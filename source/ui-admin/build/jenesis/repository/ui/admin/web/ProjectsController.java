@@ -2,7 +2,6 @@ package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
 
-import build.jenesis.repository.store.RepositoryDocument;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.ui.identity.UiProperties;
@@ -100,9 +99,7 @@ public class ProjectsController {
                            @RequestParam(name = "description", defaultValue = "") String description,
                            RedirectAttributes redirect) throws IOException {
         try {
-            String before = service.project(name).description();
-            service.describeProject(name, description);
-            if (!before.equals(RepositoryDocument.description(description))) {
+            if (service.describeProject(name, description)) {
                 redirect.addFlashAttribute("message", "Updated the description of '" + name + "'.");
             }
         } catch (IllegalArgumentException refused) {

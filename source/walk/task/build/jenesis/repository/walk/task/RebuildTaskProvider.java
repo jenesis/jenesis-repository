@@ -9,9 +9,9 @@ import build.jenesis.repository.walk.WalkProvider;
 
 /**
  * Discovers the scheduled walks: on by default when installed ({@code rebuild=false} switches all off, the scheduler's
- * {@code Features} gate), each on the cron its {@code jenrepo.walks} entry gives it ({@link WalkSchedules}): the
- * {@code rebuild} walk every consumer rides and a request runs, weekly by default, and one walk per further entry
- * carrying the consumers it names. A walk is the repair for what a crash left and the back-fill for a consumer
+ * {@code Features} gate), each on the cron its {@code jenrepo.walks} entry gives it ({@link WalkSchedules}) and carrying
+ * the consumers it names: the {@code rebuild} walk a request runs, every consumer weekly by default, and one walk per
+ * further entry. A walk is the repair for what a crash left and the back-fill for a consumer
  * installed late; publication events keep the steady state. With no walk implementation, or no {@link WalkConsumer},
  * nothing schedules, and the capability surfaces say so; a consumer module installed later is picked up on the next
  * re-resolve without a restart.
@@ -30,9 +30,10 @@ public final class RebuildTaskProvider implements MaintenanceTaskProvider {
         return tasks(config).stream().findFirst();
     }
 
-    /** One task per scheduled walk: {@code rebuild}, which every consumer rides and a request runs, on its entry's cron
-     *  (or never by the clock without one), and one task per other enabled entry carrying its consumers. An entry
-     *  naming no installed consumer schedules nothing and says so once. */
+    /** One task per scheduled walk: {@code rebuild}, which a request runs, on its entry's cron and carrying the
+     *  consumers it names (every consumer, and never by the clock, without one), and one task per other enabled entry
+     *  carrying its consumers. Another entry naming no installed consumer schedules nothing and says so once; the
+     *  {@code rebuild} task stays, since a request names it, and walks nothing. */
     @Override
     public List<MaintenanceTask> tasks(UnaryOperator<String> config) {
         Optional<ArtifactWalk> walk = WalkProvider.resolve(config);
@@ -47,7 +48,10 @@ public final class RebuildTaskProvider implements MaintenanceTaskProvider {
         List<MaintenanceTask> tasks = new ArrayList<>();
         Optional<WalkSchedules.Entry> rebuild = entries.stream()
                 .filter(entry -> entry.name().equals(RebuildTask.REBUILD) && entry.enabled()).findFirst();
-        tasks.add(new RebuildTask(RebuildTask.REBUILD, rebuild.orElse(null), walk.get(), consumers));
+        // The entry's own list: one naming a single consumer is that consumer's walk, never every repair over the store.
+        List<WalkConsumer> rebuilding = rebuild.map(entry -> consumers.stream()
+                .filter(consumer -> entry.carries(consumer.name())).toList()).orElse(consumers);
+        tasks.add(new RebuildTask(RebuildTask.REBUILD, rebuild.orElse(null), walk.get(), rebuilding));
         for (WalkSchedules.Entry entry : entries) {
             if (!entry.enabled() || entry.name().equals(RebuildTask.REBUILD)) {
                 continue;

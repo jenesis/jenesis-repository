@@ -13,8 +13,9 @@ import tools.jackson.databind.node.ObjectNode;
  * expression and the consumers riding it, {@code enabled} unless said otherwise. Every walk reads every object at least
  * once - a bill per pass on an object store - so an operator states which walks run, when, and carrying what.
  *
- * <p>The entry named {@code rebuild} schedules the pass every consumer rides, the one a request runs too, so a request
- * and the safety cadence are one task, scope and report. Any other entry is a task, lease and pass scope of its own.
+ * <p>The entry named {@code rebuild} schedules the pass a request runs too, so a request and the safety cadence are one
+ * task, scope and report; it carries the consumers it names like any entry - every one in the default - and without
+ * an entry a request runs every consumer. Any other entry is a task, lease and pass scope of its own.
  * Cron is Spring's grammar with seconds ({@code 0 0 3 * * SUN}: Sundays at three), in UTC, on whichever node holds the
  * lease. Consumers are named by {@code WalkConsumer.name()}; {@code *} is every one installed.
  */

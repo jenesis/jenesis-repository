@@ -319,16 +319,18 @@ public class CacheService {
                         + String.join(", ", TYPES) + ".");
     }
 
-    /** Replace a project's description; an unchanged one writes nothing. Audited.
+    /** Replace a project's description, answering whether it changed: an unchanged one writes and records nothing.
+     *  Audited.
      *  @throws IllegalArgumentException when it is longer than a description may be */
-    public void describeProject(String name, String description) throws IOException {
+    public boolean describeProject(String name, String description) throws IOException {
         requireProject(name);
         String line = RepositoryDocument.description(description);
         if (storage.project(name).map(CacheStorage.Project::description).orElse("").equals(line)) {
-            return;
+            return false;
         }
         storage.describeProject(name, line);
         audit("cache.project.describe", name);
+        return true;
     }
 
     /** What refuses a new project's name, empty when a creation would be accepted; the creation decides again. */
