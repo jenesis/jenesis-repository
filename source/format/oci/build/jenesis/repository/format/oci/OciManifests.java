@@ -44,6 +44,36 @@ final class OciManifests {
         }
     }
 
+    /** Where a manifest written by tag came from, recorded beside the tag: a tag relayed from the upstream a proxy
+     *  fills from is resolved there again once the node forgets it, while one pushed here - by a push or an import -
+     *  keeps answering as it stands. */
+    enum Origin {
+
+        PUSHED {
+            @Override
+            void record(ArtifactStore store, String name, String tag) throws IOException {
+                String marker = relayed(name, tag);
+                if (store.exists(marker)) {
+                    store.delete(marker);
+                }
+            }
+        },
+
+        RELAYED {
+            @Override
+            void record(ArtifactStore store, String name, String tag) throws IOException {
+                store.write(relayed(name, tag), InputStream.nullInputStream());
+            }
+        };
+
+        abstract void record(ArtifactStore store, String name, String tag) throws IOException;
+    }
+
+    /** The marker saying the tag {@code tag} of image {@code name} was relayed from the upstream. */
+    static String relayed(String name, String tag) {
+        return "oci/.relayed/" + name + "/" + tag;
+    }
+
     /** The chain's {@link PublishInterceptor.Disposition}, the hex the manifest is stored under, present whatever
      *  the verdict, and what a held or refused client is told ({@code Publication.explanation}). */
     record Ingested(PublishInterceptor.Disposition disposition, String hex, Optional<String> subject,
@@ -56,8 +86,8 @@ final class OciManifests {
      * any stale {@code withheld/<hex>} marker and fire the after-commit observers; on {@code QUARANTINE}/{@code REJECT}
      * write the {@code withheld/<hex>} marker the serving path reads and lay out nothing.
      */
-    static Ingested ingest(String name, String reference, byte[] content, String mediaTypeOrNull, ArtifactStore store)
-            throws IOException, InvalidManifest {
+    static Ingested ingest(String name, String reference, byte[] content, String mediaTypeOrNull, ArtifactStore store,
+                           Origin origin) throws IOException, InvalidManifest {
         // Validated before the screen stores anything. The size check matters on the proxy edge, whose body is bounded
         // only by the fetch cap; a top-level array or scalar has no layers to enumerate, so only an object passes.
         if (content.length > OciFormat.MAX_MANIFEST) {
@@ -84,6 +114,7 @@ final class OciManifests {
                             .through((hex, _, target) -> {
                                 if (!reference.startsWith("sha256:")) {
                                     OciFormat.linkTag(target, "oci/" + name + "/tags/" + reference, "sha256:" + hex);
+                                    origin.record(target, name, reference);
                                     // The tag list and catalog are written on the push, not enumerated per read.
                                     new OciListings(target).refresh(name, reference);
                                 }

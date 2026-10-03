@@ -61,7 +61,7 @@ public final class OciImporter implements RepositoryImporter {
     private void manifest(String name, String reference, byte[] content, ArtifactStore store) throws IOException {
         // Screened as a push is; a withheld verdict lays out nothing, so the manifest never serves.
         try {
-            OciManifests.ingest(name, reference, content, mediaType(content), store);
+            OciManifests.ingest(name, reference, content, mediaType(content), store, OciManifests.Origin.PUSHED);
         } catch (OciManifests.InvalidManifest invalid) {
             // Skipped, storing nothing; the migration continues.
             LOGGER.log(System.Logger.Level.WARNING, "skipping unparseable imported OCI manifest "

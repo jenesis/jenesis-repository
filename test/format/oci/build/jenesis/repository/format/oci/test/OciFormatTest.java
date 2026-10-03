@@ -9,6 +9,7 @@ import build.jenesis.repository.format.oci.OciListingObserver;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.StoredListing;
+import build.jenesis.repository.store.UpstreamMemory;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.Withheld;
 import build.jenesis.repository.store.ArtifactStoreProvider;
@@ -879,6 +880,75 @@ class OciFormatTest {
         assertThat(store.exists("blobs/" + sha256(manifest))).as("the manifest is cached by digest").isTrue();
         assertThat(store.readVersioned("oci/app/tags/1.0"))
                 .as("the tag is linked to the verified digest").isPresent();
+    }
+
+    @Test
+    void a_tag_relayed_from_the_upstream_is_resolved_there_again_once_the_node_forgets_it() throws IOException {
+        UpstreamMemory.reset();
+        try {
+            byte[] first = manifestNumbered(1);
+            byte[] second = manifestNumbered(2);
+            AtomicReference<byte[]> named = new AtomicReference<>(first);
+            AtomicInteger hits = new AtomicInteger();
+            ProxyFormat.Fetcher upstream = naming(named, hits);
+
+            assertThat(pullTag("latest", upstream)).isEqualTo(first);
+            named.set(second);
+            assertThat(pullTag("latest", upstream)).as("remembered: the tag answers as it stands").isEqualTo(first);
+            assertThat(hits).as("and the upstream is not asked").hasValue(1);
+
+            UpstreamMemory.reset();
+            assertThat(pullTag("latest", upstream)).as("forgotten: the upstream is asked what it names now")
+                    .isEqualTo(second);
+
+            UpstreamMemory.reset();
+            ProxyFormat.Fetcher unreachable = (ProxyFormat.Fetcher.Buffered) (url, headers) -> Optional.empty();
+            assertThat(pullTag("latest", unreachable)).as("an upstream that cannot answer leaves the last answer")
+                    .isEqualTo(second);
+        } finally {
+            UpstreamMemory.reset();
+        }
+    }
+
+    @Test
+    void a_tag_pushed_here_keeps_answering_whatever_the_upstream_names() throws IOException {
+        UpstreamMemory.reset();
+        try {
+            byte[] pushed = manifestNumbered(1);
+            push("app", "stable", pushed);
+            AtomicInteger hits = new AtomicInteger();
+
+            assertThat(pullTag("stable", naming(new AtomicReference<>(manifestNumbered(2)), hits)))
+                    .isEqualTo(pushed);
+            assertThat(hits).as("a pushed tag is this repository's, so the upstream is not asked").hasValue(0);
+        } finally {
+            UpstreamMemory.reset();
+        }
+    }
+
+    /** A manifest told apart from another by {@code n}. */
+    private static byte[] manifestNumbered(int n) {
+        return ("{\"mediaType\":\"" + MANIFEST_TYPE + "\",\"n\":" + n + "}").getBytes(StandardCharsets.UTF_8);
+    }
+
+    /** An upstream answering every manifest request with the manifest {@code named} holds now, counted in
+     *  {@code hits}. */
+    private static ProxyFormat.Fetcher naming(AtomicReference<byte[]> named, AtomicInteger hits) {
+        return (ProxyFormat.Fetcher.Buffered) (url, headers) -> {
+            hits.incrementAndGet();
+            byte[] body = named.get();
+            return Optional.of(new ProxyFormat.Fetched(200, body,
+                    Map.of("Content-Type", MANIFEST_TYPE, "Docker-Content-Digest", "sha256:" + sha256(body))));
+        };
+    }
+
+    /** Pull {@code app}'s manifest by {@code tag} through the proxy leg, answering what it serves. */
+    private byte[] pullTag(String tag, ProxyFormat.Fetcher upstream) throws IOException {
+        FakeExchange pull = new FakeExchange("GET", "/v2/app/manifests/" + tag, new byte[0], Map.of(),
+                Map.of("Accept", MANIFEST_TYPE));
+        assertThat(format.proxy(pull, store, UPSTREAM, upstream)).isTrue();
+        assertThat(pull.status()).isEqualTo(200);
+        return pull.responseBytes();
     }
 
     @Test

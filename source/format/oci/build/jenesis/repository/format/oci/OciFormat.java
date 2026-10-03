@@ -29,6 +29,7 @@ import build.jenesis.repository.format.Checksums;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.cleanup.VersionRemoval;
 import build.jenesis.repository.store.ServableNames;
+import build.jenesis.repository.store.UpstreamMemory;
 
 /**
  * The OCI / Docker registry format (the {@code /v2/} Distribution API). An OCI blob is addressed by its
@@ -559,8 +560,9 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             String hex = rest.substring(".types/".length());
             return ServableNames.isSha256Hex(hex) ? Optional.of(hex) : Optional.empty();
         }
-        if (rest.startsWith(".uploads/") || rest.startsWith(".upload-sessions/")) {
-            return Optional.empty();                            // staged chunks of a push that never became an image
+        if (rest.startsWith(".uploads/") || rest.startsWith(".upload-sessions/") || rest.startsWith(".relayed/")) {
+            // Staged chunks of a push that never became an image, and the markers of tags relayed from an upstream.
+            return Optional.empty();
         }
         // An image name is multi-segment, so the tag level is the last /tags/, as a pull resolves it.
         int tags = rest.lastIndexOf("/tags/");
@@ -658,8 +660,8 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             }
             OciManifests.Ingested ingested;
             try {
-                ingested = OciManifests.ingest(
-                        name, reference, body, exchange.requestHeader("Content-Type"), store);
+                ingested = OciManifests.ingest(name, reference, body, exchange.requestHeader("Content-Type"), store,
+                        OciManifests.Origin.PUSHED);
             } catch (OciManifests.InvalidManifest invalid) {
                 exchange.setResponseHeader("Content-Type", "application/json");
                 exchange.respond(400, ("{\"errors\":[{\"code\":\"MANIFEST_INVALID\",\"message\":"
@@ -987,10 +989,13 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      * The client {@code Accept} is forwarded so the upstream returns the right manifest media type (and image
      * index for multi-arch, whose per-architecture manifests are then proxied by digest in turn).
      */
-    /** A registry's manifests and blobs are the upstream's; a tag list is relayed, never merged with what is held here. */
+    /** A manifest asked for by tag is resolved upstream again once the node forgets a tag relayed from there, so the
+     *  proxy leg is asked whatever is held; by digest, an image is the upstream's or this repository's alone. */
     @Override
     public boolean mergesUpstream(FormatExchange exchange) {
-        return false;
+        String path = exchange.path();
+        int manifests = path == null || !path.startsWith("/v2/") ? -1 : path.indexOf("/manifests/");
+        return manifests >= 0 && !path.substring(manifests + "/manifests/".length()).startsWith("sha256:");
     }
 
     @Override
@@ -1066,8 +1071,21 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      *  as a push is. */
     private boolean proxyManifest(String name, String reference, String accept, FormatExchange exchange,
                                   ArtifactStore store, URI url, ProxyFormat.Fetcher fetcher) throws IOException {
+        boolean tagged = !reference.startsWith("sha256:");
+        boolean held = tagged && store.exists("oci/" + name + "/tags/" + reference);
+        if (held && (!store.exists(OciManifests.relayed(name, reference))
+                || UpstreamMemory.node().get(store, url).isPresent())) {
+            // Pushed here, or relayed recently enough: the tag answers as it stands.
+            handle(exchange, store);
+            return true;
+        }
         Optional<ProxyFormat.Fetched> fetched = fetch(url, accept, fetcher);
         if (fetched.isEmpty() || fetched.get().status() != 200) {
+            if (held) {
+                // The upstream could not say what the tag names now; the last answer it gave still stands.
+                handle(exchange, store);
+                return true;
+            }
             return false;
         }
         byte[] body = fetched.get().body();
@@ -1088,7 +1106,11 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
         // Screened as a push is; the local serve that follows is the response, so a withheld manifest 404s.
         try {
-            OciManifests.ingest(name, reference, body, fetched.get().header("Content-Type"), store);
+            OciManifests.ingest(name, reference, body, fetched.get().header("Content-Type"), store,
+                    OciManifests.Origin.RELAYED);
+            if (tagged) {
+                UpstreamMemory.node().put(store, url, body, fetched.get()::header);
+            }
         } catch (OciManifests.InvalidManifest invalid) {
             // An oversized or unparseable upstream manifest is served through without being stored.
             String type = fetched.get().header("Content-Type");

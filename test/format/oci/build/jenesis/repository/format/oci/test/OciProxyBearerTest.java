@@ -6,6 +6,7 @@ import module java.base;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.oci.OciFormat;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.UpstreamMemory;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -76,6 +77,8 @@ class OciProxyBearerTest {
         byte[] manifest = ("{\"mediaType\":\"" + type + "\"}").getBytes(StandardCharsets.UTF_8);
         for (String upstream : List.of("https://ghcr.example/homebrew/core", "https://ghcr.example/homebrew/core/",
                 "https://ghcr.example/v2/homebrew/core")) {
+            // Each spelling composes the same URL, which the node would otherwise answer from memory after the first.
+            UpstreamMemory.reset();
             List<String> asked = new ArrayList<>();
             ProxyFormat.Fetcher.Buffered fetcher = (url, headers) -> {
                 asked.add(url.toString());
@@ -88,6 +91,7 @@ class OciProxyBearerTest {
             assertThat(asked).as("%s asks for the image inside its namespace", upstream)
                     .containsExactly("https://ghcr.example/v2/homebrew/core/openssl/3/manifests/3.5.0");
         }
+        UpstreamMemory.reset();
     }
 
     @Test
