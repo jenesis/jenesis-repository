@@ -92,7 +92,19 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
             return Optional.empty();
         }
         return Optional.of(new ArtifactDescriptor(ecosystem(), coordinate, version, key,
-                "application/octet-stream", version.contains("-"), null, 0L));
+                "application/octet-stream", prerelease(version), null, 0L));
+    }
+
+    /**
+     * Whether a gem version is a prerelease, as RubyGems decides it: its number holds a letter ({@code 7.1.0.rc1},
+     * {@code 2.0.0.pre}). A platform gem's version carries its platform after a {@code -}
+     * ({@code 1.16.0-x86_64-linux}), which is no part of the number and makes no prerelease: a platform gem is a
+     * version of its own, released or not as its number says. The pointer and the download path decide it alike.
+     */
+    static boolean prerelease(String version) {
+        int platform = version.indexOf('-');
+        String number = platform < 0 ? version : version.substring(0, platform);
+        return number.chars().anyMatch(Character::isLetter);
     }
 
     @Override
@@ -153,8 +165,9 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         if (split < 0 || stem.indexOf('/') >= 0) {
             return Optional.of(ArtifactDescriptor.at("RubyGems", path));
         }
-        return Optional.of(new ArtifactDescriptor("RubyGems", stem.substring(0, split), stem.substring(split + 1),
-                path, "application/octet-stream", false, null, -1L));
+        String version = stem.substring(split + 1);
+        return Optional.of(new ArtifactDescriptor("RubyGems", stem.substring(0, split), version,
+                path, "application/octet-stream", prerelease(version), null, -1L));
     }
 
     // An original CC0 line glyph (a faceted gem).
