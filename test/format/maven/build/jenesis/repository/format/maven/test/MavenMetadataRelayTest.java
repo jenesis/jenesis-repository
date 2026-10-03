@@ -7,6 +7,7 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.maven.MavenFormat;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.UpstreamMemory;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -65,6 +66,16 @@ class MavenMetadataRelayTest {
         assertThat(format.proxy(served, store, UPSTREAM, answering(200))).isTrue();
         assertThat(served.status()).isEqualTo(200);
         assertThat(asked).as("the refusal left nothing behind, so the upstream is asked again").hasSize(2);
+    }
+
+    @Test
+    void a_metadata_checksum_is_relayed_and_never_stored() throws IOException {
+        for (String suffix : List.of(".sha1", ".md5", ".sha256", ".sha512")) {
+            FakeExchange get = new FakeExchange("GET", METADATA + suffix);
+            assertThat(format.proxy(get, store, UPSTREAM, answering(200))).as(suffix).isTrue();
+            assertThat(new Publication(store).located(METADATA + suffix))
+                    .as("%s changes with the document it covers, so it is never pinned in the store", suffix).isEmpty();
+        }
     }
 
     /** An upstream answering every metadata request with {@code status}, noting each one it is asked. */

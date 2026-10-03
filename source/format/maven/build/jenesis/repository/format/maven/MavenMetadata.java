@@ -47,12 +47,23 @@ public final class MavenMetadata {
         this.store = store;
     }
 
+    /** The checksums a Maven client may ask for beside a {@code maven-metadata.xml}, by suffix, each with the
+     *  algorithm it names - the two every client asks for and the two a resolver can be configured to. */
+    static final Map<String, String> CHECKSUMS = Map.of(".sha1", "SHA-1", ".md5", "MD5", ".sha256", "SHA-256",
+            ".sha512", "SHA-512");
+
     /** Whether this request path is an artifact-level {@code maven-metadata.xml} or one of its checksums. */
     public static boolean isMetadataRequest(String requestPath) {
         return requestPath.startsWith("/maven/")
-                && (requestPath.endsWith("/maven-metadata.xml")
-                || requestPath.endsWith("/maven-metadata.xml.sha1")
-                || requestPath.endsWith("/maven-metadata.xml.md5"));
+                && (requestPath.endsWith("/maven-metadata.xml") || algorithm(requestPath).isPresent());
+    }
+
+    /** The algorithm a metadata checksum path names, or empty for the document itself or any other path. */
+    static Optional<String> algorithm(String requestPath) {
+        int dot = requestPath.lastIndexOf('.');
+        return dot > 0 && requestPath.substring(0, dot).endsWith("/maven-metadata.xml")
+                ? Optional.ofNullable(CHECKSUMS.get(requestPath.substring(dot)))
+                : Optional.empty();
     }
 
     /** The bytes for a metadata request under the opt-in {@link #COMPUTE_SETTING}, from the coordinate's stored listing
@@ -62,7 +73,8 @@ public final class MavenMetadata {
         if (!isMetadataRequest(requestPath)) {
             return Optional.empty();
         }
-        boolean checksum = requestPath.endsWith(".sha1") || requestPath.endsWith(".md5");
+        Optional<String> algorithm = algorithm(requestPath);
+        boolean checksum = algorithm.isPresent();
         String documentPath = checksum ? requestPath.substring(0, requestPath.lastIndexOf('.')) : requestPath;
         String coordinatePath = coordinatePath(documentPath);
         MavenMetadataListing listing = new MavenMetadataListing(store);
@@ -77,8 +89,7 @@ public final class MavenMetadata {
         if (stored.isPresent() && Arrays.equals(stored.get(), document.get().body())) {
             return Optional.empty();   // the publisher's own document, byte for byte: its own checksum stands
         }
-        return Optional.of(Checksums.hex(requestPath.endsWith(".sha1") ? "SHA-1" : "MD5", document.get().body())
-                .getBytes(StandardCharsets.UTF_8));
+        return Optional.of(Checksums.hex(algorithm.get(), document.get().body()).getBytes(StandardCharsets.UTF_8));
     }
 
     /** A Maven path was uploaded under the computation flag: a metadata document resets its coordinate's listing, a
@@ -111,7 +122,8 @@ public final class MavenMetadata {
         if (!isMetadataRequest(requestPath)) {
             return Optional.empty();
         }
-        if (requestPath.endsWith(".sha1") || requestPath.endsWith(".md5")) {
+        Optional<String> algorithm = algorithm(requestPath);
+        if (algorithm.isPresent()) {
             String documentPath = requestPath.substring(0, requestPath.lastIndexOf('.'));
             Optional<byte[]> document = computedDocument(documentPath);
             if (document.isEmpty()) {
@@ -122,8 +134,7 @@ public final class MavenMetadata {
                 // The document is served verbatim, so its stored checksum is authoritative - never re-derived.
                 return Optional.empty();
             }
-            String algorithm = requestPath.endsWith(".sha1") ? "SHA-1" : "MD5";
-            return Optional.of(Checksums.hex(algorithm, document.get()).getBytes(StandardCharsets.UTF_8));
+            return Optional.of(Checksums.hex(algorithm.get(), document.get()).getBytes(StandardCharsets.UTF_8));
         }
         return computedDocument(requestPath);
     }
@@ -369,13 +380,10 @@ public final class MavenMetadata {
             return Optional.empty();
         }
         byte[] xml = metadata(groupId, artifactId, versions);
-        if (requestPath.endsWith(".sha1")) {
-            return Optional.of(Checksums.hex("SHA-1", xml).getBytes(StandardCharsets.UTF_8));
-        }
-        if (requestPath.endsWith(".md5")) {
-            return Optional.of(Checksums.hex("MD5", xml).getBytes(StandardCharsets.UTF_8));
-        }
-        return Optional.of(xml);
+        Optional<String> algorithm = algorithm(requestPath);
+        return Optional.of(algorithm.isPresent()
+                ? Checksums.hex(algorithm.get(), xml).getBytes(StandardCharsets.UTF_8)
+                : xml);
     }
 
     /**

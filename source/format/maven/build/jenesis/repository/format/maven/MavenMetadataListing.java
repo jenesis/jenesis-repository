@@ -97,10 +97,11 @@ final class MavenMetadataListing {
         StoredListing.Codec codec = codec(groupId, artifactId);
         return StoredListing.Spec.materialising(listing(coordinatePath), codec, () -> generate(coordinatePath, codec))
                 .deriving(document -> {
-                    StoredListing.derive(store, listing(coordinatePath) + ".sha1", document.header().seq(),
-                            Checksums.hex("SHA-1", document.body()).getBytes(StandardCharsets.UTF_8));
-                    StoredListing.derive(store, listing(coordinatePath) + ".md5", document.header().seq(),
-                            Checksums.hex("MD5", document.body()).getBytes(StandardCharsets.UTF_8));
+                    for (Map.Entry<String, String> checksum : MavenMetadata.CHECKSUMS.entrySet()) {
+                        StoredListing.derive(store, listing(coordinatePath) + checksum.getKey(),
+                                document.header().seq(),
+                                Checksums.hex(checksum.getValue(), document.body()).getBytes(StandardCharsets.UTF_8));
+                    }
                 });
     }
 
@@ -120,7 +121,7 @@ final class MavenMetadataListing {
                     listing.length() - "/maven-metadata.xml".length())));
             return true;
         }
-        return listing.endsWith("/maven-metadata.xml.sha1") || listing.endsWith("/maven-metadata.xml.md5");
+        return MavenMetadata.algorithm("/" + listing).isPresent();
     }
 
     /** A metadata document was uploaded: the listing is reset from it. */

@@ -64,6 +64,17 @@ class MavenMetadataTest {
     }
 
     @Test
+    void every_checksum_a_resolver_may_ask_for_matches_the_computed_xml() throws IOException {
+        publish(List.of("1.0", "2.0"));
+        byte[] xml = metadata.serve("/maven/org/example/lib/maven-metadata.xml").orElseThrow();
+        for (Map.Entry<String, String> checksum : Map.of(".sha1", "SHA-1", ".md5", "MD5", ".sha256", "SHA-256",
+                ".sha512", "SHA-512").entrySet()) {
+            assertThat(new String(metadata.serve("/maven/org/example/lib/maven-metadata.xml" + checksum.getKey())
+                    .orElseThrow(), StandardCharsets.UTF_8)).as(checksum.getKey()).isEqualTo(hex(checksum.getValue(), xml));
+        }
+    }
+
+    @Test
     void an_unknown_coordinate_or_non_metadata_path_yields_nothing() throws IOException {
         publish(List.of("1.0"));
         assertThat(metadata.serve("/maven/org/example/missing/maven-metadata.xml")).isEmpty();
@@ -272,6 +283,14 @@ class MavenMetadataTest {
             previous = index;
         }
         return true;
+    }
+
+    private static String hex(String algorithm, byte[] content) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance(algorithm).digest(content));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private static String sha1Hex(byte[] content) {
