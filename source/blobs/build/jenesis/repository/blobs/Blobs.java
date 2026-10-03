@@ -75,38 +75,14 @@ public final class Blobs {
      *  last-writer-wins, and a caller whose pointer cannot land is told so instead of believing it published. */
     public void write(String key, InputStream content) throws IOException {
         requireSafeKey(key);
-        Stored stored = stored(content);
+        Publication.Blob stored = stored(content);
         link(key, stored.hash(), stored.size());
     }
 
-    /** A blob {@link #stored} content-addressed: its hash and its length, for a {@link #link} that records both. */
-    public record Stored(String hash, long size) {
-    }
-
-    /** {@link #store} answering the length beside the hash, counted as the bytes stream in - so a pointer linked
-     *  from it records the length without a stat. */
-    public Stored stored(InputStream content) throws IOException {
-        long[] counted = {0L};
-        String hash = store.writeBlob(new FilterInputStream(content) {
-            @Override
-            public int read() throws IOException {
-                int one = super.read();
-                if (one >= 0) {
-                    counted[0]++;
-                }
-                return one;
-            }
-
-            @Override
-            public int read(byte[] buffer, int offset, int length) throws IOException {
-                int read = super.read(buffer, offset, length);
-                if (read > 0) {
-                    counted[0] += read;
-                }
-                return read;
-            }
-        });
-        return new Stored(hash, counted[0]);
+    /** {@link #store} answering the length beside the hash, so a pointer linked from it records the length without a
+     *  stat. Unspared, since the {@link #link} that follows spares the blob. */
+    public Publication.Blob stored(InputStream content) throws IOException {
+        return Publication.written(store, content);
     }
 
     /** Stream the content into the content-addressed store and return its lower-case SHA-256 hex, without pointing any
@@ -114,9 +90,10 @@ public final class Blobs {
      *  spool the whole artifact to storage first and only then reopen its front to read the metadata that names the
      *  pointer. The caller {@link #open reopens} the blob by the returned hash to parse it, then {@link #link}s the
      *  pointer. The returned hash is exactly the artifact's SHA-256, so a caller that needs that checksum (a compact
-     *  index line, a {@code #sha256=} fragment) reuses it rather than hashing the blob a second time. */
+     *  index line, a {@code #sha256=} fragment) reuses it rather than hashing the blob a second time. A body the
+     *  edge already stored and screened is answered by its hash without a second write. */
     public String store(InputStream content) throws IOException {
-        return store.writeBlob(content);
+        return stored(content).hash();
     }
 
     /** Open the blob with this SHA-256 hex for reading - reopen the just-stored artifact to parse its front rather than
@@ -239,7 +216,7 @@ public final class Blobs {
      */
     public void writeRelease(String key, byte[] content) throws IOException {
         requireSafeKey(key);
-        Stored stored = stored(new ByteArrayInputStream(content));
+        Publication.Blob stored = stored(new ByteArrayInputStream(content));
         linkRelease(key, stored.hash(), stored.size());
     }
 

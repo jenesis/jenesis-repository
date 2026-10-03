@@ -347,7 +347,7 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
             String revBase = base + "/revs/" + resolve.revision();
             String fileKey = revBase + "/files/" + enc(resolve.filepath());
             if (isCommit(resolve.revision())) {
-                Blobs.Stored stored = blobs.stored(exchange.requestStream());
+                Publication.Blob stored = blobs.stored(exchange.requestStream());
                 try {
                     blobs.linkRelease(fileKey, stored.hash(), stored.size());
                 } catch (Publication.RepublishConflict taken) {

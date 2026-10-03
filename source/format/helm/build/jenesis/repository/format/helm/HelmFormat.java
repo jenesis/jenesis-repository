@@ -223,7 +223,7 @@ public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobL
      */
     private void publish(String repo, String file, FormatExchange exchange, Blobs blobs) throws IOException {
         ArtifactStore store = blobs.store();
-        String hash = store.writeBlob(exchange.requestStream());
+        String hash = blobs.store(exchange.requestStream());
         Map<?, ?> chart;
         try (InputStream blob = store.open("blobs/" + hash)) {
             chart = chartYaml(blob);

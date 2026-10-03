@@ -244,38 +244,33 @@ public final class Publication {
      * counted as they pass, so the length costs nothing a store of the bytes did not already cost.
      */
     public Blob stored(InputStream content) throws IOException {
+        Blob blob = written(store, content);
+        if (content instanceof Stored) {
+            return blob;   // the edge that stored it spared it
+        }
+        // Spared the moment its bytes are stored, not when a pointer is linked at the end of the screen. A
+        // content-addressed store keeps a blob it already holds and drops the upload, so a publish of bytes a
+        // collector had condemned is relying on that one blob from here on; left condemned, a confirming sweep
+        // running while the publish is screened deletes it, and the link that follows names nothing.
+        Condemned.spare(store, blob.hash(), "an upload of " + blob.hash());
+        return blob;
+    }
+
+    /**
+     * Store content content-addressed into {@code store} and answer its hash and length, without sparing it: for a
+     * caller that links a pointer to it at once, whose link spares the blob, so nothing runs between the two for a
+     * sweep to delete it in. A body the edge already stored ({@link Stored}) answers both without a read or a write.
+     */
+    public static Blob written(ArtifactStore store, InputStream content) throws IOException {
         // The edge restreams an accepted body into the format's layout through a Stored stream; the bytes are in the
         // store already, so the layout's own store answers the hash it carries and neither reads nor writes.
         // Without this, every screened publish would write its blob twice and read it once more for the second write.
         if (content instanceof Stored stored) {
             return new Blob(stored.hash(), stored.size());
         }
-        long[] counted = {0L};
-        String hash = store.writeBlob(new FilterInputStream(content) {
-            @Override
-            public int read() throws IOException {
-                int one = super.read();
-                if (one >= 0) {
-                    counted[0]++;
-                }
-                return one;
-            }
-
-            @Override
-            public int read(byte[] buffer, int offset, int length) throws IOException {
-                int read = super.read(buffer, offset, length);
-                if (read > 0) {
-                    counted[0] += read;
-                }
-                return read;
-            }
-        });
-        // Spared the moment its bytes are stored, not when a pointer is linked at the end of the screen. A
-        // content-addressed store keeps a blob it already holds and drops the upload, so a publish of bytes a
-        // collector had condemned is relying on that one blob from here on; left condemned, a confirming sweep
-        // running while the publish is screened deletes it, and the link that follows names nothing.
-        Condemned.spare(store, hash, "an upload of " + hash);
-        return new Blob(hash, counted[0]);
+        Counting counted = new Counting(content);
+        String hash = store.writeBlob(counted);
+        return new Blob(hash, counted.count());
     }
 
     /**
@@ -287,26 +282,45 @@ public final class Publication {
      */
     public static final class Stored extends InputStream {
 
-        private final Acceptance accepted;
+        /** Where the stored bytes are read from, on the first read. */
+        private interface Source {
+            InputStream open() throws IOException;
+        }
+
+        private final String hash;
+        private final long size;
+        private final Source source;
         private InputStream in;
 
         public Stored(Acceptance accepted) {
-            this.accepted = Objects.requireNonNull(accepted, "accepted");
+            this(accepted.hash(), accepted.size(), accepted::open);
+        }
+
+        /** A blob a layout stored itself before it could name what it screens - a form whose naming fields follow the
+         *  file - handed to the commit so the screen assesses it without a second write. */
+        public Stored(ArtifactStore store, Blob blob) {
+            this(blob.hash(), blob.size(), () -> store.open("blobs/" + blob.hash()));
+        }
+
+        private Stored(String hash, long size, Source source) {
+            this.hash = Objects.requireNonNull(hash, "hash");
+            this.size = size;
+            this.source = source;
         }
 
         /** The content hash of the stored bytes - the answer a store of this stream gives without storing. */
         public String hash() {
-            return accepted.hash();
+            return hash;
         }
 
-        /** The stored bytes' length, known since the edge stored them. */
+        /** The stored bytes' length, known since they were stored. */
         public long size() {
-            return accepted.size();
+            return size;
         }
 
         private InputStream open() throws IOException {
             if (in == null) {
-                in = accepted.open();
+                in = source.open();
             }
             return in;
         }
@@ -972,10 +986,9 @@ public final class Publication {
             throws IOException {
         // The length is counted as the bytes stream into the store, so the descriptor never stats the blob it just
         // wrote - one read per publish that answered a question the write itself had answered.
-        Counting counted = new Counting(content);
-        String hash = storeBlob(counted);
-        long size = content instanceof Stored ? artifact.size() : counted.count();
-        ArtifactDescriptor stored = artifact.withBlob(hash, size);
+        Blob blob = stored(content);
+        String hash = blob.hash();
+        ArtifactDescriptor stored = artifact.withBlob(hash, blob.size());
         PublishInterceptor.Content access = contentOf(hash);
         PublishInterceptor.Disposition disposition = PublishInterceptor.Disposition.ACCEPT;
         List<PublishInterceptor.Disposition> verdicts = new ArrayList<>(interceptors.size());

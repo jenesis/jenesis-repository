@@ -548,7 +548,7 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
             exchange.respond(400);
             return;
         }
-        Blobs.Stored archive = null;
+        Publication.Blob archive = null;
         byte[] metadata = "{}".getBytes(StandardCharsets.UTF_8);
         byte[] manifest = null;
         byte[] signature = null;
@@ -643,7 +643,7 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
 
     /** One release as its publish form named it: the stored archive and the parts beside it. The accepted and held legs
      *  both lay it out through {@link #lay}, so they cannot write different releases for one form. */
-    private record Release(String repo, String scope, String name, String version, Blobs.Stored archive,
+    private record Release(String repo, String scope, String name, String version, Publication.Blob archive,
                            ObjectNode metadata, byte[] manifest, byte[] signature) {
 
         String archiveKey() {

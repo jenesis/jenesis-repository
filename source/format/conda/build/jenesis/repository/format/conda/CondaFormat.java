@@ -238,7 +238,7 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
             exchange.respond(400);
             return;
         }
-        String hash = store.writeBlob(exchange.requestStream());
+        String hash = new Blobs(store).store(exchange.requestStream());
         long size = store.size("blobs/" + hash);
         ObjectNode index;
         try (InputStream blob = store.open("blobs/" + hash)) {

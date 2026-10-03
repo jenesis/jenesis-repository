@@ -217,7 +217,7 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
             exchange.respond(400);
             return;
         }
-        String hash = store.writeBlob(exchange.requestStream());
+        String hash = new Blobs(store).store(exchange.requestStream());
         ObjectNode composer;
         try (InputStream blob = store.open("blobs/" + hash)) {
             composer = readComposerJson(blob);

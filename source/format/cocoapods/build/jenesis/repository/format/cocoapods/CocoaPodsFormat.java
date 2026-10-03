@@ -201,7 +201,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
             exchange.respond(400);
             return;
         }
-        String hash = store.writeBlob(exchange.requestStream());
+        String hash = new Blobs(store).store(exchange.requestStream());
         ObjectNode podspec;
         try (InputStream blob = store.open("blobs/" + hash)) {
             podspec = readPodspec(blob);
