@@ -2,6 +2,7 @@ package build.jenesis.repository.management.web;
 
 import module java.base;
 import build.jenesis.repository.audit.AuditActions;
+import build.jenesis.repository.audit.AuditCsv;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.LiveConfig;
@@ -225,13 +226,8 @@ public class ManagementController {
             respondAuditNotInstalled(response);
             return;
         }
-        String tenant = routing.tenant(http);
-        response.setContentType("text/csv;charset=UTF-8");
-        Writer out = response.getWriter();
-        out.write("at,actor,action,target\n");
-        audit.stream(tenant, instant(from), instant(to), action, event ->
-                out.write(csv(event.at().toString()) + ',' + csv(event.actor()) + ',' + csv(event.action()) + ','
-                        + csv(event.target()) + '\n'));
+        response.setContentType(AuditCsv.CONTENT_TYPE);
+        AuditCsv.write(audit, routing.tenant(http), instant(from), instant(to), action, response.getWriter());
     }
 
     /** With no rate-limiting module installed the ceiling endpoints answer 501: a ceiling would meter nothing. */
@@ -246,25 +242,12 @@ public class ManagementController {
     private static void respondAuditNotInstalled(HttpServletResponse response) throws IOException {
         response.setStatus(501);
         response.setContentType("text/plain;charset=UTF-8");
-        response.getWriter().write("audit is not installed on this deployment");
+        response.getWriter().write(AuditCsv.NOT_INSTALLED);
     }
 
     /** A blank value is no bound; otherwise an absolute ISO-8601 instant. */
     private static Instant instant(String value) {
         return value == null || value.isBlank() ? null : Instant.parse(value.trim());
-    }
-
-    /** Quote a CSV field carrying a comma, quote or newline, and prefix a leading {@code = + - @}, tab or carriage
-     *  return with an apostrophe so a spreadsheet does not evaluate it. */
-    private static String csv(String value) {
-        if (value == null) {
-            return "";
-        }
-        String safe = value.isEmpty() || "=+-@\t\r".indexOf(value.charAt(0)) < 0 ? value : "'" + value;
-        if (safe.contains(",") || safe.contains("\"") || safe.contains("\n")) {
-            return "\"" + safe.replace("\"", "\"\"") + "\"";
-        }
-        return safe;
     }
 
     @ExceptionHandler(IllegalStateException.class)

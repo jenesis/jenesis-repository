@@ -1,6 +1,7 @@
 package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
+import build.jenesis.repository.audit.AuditCsv;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.ui.CurrentTenant;
 import jakarta.servlet.http.HttpServletResponse;
@@ -42,17 +43,26 @@ public class AuditController {
         return "audit";
     }
 
-    /** The trail as CSV, streamed a row at a time through the audit SPI's {@code stream} seam, so a large trail exports
-     *  in flat memory. Matches {@code /api/audit.csv}. */
-    @GetMapping(value = "/ui/admin/audit.csv", produces = "text/csv;charset=UTF-8")
-    public void csv(@RequestParam(name = "action", required = false) String action,
+    /** The trail as CSV - the export {@code /api/audit.csv} writes, between {@code from} and {@code to} when named -
+     *  streamed a row at a time, and {@code 501} on a deployment with no audit module. */
+    @GetMapping(value = "/ui/admin/audit.csv", produces = AuditCsv.CONTENT_TYPE)
+    public void csv(@RequestParam(name = "from", required = false) String from,
+                    @RequestParam(name = "to", required = false) String to,
+                    @RequestParam(name = "action", required = false) String action,
                     HttpServletResponse response) throws IOException {
-        response.setContentType("text/csv;charset=UTF-8");
-        Writer out = response.getWriter();
-        out.write("at,actor,action,target\n");
-        audit.stream(tenant(), null, null, action, event ->
-                out.write(field(event.at().toString()) + ',' + field(event.actor()) + ',' + field(event.action()) + ','
-                        + field(event.target()) + '\n'));
+        if (audit == AuditTrail.none()) {
+            response.setStatus(501);
+            response.setContentType("text/plain;charset=UTF-8");
+            response.getWriter().write(AuditCsv.NOT_INSTALLED);
+            return;
+        }
+        response.setContentType(AuditCsv.CONTENT_TYPE);
+        AuditCsv.write(audit, tenant(), instant(from), instant(to), action, response.getWriter());
+    }
+
+    /** A blank value is no bound; otherwise an absolute ISO-8601 instant. */
+    private static Instant instant(String value) {
+        return value == null || value.isBlank() ? null : Instant.parse(value.trim());
     }
 
     private String tenant() {
@@ -61,16 +71,5 @@ public class AuditController {
             throw new IllegalStateException("No tenant selected.");
         }
         return tenant;
-    }
-
-    private static String field(String value) {
-        if (value == null) {
-            return "";
-        }
-        String safe = value.isEmpty() || "=+-@\t\r".indexOf(value.charAt(0)) < 0 ? value : "'" + value;
-        if (safe.contains(",") || safe.contains("\"") || safe.contains("\n")) {
-            return "\"" + safe.replace("\"", "\"\"") + "\"";
-        }
-        return safe;
     }
 }
