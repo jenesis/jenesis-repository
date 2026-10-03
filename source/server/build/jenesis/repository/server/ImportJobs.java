@@ -158,36 +158,17 @@ public final class ImportJobs {
 
     /** The persisted state of a job as raw JSON bytes, or empty if there is no such job. */
     public Optional<byte[]> status(ArtifactStore store, String jobId) throws IOException {
-        // One store round trip: readVersioned answers presence (empty when absent) and the small job-state bytes
-        // together, rather than an exists() probe then a read() (two round trips on the endpoint a migration polls),
-        // and hands the bytes back without a ByteArrayOutputStream copy - the same write-then-readVersioned pattern
-        // the credential store uses.
-        Optional<ArtifactStore.Versioned> stored = store.readVersioned(RECORDS + "/" + jobId);
-        if (stored.isEmpty()) {
-            return Optional.empty();
-        }
-        // The record as its run wrote it, except that a running record no run holds is told as interrupted.
-        JsonNode state = JSON.readTree(stored.get().content());
-        String effective = JobState.effective(store, RECORDS, jobId, state.path("state").asString(null));
-        if (Objects.equals(effective, state.path("state").asString(null))) {
-            return Optional.of(stored.get().content());
-        }
-        ((tools.jackson.databind.node.ObjectNode) state).put("state", effective);
-        return Optional.of(JSON.writeValueAsBytes(state));
+        return JobRecords.status(store, RECORDS, jobId);
     }
 
     /** A job's state parsed for a status response or to seed a resume; empty for a job there is none of, or one a
      *  reap has dismissed. */
     public Optional<Snapshot> snapshot(ArtifactStore store, String jobId) throws IOException {
-        Optional<ArtifactStore.Versioned> stored = store.readVersioned(RECORDS + "/" + jobId);
-        if (stored.isEmpty()) {
+        Optional<JobRecords.Record> record = JobRecords.read(store, RECORDS, jobId);
+        if (record.isEmpty()) {
             return Optional.empty();
         }
-        JsonNode state = JSON.readTree(stored.get().content());
-        if (JobState.DISMISSED.equals(state.path("state").asString(null))) {
-            return Optional.empty();
-        }
-        String effective = JobState.effective(store, RECORDS, jobId, state.path("state").asString(null));
+        JsonNode state = record.get().fields();
         List<String> formats = new ArrayList<>();
         for (JsonNode format : state.path("skippedFormats")) {
             formats.add(format.asString(null));
@@ -195,10 +176,10 @@ public final class ImportJobs {
         Map<String, Integer> drops = new LinkedHashMap<>();
         JsonNode dropped = state.path("dropped");
         dropped.propertyNames().forEach(name -> drops.put(name, dropped.path(name).asInt(0)));
-        return Optional.of(new Snapshot(effective, state.path("imported").asInt(0),
+        return Optional.of(new Snapshot(record.get().state(), state.path("imported").asInt(0),
                 state.path("skipped").asInt(0), state.path("held").asInt(0), state.path("rejected").asInt(0),
                 formats, Map.copyOf(drops), state.path("cursor").asString(null),
-                state.path("asset").asString(null), state.path("error").asString(null), stored.get().token()));
+                state.path("asset").asString(null), state.path("error").asString(null), record.get().token()));
     }
 
     private static byte[] body(String state, int imported, int skipped, int held, int rejected,

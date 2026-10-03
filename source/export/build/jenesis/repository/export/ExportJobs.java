@@ -7,6 +7,7 @@ import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
+import build.jenesis.repository.server.JobRecords;
 import build.jenesis.repository.store.JobState;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.RepositoryDocument;
@@ -239,35 +240,20 @@ public final class ExportJobs {
 
     /** A job's persisted state as raw JSON bytes, or empty when there is no such job. */
     public Optional<byte[]> status(ArtifactStore store, String jobId) throws IOException {
-        Optional<ArtifactStore.Versioned> stored = store.readVersioned(RECORDS + "/" + jobId);
-        if (stored.isEmpty()) {
-            return Optional.empty();
-        }
-        // The record as its run wrote it, except that a running record no run holds is told as interrupted.
-        JsonNode state = JSON.readTree(stored.get().content());
-        String effective = JobState.effective(store, RECORDS, jobId, state.path("state").asString(null));
-        if (Objects.equals(effective, state.path("state").asString(null))) {
-            return Optional.of(stored.get().content());
-        }
-        ((tools.jackson.databind.node.ObjectNode) state).put("state", effective);
-        return Optional.of(JSON.writeValueAsBytes(state));
+        return JobRecords.status(store, RECORDS, jobId);
     }
 
     /** A job's state parsed, for a status answer or to seed a resume. */
     public Optional<Snapshot> snapshot(ArtifactStore store, String jobId) throws IOException {
-        Optional<ArtifactStore.Versioned> stored = store.readVersioned(RECORDS + "/" + jobId);
-        if (stored.isEmpty()) {
+        Optional<JobRecords.Record> record = JobRecords.read(store, RECORDS, jobId);
+        if (record.isEmpty()) {
             return Optional.empty();
         }
-        JsonNode state = JSON.readTree(stored.get().content());
-        if (JobState.DISMISSED.equals(state.path("state").asString(null))) {
-            return Optional.empty();
-        }
-        String effective = JobState.effective(store, RECORDS, jobId, state.path("state").asString(null));
-        return Optional.of(new Snapshot(effective, state.path("target").asString(null),
+        JsonNode state = record.get().fields();
+        return Optional.of(new Snapshot(record.get().state(), state.path("target").asString(null),
                 state.path("published").asInt(0), state.path("present").asInt(0), state.path("withheld").asInt(0),
                 state.path("cursor").asString(null), state.path("reached").asString(null),
-                state.path("error").asString(null), stored.get().token()));
+                state.path("error").asString(null), record.get().token()));
     }
 
     private static byte[] body(String state, String url, Counts counts, String cursor, String reached, String error)
