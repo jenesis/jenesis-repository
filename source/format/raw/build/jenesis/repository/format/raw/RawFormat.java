@@ -23,10 +23,16 @@ import build.jenesis.repository.format.PublishedExport;
  * {@code GET} serves them, a {@code GET} on a trailing-slash path lists the directory, and a {@code DELETE} removes the
  * pointer.
  */
-public final class RawFormat implements RepositoryFormat, ProxyFormat, RepositoryImporter, RepositoryExporter {
+public final class RawFormat implements RepositoryFormat, ProxyFormat, RepositoryImporter.Delegating,
+        RepositoryExporter {
 
     /** The migration-import capability, delegated to {@link RawImporter}. */
     private final RawImporter importer = new RawImporter();
+
+    @Override
+    public RepositoryImporter importer() {
+        return importer;
+    }
 
     @Override
     public String name() {
@@ -166,21 +172,6 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
         boolean[] any = {false};
         store.page(prefix, "", 1, _ -> any[0] = true);
         return any[0];
-    }
-
-    @Override
-    public boolean imports(String sourceFormat) {
-        return importer.imports(sourceFormat);
-    }
-
-    @Override
-    public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
-        return importer.importTarget(sourcePath);
-    }
-
-    @Override
-    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        importer.importArtifact(path, content, store);
     }
 
     /** Raw files record no coordinates, so each is a unit of its own, put at its path under the client's

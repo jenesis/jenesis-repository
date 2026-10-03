@@ -67,8 +67,8 @@ import build.jenesis.repository.walk.TraversalException;
  * empty and a coordinate is reached through {@link #blobKeys} and {@link #servedPaths}, which walk the pool for a
  * version's {@code .rpm} pointers; {@link #describe} resolves a {@code .rpm} path to its NEVRA coordinate.
  */
-public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter,
-        ArtifactSignatures, RepositoryExporter {
+public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout,
+        RepositoryImporter.Delegating, ArtifactSignatures, RepositoryExporter {
 
     /** The ecosystem name this format's artifacts report, distinct from {@link #name()}, the routing id. */
     public static final String ECOSYSTEM = "RPM";
@@ -815,18 +815,8 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
     private final RpmImporter importer = new RpmImporter();
 
     @Override
-    public boolean imports(String sourceFormat) {
-        return importer.imports(sourceFormat);
-    }
-
-    @Override
-    public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
-        return importer.importTarget(sourcePath);
-    }
-
-    @Override
-    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        importer.importArtifact(path, content, store);
+    public RepositoryImporter importer() {
+        return importer;
     }
 
     /** Each {@code .rpm} of the version is put at its location; the target derives its own repodata. */

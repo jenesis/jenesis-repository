@@ -53,8 +53,8 @@ import build.jenesis.repository.walk.TraversalException;
  * {@code revisions}, {@code files}, {@code search}) is streamed fresh and carries no download URLs.
  * {@link #defaultUpstream()} is ConanCenter.
  */
-public final class ConanFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter,
-        RepositoryExporter {
+public final class ConanFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout,
+        RepositoryImporter.Delegating, RepositoryExporter {
 
     /** The ecosystem name this format's artifacts report, distinct from {@link #name()}, the routing id. */
     public static final String ECOSYSTEM = "Conan";
@@ -798,18 +798,8 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
     private final ConanImporter importer = new ConanImporter();
 
     @Override
-    public boolean imports(String sourceFormat) {
-        return importer.imports(sourceFormat);
-    }
-
-    @Override
-    public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
-        return importer.importTarget(sourcePath);
-    }
-
-    @Override
-    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        importer.importArtifact(path, content, store);
+    public RepositoryImporter importer() {
+        return importer;
     }
 
     /** Every revision of the version is uploaded as {@code conan upload} does through the v2 API - each recipe file,

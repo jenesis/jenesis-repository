@@ -60,8 +60,8 @@ import build.jenesis.repository.store.Publication;
  * first download its URL is resolved from the upstream podspec, and it streams into the store ({@link ProxyRelay#fill})
  * and is served.
  */
-public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter,
-        RepositoryExporter {
+public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout,
+        RepositoryImporter.Delegating, RepositoryExporter {
 
     /** The ecosystem name this format's artifacts report, distinct from {@link #name()}, the routing id. */
     public static final String ECOSYSTEM = "CocoaPods";
@@ -725,18 +725,8 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
     private final CocoaPodsImporter importer = new CocoaPodsImporter();
 
     @Override
-    public boolean imports(String sourceFormat) {
-        return importer.imports(sourceFormat);
-    }
-
-    @Override
-    public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
-        return importer.importTarget(sourcePath);
-    }
-
-    @Override
-    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        importer.importArtifact(path, content, store);
+    public RepositoryImporter importer() {
+        return importer;
     }
 
     /** Each registry's pod archive of the version is put where a push goes, {@code <repo>/<name>/<version>}, unless its

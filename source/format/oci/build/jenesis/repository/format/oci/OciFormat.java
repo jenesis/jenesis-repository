@@ -61,7 +61,7 @@ import build.jenesis.repository.store.ServableNames;
  * {@code DELETE} of a manifest or a tag removes versions through the one removal ({@link VersionRemoval}), and an
  * upload naming {@code mount} and {@code from} links a blob the caller may read in another repository of the tenant.
  */
-public final class OciFormat implements RepositoryFormat, ProxyFormat, RepositoryImporter, BlobReferences,
+public final class OciFormat implements RepositoryFormat, ProxyFormat, RepositoryImporter.Delegating, BlobReferences,
         ArtifactSignatures, RepositoryExporter {
 
     /** cosign's tag for the signature artifact of the manifest {@code sha256:<hex>}: {@code sha256-<hex>.sig}. */
@@ -73,6 +73,11 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
 
     /** The import capability's delegate. */
     private final OciImporter importer = new OciImporter();
+
+    @Override
+    public RepositoryImporter importer() {
+        return importer;
+    }
 
     static final String OCI_MANIFEST = "application/vnd.oci.image.manifest.v1+json";
 
@@ -1672,21 +1677,6 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     }
 
     // --- RepositoryImporter capability, delegated to OciImporter ---
-
-    @Override
-    public boolean imports(String sourceFormat) {
-        return importer.imports(sourceFormat);
-    }
-
-    @Override
-    public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
-        return importer.importTarget(sourcePath);
-    }
-
-    @Override
-    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        importer.importArtifact(path, content, store);
-    }
 
     /** An image is exported tag by tag through the Distribution API, as {@code docker push} sends it; see
      *  {@link OciExport}. */

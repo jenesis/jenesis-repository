@@ -49,7 +49,7 @@ import build.jenesis.repository.store.Publication;
  * <p>Chart pointers live in the shared {@code Blobs} namespace, so {@link #paths} is empty and coordinate-scoped
  * enforcement runs through the {@link BlobLayout} seam.
  */
-public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, RepositoryImporter,
+public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, RepositoryImporter.Delegating,
         ArtifactSignatures, RepositoryExporter, ProxyLeg {
 
     /** The ecosystem name Helm coordinates report. OSV has no Helm feed, so vulnerability lookup finds nothing while
@@ -144,6 +144,11 @@ public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobL
     private static final String CHART_YAML = "Chart.yaml";
 
     private final HelmImporter importer = new HelmImporter();
+
+    @Override
+    public RepositoryImporter importer() {
+        return importer;
+    }
 
     public HelmFormat() {
     }
@@ -621,21 +626,6 @@ public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobL
     }
 
     // ---- importer
-
-    @Override
-    public boolean imports(String format) {
-        return importer.imports(format);
-    }
-
-    @Override
-    public Optional<ArtifactDescriptor> importTarget(String path) {
-        return importer.importTarget(path);
-    }
-
-    @Override
-    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        importer.importArtifact(path, content, store);
-    }
 
     // ---- keys
 

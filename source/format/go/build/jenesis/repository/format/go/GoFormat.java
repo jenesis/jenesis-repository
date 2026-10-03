@@ -65,7 +65,8 @@ import build.jenesis.repository.format.Semver;
  *       is served whole for the same reason.</li>
  * </ol>
  */
-public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter, RepositoryExporter {
+public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter.Delegating,
+        RepositoryExporter {
 
     @Override
     public String name() {
@@ -563,18 +564,8 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
     private final GoImporter importer = new GoImporter();
 
     @Override
-    public boolean imports(String sourceFormat) {
-        return importer.imports(sourceFormat);
-    }
-
-    @Override
-    public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
-        return importer.importTarget(sourcePath);
-    }
-
-    @Override
-    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        importer.importArtifact(path, content, store);
+    public RepositoryImporter importer() {
+        return importer;
     }
 
     /** Each of the version's {@code .info}, {@code .mod} and {@code .zip} is put at its {@code @v/} path, as a GOPROXY

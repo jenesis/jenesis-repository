@@ -58,7 +58,7 @@ import build.jenesis.repository.walk.Trees;
  * {@code InRelease} whole, so this repository can verify the same chain ({@link #indexCoverage}).
  */
 public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayout, ArtifactSignatures,
-        RepositoryImporter, RepositoryExporter {
+        RepositoryImporter.Delegating, RepositoryExporter {
 
     /** How many per-package digests one relayed index may record: a bound on a hostile upstream, well past a real suite
      *  (Debian main/amd64 carries some sixty thousand packages). */
@@ -1010,18 +1010,8 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
     private final DebianImporter importer = new DebianImporter();
 
     @Override
-    public boolean imports(String sourceFormat) {
-        return importer.imports(sourceFormat);
-    }
-
-    @Override
-    public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
-        return importer.importTarget(sourcePath);
-    }
-
-    @Override
-    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        importer.importArtifact(path, content, store);
+    public RepositoryImporter importer() {
+        return importer;
     }
 
     /** Each {@code .deb} of the version is put at its pool path; the target derives its own {@code Packages} and

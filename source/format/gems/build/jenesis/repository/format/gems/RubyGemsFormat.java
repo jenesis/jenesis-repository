@@ -44,8 +44,8 @@ import build.jenesis.repository.store.Withheld;
  * {@code /rubygems/quick/Marshal.4.8/<name>-<version>.gemspec.rz}, produced by {@link QuickSpec} at push. The gem is
  * served at {@code /rubygems/gems/<file>.gem}.
  */
-public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter, ArtifactSignatures,
-        RepositoryExporter {
+public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter.Delegating,
+        ArtifactSignatures, RepositoryExporter {
 
     private static final String QUICK = "quick/Marshal.4.8/";
 
@@ -1031,18 +1031,8 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
     private final RubyGemsImporter importer = new RubyGemsImporter();
 
     @Override
-    public boolean imports(String sourceFormat) {
-        return importer.imports(sourceFormat);
-    }
-
-    @Override
-    public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
-        return importer.importTarget(sourcePath);
-    }
-
-    @Override
-    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        importer.importArtifact(path, content, store);
+    public RepositoryImporter importer() {
+        return importer;
     }
 
     /** The version's {@code .gem} is pushed as {@code gem push} does - posted to {@code api/v1/gems} with the key as

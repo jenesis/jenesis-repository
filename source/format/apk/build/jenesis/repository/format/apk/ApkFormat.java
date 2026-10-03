@@ -49,7 +49,7 @@ import build.jenesis.repository.format.Listings;
  * {@code GET /apk/keys/jenesis.rsa.pub} for {@code /etc/apk/keys/} ({@link ApkSigner}).
  */
 public final class ApkFormat implements RepositoryFormat, ArtifactLayout, PathKeyedBlobLayout, ArtifactSignatures,
-        RepositoryExporter, RepositoryImporter, ProxyLeg {
+        RepositoryExporter, RepositoryImporter.Delegating, ProxyLeg {
 
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(ApkFormat.class);
 
@@ -82,18 +82,8 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, PathKe
     private final ApkImporter importer = new ApkImporter();
 
     @Override
-    public boolean imports(String format) {
-        return importer.imports(format);
-    }
-
-    @Override
-    public Optional<ArtifactDescriptor> importTarget(String path) {
-        return importer.importTarget(path);
-    }
-
-    @Override
-    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        importer.importArtifact(path, content, store);
+    public RepositoryImporter importer() {
+        return importer;
     }
 
     /** The marks this format's clients see, each by its own word. */

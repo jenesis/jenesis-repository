@@ -55,7 +55,7 @@ import build.jenesis.repository.format.Listings;
  * registry.
  */
 public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, PathKeyedBlobLayout, RepositoryExporter,
-        RepositoryImporter, ProxyLeg {
+        RepositoryImporter.Delegating, ProxyLeg {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -89,18 +89,8 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
     private final TerraformImporter importer = new TerraformImporter();
 
     @Override
-    public boolean imports(String format) {
-        return importer.imports(format);
-    }
-
-    @Override
-    public Optional<ArtifactDescriptor> importTarget(String path) {
-        return importer.importTarget(path);
-    }
-
-    @Override
-    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        importer.importArtifact(path, content, store);
+    public RepositoryImporter importer() {
+        return importer;
     }
 
     /** The marks this format's clients see, each by its own word. */

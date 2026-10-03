@@ -60,7 +60,8 @@ import build.jenesis.repository.store.OwnerOnly;
  * the filename, split from the right since a conda version has no {@code -}. Pointers live in the shared {@code Blobs}
  * namespace, so {@link #paths} is empty and a coordinate is reached through {@link #blobKeys} and {@link #servedPaths}.
  */
-public final class CondaFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter, RepositoryExporter {
+public final class CondaFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout,
+        RepositoryImporter.Delegating, RepositoryExporter {
 
     /** The ecosystem name this format's artifacts report, distinct from {@link #name()}, the routing id. */
     public static final String ECOSYSTEM = "conda";
@@ -724,18 +725,8 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
     private final CondaImporter importer = new CondaImporter();
 
     @Override
-    public boolean imports(String sourceFormat) {
-        return importer.imports(sourceFormat);
-    }
-
-    @Override
-    public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
-        return importer.importTarget(sourcePath);
-    }
-
-    @Override
-    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        importer.importArtifact(path, content, store);
+    public RepositoryImporter importer() {
+        return importer;
     }
 
     /** Each build of the version is put where conda's own upload puts it, {@code <channel>/<subdir>/<file>}: the path

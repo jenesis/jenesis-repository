@@ -65,8 +65,8 @@ import build.jenesis.repository.walk.TraversalException;
  * uncached file answers from the upstream's headers without pulling the body. The {@code /api/...} index is streamed
  * fresh and needs no rewrite.
  */
-public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter,
-        RepositoryExporter {
+public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout,
+        RepositoryImporter.Delegating, RepositoryExporter {
 
     /** The ecosystem name this format's artifacts report, distinct from {@link #name()}, the routing id. */
     public static final String ECOSYSTEM = "Hugging Face";
@@ -1068,18 +1068,8 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
     private final HuggingFaceImporter importer = new HuggingFaceImporter();
 
     @Override
-    public boolean imports(String sourceFormat) {
-        return importer.imports(sourceFormat);
-    }
-
-    @Override
-    public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
-        return importer.importTarget(sourcePath);
-    }
-
-    @Override
-    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        importer.importArtifact(path, content, store);
+    public RepositoryImporter importer() {
+        return importer;
     }
 
     /** Each file of the revision is put at its {@code resolve/<revision>/<path>}, one request a file; the target

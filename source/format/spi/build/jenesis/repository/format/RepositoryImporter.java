@@ -125,4 +125,30 @@ public interface RepositoryImporter {
      *  storage; an importer that must inspect the content (to parse a manifest or a coordinate) may read it into a
      *  buffer, but a plain blob streams through unbuffered. The caller closes the stream. */
     void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException;
+
+    /**
+     * A format whose importer capability is a separate object it holds - the shape every importing format takes, so the
+     * format keeps its own {@code handles} and {@code describe} and the migration write-half lives beside it. The three
+     * calls go to {@link #importer()}, so a format names its importer once rather than forwarding each call itself.
+     */
+    interface Delegating extends RepositoryImporter {
+
+        /** The importer this format's import calls go to. */
+        RepositoryImporter importer();
+
+        @Override
+        default boolean imports(String sourceFormat) {
+            return importer().imports(sourceFormat);
+        }
+
+        @Override
+        default Optional<ArtifactDescriptor> importTarget(String sourcePath) {
+            return importer().importTarget(sourcePath);
+        }
+
+        @Override
+        default void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
+            importer().importArtifact(path, content, store);
+        }
+    }
 }

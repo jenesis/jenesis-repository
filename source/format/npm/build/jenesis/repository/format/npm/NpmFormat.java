@@ -39,7 +39,7 @@ import build.jenesis.repository.format.Semver;
  * maintains, each version's {@code dist.tarball} completed to this registry's URL with npm's integrity and shasum kept;
  * the tarball is served verbatim, so the client's integrity check passes.
  */
-public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter,
+public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter.Delegating,
         ArtifactSignatures, RepositoryExporter {
 
     static final ObjectMapper MAPPER = new ObjectMapper();
@@ -1281,17 +1281,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
     private final NpmImporter importer = new NpmImporter();
 
     @Override
-    public boolean imports(String sourceFormat) {
-        return importer.imports(sourceFormat);
+    public RepositoryImporter importer() {
+        return importer;
     }
 
-    @Override
-    public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
-        return importer.importTarget(sourcePath);
-    }
-
-    @Override
-    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        importer.importArtifact(path, content, store);
-    }
 }

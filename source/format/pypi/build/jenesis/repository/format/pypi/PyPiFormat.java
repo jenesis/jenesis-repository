@@ -42,7 +42,7 @@ import build.jenesis.repository.walk.ScreenedNames;
  * project index ({@code GET /pypi/simple/<project>/}) is a stored page the upload maintains, each link relative with
  * the file's {@code #sha256}, and the file is served at {@code /pypi/simple/<project>/<filename>}.
  */
-public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter,
+public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter.Delegating,
         ArtifactSignatures, RepositoryExporter {
 
     private static final Logger LOGGER =
@@ -999,18 +999,8 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
     private final PyPiImporter importer = new PyPiImporter();
 
     @Override
-    public boolean imports(String sourceFormat) {
-        return importer.imports(sourceFormat);
-    }
-
-    @Override
-    public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
-        return importer.importTarget(sourcePath);
-    }
-
-    @Override
-    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        importer.importArtifact(path, content, store);
+    public RepositoryImporter importer() {
+        return importer;
     }
 
     /** Each distribution of the version is uploaded as {@code twine upload} sends it: the legacy form posted to the

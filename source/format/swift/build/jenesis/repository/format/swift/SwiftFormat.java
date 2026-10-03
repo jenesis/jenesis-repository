@@ -52,7 +52,7 @@ import tools.jackson.databind.node.ObjectNode;
  * (see {@link SwiftListings}).
  */
 public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, PathKeyedBlobLayout, ArtifactSignatures,
-        RepositoryExporter, RepositoryImporter, ProxyLeg {
+        RepositoryExporter, RepositoryImporter.Delegating, ProxyLeg {
 
     /** The archive signature's sidecar suffix under the archive key and path: {@code <version>.zip.sig}. */
     private static final String SIGNATURE = ".sig";
@@ -156,18 +156,8 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Path
     private final SwiftImporter importer = new SwiftImporter();
 
     @Override
-    public boolean imports(String format) {
-        return importer.imports(format);
-    }
-
-    @Override
-    public Optional<ArtifactDescriptor> importTarget(String path) {
-        return importer.importTarget(path);
-    }
-
-    @Override
-    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        importer.importArtifact(path, content, store);
+    public RepositoryImporter importer() {
+        return importer;
     }
 
     /** The marks this format's clients see, each by its own word. */

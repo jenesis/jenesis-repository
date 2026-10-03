@@ -29,12 +29,17 @@ import build.jenesis.repository.format.PublishedExport;
  * blob.
  */
 public final class MavenFormat implements RepositoryFormat, ProxyFormat, ArtifactLayout, ArtifactSignatures,
-        RepositoryImporter, RepositoryExporter {
+        RepositoryImporter.Delegating, RepositoryExporter {
 
     private static final List<ModuleView> MODULE_VIEWS = ModuleView.installed();
 
     /** The migration-import capability, delegated to {@link MavenImporter}. */
     private final MavenImporter importer = new MavenImporter();
+
+    @Override
+    public RepositoryImporter importer() {
+        return importer;
+    }
 
     /** The ecosystem name the descriptor carries, OSV's "Maven", distinct from {@link #name()}, the format id routing
      *  {@code /maven/}. */
@@ -564,24 +569,6 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         String hex = space > 0 ? body.substring(0, space) : body;
         return new Sha1(hex.length() == 40 && hex.chars().allMatch(c -> Character.digit(c, 16) >= 0) ? hex : null,
                 null);
-    }
-
-    // RepositoryImporter, delegated to MavenImporter; importTarget and imports avoid clashing with describe(String) and
-    // handles(String).
-
-    @Override
-    public boolean imports(String sourceFormat) {
-        return importer.imports(sourceFormat);
-    }
-
-    @Override
-    public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
-        return importer.importTarget(sourcePath);
-    }
-
-    @Override
-    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        importer.importArtifact(path, content, store);
     }
 
     /** A version's folder, each file put under the client's {@code .../maven/} URL; the {@code /module/} view is left

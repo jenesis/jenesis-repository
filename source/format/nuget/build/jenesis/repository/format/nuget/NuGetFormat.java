@@ -44,8 +44,8 @@ import build.jenesis.repository.xml.Xml;
  * the archive and stores the package under {@code nuget/<id>/<version>/}; the flat container lists a package's versions
  * and serves each {@code .nupkg}.
  */
-public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter, ArtifactSignatures,
-        RepositoryExporter {
+public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter.Delegating,
+        ArtifactSignatures, RepositoryExporter {
 
     static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -1014,18 +1014,8 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
     private final NuGetImporter importer = new NuGetImporter();
 
     @Override
-    public boolean imports(String sourceFormat) {
-        return importer.imports(sourceFormat);
-    }
-
-    @Override
-    public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
-        return importer.importTarget(sourcePath);
-    }
-
-    @Override
-    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        importer.importArtifact(path, content, store);
+    public RepositoryImporter importer() {
+        return importer;
     }
 
     /** The version's {@code .nupkg} is pushed as {@code dotnet nuget push} does - a multipart {@code PUT} to the

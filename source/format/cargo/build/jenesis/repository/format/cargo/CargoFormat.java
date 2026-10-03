@@ -51,8 +51,8 @@ import build.jenesis.repository.store.Withheld;
  * <p>The ecosystem is {@code "crates.io"}, the OSV name. Crate pointers live in the shared {@code Blobs} namespace, so
  * {@link #paths} is empty and coordinate-scoped enforcement runs through {@link #blobKeys}/{@link #servedPaths}.
  */
-public final class CargoFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, RepositoryImporter,
-        RepositoryExporter {
+public final class CargoFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout,
+        RepositoryImporter.Delegating, RepositoryExporter {
 
     /** The OSV ecosystem name this format's artifacts report (distinct from {@link #name()}, the routing id). */
     public static final String ECOSYSTEM = "crates.io";
@@ -875,18 +875,8 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
     private final CargoImporter importer = new CargoImporter();
 
     @Override
-    public boolean imports(String sourceFormat) {
-        return importer.imports(sourceFormat);
-    }
-
-    @Override
-    public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
-        return importer.importTarget(sourcePath);
-    }
-
-    @Override
-    public void importArtifact(String path, InputStream content, ArtifactStore store) throws IOException {
-        importer.importArtifact(path, content, store);
+    public RepositoryImporter importer() {
+        return importer;
     }
 
     /** Each registry's crate of the version is sent as {@code cargo publish} frames it to that registry's
