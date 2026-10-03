@@ -5,13 +5,16 @@ import module java.base;
 /**
  * A minimal, read-only reader for the front of an RPM package: the 96-byte lead, the signature header and the main
  * header, from which {@link RpmFormat}'s {@code repodata} takes the name, version, release, epoch, architecture and a
- * few descriptive fields, plus the main header's byte range for {@code dnf}'s ranged header fetch. Only the header
- * region is materialised; the cpio payload streams past.
+ * few descriptive fields, plus the main header's byte range for {@code dnf}'s ranged header fetch, and from which a
+ * quality inspector reads the same coordinate and what the package requires. Only the header region is materialised;
+ * the cpio payload streams past.
  *
  * <p>The header is an 8-byte magic, a count and a data-store size, then fixed 16-byte index entries into a tagged data
- * store, read directly and pinned to real {@code rpmbuild} output by its test.
+ * store, read directly and pinned to real {@code rpmbuild} output by its test. What a readable header is - a name, a
+ * version and a release, an epoch only as an {@code int32}, a string tag only as a string - is decided here alone, so
+ * the format indexes exactly the packages the screen reads a coordinate from.
  */
-final class RpmHeader {
+public final class RpmHeader {
 
     /** The RPM lead is a fixed-length legacy preamble; the two header structures follow it. */
     private static final int LEAD_LENGTH = 96;
@@ -38,8 +41,14 @@ final class RpmHeader {
     private static final int TAG_GROUP = 1016;
     private static final int TAG_ARCH = 1022;
     private static final int TAG_SOURCERPM = 1044;
+    /** What the package requires: the names, their version relations' flags, and the versions, index-aligned. */
+    private static final int TAG_REQUIREFLAGS = 1048;
+    private static final int TAG_REQUIRENAME = 1049;
+    private static final int TAG_REQUIREVERSION = 1050;
 
+    private static final int TYPE_INT32 = 4;
     private static final int TYPE_STRING = 6;
+    private static final int TYPE_STRING_ARRAY = 8;
     private static final int TYPE_BIN = 7;
     private static final int TYPE_I18NSTRING = 9;
 
@@ -57,8 +66,9 @@ final class RpmHeader {
     private RpmHeader() {
     }
 
-    /** A package's metadata and the {@code [start, end)} offsets of its main header, for {@code <rpm:header-range>}. */
-    record Package(String name,
+    /** A package's metadata, what it requires, and the {@code [start, end)} offsets of its main header, for
+     *  {@code <rpm:header-range>}. */
+    public record Package(String name,
                    String epoch,
                    String version,
                    String release,
@@ -71,7 +81,28 @@ final class RpmHeader {
                    long buildTime,
                    long installedSize,
                    long headerStart,
-                   long headerEnd) {
+                   long headerEnd,
+                   List<Require> requires) {
+
+        /** The canonical RPM version string {@code [epoch:]version-release}, the epoch omitted when it is zero, as RPM
+         *  reads a missing epoch. */
+        public String evr() {
+            return (epoch.equals("0") ? "" : epoch + ":") + version + "-" + release;
+        }
+    }
+
+    /** One requirement: the name required, the flags carrying its version relation, and the version it names. */
+    public record Require(String name, int flags, String version) {
+
+        private static final int SENSE_LESS = 2;
+        private static final int SENSE_GREATER = 4;
+        private static final int SENSE_EQUAL = 8;
+
+        /** The version relation the flags carry ({@code <}, {@code >=}, {@code =} ...), empty when they carry none. */
+        public String relation() {
+            return ((flags & SENSE_LESS) != 0 ? "<" : "") + ((flags & SENSE_GREATER) != 0 ? ">" : "")
+                    + ((flags & SENSE_EQUAL) != 0 ? "=" : "");
+        }
     }
 
     /** One OpenPGP signature from the signature header: the tag saying what it covers, and the binary packet. */
@@ -143,7 +174,7 @@ final class RpmHeader {
     }
 
     /** Parse the metadata and header range out of a region produced by {@link #readHeaderRegion}. */
-    static Package parse(byte[] region) throws IOException {
+    public static Package parse(byte[] region) throws IOException {
         int signatureCount = int32(region, LEAD_LENGTH + 8);
         int signatureStore = int32(region, LEAD_LENGTH + 12);
         int mainStart = LEAD_LENGTH + INTRO_LENGTH + signatureCount * INDEX_ENTRY_LENGTH + signatureStore;
@@ -163,13 +194,16 @@ final class RpmHeader {
             throw new IOException("truncated RPM header");
         }
         String name = null, version = null, release = null, epoch = "0", arch = "noarch";
-        String summary = "", description = "", license = "", group = "", sourceRpm = null;
+        String summary = null, description = null, license = null, group = null, sourceRpm = null;
         long buildTime = 0, installedSize = 0;
+        List<String> requireNames = List.of(), requireVersions = List.of();
+        int[] requireFlags = new int[0];
         for (int i = 0; i < count; i++) {
             int entry = indexStart + i * INDEX_ENTRY_LENGTH;
             int tag = int32(region, entry);
             int type = int32(region, entry + 4);
             int at = dataStart + int32(region, entry + 8);
+            int items = int32(region, entry + 12);
             if (at < dataStart || at >= headerEnd) {
                 continue;
             }
@@ -177,7 +211,8 @@ final class RpmHeader {
                 case TAG_NAME -> name = string(region, at, type, headerEnd);
                 case TAG_VERSION -> version = string(region, at, type, headerEnd);
                 case TAG_RELEASE -> release = string(region, at, type, headerEnd);
-                case TAG_EPOCH -> epoch = int32Fits(at, headerEnd) ? Integer.toString(int32(region, at)) : epoch;
+                case TAG_EPOCH -> epoch = type == TYPE_INT32 && int32Fits(at, headerEnd)
+                        ? Integer.toString(int32(region, at)) : epoch;
                 case TAG_ARCH -> arch = string(region, at, type, headerEnd);
                 case TAG_SUMMARY -> summary = string(region, at, type, headerEnd);
                 case TAG_DESCRIPTION -> description = string(region, at, type, headerEnd);
@@ -188,6 +223,9 @@ final class RpmHeader {
                         ? Integer.toUnsignedLong(int32(region, at)) : buildTime;
                 case TAG_SIZE -> installedSize = int32Fits(at, headerEnd)
                         ? Integer.toUnsignedLong(int32(region, at)) : installedSize;
+                case TAG_REQUIRENAME -> requireNames = strings(region, at, type, items, headerEnd);
+                case TAG_REQUIREVERSION -> requireVersions = strings(region, at, type, items, headerEnd);
+                case TAG_REQUIREFLAGS -> requireFlags = int32s(region, at, type, items, headerEnd);
                 default -> {
                 }
             }
@@ -195,8 +233,14 @@ final class RpmHeader {
         if (name == null || version == null || release == null) {
             throw new IOException("RPM main header lacks name/version/release");
         }
-        return new Package(name, epoch, version, release, arch, summary, description, license, group, sourceRpm,
-                buildTime, installedSize, mainStart, headerEnd);
+        List<Require> requires = new ArrayList<>(requireNames.size());
+        for (int index = 0; index < requireNames.size(); index++) {
+            requires.add(new Require(requireNames.get(index), index < requireFlags.length ? requireFlags[index] : 0,
+                    index < requireVersions.size() ? requireVersions.get(index) : ""));
+        }
+        return new Package(name, epoch, version, release, arch == null ? "noarch" : arch, text(summary),
+                text(description), text(license), text(group), sourceRpm, buildTime, installedSize, mainStart,
+                headerEnd, List.copyOf(requires));
     }
 
     /** Read a header intro (magic, count, store size) into {@code region} and return {@code {count, store}}. */
@@ -227,10 +271,46 @@ final class RpmHeader {
         region.write(chunk, 0, chunk.length);
     }
 
-    /** A NUL-terminated string in the data store; only {@code STRING}/{@code I18NSTRING} carry the fields we read. */
+    /** A descriptive field, empty when the header does not carry it as a string. */
+    private static String text(String value) {
+        return value == null ? "" : value;
+    }
+
+    /** {@code count} NUL-terminated strings from {@code at}, or none when the entry is not a string array. */
+    private static List<String> strings(byte[] region, int at, int type, int count, int limit) {
+        if (type != TYPE_STRING_ARRAY || count < 0 || count > MAX_INDEX_ENTRIES) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>(count);
+        int position = at;
+        for (int index = 0; index < count && position < limit; index++) {
+            int end = position;
+            while (end < limit && region[end] != 0) {
+                end++;
+            }
+            values.add(new String(region, position, end - position, StandardCharsets.UTF_8));
+            position = end + 1;
+        }
+        return values;
+    }
+
+    /** {@code count} big-endian 32-bit integers from {@code at}, or none when the entry is not an int32 array. */
+    private static int[] int32s(byte[] region, int at, int type, int count, int limit) {
+        if (type != TYPE_INT32 || count < 0 || count > MAX_INDEX_ENTRIES || at + 4L * count > limit) {
+            return new int[0];
+        }
+        int[] values = new int[count];
+        for (int index = 0; index < count; index++) {
+            values[index] = int32(region, at + 4 * index);
+        }
+        return values;
+    }
+
+    /** A NUL-terminated string in the data store, or {@code null} when the entry is not a string: only
+     *  {@code STRING}/{@code I18NSTRING} carry the fields read here. */
     private static String string(byte[] region, int at, int type, int limit) {
         if (type != TYPE_STRING && type != TYPE_I18NSTRING) {
-            return "";
+            return null;
         }
         int end = at;
         while (end < limit && region[end] != 0) {
