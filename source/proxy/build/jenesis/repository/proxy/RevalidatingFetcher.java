@@ -66,6 +66,13 @@ public final class RevalidatingFetcher implements ProxyFormat.Fetcher, Observabi
         return fetched;
     }
 
+    /** Itself, over what its delegate fetches beside an artifact: a document there revalidates as any other. */
+    @Override
+    public ProxyFormat.Fetcher beside() {
+        ProxyFormat.Fetcher beside = delegate.beside();
+        return beside == delegate ? this : new RevalidatingFetcher(beside);
+    }
+
     @Override
     public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders) throws IOException {
         return delegate.download(url, requestHeaders);

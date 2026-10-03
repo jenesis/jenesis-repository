@@ -256,7 +256,9 @@ public final class ProxyRelay {
     }
 
     /**
-     * Fetch the small document that declares a proxied artifact's digest, buffered, and fold the transport /
+     * Fetch the small document that declares a proxied artifact's digest, buffered and
+     * {@linkplain ProxyFormat.Fetcher#beside beside the artifact} - it is read to check the artifact, never served as
+     * it - and fold the transport /
      * miss / refusal ladder into {@link Declared}. On a {@code 200} the caller parses
      * {@link Sidecar#document()} for the digest and returns {@link Declared#of} or {@link Declared#NONE}; otherwise it
      * returns {@link Sidecar#verdict()} unchanged, this class having already decided whether the upstream declared
@@ -264,7 +266,7 @@ public final class ProxyRelay {
      */
     public static Sidecar declaring(ProxyFormat.Fetcher fetcher, URI url, Map<String, String> requestHeaders)
             throws IOException {
-        Optional<ProxyFormat.Fetched> fetched = fetcher.fetch(url, requestHeaders);
+        Optional<ProxyFormat.Fetched> fetched = fetcher.beside().fetch(url, requestHeaders);
         if (fetched.isEmpty()) {
             return new Sidecar(null, Declared.unreachable(url));
         }

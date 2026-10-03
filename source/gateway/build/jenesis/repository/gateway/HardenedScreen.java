@@ -531,6 +531,12 @@ public final class HardenedScreen {
                 return screened.fetch(url, headers);
             }
 
+            /** Unscreened, as the ordinary screen's: a document beside the artifact is not the artifact. */
+            @Override
+            public ProxyFormat.Fetcher beside() {
+                return upstream.beside();
+            }
+
             @Override
             public Optional<ProxyFormat.Head> head(URI url, Map<String, String> headers) throws IOException {
                 // A metadata answer carries no body, so there is nothing to spool, digest, full-body screen or pin a

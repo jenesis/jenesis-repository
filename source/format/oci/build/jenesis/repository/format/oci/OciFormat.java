@@ -1391,7 +1391,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
                 || (!realmHost.equalsIgnoreCase(upstreamHost) && PrivateHosts.resolvesToPrivate(realmHost))) {
             return null;
         }
-        Optional<ProxyFormat.Fetched> response = fetcher.fetch(realmUri, Map.of());
+        Optional<ProxyFormat.Fetched> response = fetcher.beside().fetch(realmUri, Map.of());
         if (response.isEmpty() || response.get().status() != 200) {
             return null;
         }

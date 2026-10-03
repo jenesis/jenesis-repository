@@ -126,6 +126,14 @@ public final class ImportScreen implements ProxyFormat.Fetcher {
         return delegate.fetch(screen(url), requestHeaders);
     }
 
+    /** Still screened against the authorised URL: a document beside an artifact is fetched from where a source
+     *  says, and no more trusted for it. */
+    @Override
+    public ProxyFormat.Fetcher beside() {
+        ProxyFormat.Fetcher beside = delegate.beside();
+        return beside == delegate ? this : new ImportScreen(beside, authorised);
+    }
+
     @Override
     public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders) throws IOException {
         return delegate.download(screen(url), requestHeaders);

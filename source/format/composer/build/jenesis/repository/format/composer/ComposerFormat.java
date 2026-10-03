@@ -545,7 +545,7 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
     private static Dist distUrl(String root, String vendor, String pkg, String version, ProxyFormat.Fetcher fetcher,
                                 boolean allowInternal) throws IOException {
         String file = P2 + vendor + "/" + pkg + (isDev(version) ? DEV : "") + JSON;
-        Optional<ProxyFormat.Fetched> fetched = fetcher.fetch(URI.create(root + "/" + file), Map.of());
+        Optional<ProxyFormat.Fetched> fetched = fetcher.beside().fetch(URI.create(root + "/" + file), Map.of());
         if (fetched.isEmpty() || fetched.get().status() != 200) {
             return null;
         }

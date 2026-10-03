@@ -569,7 +569,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
      *  archive is then cached. */
     private static URI downloadUrl(String root, String crate, String version, ProxyFormat.Fetcher fetcher)
             throws IOException {
-        Optional<ProxyFormat.Fetched> config = fetcher.fetch(URI.create(root + CONFIG), Map.of());
+        Optional<ProxyFormat.Fetched> config = fetcher.beside().fetch(URI.create(root + CONFIG), Map.of());
         if (config.isEmpty() || config.get().status() != 200) {
             return null;
         }

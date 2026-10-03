@@ -34,6 +34,13 @@ public final class AuthFetcher implements ProxyFormat.Fetcher {
         return delegate.fetch(url, augment(url, headers));
     }
 
+    /** The credentials apply to a document beside an artifact as to the artifact itself. */
+    @Override
+    public ProxyFormat.Fetcher beside() {
+        ProxyFormat.Fetcher beside = delegate.beside();
+        return beside == delegate ? this : new AuthFetcher(beside, credentials);
+    }
+
     @Override
     public Optional<ProxyFormat.Download> download(URI url, Map<String, String> headers) throws IOException {
         // Delegate to the streaming download of the real fetcher (never the buffering default), so a large proxied

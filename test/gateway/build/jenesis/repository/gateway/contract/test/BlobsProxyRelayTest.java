@@ -39,6 +39,30 @@ class BlobsProxyRelayTest {
     }
 
     @Test
+    void the_declaring_document_is_read_beside_the_artifact() throws IOException {
+        // A fetcher that screens what it serves as the artifact refuses every fetch; the document beside it is read
+        // through the fetcher it hands out for that.
+        ProxyFormat.Fetcher.Buffered beside = (_, _) -> Optional.of(new ProxyFormat.Fetched(200,
+                "declared".getBytes(StandardCharsets.UTF_8), Map.of()));
+        ProxyFormat.Fetcher screening = new ProxyFormat.Fetcher.Buffered() {
+            @Override
+            public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) {
+                return Optional.empty();
+            }
+
+            @Override
+            public ProxyFormat.Fetcher beside() {
+                return beside;
+            }
+        };
+
+        ProxyRelay.Sidecar sidecar = ProxyRelay.declaring(screening, URI.create("http://upstream/lodash"), Map.of());
+
+        assertThat(sidecar.answered()).isTrue();
+        assertThat(new String(sidecar.document().body(), StandardCharsets.UTF_8)).isEqualTo("declared");
+    }
+
+    @Test
     void length_degrades_an_absent_or_unparseable_content_length_to_unknown() {
         assertThat(ProxyRelay.length(null)).as("no header streams the body (unknown length)").isEqualTo(-1L);
         assertThat(ProxyRelay.length("123")).as("a numeric header parses").isEqualTo(123L);

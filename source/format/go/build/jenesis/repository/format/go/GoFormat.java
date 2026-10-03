@@ -384,7 +384,7 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
         }
         String version = file.substring(0, dot);
         GoChecksumDatabase.Advertised advertised =
-                GoChecksumDatabase.lookup(fetcher, upstream, module, version, allowInternal);
+                GoChecksumDatabase.lookup(fetcher.beside(), upstream, module, version, allowInternal);
         if (advertised.unreadable() != null) {
             return ProxyRelay.Declared.unreadable(advertised.unreadable());
         }

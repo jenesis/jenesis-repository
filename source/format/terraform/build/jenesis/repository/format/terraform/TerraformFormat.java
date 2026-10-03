@@ -525,7 +525,8 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
             throws IOException {
         URI root = URI.create(upstream.toString().endsWith("/") ? upstream.toString() : upstream + "/");
         URI providers = root.resolve("v1/providers/"), modules = root.resolve("v1/modules/");
-        Optional<ProxyFormat.Fetched> discovery = fetcher.fetch(root.resolve(".well-known/terraform.json"), Map.of());
+        Optional<ProxyFormat.Fetched> discovery = fetcher.beside().fetch(root.resolve(".well-known/terraform.json"),
+                Map.of());
         if (discovery.isPresent() && discovery.get().status() == 200) {
             try {
                 JsonNode document = MAPPER.readTree(discovery.get().body());
@@ -555,8 +556,8 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
     /** A provider version's package document for one platform, or {@code null} when it could not be read. */
     private static JsonNode packageDocument(ProxyFormat.Fetcher fetcher, Services services, String namespace,
                                             String type, String version, String os, String arch) throws IOException {
-        Optional<ProxyFormat.Fetched> fetched = fetcher.fetch(services.providers().resolve(namespace + "/" + type
-                + "/" + version + "/download/" + os + "/" + arch), Map.of());
+        Optional<ProxyFormat.Fetched> fetched = fetcher.beside().fetch(services.providers().resolve(namespace + "/"
+                + type + "/" + version + "/download/" + os + "/" + arch), Map.of());
         if (fetched.isEmpty() || fetched.get().status() != 200) {
             return null;
         }
@@ -666,7 +667,7 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
 
     /** The source a module version's {@code download} names upstream, or {@code null} when it names none. */
     private static String moduleSource(ProxyFormat.Fetcher fetcher, URI download) throws IOException {
-        Optional<ProxyFormat.Fetched> fetched = fetcher.fetch(download, Map.of());
+        Optional<ProxyFormat.Fetched> fetched = fetcher.beside().fetch(download, Map.of());
         if (fetched.isEmpty() || (fetched.get().status() != 204 && fetched.get().status() != 200)) {
             return null;
         }

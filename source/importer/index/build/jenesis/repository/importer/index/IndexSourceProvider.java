@@ -86,6 +86,12 @@ public final class IndexSourceProvider implements ImportSourceProvider {
             }
 
             @Override
+            public ProxyFormat.Fetcher beside() {
+                ProxyFormat.Fetcher beside = fetcher.beside();
+                return beside == fetcher ? this : authorized(beside, username, password, root);
+            }
+
+            @Override
             public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders) throws IOException {
                 return fetcher.download(url, merged(url, requestHeaders));
             }

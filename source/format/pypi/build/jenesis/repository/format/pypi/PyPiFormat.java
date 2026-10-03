@@ -400,7 +400,8 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         }
         String project = normalize(after.substring(0, slash));
         String file = after.substring(slash + 1);
-        Optional<ProxyFormat.Fetched> index = fetcher.fetch(URI.create(root + "simple/" + project + "/"), Map.of());
+        Optional<ProxyFormat.Fetched> index = fetcher.beside().fetch(URI.create(root + "simple/" + project + "/"),
+                Map.of());
         if (index.isEmpty() || index.get().status() != 200) {
             return false;
         }

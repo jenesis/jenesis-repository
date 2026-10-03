@@ -716,6 +716,13 @@ public final class RepositoryRouter {
             this.delegate = delegate;
         }
 
+        /** What the leg fetches beside the artifact, unprobed: a declaring document answering {@code 200} says
+         *  nothing about whether the upstream served the artifact. */
+        @Override
+        public ProxyFormat.Fetcher beside() {
+            return delegate.beside();
+        }
+
         @Override
         public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) throws IOException {
             Optional<ProxyFormat.Fetched> fetched = delegate.fetch(url, requestHeaders);

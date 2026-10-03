@@ -161,6 +161,13 @@ public final class ProxyScreen {
                 return fetched;
             }
 
+            /** Unscreened: a document beside the artifact is not the artifact this screen judges (see
+             *  {@link ProxyFormat.Fetcher#beside}). */
+            @Override
+            public ProxyFormat.Fetcher beside() {
+                return delegate.beside();
+            }
+
             @Override
             public Optional<ProxyFormat.Head> head(URI url, Map<String, String> headers) throws IOException {
                 // Delegated to the transport's real HTTP HEAD, never derived: a derivation would open (and this screen
@@ -257,14 +264,28 @@ public final class ProxyScreen {
     }
 
     Verdict screen(String path, byte[] body, Instant lastModified, String upstream) throws IOException {
-        // The buffered fetch body is the COMPLETE artifact, never a bounded prefix, so it is never truncated.
-        Screening screening = assess(path, body, lastModified, false);
+        // The buffered fetch body is the COMPLETE document, never a bounded prefix, so it is never truncated. A
+        // document naming no version - a packument, a maven-metadata.xml, a project page - is about a package rather
+        // than a release of it: its dates move with every release, so the immaturity hold does not read them, and a
+        // withholding refuses it rather than keeping a copy for review, since a copy released later would serve a
+        // document the upstream has moved past and no version would have been reviewed.
+        boolean versioned = !pathDerivedSubject(path).version().isEmpty();
+        Screening screening = assess(path, body, versioned ? lastModified : null, false);
+        if (!versioned && screening.verdict() == Verdict.QUARANTINE) {
+            List<String> reasons = new ArrayList<>(screening.reasons());
+            reasons.add(UNVERSIONED_REASON);
+            screening = new Screening(Verdict.REJECT, screening.coordinate(), reasons, screening.complete());
+        }
         if (screening.verdict() == Verdict.QUARANTINE) {
             quarantine(path, new ByteArrayInputStream(body), upstream);
         }
         log(path, screening);
         return screening.verdict();
     }
+
+    /** Why a withheld document naming no version was refused rather than held for review. */
+    public static final String UNVERSIONED_REASON = "Refused rather than held for review: the document names no version, so "
+            + "there is no release to review and a held copy would go stale";
 
     /** Store a withheld body fetched from {@code upstream} under {@code /quarantine} for review - the durable hold the
      *  {@link QuarantineLog} row points at. Shared by the buffered/streaming screen and the hardened proxy leg

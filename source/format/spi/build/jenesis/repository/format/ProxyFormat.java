@@ -296,6 +296,20 @@ public interface ProxyFormat {
         Optional<Fetched> fetch(URI url, Map<String, String> requestHeaders) throws IOException;
 
         /**
+         * The fetcher for a document read <em>beside</em> the artifact a leg is filling rather than served as it: the
+         * index or checksum that declares its digest, the registry document that says where it downloads from, the
+         * token a registry hands out for it. A screen wraps a fetcher for the one path a fill serves, and judges
+         * every answer it fetches as that path's content; a document beside the artifact is not that content, so a
+         * screen answers with the fetcher it wraps and leaves the document unscreened - judged as the artifact, it
+         * would be held in the artifact's place, by the document's own dates. Every other decorator answers with
+         * itself over the fetcher it wraps, so what it adds - credentials, a negative cache - still applies. This
+         * fetcher, by default.
+         */
+        default Fetcher beside() {
+            return this;
+        }
+
+        /**
          * Open a streaming download of an upstream {@code GET}, so a large artifact copies straight from the network
          * to storage rather than being buffered whole (as {@link #fetch} does for the small bodies a proxy must
          * inspect or rewrite). An empty result is a transport failure; otherwise the {@link Download} carries the

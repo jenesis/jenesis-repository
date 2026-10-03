@@ -476,7 +476,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         String[] shard = shard(name);
         String specPath = SPECS + shard[0] + "/" + shard[1] + "/" + shard[2] + "/" + name + "/" + version
                 + "/" + name + PODSPEC_SUFFIX;
-        Optional<ProxyFormat.Fetched> fetched = fetcher.fetch(URI.create(root + "/" + specPath), Map.of());
+        Optional<ProxyFormat.Fetched> fetched = fetcher.beside().fetch(URI.create(root + "/" + specPath), Map.of());
         if (fetched.isEmpty() || fetched.get().status() != 200) {
             return null;
         }

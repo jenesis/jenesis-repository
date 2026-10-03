@@ -553,7 +553,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
      *  An upstream answering {@code 404}/{@code 410}, or a body that is no digest, publishes none; a transport failure
      *  or other status is unreadable. */
     private static Sha1 upstreamSha1(ProxyFormat.Fetcher fetcher, URI sha1) throws IOException {
-        Optional<ProxyFormat.Fetched> response = fetcher.fetch(sha1, Map.of());
+        Optional<ProxyFormat.Fetched> response = fetcher.beside().fetch(sha1, Map.of());
         if (response.isEmpty()) {
             return new Sha1(null, "the checksum sibling " + sha1 + " could not be reached");
         }

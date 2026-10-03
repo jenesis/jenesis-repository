@@ -278,35 +278,48 @@ public final class PullThroughCache {
     private static final class Answered implements ProxyFormat.Fetcher {
 
         private final ProxyFormat.Fetcher delegate;
-        private volatile String last = "unasked";
+        /** What the upstream last answered, shared with the view {@link #beside()} hands out, since a declaring
+         *  document that could not be reached is as much the reading as the artifact itself. */
+        private final AtomicReference<String> last;
 
         private Answered(ProxyFormat.Fetcher delegate) {
+            this(delegate, new AtomicReference<>("unasked"));
+        }
+
+        private Answered(ProxyFormat.Fetcher delegate, AtomicReference<String> last) {
             this.delegate = delegate;
+            this.last = last;
         }
 
         String last() {
-            return last;
+            return last.get();
         }
 
         @Override
         public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) throws IOException {
             Optional<ProxyFormat.Fetched> fetched = delegate.fetch(url, requestHeaders);
-            last = fetched.map(response -> Integer.toString(response.status())).orElse("unreachable");
+            last.set(fetched.map(response -> Integer.toString(response.status())).orElse("unreachable"));
             return fetched;
+        }
+
+        @Override
+        public ProxyFormat.Fetcher beside() {
+            ProxyFormat.Fetcher beside = delegate.beside();
+            return beside == delegate ? this : new Answered(beside, last);
         }
 
         @Override
         public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders)
                 throws IOException {
             Optional<ProxyFormat.Download> download = delegate.download(url, requestHeaders);
-            last = download.map(response -> Integer.toString(response.status())).orElse("unreachable");
+            last.set(download.map(response -> Integer.toString(response.status())).orElse("unreachable"));
             return download;
         }
 
         @Override
         public Optional<ProxyFormat.Head> head(URI url, Map<String, String> requestHeaders) throws IOException {
             Optional<ProxyFormat.Head> head = delegate.head(url, requestHeaders);
-            last = head.map(response -> Integer.toString(response.status())).orElse("unreachable");
+            last.set(head.map(response -> Integer.toString(response.status())).orElse("unreachable"));
             return head;
         }
     }

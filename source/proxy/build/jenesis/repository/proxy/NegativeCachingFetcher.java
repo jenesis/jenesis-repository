@@ -52,6 +52,13 @@ public final class NegativeCachingFetcher implements ProxyFormat.Fetcher, Observ
         return fetched;
     }
 
+    /** Itself, over what its delegate fetches beside an artifact: a miss is remembered for a document there too. */
+    @Override
+    public ProxyFormat.Fetcher beside() {
+        ProxyFormat.Fetcher beside = delegate.beside();
+        return beside == delegate ? this : new NegativeCachingFetcher(beside, ttl, clock);
+    }
+
     @Override
     public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders) throws IOException {
         if (cached(url)) {

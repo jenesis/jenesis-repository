@@ -345,7 +345,7 @@ public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobL
         if (file.indexOf('/') >= 0 || Keys.unsafe(file)) {
             return false;
         }
-        Optional<ProxyFormat.Fetched> fetched = fetcher.fetch(index, Map.of());
+        Optional<ProxyFormat.Fetched> fetched = fetcher.beside().fetch(index, Map.of());
         if (fetched.isEmpty() || fetched.get().status() != 200) {
             return false;
         }
