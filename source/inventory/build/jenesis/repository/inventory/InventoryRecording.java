@@ -121,8 +121,7 @@ final class InventoryRecording {
     void commit(Recording recording) throws IOException {
         Instant now = Clocks.now();
         String documentKey = MetadataKey.version(recording.ecosystem, recording.coordinate, recording.version);
-        Committed committed = DocumentTurns.take(store, documentKey,
-                () -> Retries.decide(store, documentKey, current -> {
+        Committed committed = DocumentTurns.decide(store, documentKey, current -> {
             MetadataDocument document = current.map(versioned -> MetadataDocument.read(versioned.content()))
                     .orElseGet(MetadataDocument::empty);
             boolean firstPublish = !PublishedSection.published(document.section(PublishedSection.TAG));
@@ -162,7 +161,7 @@ final class InventoryRecording {
                     PublishedSection.facts(next.section(PublishedSection.TAG)));
             return !firstPublish && same(document, next) ? Retries.Verdict.keep(landed)
                     : Retries.Verdict.write(next.serialize(), landed);
-        }));
+        });
         if (committed.firstPublish()) {
             identity.foldIn(InventoryIdentity.member(recording.ecosystem, recording.coordinate, recording.version,
                     LicenseSection.fingerprintOf(committed.licensesAfter())), recording.published);
@@ -235,7 +234,7 @@ final class InventoryRecording {
                                            Instant published, String originSha256) throws IOException {
         // The document as the landing try wrote it on a first publish, else none.
         String key = MetadataKey.version(ecosystem, coordinate, version);
-        MetadataDocument committed = DocumentTurns.take(store, key, () -> Retries.decide(store, key, current -> {
+        MetadataDocument committed = DocumentTurns.decide(store, key, current -> {
             MetadataDocument document = current.map(versioned -> MetadataDocument.read(versioned.content()))
                     .orElseGet(MetadataDocument::empty);
             boolean firstPublish = !PublishedSection.published(document.section(PublishedSection.TAG));
@@ -250,7 +249,7 @@ final class InventoryRecording {
             MetadataDocument next = document.mutate(mutations);
             return !firstPublish && same(document, next) ? Retries.Verdict.<MetadataDocument>keep(null)
                     : Retries.Verdict.write(next.serialize(), firstPublish ? next : null);
-        }));
+        });
         if (committed == null) {
             return false;
         }
@@ -315,7 +314,7 @@ final class InventoryRecording {
     boolean cache(String ecosystem, String coordinate, String version, String upstream, Instant at)
             throws IOException {
         String key = MetadataKey.version(ecosystem, coordinate, version);
-        boolean recorded = DocumentTurns.take(store, key, () -> Retries.decide(store, key, current -> {
+        boolean recorded = DocumentTurns.decide(store, key, current -> {
             MetadataDocument document = current.map(versioned -> MetadataDocument.read(versioned.content()))
                     .orElseGet(MetadataDocument::empty);
             if (Holdings.held(document)) {
@@ -324,7 +323,7 @@ final class InventoryRecording {
             SequencedMap<String, SectionMutation> mutations = new LinkedHashMap<>();
             mutations.put(CachedSection.TAG, CachedSection.record(at, upstream));
             return Retries.Verdict.write(document.mutate(mutations).serialize(), true);
-        }));
+        });
         if (recorded) {
             NewestFirst.CACHED.record(store, ecosystem, coordinate, version, at);
         }

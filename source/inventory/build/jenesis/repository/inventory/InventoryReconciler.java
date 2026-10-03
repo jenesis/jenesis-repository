@@ -285,7 +285,7 @@ final class InventoryReconciler {
     private void recordAsCopy(String ecosystem, String coordinate, String version, PublishedSection.Facts facts,
                               String upstream) throws IOException {
         String key = MetadataKey.version(ecosystem, coordinate, version);
-        boolean turned = DocumentTurns.take(store, key, () -> Retries.decide(store, key, current -> {
+        boolean turned = DocumentTurns.decide(store, key, current -> {
             if (current.isEmpty()) {
                 return Retries.Verdict.keep(false);
             }
@@ -299,7 +299,7 @@ final class InventoryReconciler {
             mutations.put(PublishedSection.TAG, _ -> null);
             mutations.put(CachedSection.TAG, _ -> CachedSection.section(now.get().at(), upstream));
             return Retries.Verdict.write(document.mutate(mutations).serialize(), true);
-        }));
+        });
         if (turned) {
             NewestFirst.RELEASES.forget(store, ecosystem, coordinate, version, facts.at());
             NewestFirst.CACHED.ensure(store, ecosystem, coordinate, version, facts.at());

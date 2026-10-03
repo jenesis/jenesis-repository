@@ -15,7 +15,7 @@ import build.jenesis.repository.store.Retries;
  * {@link MetadataKey#version}, so a version's record is a point lookup. A mutation re-reads, transforms only the
  * sections it names, carries every other section through verbatim and commits through the store's compare-and-set
  * under {@link Retries}, so writers of disjoint sections converge on the union instead of losing an update, and a
- * batch of sections commits in one cycle. This node's writers of one document take turns ({@link DocumentTurns}).
+ * batch of sections commits in one cycle. This node's writers of one document land together ({@link DocumentTurns}).
  *
  * <p>The read is total - a torn or foreign object reads as an empty document - and the format guard is loud: mutating
  * a document a newer node wrote (a higher {@code format}) fails rather than rewriting it in the older shape. Document
@@ -85,16 +85,9 @@ public final class StoreMetadata implements MetadataStore {
 
     /** The read-transform-compare-and-set loop the version and the {@link MetadataKey#COORDINATE} documents share. */
     private void mutateKey(String key, SequencedMap<String, SectionMutation> mutations) throws IOException {
-        DocumentTurns.take(store, key, () -> {
-            mutateTurn(key, mutations);
-            return null;
-        });
-    }
-
-    private void mutateTurn(String key, SequencedMap<String, SectionMutation> mutations) throws IOException {
         int[] asked = new int[1];
         try {
-            Retries.update(store, key, current -> {
+            DocumentTurns.decide(store, key, current -> {
                 if (asked[0]++ > 0) {
                     metrics.recordRetry();                      // asked again: the previous write lost its token
                 }
@@ -103,7 +96,7 @@ public final class StoreMetadata implements MetadataStore {
                 // A newer node's format makes mutate throw; sections not named ride the commit verbatim.
                 byte[] serialized = document.mutate(mutations).serialize();
                 metrics.observeDocument(key, serialized.length);
-                return serialized;
+                return Retries.Verdict.write(serialized, null);
             });
         } catch (IOException lost) {
             metrics.recordExhausted();

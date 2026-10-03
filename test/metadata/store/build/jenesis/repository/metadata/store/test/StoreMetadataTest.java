@@ -161,6 +161,67 @@ class StoreMetadataTest {
     }
 
     @Test
+    void a_node_s_writers_of_one_document_land_in_fewer_writes_than_there_are_writers() throws Exception {
+        // Sixteen files of one version on one node, over a store whose conditional write is slow enough that the
+        // writers queue behind it: whoever holds the document's turn decides for every writer waiting, so the burst
+        // is a handful of writes - and every writer lands on its first call, with no retry of its own.
+        int writers = 16;
+        SlowWritingStore slow = new SlowWritingStore(store);
+        MetadataStore metadata = new StoreMetadata(slow);
+        CyclicBarrier barrier = new CyclicBarrier(writers);
+        List<Throwable> failures = Collections.synchronizedList(new ArrayList<>());
+        try (ExecutorService pool = Executors.newFixedThreadPool(writers)) {
+            for (int index = 0; index < writers; index++) {
+                String tag = "file" + index;
+                pool.submit(() -> {
+                    try {
+                        barrier.await();
+                        metadata.mutate(ECO, COORD, VERSION, tag,
+                                set(Section.derived(tag, 1, NOW, Signal.NEUTRAL, data("who", tag))));
+                    } catch (Throwable failure) {
+                        failures.add(failure);
+                    }
+                    return null;
+                });
+            }
+        }
+
+        assertThat(failures).as("every writer landed on its first call").isEmpty();
+        assertThat(metadata.read(ECO, COORD, VERSION).orElseThrow().tags()).hasSize(writers);
+        assertThat(slow.writes()).as("the waiting writers were folded into shared writes").isLessThan(writers / 2);
+    }
+
+    @Test
+    void a_writer_whose_decision_throws_fails_alone() throws Exception {
+        // The second writer's mutation throws on whatever it is handed; the first writer, decided in the same
+        // write while the second waits on the slow store, still lands, and the failure reaches only its own caller.
+        SlowWritingStore slow = new SlowWritingStore(store);
+        MetadataStore metadata = new StoreMetadata(slow);
+        try (ExecutorService pool = Executors.newFixedThreadPool(3)) {
+            Future<?> first = pool.submit(() -> {
+                metadata.mutate(ECO, COORD, VERSION, "first",
+                        set(Section.derived("first", 1, NOW, Signal.NEUTRAL, data("who", "first"))));
+                return null;
+            });
+            Future<?> broken = pool.submit(() -> {
+                metadata.mutate(ECO, COORD, VERSION, "broken", current -> {
+                    throw new IllegalStateException("this writer's own mistake");
+                });
+                return null;
+            });
+            Future<?> third = pool.submit(() -> {
+                metadata.mutate(ECO, COORD, VERSION, "third",
+                        set(Section.derived("third", 1, NOW, Signal.NEUTRAL, data("who", "third"))));
+                return null;
+            });
+            first.get();
+            third.get();
+            assertThatThrownBy(broken::get).hasCauseInstanceOf(IllegalStateException.class);
+        }
+        assertThat(metadata.read(ECO, COORD, VERSION).orElseThrow().tags()).containsExactlyInAnyOrder("first", "third");
+    }
+
+    @Test
     void an_unknown_section_survives_a_foreign_writers_mutate() throws IOException {
         MetadataStore metadata = new StoreMetadata(store);
         // A newer/custom module writes a section this node does not recognise, with its own schema and payload.
@@ -247,6 +308,32 @@ class StoreMetadataTest {
     /** A store wrapper that, on the first CAS write to a target key, first commits a competing section underneath -
      *  so the caller's token goes stale and its write conflicts exactly once, exercising the re-read-and-retry
      *  convergence. */
+    /** A store whose conditional write takes a while, so concurrent writers of one document queue behind it, and
+     *  which counts the conditional writes it was asked for. */
+    private static final class SlowWritingStore extends DelegatingStore {
+
+        private final AtomicInteger writes = new AtomicInteger();
+
+        SlowWritingStore(ArtifactStore delegate) {
+            super(delegate);
+        }
+
+        int writes() {
+            return writes.get();
+        }
+
+        @Override
+        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
+            writes.incrementAndGet();
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+            return super.writeVersioned(key, content, expected);
+        }
+    }
+
     private static final class RaceInjectingStore extends DelegatingStore {
 
         private final String targetKey;
