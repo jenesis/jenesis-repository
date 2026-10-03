@@ -498,22 +498,24 @@ public final class ProxyRelay {
      *
      * <p>For a document a client reads alone. A document another one names by digest - a Debian {@code Packages}
      * its {@code InRelease} lists - must not be remembered apart from the one that names it, or a root remembered
-     * at one moment names a member fetched after the upstream moved; such a family is relayed fresh.
+     * at one moment names a member fetched after the upstream moved; its format remembers such a family together, or
+     * relays it fresh.
      */
     public static boolean streamRemembered(ProxyFormat.Fetcher fetcher, URI url, String defaultContentType,
             FormatExchange exchange, Document document, ArtifactStore repository) throws IOException {
         Objects.requireNonNull(repository, "repository");
         Optional<UpstreamMemory.Remembered> remembered = UpstreamMemory.node().get(repository, url);
         if (remembered.isPresent()) {
-            answer(remembered.get(), defaultContentType, exchange);
+            answerRemembered(remembered.get(), defaultContentType, exchange);
             return true;
         }
         return relay(fetcher, url, defaultContentType, exchange, document, null, repository);
     }
 
     /** Answer a remembered document: {@code 304} to a client whose {@code If-None-Match} names its {@code ETag},
-     *  else the document with its {@code Content-Type} and validators. */
-    private static void answer(UpstreamMemory.Remembered remembered, String defaultContentType,
+     *  else the document with its {@code Content-Type} and validators. For a format that remembers a family of
+     *  documents together and answers each from what it remembered. */
+    public static void answerRemembered(UpstreamMemory.Remembered remembered, String defaultContentType,
             FormatExchange exchange) throws IOException {
         String etag = remembered.headers().get("ETag");
         relay(etag, remembered.headers().get("Last-Modified"), exchange);

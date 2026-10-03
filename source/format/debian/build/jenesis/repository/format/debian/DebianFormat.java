@@ -53,7 +53,9 @@ import build.jenesis.repository.walk.Trees;
  * and a client trusts it with {@code [trusted=yes]}.
  *
  * <p>As a proxy, an immutable {@code .deb} is fetched, cached and served; {@code Release}, {@code InRelease} and
- * {@code Packages} pass through unchanged, so a proxied mirror verifies against the upstream's key. The leg keeps the
+ * {@code Packages} pass through unchanged, so a proxied mirror verifies against the upstream's key - the release
+ * documents remembered together for the upstream ttl and each index fetched by the digest they name
+ * ({@link DebianSuiteMemory}). The leg keeps the
  * digest each {@code Packages} declared per package, the digest of that index as relayed, and the suite's
  * {@code InRelease} whole, so this repository can verify the same chain ({@link #indexCoverage}).
  */
@@ -752,7 +754,8 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
     }
 
     /** Proxy a Debian miss to the upstream apt repository. A {@code .deb} is immutable, so it is fetched, cached and
-     *  served; {@code Release}, {@code InRelease} and {@code Packages} are mutable and streamed through, needing no
+     *  served; a suite's release documents are remembered together and its indexes fetched by the digest they name
+     *  ({@link DebianSuiteMemory}), or all streamed fresh from an upstream that offers no by-hash path - needing no
      *  rewrite since the upstream's root maps to this repository's {@code /debian/}. */
     @Override
     public boolean pullThrough(FormatExchange exchange, ArtifactStore store, URI upstream,
@@ -802,7 +805,14 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         } else if (rest.matches("dists/[^/]+/InRelease")) {
             tap = body -> keepInRelease(body, store, rest);
         }
-        return ProxyRelay.streamFresh(fetcher, URI.create(root + rest), null, exchange, document, tap);
+        // A suite's release documents are remembered together, and an index the remembered Release names is fetched
+        // by its digest, so what a client is given always agrees with the Release it was given (DebianSuiteMemory).
+        Optional<String> suite = DebianSuiteMemory.releaseOf(rest);
+        if (suite.isPresent()) {
+            return DebianSuiteMemory.relayRelease(fetcher, root, suite.get(), rest, exchange, store, document, tap);
+        }
+        URI target = DebianSuiteMemory.pinned(root, rest, store).orElse(URI.create(root + rest));
+        return ProxyRelay.streamFresh(fetcher, target, null, exchange, document, tap);
     }
 
     /** The store key a relayed index's declaration for one pool path is recorded under. */
@@ -879,7 +889,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
     /** Keep a suite's clearsigned {@code InRelease} whole as it streams. Held to the signature bound a verifier reads
      *  it under: one past it is not kept and a stale copy is dropped, so nothing vouches on an unverifiable
      *  document. */
-    private static void keepInRelease(InputStream body, ArtifactStore store, String rest) throws IOException {
+    static void keepInRelease(InputStream body, ArtifactStore store, String rest) throws IOException {
         String key = INDEX_COPIES + rest.split("/")[1] + "/InRelease";
         byte[] copy = body.readNBytes(ArtifactSignatures.Material.LARGEST_SIGNATURE + 1);
         body.transferTo(OutputStream.nullOutputStream());
