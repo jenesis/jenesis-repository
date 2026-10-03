@@ -387,9 +387,8 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
      * cross-published like a local one; {@code maven-metadata.xml} is mutable and proxied fresh on each miss, never
      * cached.
      *
-     * <p>A cached artifact is held to the upstream's {@code .sha1} before it is laid out: the bytes are stored
-     * content-addressed as they stream and the {@link #layout(ArtifactStore, String, String) layout sequence} runs only
-     * on a match, so a refused fill is never reachable and nothing needs retracting.
+     * <p>A cached artifact is stored as the upstream serves it, and its checksum sidecars are relayed beside it as the
+     * upstream serves them: a checksum is the publisher's to provide and a client's to check, never verified here.
      */
     @Override
     public boolean proxy(FormatExchange exchange, ArtifactStore store, URI upstream, ProxyFormat.Fetcher fetcher)
@@ -439,35 +438,8 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
             if (ServableNames.sidecar(rest)) {
                 layout(store, path, download.body());
             } else {
-                // Verified against the upstream's SHA-1, computed as the blob streams to storage. The bytes are stored
-                // here and laid out below only once they match, so a refused fill links nothing; its unreferenced blob
-                // is the collector's.
-                MessageDigest sha1 = sha1();
-                Publication.Blob stored = new Publication(store).stored(new DigestInputStream(download.body(), sha1));
-                String hash = stored.hash();
-                URI sibling = URI.create(prefix + rest + ".sha1");
-                Sha1 expected = upstreamSha1(fetcher, sibling);
-                if (expected.unreadable() != null) {
-                    // Clause 5: only an upstream that publishes no .sha1 may downgrade a fill to unverified. A sibling
-                    // that could not be read is refused like a mismatch, or anyone able to drop one request could
-                    // switch verification off.
-                    LOGGER.warn("Refusing to cache the proxied artifact {} unverified: {}. Nothing was cached or served; "
-                            + "the local 404 stands so a later pull re-hits the upstream.", prefix + rest,
-                            expected.unreadable());
-                    return resolvedAgainstAbsence(rest)
-                            ? undecided(prefix + rest, exchange, "its checksum sibling could not be read")
-                            : false;
-                }
-                if (expected.hex() != null && !expected.hex().equalsIgnoreCase(HexFormat.of().formatHex(sha1.digest()))) {
-                    // A mismatch is logged on its own, since it says the bytes changed between the upstream and here.
-                    LOGGER.warn("Refusing to cache the proxied artifact {}: it does not match the SHA-1 {} the upstream "
-                            + "publishes for it. Nothing was cached or served; the local 404 stands.", prefix + rest,
-                            expected.hex());
-                    return resolvedAgainstAbsence(rest)
-                            ? undecided(prefix + rest, exchange, "it does not match the SHA-1 the upstream publishes")
-                            : false;
-                }
-                layout(store, path, hash, stored.size());
+                Publication.Blob stored = new Publication(store).stored(download.body());
+                layout(store, path, stored.hash(), stored.size());
             }
         }
         handle(exchange, store);
@@ -517,48 +489,6 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     }
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MavenFormat.class);
-
-    private static MessageDigest sha1() {
-        try {
-            return MessageDigest.getInstance("SHA-1");
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    /**
-     * What the upstream's {@code .sha1} sibling says about an artifact being cached: three states, since clause 5
-     * licenses the fall-back for one.
-     *
-     * @param hex the 40-hex digest, or {@code null} when the upstream answered that it publishes none, and the artifact
-     *     is proxied unverified
-     * @param unreadable why the sibling could not be read, or {@code null} when it was; never a fall-back, the fill is
-     *     refused
-     */
-    private record Sha1(String hex, String unreadable) {
-    }
-
-    /** The upstream SHA-1 for an artifact from its {@code .sha1} sibling (40 hex, optionally followed by a filename).
-     *  An upstream answering {@code 404}/{@code 410}, or a body that is no digest, publishes none; a transport failure
-     *  or other status is unreadable. */
-    private static Sha1 upstreamSha1(ProxyFormat.Fetcher fetcher, URI sha1) throws IOException {
-        Optional<ProxyFormat.Fetched> response = fetcher.beside().fetch(sha1, Map.of());
-        if (response.isEmpty()) {
-            return new Sha1(null, "the checksum sibling " + sha1 + " could not be reached");
-        }
-        int status = response.get().status();
-        if (status == 404 || status == 410) {
-            return new Sha1(null, null);   // the upstream answered: it publishes no checksum for this artifact
-        }
-        if (status != 200) {
-            return new Sha1(null, "the checksum sibling " + sha1 + " answered " + status);
-        }
-        String body = new String(response.get().body(), StandardCharsets.UTF_8).trim();
-        int space = body.indexOf(' ');
-        String hex = space > 0 ? body.substring(0, space) : body;
-        return new Sha1(hex.length() == 40 && hex.chars().allMatch(c -> Character.digit(c, 16) >= 0) ? hex : null,
-                null);
-    }
 
     /** A version's folder, each file put under the client's {@code .../maven/} URL; the {@code /module/} view is left
      *  to a target that derives it from the jar. */

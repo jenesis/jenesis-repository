@@ -11,10 +11,10 @@ import build.jenesis.repository.store.Publication;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The Maven proxy verifies a fetched artifact against its upstream {@code .sha1} sibling before it is cached and
- * served: a matching checksum is cached and served, a mismatch is refused and left uncached, and an artifact the
- * upstream publishes no checksum for is served unverified rather than refused. Answered from a fixed in-memory
- * upstream, no network.
+ * The Maven proxy relays a checksum rather than judging one: a fetched artifact is cached and served as the upstream
+ * serves it, with no request for its checksum, and the {@code .sha1} is relayed as the upstream serves that - even
+ * where the two disagree, since a checksum is the publisher's to provide and the client's to check. Answered from a
+ * fixed in-memory upstream, no network.
  */
 class MavenProxyChecksumTest {
 
@@ -27,6 +27,7 @@ class MavenProxyChecksumTest {
     private ArtifactStore store;
     private Publication publication;
     private final MavenFormat format = new MavenFormat();
+    private final List<String> asked = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
@@ -36,48 +37,53 @@ class MavenProxyChecksumTest {
     }
 
     @Test
-    void a_matching_upstream_checksum_is_cached_and_served() throws IOException {
-        byte[] jar = "verified jar bytes".getBytes(StandardCharsets.UTF_8);
+    void a_proxied_artifact_is_cached_without_asking_for_its_checksum() throws IOException {
+        byte[] jar = "jar bytes".getBytes(StandardCharsets.UTF_8);
         FakeExchange get = new FakeExchange("GET", PATH);
 
-        boolean served = format.proxy(get, store, UPSTREAM, upstream(jar, 200, sha1(jar)));
+        assertThat(format.proxy(get, store, UPSTREAM, upstream(jar, 200, sha1(jar)))).isTrue();
 
-        assertThat(served).isTrue();
         assertThat(get.status()).isEqualTo(200);
         assertThat(get.responseBytes()).isEqualTo(jar);
-        assertThat(publication.located(PATH)).as("a verified artifact is cached for a later hit").isPresent();
+        assertThat(publication.located(PATH)).as("cached for a later hit").isPresent();
+        assertThat(asked).as("the fill asks for the artifact alone").containsExactly(UPSTREAM + "org/example/lib/1.0/lib-1.0.jar");
     }
 
     @Test
-    void a_checksum_mismatch_is_refused_and_left_uncached() throws IOException {
-        byte[] jar = "tampered jar bytes".getBytes(StandardCharsets.UTF_8);
-        FakeExchange get = new FakeExchange("GET", PATH);
+    void a_checksum_that_disagrees_with_the_bytes_is_relayed_for_the_client_to_judge() throws IOException {
+        byte[] jar = "jar bytes".getBytes(StandardCharsets.UTF_8);
+        String declared = "0000000000000000000000000000000000000000";
+        ProxyFormat.Fetcher upstream = upstream(jar, 200, declared);
 
-        boolean served = format.proxy(get, store, UPSTREAM,
-                upstream(jar, 200, "0000000000000000000000000000000000000000"));
+        FakeExchange artifact = new FakeExchange("GET", PATH);
+        assertThat(format.proxy(artifact, store, UPSTREAM, upstream)).isTrue();
+        FakeExchange checksum = new FakeExchange("GET", PATH + ".sha1");
+        assertThat(format.proxy(checksum, store, UPSTREAM, upstream)).isTrue();
 
-        assertThat(served).as("a body that does not match its upstream checksum is refused").isFalse();
-        assertThat(publication.located(PATH)).as("the corrupt artifact is not left cached").isEmpty();
+        assertThat(artifact.responseBytes()).as("the artifact is served as the upstream serves it").isEqualTo(jar);
+        assertThat(new String(checksum.responseBytes(), StandardCharsets.UTF_8))
+                .as("and its checksum as the upstream serves that").isEqualTo(declared);
     }
 
     @Test
-    void an_artifact_without_an_upstream_checksum_is_served_unverified() throws IOException {
+    void an_artifact_the_upstream_publishes_no_checksum_for_is_served() throws IOException {
         byte[] jar = "unchecksummed jar".getBytes(StandardCharsets.UTF_8);
         FakeExchange get = new FakeExchange("GET", PATH);
 
-        boolean served = format.proxy(get, store, UPSTREAM, upstream(jar, 404, null));
-
-        assertThat(served).as("an artifact the upstream has no checksum for is still served").isTrue();
+        assertThat(format.proxy(get, store, UPSTREAM, upstream(jar, 404, null))).isTrue();
         assertThat(get.responseBytes()).isEqualTo(jar);
     }
 
     /** An upstream that serves {@code artifact} for the jar and {@code sha1Hex} (at {@code sha1Status}) for its
-     *  {@code .sha1} sibling. */
-    private static ProxyFormat.Fetcher.Buffered upstream(byte[] artifact, int sha1Status, String sha1Hex) {
-        return (url, headers) -> url.toString().endsWith(".sha1")
-                ? Optional.of(new ProxyFormat.Fetched(sha1Status,
-                        sha1Hex == null ? new byte[0] : sha1Hex.getBytes(StandardCharsets.UTF_8), Map.of()))
-                : Optional.of(new ProxyFormat.Fetched(200, artifact, Map.of()));
+     *  {@code .sha1} sibling, noting every URL it is asked for. */
+    private ProxyFormat.Fetcher.Buffered upstream(byte[] artifact, int sha1Status, String sha1Hex) {
+        return (url, headers) -> {
+            asked.add(url.toString());
+            return url.toString().endsWith(".sha1")
+                    ? Optional.of(new ProxyFormat.Fetched(sha1Status,
+                            sha1Hex == null ? new byte[0] : sha1Hex.getBytes(StandardCharsets.UTF_8), Map.of()))
+                    : Optional.of(new ProxyFormat.Fetched(200, artifact, Map.of()));
+        };
     }
 
     private static String sha1(byte[] bytes) {

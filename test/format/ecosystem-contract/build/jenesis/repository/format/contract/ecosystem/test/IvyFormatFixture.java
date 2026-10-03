@@ -7,6 +7,7 @@ import build.jenesis.repository.format.testkit.GeneratedBody;
 import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.format.testkit.ContractHold;
 import build.jenesis.repository.format.testkit.FormatContract;
+import build.jenesis.repository.format.testkit.FormatFixture;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.format.ArtifactSignatures;
 
@@ -125,7 +126,11 @@ final class IvyFormatFixture implements EcosystemFormatFixture {
     public Map<FormatContract.Property, String> unsupported() {
         return Map.of(
                 FormatContract.Property.GENERATED_INDEX_IS_REVALIDATABLE, STORED_NOT_GENERATED,
-                FormatContract.Property.GENERATED_INDEX_CARRIES_THE_REQUEST_SCHEME, STORED_NOT_GENERATED);
+                FormatContract.Property.GENERATED_INDEX_CARRIES_THE_REQUEST_SCHEME, STORED_NOT_GENERATED,
+                FormatContract.Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY,
+                "an Ivy checksum is the publisher's sidecar, as Maven's is: relayed beside the file for the client to "
+                        + "check and never held against the bytes here, so a proxied file is cached as the upstream "
+                        + "serves it");
     }
 
     /** Not a gap: the revision listing is a STORED document streamed as it is, not one rendered per request, so
@@ -143,17 +148,12 @@ final class IvyFormatFixture implements EcosystemFormatFixture {
                 fetcher(PROXIED_JAR, body, body.digest("SHA-1"))));
     }
 
-    @Override
-    public Optional<Upstream> tampered(GeneratedBody body) {
-        return Optional.of(new Upstream("/ivy/" + PROXIED_JAR, ROOT, fetcher(PROXIED_JAR, body, "0".repeat(40))));
-    }
-
-    /** The descriptor: with none, Ivy assumes a module of one jar and no dependencies, so a refusal of it must not
-     *  read as an absence. */
+    /** The descriptor: with none, Ivy assumes a module of one jar and no dependencies, so a refusal of it - an upstream
+     *  answering {@code 503}, which is neither the descriptor nor its absence - must not read as an absence. */
     @Override
     public Optional<Elective> elective(GeneratedBody body) {
         return Optional.of(new Elective("/ivy/" + PROXIED_DESCRIPTOR, ROOT, fetcher(PROXIED_DESCRIPTOR, null, null),
-                fetcher(PROXIED_DESCRIPTOR, body, "0".repeat(40))));
+                FormatFixture.answering(503)));
     }
 
     /** An upstream Ivy repository serving {@code file} and a {@code .sha1} beside it, or nothing at all when there is

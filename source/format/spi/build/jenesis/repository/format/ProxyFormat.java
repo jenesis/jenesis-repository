@@ -58,11 +58,14 @@ import build.jenesis.repository.store.ArtifactStore;
  * <li><b>Read purity.</b> A proxy fetch is the one sanctioned exception to the read path rendering only
  *     stored state, and it is entered solely on a local miss of a path this format claims. A local hit never touches
  *     the upstream.</li>
- * <li><b>Upstream integrity.</b> Where the ecosystem's own protocol advertises a digest for the bytes - a
- *     content-addressed reference, a checksum sibling, a digest header - the fetched body is held to it and a mismatch
+ * <li><b>Upstream integrity.</b> Where the ecosystem's own protocol has the registry advertise a digest for the bytes
+ *     - a content-addressed reference, an index entry, a digest header - the fetched body is held to it and a mismatch
  *     is <em>refused</em>: nothing is linked, nothing is served, and the caller lets the local {@code 404} stand so a
  *     later pull re-hits the upstream. A body is never cached under a digest it does not hash to. An ecosystem that
- *     advertises no digest (a plain file mirror) proxies unverified rather than fabricating a check, and says so.
+ *     advertises no digest (a plain file mirror) proxies unverified rather than fabricating a check, and says so. A
+ *     checksum the <em>publisher</em> uploads beside the artifact - Maven's or Ivy's {@code .sha1}, Conan's
+ *     {@code conanmanifest.txt} - is not such a digest: it is relayed for the client to check, never held against
+ *     the bytes here.
  *     <p><b>The check runs before anything is linked, never as a retraction afterwards</b>. An adapter may
  *     have to <em>store</em> the body first - that is how a digest is computed while the bytes stream instead of
  *     buffering them - but a stored blob is inert until a pointer references it, so every adapter can verify before
@@ -72,11 +75,11 @@ import build.jenesis.repository.store.ArtifactStore;
  *     "Read purity": a local hit never touches the upstream). An adapter that links first and undoes it is a defect
  *     against this clause rather than a variation of it.
  *     <p><b>"We could not read the digest" is not "the upstream publishes none".</b> The unverified fall-back above
- *     is written for the upstream having <em>published nothing</em> - Maven serves jars whose {@code .sha1} sibling
- *     is missing, Packagist leaves {@code shasum} blank for a VCS-sourced dist - and not for an adapter whose digest
+ *     is written for the upstream having <em>published nothing</em> - Packagist leaves {@code shasum} blank for a
+ *     VCS-sourced dist, a mirror may serve no compact index - and not for an adapter whose digest
  *     comes out of a <em>second</em> document it could not read. A packument fetch that timed out, a compact index
- *     behind a shared-egress {@code 429}, a registration leaf whose advertised URL an outbound screen refuses, a
- *     checksum sibling answered by a captive portal: answering any of those as "this ecosystem declares no digest for
+ *     behind a shared-egress {@code 429}, a registration leaf whose advertised URL an outbound screen refuses, an
+ *     index answered by a captive portal: answering any of those as "this ecosystem declares no digest for
  *     this artifact" would cache the artifact with no point check at all. That is a silent fail-open, not a wrong
  *     answer - anyone able to drop one sidecar fetch turns this clause's "held to it and a mismatch is refused" off
  *     for that pull - and it is the

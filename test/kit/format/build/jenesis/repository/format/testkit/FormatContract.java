@@ -124,7 +124,7 @@ public final class FormatContract {
          *  while the honest body is accepted ({@code ProxyFormat} clause 5). */
         PROXY_VERIFIES_UPSTREAM_INTEGRITY,
         /** On a path whose absence the client resolves against, a refusal is told apart from an absence: an upstream
-         *  that genuinely has nothing still reaches the client as a miss, and a body failing its advertised digest
+         *  that genuinely has nothing still reaches the client as a miss, and an upstream answer the leg refuses
          *  does not ({@code ProxyFormat} clause 5). */
         PROXY_REFUSAL_IS_NOT_AN_ABSENCE,
         /** A proxied artifact goes from the network into the content-addressed store without being materialised, and
@@ -669,20 +669,21 @@ public final class FormatContract {
                     + "every coordinate that simply does not publish the file.");
         }
 
-        // Half two: the same path, the same client, an upstream whose body fails the digest it advertises for it. The
-        // integrity row already proves nothing is cached and nothing is served. What it cannot see is that the client
-        // is handed the *same* answer as half one - and on this path that answer is not "withheld", it is a different
-        // resolution, reported as success. A refusal the client cannot tell from an absence is not a refusal.
+        // Half two: the same path, the same client, an upstream answer the leg must refuse - a body failing the digest
+        // the protocol advertises, or an answer the leg cannot decide on. Nothing may be cached or served; what matters
+        // here is that the client is not handed the *same* answer as half one - on this path that answer is not
+        // "withheld", it is a different resolution, reported as success. A refusal the client cannot tell from an
+        // absence is not a refusal.
         ArtifactStore tamperedSpace = store.scope("tampered");
         body.rewind();
         ContractExchange refused = get(fixture, elective.requestPath());
-        boolean served = proxy.proxy(refused, tamperedSpace, elective.root(), elective.tampered());
+        boolean served = proxy.proxy(refused, tamperedSpace, elective.root(), elective.refused());
         if (served && refused.status() >= 200 && refused.status() < 300) {
-            throw failure(fixture, "a body that fails its advertised upstream digest was served (" + refused.status()
+            throw failure(fixture, "an upstream answer the leg must refuse was served (" + refused.status()
                     + ") on " + elective.requestPath() + ".");
         }
         if (!served || refused.status() == 404 || refused.status() == 410) {
-            throw failure(fixture, "a body that fails its advertised upstream digest was refused at "
+            throw failure(fixture, "an upstream answer the leg must refuse was refused at "
                     + elective.requestPath() + " by answering " + (served ? String.valueOf(refused.status())
                     + ", which is" : "a local miss, which is") + " exactly what an upstream with nothing there gets. "
                     + "The client cannot tell the two apart, so it does not learn that anything was refused: it takes "

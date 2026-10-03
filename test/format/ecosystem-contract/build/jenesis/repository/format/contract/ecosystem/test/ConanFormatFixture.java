@@ -129,19 +129,16 @@ final class ConanFormatFixture implements EcosystemFormatFixture {
     }
 
     @Override
-    public Optional<Upstream> tampered(GeneratedBody body) {
-        // The revision's own manifest declares an MD5 the file it sits beside does not hash to - a file substituted
-        // between the manifest and the download. Nothing may be linked, and the local 404 must stand.
-        return Optional.of(new Upstream(PROXIED, ROOT, fetcher(body, "0".repeat(32))));
-    }
-
-    @Override
     public Map<FormatContract.Property, String> unsupported() {
         return Map.of(
                 FormatContract.Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE, "audited 2026-08-24: the revisions listings are ENUMERATIONs already refused as 502s. Each file of a "
                         + "revision is named by the files document the client just read, so a miss is a broken revision it reports "
-                        + "rather than a fact it resolves around - conanmanifest.txt included, which is read for verification and "
-                        + "whose absence is a failure, not a default. ",
+                        + "rather than a fact it resolves around - conanmanifest.txt included, which the client reads to verify "
+                        + "the revision's files and whose absence is a failure, not a default. ",
+                FormatContract.Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY,
+                "a revision's conanmanifest.txt is the publisher's: the conan client writes it on upload and checks "
+                        + "each file against it on install, so it is relayed like any other file and never held against "
+                        + "the bytes here - a proxied file is cached as the upstream serves it",
                FormatContract.Property.COORDINATE_TRAVERSAL_REFUSED,
                 "ConanFormat DOES implement ArtifactLayout, but only for ecosystem()/describe(): paths() answers empty "
                         + "by design, because a revision file's pointer lives in the blobs namespace "

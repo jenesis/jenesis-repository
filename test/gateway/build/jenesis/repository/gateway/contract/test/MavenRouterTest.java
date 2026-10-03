@@ -65,11 +65,11 @@ public class MavenRouterTest {
         // a third-party jar misses the hosted member and is fetched and cached by the proxy member
         assertThat(get("public", JAR)).isEqualTo("the dependency jar");
         assertThat(fetches.get())
-                .as("the jar, its upstream checksum probe, and the two companions the pull-through asks for beside "
-                        + "it - the .asc and the .sigstore.json Central publishes - once")
-                .isEqualTo(4);
+                .as("the jar and the two companions the pull-through asks for beside it - the .asc and the "
+                        + ".sigstore.json Central publishes - once; its checksum is the client's to fetch and check")
+                .isEqualTo(3);
         assertThat(get("central", JAR)).as("the proxy cached the jar").isEqualTo("the dependency jar");
-        assertThat(fetches.get()).as("served from the cache").isEqualTo(4);
+        assertThat(fetches.get()).as("served from the cache").isEqualTo(3);
 
         assertThat(router.writeTarget("acme", "public")).as("a group is read-only, and delegates no write").isNull();
     }

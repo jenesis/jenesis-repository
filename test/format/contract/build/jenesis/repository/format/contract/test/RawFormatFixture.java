@@ -116,9 +116,9 @@ final class RawFormatFixture implements FormatFixture {
                 FormatContract.Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY,
                 "the raw protocol is a plain HTTP file tree: it publishes no checksum sibling, no digest header and "
                         + "no content-addressed reference, so an upstream body carries nothing to hold it to. The kit "
-                        + "refuses to fabricate a check the protocol does not have - Maven's .sha1 sibling and OCI's "
-                        + "digest reference prove the property where a digest really is advertised. A raw mirror that "
-                        + "wants integrity must proxy an upstream that publishes one",
+                        + "refuses to fabricate a check the protocol does not have - OCI's digest reference proves the "
+                        + "property where the protocol itself names the digest. A raw mirror that wants integrity must "
+                        + "proxy an upstream that publishes one",
                 FormatContract.Property.COORDINATE_TRAVERSAL_REFUSED,
                 "RawFormat implements no ArtifactLayout, and deliberately: a raw asset has no ecosystem coordinate, "
                         + "so its request path IS its identity and there is no coordinate-to-path composition to "

@@ -170,24 +170,41 @@ public interface FormatFixture {
      * answers a miss has not withheld anything - it has substituted a different, silently successful outcome, which is
      * a silent failure of its own. The kit therefore drives the same path twice, and the fixture
      * supplies both fetchers, because either half alone can be satisfied by a broken implementation: an upstream that
-     * legitimately has nothing must still reach the client as a miss, and an upstream whose body fails its advertised
-     * digest must not.
+     * legitimately has nothing must still reach the client as a miss, and an upstream answer the leg refuses - a body
+     * failing a digest the protocol advertises, or an answer it cannot decide on - must not.
      *
-     * @param body the generated body the {@code tampered} fetcher serves under a digest that disagrees with it
+     * @param body the generated body a {@code refused} fetcher may serve under a digest that disagrees with it
      */
     default Optional<Elective> elective(GeneratedBody body) throws IOException {
         return Optional.empty();
     }
 
+    /** An upstream that answers every request with {@code status} and no body - a {@code 503} is neither an artifact
+     *  nor its absence, the answer an elective leg must refuse rather than pass on as a miss. */
+    static ProxyFormat.Fetcher answering(int status) {
+        return new ProxyFormat.Fetcher.Buffered() {
+
+            @Override
+            public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) {
+                return Optional.of(new ProxyFormat.Fetched(status, new byte[0], Map.of()));
+            }
+
+            @Override
+            public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders) {
+                return Optional.of(new ProxyFormat.Download(status, InputStream.nullInputStream(), Map.of()));
+            }
+        };
+    }
+
     /** One path whose absence is an answer, with the two upstreams that must not look alike to the client: {@code
-     *  absent} genuinely has nothing, {@code tampered} serves bytes that fail the digest it advertises for them. */
-    record Elective(String requestPath, URI root, ProxyFormat.Fetcher absent, ProxyFormat.Fetcher tampered) {
+     *  absent} genuinely has nothing, {@code refused} answers something the leg must refuse. */
+    record Elective(String requestPath, URI root, ProxyFormat.Fetcher absent, ProxyFormat.Fetcher refused) {
 
         public Elective {
             Objects.requireNonNull(requestPath, "requestPath");
             Objects.requireNonNull(root, "root");
             Objects.requireNonNull(absent, "absent");
-            Objects.requireNonNull(tampered, "tampered");
+            Objects.requireNonNull(refused, "refused");
         }
     }
 

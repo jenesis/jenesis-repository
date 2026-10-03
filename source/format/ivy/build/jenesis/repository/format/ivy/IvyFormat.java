@@ -261,13 +261,11 @@ public final class IvyFormat implements RepositoryFormat, ArtifactLayout, Artifa
      * only an upstream that answered 404/410 reaches the client as a 404. Its entries are relative names, relayed
      * unchanged.
      *
-     * <p>A revision's file is PINNED and held to the upstream's {@code .sha1} beside it: a 404 for the checksum leaves
-     * the file unverified, as Ivy allows; an unreadable one declines the fill; a mismatch is refused. Bytes are linked
-     * only once held to the checksum. A checksum or signature file is laid out as it is.
+     * <p>A revision's file is PINNED and cached as the upstream serves it; a checksum or signature file beside it is
+     * laid out as it is, the publisher's for the client to check rather than held against the bytes here.
      *
      * <p>A client resolves against the descriptor's absence - without {@code ivy-<revision>.xml} Ivy assumes one jar
-     * and no dependencies - so a descriptor this leg refuses, or cannot read the checksum of, answers {@code 502}
-     * rather than a miss.
+     * and no dependencies - so a descriptor this leg could not fetch answers {@code 502} rather than a miss.
      *
      * <p>A proxied revision does not join the module's listing: through a proxy, the listing is the upstream's.
      */
@@ -300,15 +298,6 @@ public final class IvyFormat implements RepositoryFormat, ArtifactLayout, Artifa
             serve(exchange, store);
             return true;
         }
-        URI checksum = URI.create(target + ".sha1");
-        ProxyRelay.Sidecar sidecar = ProxyRelay.declaring(fetcher, checksum, Map.of());
-        ProxyRelay.Declared declared = sidecar.answered() ? sha1(sidecar.document().body(), checksum)
-                : sidecar.verdict();
-        if (!declared.readable()) {
-            return descriptor
-                    ? undecided(target, exchange, "its checksum could not be read: " + declared.unreadable())
-                    : ProxyRelay.unverifiable(target, declared);
-        }
         Optional<ProxyFormat.Download> fetched = fetcher.download(target, Map.of());
         if (fetched.isEmpty()) {
             return descriptor && undecided(target, exchange, "the upstream could not be reached");
@@ -318,14 +307,7 @@ public final class IvyFormat implements RepositoryFormat, ArtifactLayout, Artifa
                 return descriptor && !ProxyRelay.upstreamMiss(download.status())
                         && undecided(target, exchange, "the upstream answered " + download.status());
             }
-            MessageDigest digest = sha1();
-            Publication.Blob stored = publication.stored(new DigestInputStream(download.body(), digest));
-            if (declared.verifiable() && !MessageDigest.isEqual(declared.expected(), digest.digest())) {
-                LOGGER.warn("Refusing to cache the proxied Ivy file {}: it does not match the SHA-1 {} the upstream "
-                        + "publishes for it. Nothing was cached or served.", target,
-                        HexFormat.of().formatHex(declared.expected()));
-                return descriptor && undecided(target, exchange, "it does not match the SHA-1 the upstream publishes for it");
-            }
+            Publication.Blob stored = publication.stored(download.body());
             publication.link(path, stored.hash(), stored.size());
         }
         serve(exchange, store);
@@ -339,23 +321,6 @@ public final class IvyFormat implements RepositoryFormat, ArtifactLayout, Artifa
                 + "a module with one jar and no dependencies, so the client is answered 502.", target, reason);
         exchange.respond(502);
         return true;
-    }
-
-    /** What an upstream {@code .sha1} declares: its first token, when that is 40 hex characters; anything else is a
-     *  document that could not be read, not one declaring nothing. */
-    private static ProxyRelay.Declared sha1(byte[] body, URI document) {
-        String token = new String(body, StandardCharsets.UTF_8).strip().split("\\s+", 2)[0];
-        return token.matches("[0-9a-fA-F]{40}")
-                ? ProxyRelay.Declared.of("SHA-1", HexFormat.of().parseHex(token))
-                : ProxyRelay.Declared.unreadable("the checksum " + document + " is not a SHA-1");
-    }
-
-    private static MessageDigest sha1() {
-        try {
-            return MessageDigest.getInstance("SHA-1");
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("every JDK provides SHA-1", e);
-        }
     }
 
     // ---- layout ----

@@ -14,8 +14,8 @@ import build.jenesis.repository.store.ArtifactStore;
 /**
  * The Maven layout's leg of the shared contract. It runs every property: Maven publishes through {@code /maven/}
  * pointers, carries the {@code ArtifactLayout} coordinate seam, generates {@code maven-metadata.xml} on read, and
- * proxies Maven Central - and its upstream advertises a {@code .sha1} sibling, which is the digest the proxy-integrity
- * leg holds a fetched body to.
+ * proxies Maven Central. Its {@code .sha1} sibling is the publisher's, relayed for the client to check rather than held
+ * against the bytes here, so the proxy-integrity property is OCI's to prove.
  */
 final class MavenFormatFixture implements FormatFixture {
 
@@ -103,15 +103,8 @@ final class MavenFormatFixture implements FormatFixture {
 
     @Override
     public Optional<Upstream> upstream(GeneratedBody body) {
-        // The honest upstream: the artifact, and beside it the .sha1 sibling Maven publishes as its integrity token.
+        // The upstream: the artifact, and beside it the .sha1 sibling Maven publishes, relayed to the client.
         return Optional.of(new Upstream(PROXIED, ROOT, fetcher(body, body.digest("SHA-1"))));
-    }
-
-    @Override
-    public Optional<Upstream> tampered(GeneratedBody body) {
-        // The same bytes, advertised under a digest they do not hash to - a body corrupted or substituted between the
-        // upstream and here. The proxy must retract what it laid out and let the local 404 stand.
-        return Optional.of(new Upstream(PROXIED, ROOT, fetcher(body, "0".repeat(40))));
     }
 
     @Override
@@ -120,8 +113,9 @@ final class MavenFormatFixture implements FormatFixture {
         // Gradle acts on it: it falls back to the POM, selects a variant by the pre-metadata rules and reports
         // BUILD SUCCESSFUL. That makes this the one Maven path where a miss is not a loud answer, so it is the one
         // where a refusal spelled as a miss becomes a different resolution instead of a failed build.
-        return Optional.of(new Elective(DESCRIPTOR, ROOT,
-                nothing(), fetcher(body, "0".repeat(40), DESCRIPTOR)));
+        // The refused leg is an upstream that answers 503: neither the descriptor nor its absence, so answering a
+        // miss would hand Gradle a resolution the upstream never stated.
+        return Optional.of(new Elective(DESCRIPTOR, ROOT, nothing(), FormatFixture.answering(503)));
     }
 
     /** An upstream that publishes no descriptor for this coordinate - the common, legal case. */
@@ -172,7 +166,11 @@ final class MavenFormatFixture implements FormatFixture {
 
     @Override
     public Map<FormatContract.Property, String> unsupported() {
-        return Map.of();
+        return Map.of(FormatContract.Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY,
+                "a Maven checksum is the publisher's sidecar: it is relayed beside the artifact for the client to "
+                        + "check and never held against the bytes here, so a proxied artifact is cached as the "
+                        + "upstream serves it. OCI's content-addressed reference proves the property where the "
+                        + "protocol itself names the digest");
     }
 
     private static String jar(String version) {

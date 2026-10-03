@@ -533,19 +533,14 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         URI target = URI.create(root + "/" + sub);
         FileRef file = fileRef(repo, sub.substring(CONANS.length()));
         if (file != null) {
-            // The revision's conanmanifest.txt lists each file's MD5, and the streamed file is held to it. The manifest
-            // is a separate fetch, and one that could not be read must not become an unverified fill.
-            String name = sub.substring(sub.lastIndexOf('/') + 1);
-            ProxyRelay.Declared expected = manifestChecksum(target, name, fetcher);
-            if (!expected.readable()) {
-                return ProxyRelay.unverifiable(target, expected);
-            }
-            // An immutable, revision-pinned file: cached once, then served locally.
+            // An immutable, revision-pinned file: cached once as the upstream serves it, then served locally. The
+            // revision's conanmanifest.txt, which lists each file's MD5, is the publisher's and is relayed like any
+            // other file for the conan client to check; it is never held against the bytes here.
             try (ProxyFormat.Download download = fetcher.download(target, Map.of()).orElse(null)) {
                 if (download == null || download.status() != 200) {
                     return false;
                 }
-                if (!ProxyRelay.fill(new Blobs(store), file.key(), target, download.body(), expected)) {
+                if (!ProxyRelay.fill(new Blobs(store), file.key(), target, download.body(), ProxyRelay.Declared.NONE)) {
                     return false;
                 }
             }
@@ -641,54 +636,6 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
 
         String timeKey() {
             return revBase() + "/time";
-        }
-    }
-
-    /**
-     * The MD5 the revision's {@code conanmanifest.txt} records for {@code file} (a timestamp line, then
-     * {@code <path>: <md5>} lines), read from the sibling in the same {@code files/} directory, once per file miss.
-     *
-     * <p>{@link ProxyRelay.Declared#NONE}, cached without a check, for the manifest itself and when the manifest
-     * answered and declares nothing: a {@code 404}/{@code 410}, or no 16-byte {@code md5} for the file.
-     * {@linkplain ProxyRelay.Declared#unreadable Unreadable} when it could not be read.
-     */
-    private static ProxyRelay.Declared manifestChecksum(URI target, String file, ProxyFormat.Fetcher fetcher)
-            throws IOException {
-        if (file.equals("conanmanifest.txt")) {
-            return ProxyRelay.Declared.NONE;
-        }
-        String url = target.toString();
-        int slash = url.lastIndexOf('/');
-        if (slash < 0) {
-            return ProxyRelay.Declared.NONE;
-        }
-        ProxyRelay.Sidecar sidecar = ProxyRelay.declaring(fetcher,
-                URI.create(url.substring(0, slash + 1) + "conanmanifest.txt"), Map.of());
-        if (!sidecar.answered()) {
-            return sidecar.verdict();
-        }
-        for (String line : new String(sidecar.document().body(), StandardCharsets.UTF_8).split("\n")) {
-            int colon = line.indexOf(':');
-            if (colon < 0) {
-                continue;
-            }
-            if (line.substring(0, colon).strip().equals(file)) {
-                byte[] md5 = hex(line.substring(colon + 1).strip(), 16);
-                return md5 == null ? ProxyRelay.Declared.NONE : ProxyRelay.Declared.of("MD5", md5);
-            }
-        }
-        return ProxyRelay.Declared.NONE;
-    }
-
-    /** Decode a hex digest of exactly {@code bytes} bytes to its raw bytes, or {@code null} when absent or malformed. */
-    private static byte[] hex(String value, int bytes) {
-        if (value == null || value.length() != bytes * 2) {
-            return null;
-        }
-        try {
-            return HexFormat.of().parseHex(value);
-        } catch (IllegalArgumentException e) {
-            return null;
         }
     }
 
