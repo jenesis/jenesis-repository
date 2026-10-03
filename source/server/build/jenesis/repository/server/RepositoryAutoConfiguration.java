@@ -127,6 +127,16 @@ public class RepositoryAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public Authorization authorization(RepositoryProperties properties, ArtifactStore store) {
+        return configured(properties, store);
+    }
+
+    /**
+     * The deployment's authorization as its properties configure it: open under {@code jenrepo.auth=false}, else
+     * enforcing over {@code store} with the configured anonymous rights, credential lifetimes and bootstrap key. Public
+     * so a composition that must declare the bean itself - one whose modules bring a default of their own, which a
+     * module configuration's bean is taken before this auto-configuration's - declares this one rather than a copy.
+     */
+    public static Authorization configured(RepositoryProperties properties, ArtifactStore store) {
         // Secure-defaults principle: an insecure configuration must be loud, not silent. The auth=false open-deployment
         // WARN is not an ad-hoc line here; it is the jenrepo.auth.open security-posture advisory
         // (SecurityPosture), logged once at boot by logSecurityPosture(...) and surfaced on the console and

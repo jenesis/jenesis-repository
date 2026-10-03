@@ -8,6 +8,7 @@ import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.store.metering.MeteringArtifactStore;
 import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.kernel.Repositories;
+import build.jenesis.repository.server.RepositoryAutoConfiguration;
 import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.audit.AuditTrail;
@@ -45,7 +46,7 @@ import org.springframework.core.env.Environment;
  * store-backed {@link Settings}, the token-exchange and audit-trail plugins, the
  * settings-precedence probe, the tenant directory, the {@link Repositories} tenant kernel and the storage-namespace
  * registration. The declaration that resolves the store applies the layers, and the quota and read-only wrappers
- * this class must not restate; the {@link Authorization} is the server's own, as every composition has it.
+ * this class must not restate; the {@link Authorization} is the server's own ({@link #authorization}).
  */
 @Configuration(proxyBeanMethods = false)
 public class StoreConfig {
@@ -71,6 +72,17 @@ public class StoreConfig {
     @Order(20)
     public ArtifactStoreDecorator nodeMemoStoreDecorator() {
         return store -> NodeMemoStore.over(store, MissMemory.node(), DocumentMemory.node());
+    }
+
+    /**
+     * The server's {@link Authorization}, declared here rather than left to its auto-configuration: a module's
+     * configuration is taken before an auto-configuration, so the build cache's default - enforcing whatever
+     * {@code jenrepo.auth} says - would otherwise be this composition's, and an open deployment would refuse every
+     * request.
+     */
+    @Bean
+    public Authorization authorization(RepositoryProperties properties, ArtifactStore store) {
+        return RepositoryAutoConfiguration.configured(properties, store);
     }
 
     /** What this node resolved, said once at boot. */

@@ -182,8 +182,10 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
      *  is not enough and the caller must also be the operator tenant. The issued login keys are among them: a login
      *  key can bind a principal into any tenant, so a tenant's own administrator issuing one would reach past it. So
      *  is setting a tenant's quota or rate limit: they are the operator's ceilings on the tenant, and a tenant's own
-     *  administrator lifting them would make them no ceiling at all; reading them stays the tenant's. */
-    private static boolean global(String path, boolean read) {
+     *  administrator lifting them would make them no ceiling at all; reading them stays the tenant's. Public so a census
+     *  of every route the product serves can hold each one to a declared scope, which is what stops a new
+     *  deployment-wide route from reaching a tenant's administrator by being left off this list. */
+    public static boolean global(String path, boolean read) {
         return !read && (path.equals("/api/quota") || path.equals("/api/rate-limit"))
                 || path.startsWith("/api/settings") || path.startsWith("/api/repositories")
                 || path.equals("/api/keylogin") || path.startsWith("/api/keylogin/")
