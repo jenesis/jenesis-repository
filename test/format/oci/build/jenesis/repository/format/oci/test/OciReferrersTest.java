@@ -191,6 +191,9 @@ class OciReferrersTest {
         String hex = sha256(body);
         FakeExchange put = put(name, "sha256:" + hex, body);
         assertThat(put.status()).isEqualTo(202);
+        assertThat(put.responseBytes()).as("a held push is accepted with no body, which a registry client would read "
+                + "as an error and fail the push on").isEmpty();
+        assertThat(put.responseHeader("Warning")).as("the hold's reason rides a header instead").startsWith("199 - ");
         assertThat(put.responseHeader("OCI-Subject")).isEqualTo("sha256:" + image);
         assertThat(digests(get("/v2/" + name + "/referrers/sha256:" + image, Map.of()))).isEmpty();
         assertThat(store.exists("oci/" + name + "/.manifests/" + image + "/referrers/" + hex))

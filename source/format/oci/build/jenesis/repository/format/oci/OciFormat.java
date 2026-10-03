@@ -195,10 +195,17 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
     }
 
-    /** An answer in the Distribution error envelope, so a registry client prints it: {@code DENIED} for a refusal,
-     *  the spec's catch-all code for anything else. */
+    /** A refusal in the Distribution error envelope, so a registry client prints it: {@code DENIED} for a refusal, the
+     *  spec's catch-all code for anything else. A hold is an accepted push and answers {@code 202} with no body, since
+     *  a registry client reads any body beside a manifest push's answer as an error and fails the push; its sentence
+     *  rides a {@code Warning} header instead. */
     @Override
     public void explain(FormatExchange exchange, int status, String sentence) throws IOException {
+        if (status < 300) {
+            exchange.setResponseHeader("Warning", "199 - \"" + sentence.replaceAll("[\\r\\n\"\\\\]", " ") + "\"");
+            exchange.respond(status);
+            return;
+        }
         error(exchange, status, status == 403 ? "DENIED" : "UNKNOWN", sentence);
     }
 
