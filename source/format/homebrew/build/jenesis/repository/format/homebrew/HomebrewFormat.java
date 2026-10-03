@@ -192,20 +192,7 @@ public final class HomebrewFormat implements RepositoryFormat, ArtifactLayout, P
 
     private void serveBottle(FormatExchange exchange, Blobs blobs, String repo, String file, String contentType)
             throws IOException {
-        Optional<Blobs.Located> located = blobs.locate(key(repo, file));
-        if (located.isEmpty()) {
-            exchange.respond(404);
-            return;
-        }
-        exchange.setResponseHeader("Content-Type", contentType);
-        if (exchange.method().equals("HEAD")) {
-            if (located.get().size() >= 0) {
-                exchange.setResponseHeader("Content-Length", Long.toString(located.get().size()));
-            }
-            exchange.respond(200, -1L).close();
-            return;
-        }
-        blobs.serve(located.get(), exchange);
+        blobs.answer(key(repo, file), exchange, contentType);
     }
 
     private static String key(String repo, String file) {

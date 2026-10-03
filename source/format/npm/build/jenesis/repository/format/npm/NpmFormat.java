@@ -958,40 +958,18 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
     }
 
     private void serveTarball(String name, String file, Blobs blobs, FormatExchange exchange) throws IOException {
-        Optional<Blobs.Located> located = blobs.locate("npm/" + name + "/tarballs/" + file);
-        if (located.isEmpty()) {
-            exchange.respond(404);
-            return;
-        }
-        long size = located.get().size();
-        exchange.setResponseHeader("Content-Type", "application/octet-stream");
-        if (exchange.method().equals("HEAD")) {
-            // HEAD answers from the stored size; npm probes a tarball's size and existence with it.
-            if (size >= 0) {
-                exchange.setResponseHeader("Content-Length", Long.toString(size));
-            }
-            exchange.respond(200, -1L).close();
-            return;
-        }
-        blobs.serve(located.get(), exchange);
+        blobs.answer("npm/" + name + "/tarballs/" + file, exchange, "application/octet-stream");
     }
 
     /** The attestations a version was published with, what a client following {@code dist.attestations.url} fetches; a
      *  version without any is a 404. */
     private void serveAttestations(String name, String version, Blobs blobs, FormatExchange exchange)
             throws IOException {
-        Optional<Blobs.Located> located = Keys.unsafe(version) ? Optional.empty()
-                : blobs.locate(attestationsKey(name, version));
-        if (located.isEmpty()) {
+        if (Keys.unsafe(version)) {
             exchange.respond(404);
             return;
         }
-        exchange.setResponseHeader("Content-Type", "application/json");
-        if (exchange.method().equals("HEAD")) {
-            exchange.respond(200, -1L).close();
-            return;
-        }
-        blobs.serve(located.get(), exchange);
+        blobs.answer(attestationsKey(name, version), exchange, "application/json");
     }
 
     // ---- the signature seam: Sigstore bundles published beside the tarball ----

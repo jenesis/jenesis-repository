@@ -930,22 +930,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
     }
 
     private void serveFile(String project, String file, Blobs blobs, FormatExchange exchange) throws IOException {
-        Optional<Blobs.Located> located = blobs.locate("pypi/" + project + "/files/" + file);
-        if (located.isEmpty()) {
-            exchange.respond(404);
-            return;
-        }
-        long size = located.get().size();
-        exchange.setResponseHeader("Content-Type", "application/octet-stream");
-        if (exchange.method().equals("HEAD")) {
-            // HEAD answers from the stored size; pip probes a file's size and existence with it.
-            if (size >= 0) {
-                exchange.setResponseHeader("Content-Length", Long.toString(size));
-            }
-            exchange.respond(200, -1L).close();
-            return;
-        }
-        blobs.serve(located.get(), exchange);
+        blobs.answer("pypi/" + project + "/files/" + file, exchange, "application/octet-stream");
     }
 
     /** The PEP 503 root index ({@code /pypi/simple/}): the stored page uploads maintain, listing every hosted project

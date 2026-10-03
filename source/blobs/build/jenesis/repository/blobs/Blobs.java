@@ -405,6 +405,35 @@ public final class Blobs {
         }
     }
 
+    /**
+     * Answer a download of the artifact the pointer at {@code key} names, as {@code contentType}: a {@code 404} when
+     * nothing is published there, a {@code HEAD} answered from the pointer's recorded length with no blob opened, and
+     * otherwise the artifact {@linkplain #serve served}. The answer every blobs-namespace format gives a download, so a
+     * client probing a file before fetching it reads the same length from every format.
+     */
+    public void answer(String key, FormatExchange exchange, String contentType) throws IOException {
+        Optional<Located> located = locate(key);
+        if (located.isEmpty()) {
+            exchange.respond(404);
+            return;
+        }
+        exchange.setResponseHeader("Content-Type", contentType);
+        answer(located.get(), exchange);
+    }
+
+    /** {@link #answer(String, FormatExchange, String)} for an artifact the caller located and set its own headers
+     *  for: a {@code HEAD} from the recorded length, anything else {@linkplain #serve served}. */
+    public void answer(Located located, FormatExchange exchange) throws IOException {
+        if (exchange.method().equals("HEAD")) {
+            if (located.size() >= 0) {
+                exchange.setResponseHeader("Content-Length", Long.toString(located.size()));
+            }
+            exchange.respond(200, -1L).close();
+            return;
+        }
+        serve(located, exchange);
+    }
+
     /** The blob's recorded length for the pointer at {@code key}, or {@code -1} if nothing is published there, the
      *  blob is {@linkplain build.jenesis.repository.store.Withheld withheld}, or the pointer carries no length -
      *  read off the pointer, never off the blob, like {@link #locate}. */

@@ -370,21 +370,7 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
             return;
         }
         String key = distKey(repo, parts[0], parts[1], parts[2]);
-        Optional<Blobs.Located> located = blobs.locate(key);
-        if (located.isEmpty()) {
-            exchange.respond(404);
-            return;
-        }
-        long size = located.get().size();
-        exchange.setResponseHeader("Content-Type", "application/zip");
-        if (exchange.method().equals("HEAD")) {
-            if (size >= 0) {
-                exchange.setResponseHeader("Content-Length", Long.toString(size));
-            }
-            exchange.respond(200, -1L).close();
-            return;
-        }
-        blobs.serve(located.get(), exchange);
+        blobs.answer(key, exchange, "application/zip");
     }
 
     /** Packagist, mirrored when a deployment names no upstream; a repository can set another. */

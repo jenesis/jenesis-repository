@@ -220,20 +220,7 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
     }
 
     private void stream(FormatExchange exchange, Blobs blobs, String key, String contentType) throws IOException {
-        Optional<Blobs.Located> located = blobs.locate(key);
-        if (located.isEmpty()) {
-            exchange.respond(404);
-            return;
-        }
-        exchange.setResponseHeader("Content-Type", contentType);
-        if (exchange.method().equals("HEAD")) {
-            if (located.get().size() >= 0) {
-                exchange.setResponseHeader("Content-Length", Long.toString(located.get().size()));
-            }
-            exchange.respond(200, -1L).close();
-            return;
-        }
-        blobs.serve(located.get(), exchange);
+        blobs.answer(key, exchange, contentType);
     }
 
     /** Publish one artifact: the bytes stream into the content-addressed store, whose SHA-256 becomes the digest the

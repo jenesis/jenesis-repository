@@ -415,21 +415,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         String crate = canonical(middle.substring(0, last));
         String version = middle.substring(last + 1);
         String key = crateKey(repo, crate, version);
-        Optional<Blobs.Located> located = blobs.locate(key);
-        if (located.isEmpty()) {
-            exchange.respond(404);
-            return;
-        }
-        long size = located.get().size();
-        exchange.setResponseHeader("Content-Type", "application/gzip");
-        if (exchange.method().equals("HEAD")) {
-            if (size >= 0) {
-                exchange.setResponseHeader("Content-Length", Long.toString(size));
-            }
-            exchange.respond(200, -1L).close();
-            return;
-        }
-        blobs.serve(located.get(), exchange);
+        blobs.answer(key, exchange, "application/gzip");
     }
 
     /** The public sparse index this format mirrors when proxying is enabled without naming one. */

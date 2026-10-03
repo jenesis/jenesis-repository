@@ -762,22 +762,7 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
     private void serve(String id, String version, String file, Blobs blobs, FormatExchange exchange)
             throws IOException {
         String key = "nuget/" + id.toLowerCase(Locale.ROOT) + "/" + version + "/" + file;
-        Optional<Blobs.Located> located = blobs.locate(key);
-        if (located.isEmpty()) {
-            exchange.respond(404);
-            return;
-        }
-        long size = located.get().size();
-        exchange.setResponseHeader("Content-Type", "application/octet-stream");
-        if (exchange.method().equals("HEAD")) {
-            // HEAD answers from the stored size; a restore client probes size and existence with it.
-            if (size >= 0) {
-                exchange.setResponseHeader("Content-Length", Long.toString(size));
-            }
-            exchange.respond(200, -1L).close();
-            return;
-        }
-        blobs.serve(located.get(), exchange);
+        blobs.answer(key, exchange, "application/octet-stream");
     }
 
     /** Proxy a NuGet flat-container miss to the upstream registry. The service index stays local, advertising this

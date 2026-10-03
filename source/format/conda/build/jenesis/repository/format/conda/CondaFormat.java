@@ -453,21 +453,7 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
     private void serve(String repo, String subdir, String file, Blobs blobs, FormatExchange exchange)
             throws IOException {
         String key = packageKey(repo, subdir, file);
-        Optional<Blobs.Located> located = blobs.locate(key);
-        if (located.isEmpty()) {
-            exchange.respond(404);
-            return;
-        }
-        long size = located.get().size();
-        exchange.setResponseHeader("Content-Type", "application/octet-stream");
-        if (exchange.method().equals("HEAD")) {
-            if (size >= 0) {
-                exchange.setResponseHeader("Content-Length", Long.toString(size));
-            }
-            exchange.respond(200, -1L).close();
-            return;
-        }
-        blobs.serve(located.get(), exchange);
+        blobs.answer(key, exchange, "application/octet-stream");
     }
 
     /** Proxy a conda miss to an upstream channel: {@code /conda/<repo>/<subdir>/<file>} maps to

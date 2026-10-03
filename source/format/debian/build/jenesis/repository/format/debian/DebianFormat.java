@@ -650,22 +650,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
     }
 
     private void serve(String rest, Blobs blobs, FormatExchange exchange) throws IOException {
-        Optional<Blobs.Located> located = blobs.locate("debian/" + rest);
-        if (located.isEmpty()) {
-            exchange.respond(404);
-            return;
-        }
-        long size = located.get().size();
-        exchange.setResponseHeader("Content-Type", "application/vnd.debian.binary-package");
-        if (exchange.method().equals("HEAD")) {
-            // HEAD answers from the stored size; apt probes size and existence with it.
-            if (size >= 0) {
-                exchange.setResponseHeader("Content-Length", Long.toString(size));
-            }
-            exchange.respond(200, -1L).close();
-            return;
-        }
-        blobs.serve(located.get(), exchange);
+        blobs.answer("debian/" + rest, exchange, "application/vnd.debian.binary-package");
     }
 
     private void metadata(String rest, Blobs blobs, FormatExchange exchange) throws IOException {

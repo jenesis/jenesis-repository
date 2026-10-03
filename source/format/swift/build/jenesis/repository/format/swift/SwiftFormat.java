@@ -448,14 +448,7 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Path
         exchange.setResponseHeader("Digest", "sha-256=" + Base64.getEncoder()
                 .encodeToString(HexFormat.of().parseHex(located.get().hash())));
         exchange.setResponseHeader("Cache-Control", "public, immutable");
-        if (exchange.method().equals("HEAD")) {
-            if (located.get().size() >= 0) {
-                exchange.setResponseHeader("Content-Length", Long.toString(located.get().size()));
-            }
-            exchange.respond(200, -1L).close();
-            return;
-        }
-        blobs.serve(located.get(), exchange);
+        blobs.answer(located.get(), exchange);
     }
 
     /**

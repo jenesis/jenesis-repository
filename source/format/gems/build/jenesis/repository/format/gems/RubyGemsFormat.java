@@ -562,22 +562,7 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
     }
 
     private void serveFile(String key, Blobs blobs, FormatExchange exchange, String contentType) throws IOException {
-        Optional<Blobs.Located> located = blobs.locate(key);
-        if (located.isEmpty()) {
-            exchange.respond(404);
-            return;
-        }
-        long size = located.get().size();
-        exchange.setResponseHeader("Content-Type", contentType);
-        if (exchange.method().equals("HEAD")) {
-            // HEAD answers from the stored size; a gem or bundler client probes a file's size and existence with it.
-            if (size >= 0) {
-                exchange.setResponseHeader("Content-Length", Long.toString(size));
-            }
-            exchange.respond(200, -1L).close();
-            return;
-        }
-        blobs.serve(located.get(), exchange);
+        blobs.answer(key, exchange, contentType);
     }
 
     private void info(String name, Blobs blobs, FormatExchange exchange) throws IOException {

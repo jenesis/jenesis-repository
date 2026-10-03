@@ -393,14 +393,9 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
                 reportedCommit(base, storageRev, resolve.type(), resolve.repoId(), store));
         exchange.setResponseHeader("ETag", '"' + located.get().hash() + '"');
         if (exchange.method().equals("HEAD")) {
-            if (size >= 0) {
-                exchange.setResponseHeader("Content-Length", Long.toString(size));
-            }
             exchange.setResponseHeader("X-Linked-Size", Long.toString(size));
-            exchange.respond(200, -1L).close();
-            return;
         }
-        blobs.serve(located.get(), exchange);
+        blobs.answer(located.get(), exchange);
     }
 
     /** Route an API request {@code <repo_id>[/revision/<rev>][/tree/<rev>[/<subpath>]]} for a type, served from stored

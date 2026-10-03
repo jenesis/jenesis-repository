@@ -286,19 +286,7 @@ public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobL
             exchange.respond(404);
             return;
         }
-        Optional<Blobs.Located> located = blobs.locate(fileKey(repo, file));
-        if (located.isEmpty()) {
-            exchange.respond(404);
-            return;
-        }
-        long size = located.get().size();
-        exchange.setResponseHeader("Content-Type", file.endsWith(PROV) ? "text/plain" : "application/gzip");
-        if (exchange.method().equals("HEAD")) {
-            exchange.setResponseHeader("Content-Length", Long.toString(size));
-            exchange.respond(200, -1L).close();
-            return;
-        }
-        blobs.serve(located.get(), exchange);
+        blobs.answer(fileKey(repo, file), exchange, file.endsWith(PROV) ? "text/plain" : "application/gzip");
     }
 
     // ---- proxy

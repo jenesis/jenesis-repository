@@ -280,20 +280,7 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, PathKe
     /** A package's bytes, streamed from the pointer the publish wrote - never re-read from the archive. */
     private void servePackage(FormatExchange exchange, Blobs blobs, String repo, String architecture, String file)
             throws IOException {
-        Optional<Blobs.Located> located = blobs.locate(ApkListings.packageKey(repo, architecture, file));
-        if (located.isEmpty()) {
-            exchange.respond(404);
-            return;
-        }
-        exchange.setResponseHeader("Content-Type", "application/octet-stream");
-        if (exchange.method().equals("HEAD")) {
-            if (located.get().size() >= 0) {
-                exchange.setResponseHeader("Content-Length", Long.toString(located.get().size()));
-            }
-            exchange.respond(200, -1L).close();
-            return;
-        }
-        blobs.serve(located.get(), exchange);
+        blobs.answer(ApkListings.packageKey(repo, architecture, file), exchange, "application/octet-stream");
     }
 
 

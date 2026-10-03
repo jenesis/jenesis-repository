@@ -368,19 +368,7 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
             exchange.respond(404);
             return;
         }
-        Optional<Blobs.Located> located = blobs.locate(installerKey(repo, parts[0], parts[1], parts[2]));
-        if (located.isEmpty()) {
-            exchange.respond(404);
-            return;
-        }
-        long size = located.get().size();
-        exchange.setResponseHeader("Content-Type", "application/octet-stream");
-        if (exchange.method().equals("HEAD")) {
-            exchange.setResponseHeader("Content-Length", Long.toString(size));
-            exchange.respond(200, -1L).close();
-            return;
-        }
-        blobs.serve(located.get(), exchange);
+        blobs.answer(installerKey(repo, parts[0], parts[1], parts[2]), exchange, "application/octet-stream");
     }
 
     // ---- layout

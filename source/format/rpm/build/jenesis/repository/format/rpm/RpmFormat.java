@@ -406,21 +406,7 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
             exchange.respond(404);   // a traversal path names no served .rpm
             return;
         }
-        Optional<Blobs.Located> located = blobs.locate("rpm/" + rest);
-        if (located.isEmpty()) {
-            exchange.respond(404);
-            return;
-        }
-        long size = located.get().size();
-        exchange.setResponseHeader("Content-Type", "application/x-rpm");
-        if (exchange.method().equals("HEAD")) {
-            if (size >= 0) {
-                exchange.setResponseHeader("Content-Length", Long.toString(size));
-            }
-            exchange.respond(200, -1L).close();
-            return;
-        }
-        blobs.serve(located.get(), exchange);
+        blobs.answer("rpm/" + rest, exchange, "application/x-rpm");
     }
 
     /**

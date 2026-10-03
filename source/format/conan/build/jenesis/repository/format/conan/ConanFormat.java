@@ -462,21 +462,7 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
                 exchange.respond(201);
             }
             case "GET", "HEAD" -> {
-                Optional<Blobs.Located> located = blobs.locate(fileKey);
-                if (located.isEmpty()) {
-                    exchange.respond(404);
-                    return;
-                }
-                long size = located.get().size();
-                exchange.setResponseHeader("Content-Type", contentType(filename));
-                if (exchange.method().equals("HEAD")) {
-                    if (size >= 0) {
-                        exchange.setResponseHeader("Content-Length", Long.toString(size));
-                    }
-                    exchange.respond(200, -1L).close();
-                    return;
-                }
-                blobs.serve(located.get(), exchange);
+                blobs.answer(fileKey, exchange, contentType(filename));
             }
             default -> exchange.respond(405);
         }
