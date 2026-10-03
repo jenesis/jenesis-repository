@@ -80,55 +80,36 @@
     <!--/* The row's controls on one line across the row: the value and its Save, then the quiet Reset to default
          while a value is set here. On a high-impact setting either asks first. */-->
     <div class="setting-controls">
-    <th:block th:if="${s.toggle()}">
+    <th:block th:if="${s.control().isSwitch()}">
         <div th:replace="~{fragments :: settingSwitch(${s}, ${action}, ${back},
                 |Apply this high-impact policy change${scope}?|)}"></div>
     </th:block>
-    <!--/* The value's control follows its kind and declared form: a choice, a text area for several lines or JSON,
-         a duration the script turns into an amount and a unit, the routing editor the script builds over its clauses,
-         or one line. Each is checked against the catalogue as soon as the field is left (data-check-key). */-->
-    <form method="post" th:action="@{${action}}" class="setting-edit" th:unless="${s.pinned or s.toggle()}"
-          th:classappend="${s.textArea() or s.routing()} ? 'setting-edit--wide'">
+    <form method="post" th:action="@{${action}}" class="setting-edit"
+          th:unless="${s.pinned or s.control().isSwitch()}"
+          th:classappend="${s.control().wide()} ? 'setting-edit--wide'">
         <input type="hidden" name="key" th:value="${s.key}">
         <input type="hidden" name="return" th:value="${back}" th:if="${back != null}">
-        <select name="value" th:if="${s.dropdown()}"
-                th:attr="aria-label=${s.label},data-describe=|choice-${s.key}|">
-            <option th:each="o : ${s.options()}" th:value="${o}" th:text="${s.optionLabel(o)}"
-                    th:title="${s.optionDescription(o)}" th:selected="${o == s.value}">option</option>
-        </select>
-        <textarea th:if="${s.textArea()}" name="value" th:rows="${s.json()} ? 8 : 4"
-                  th:classappend="${s.json()} ? 'app-code'" th:text="${s.editValue()}"
-                  th:placeholder="${s.editPlaceholder()}"
-                  th:attr="aria-label=${s.label},data-check-key=${s.key}"></textarea>
-        <input th:unless="${s.dropdown() or s.textArea()}" name="value" th:type="${s.inputType()}"
-               th:value="${s.editValue()}" th:placeholder="${s.editPlaceholder()}"
-               th:attr="aria-label=${s.label},data-check-key=${s.key},
-                       data-duration=${s.duration()} ? (${s.durationOrNone()} ? 'or-none' : 'duration') : null,
-                       data-default=${s.duration()} ? ${s.defaultValue} : null,
-                       data-routing=${s.routing()} ? 'true' : null,
-                       data-values=${s.values()} ? 'true' : null,list=${s.values()} ? |known-${s.key}| : null">
-        <datalist th:if="${s.values()}" th:id="|known-${s.key}|">
-            <option th:each="o : ${s.options()}" th:value="${o}" th:label="${s.choiceOf(o).name()}"></option>
-        </datalist>
+        <th:block th:replace="~{fragments :: settingControl(${s}, 'value', null, ${s.control().select()} ? ${s.value}
+                : ${s.editValue()}, ${s.editPlaceholder()}, false, null, false)}"></th:block>
         <!--/* One Save on every row, the primary one; a high-impact setting asks before it changes. */-->
         <button type="submit" class="app-primary"
                 th:attr="data-confirm=${s.highImpact} ? |Apply this high-impact policy change${scope}?| : null">Save</button>
     </form>
-    <div class="setting-edit setting-pinned" th:if="${s.pinned and !s.toggle()}">
-        <select th:if="${s.dropdown()}" disabled th:attr="aria-label=${s.label}">
+    <div class="setting-edit setting-pinned" th:if="${s.pinned and !s.control().isSwitch()}">
+        <select th:if="${s.control().select()}" disabled th:attr="aria-label=${s.label}">
             <option th:each="o : ${s.options()}" th:value="${o}" th:text="${s.optionLabel(o)}"
                     th:selected="${o == s.value}">option</option>
         </select>
-        <input th:unless="${s.dropdown()}" th:type="${s.inputType()}" disabled
+        <input th:unless="${s.control().select()}" th:type="${s.control().inputType()}" disabled
                th:value="${s.secret()} ? '' : ${s.value}" th:attr="aria-label=${s.label}">
         <p class="setting-pinned-note" th:text="|Pinned by ${s.pinnedBy} — not editable here.|">
             Pinned — not editable here.</p>
     </div>
     <!--/* What the chosen value does, in full - "Hold for review: ..." - where the drop-down has room only for names. */-->
-    <p class="setting-choice" th:if="${s.dropdown()}" th:id="|choice-${s.key}|"
+    <p class="setting-choice" th:if="${s.control().choice()}" th:id="|choice-${s.key}|"
        th:text="${s.choiceDescription()}" aria-live="polite"></p>
     <form method="post" th:action="@{${action}}" class="setting-revert"
-          th:if="${s.overridden and !s.pinned and !s.toggle()}">
+          th:if="${s.overridden and !s.pinned and !s.control().isSwitch()}">
         <input type="hidden" name="key" th:value="${s.key}">
         <input type="hidden" name="return" th:value="${back}" th:if="${back != null}">
         <input type="hidden" name="value" value="">
@@ -139,7 +120,7 @@
     </div>
     <!--/* Where a value is set here, what it replaced - the field already shows an inherited value, marked as the
          default, so nothing needs saying while none is set. */-->
-    <p class="setting-values" th:if="${s.overridden and !s.pinned and !s.toggle()}">Set here, over <th:block
+    <p class="setting-values" th:if="${s.overridden and !s.pinned and !s.control().isSwitch()}">Set here, over <th:block
             th:text="${revertTo}">its default</th:block>: <strong th:text="${s.defaultDisplay()}">value</strong>.</p>
 </div>
 
@@ -171,6 +152,38 @@
         settings</label>
     <p class="setting-nomatch" id="setting-nomatch" hidden>No setting matches that filter.</p>
 </div>
+
+<!--/* settingControl: the one control that edits a setting's value, drawn as its control asks - a drop-down, a text
+     area or one input, which the script turns into an amount and a unit, a routing editor or removable values where
+     the control says so - and checked against the catalogue as soon as it is left. The settings row names the field
+     "value" and labels it with the setting's name; the wizard names and identifies it by its key, describes it with
+     the setting's text, offers the default as an empty first choice (defaulting) and marks a refused value invalid. */-->
+<th:block th:fragment="settingControl(s, name, id, value, placeholder, defaulting, describedBy, invalid)"
+          th:with="c=${s.control()}">
+    <select th:if="${c.select()}" th:id="${id}" th:name="${name}"
+            th:attr="aria-label=${describedBy == null} ? ${s.label} : null,aria-describedby=${describedBy},
+                    aria-invalid=${invalid} ? 'true' : null,data-describe=${defaulting} ? null : |choice-${s.key}|,
+                    data-switch=${c.isSwitch()} ? ${s.defaultValue} : null,data-check-key=${s.key}">
+        <option th:if="${defaulting}" value="" th:text="|${s.defaultDisplay()} (default)|">Default</option>
+        <option th:each="o : ${s.options()}" th:unless="${defaulting and o == s.defaultValue and !c.isSwitch()}"
+                th:value="${o}" th:text="${s.optionLabel(o)}" th:title="${s.optionDescription(o)}"
+                th:selected="${o == value}">option</option>
+    </select>
+    <textarea th:if="${c.textArea()}" th:id="${id}" th:name="${name}" th:rows="${c.rows()}"
+              th:classappend="${c.code()} ? 'app-code'" th:text="${value}" th:placeholder="${placeholder}"
+              th:attr="aria-label=${describedBy == null} ? ${s.label} : null,aria-describedby=${describedBy},
+                      aria-invalid=${invalid} ? 'true' : null,data-check-key=${s.key}"></textarea>
+    <input th:if="${c.input()}" th:id="${id}" th:name="${name}" th:type="${c.inputType()}" th:value="${value}"
+           th:placeholder="${placeholder}"
+           th:attr="aria-label=${describedBy == null} ? ${s.label} : null,aria-describedby=${describedBy},
+                   aria-invalid=${invalid} ? 'true' : null,data-check-key=${s.key},
+                   data-duration=${c.durationMode()},data-default=${c.duration()} ? ${s.defaultValue} : null,
+                   data-routing=${c.editsRouting()} ? 'true' : null,data-values=${c.editsValues()} ? 'true' : null,
+                   list=${c.editsValues()} ? |known-${s.key}| : null">
+    <datalist th:if="${c.editsValues()}" th:id="|known-${s.key}|">
+        <option th:each="o : ${s.options()}" th:value="${o}" th:label="${s.choiceOf(o).name()}"></option>
+    </datalist>
+</th:block>
 
 <!--/* settingSwitch: a boolean setting as a switch showing its effective value. Pressing it flips the switch at once
      and posts the opposite value to `action` - the same save route the other kinds use - after a grace of

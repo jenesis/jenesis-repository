@@ -124,31 +124,8 @@
                     <span th:text="|fixed by ${s.pinnedBy()}|">fixed by the operator</span></p>
             </th:block>
             <div class="setting-controls" th:unless="${s.pinned()}">
-                <select th:if="${s.dropdown() or s.toggle()}" th:id="${name}" th:name="${name}"
-                        th:attr="aria-describedby=${help},aria-invalid=${wizard.error(name) != null} ? 'true' : null,
-                                data-switch=${s.toggle()} ? ${s.defaultValue()} : null,data-check-key=${s.key()}">
-                    <option value="" th:text="|${s.defaultDisplay()} (default)|">Default</option>
-                    <option th:each="o : ${s.options()}" th:unless="${o == s.defaultValue() and !s.toggle()}" th:value="${o}"
-                            th:text="${s.optionLabel(o)}" th:selected="${o == wizard.value(name)}">option</option>
-                </select>
-                <textarea th:if="${s.textArea()}" th:id="${name}" th:name="${name}" th:rows="${s.json()} ? 8 : 4"
-                          th:classappend="${s.json()} ? 'app-code'" th:text="${wizard.value(name)}"
-                          th:placeholder="|${s.defaultDisplay()} (default)|"
-                          th:attr="aria-describedby=${help},aria-invalid=${wizard.error(name) != null} ? 'true' : null,
-                                  data-check-key=${s.key()}"></textarea>
-                <input th:unless="${s.dropdown() or s.toggle() or s.textArea()}" th:id="${name}" th:name="${name}"
-                       th:type="${s.inputType()}" th:value="${wizard.value(name)}"
-                       th:placeholder="|${s.defaultDisplay()} (default)|"
-                       th:attr="aria-describedby=${help},aria-invalid=${wizard.error(name) != null} ? 'true' : null,
-                               data-check-key=${s.key()},
-                               data-duration=${s.duration()} ? (${s.durationOrNone()} ? 'or-none' : 'duration') : null,
-                               data-default=${s.duration()} ? ${s.defaultValue()} : null,
-                               data-routing=${s.routing()} ? 'true' : null,
-                               data-values=${s.values()} ? 'true' : null,
-                               list=${s.values()} ? |known-${s.key()}| : null">
-                <datalist th:if="${s.values()}" th:id="|known-${s.key()}|">
-                    <option th:each="o : ${s.options()}" th:value="${o}" th:label="${s.choiceOf(o).name()}"></option>
-                </datalist>
+                <th:block th:replace="~{fragments :: settingControl(${s}, ${name}, ${name}, ${wizard.value(name)},
+                        |${s.defaultDisplay()} (default)|, true, ${help}, ${wizard.error(name) != null})}"></th:block>
             </div>
             <small class="app-field__error" th:if="${wizard.error(name) != null}" role="alert"
                    th:text="${wizard.error(name)}">Refused.</small>

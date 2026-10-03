@@ -887,76 +887,28 @@ public class SettingsAdmin {
             return choice.description().isBlank() ? "" : choice.name() + ": " + choice.description();
         }
 
-        /** Whether a form edits the value over several lines - free text, a list one entry per line, or JSON. */
-        public boolean textArea() {
-            return "TEXT".equals(form) || "LINES".equals(form) || "JSON".equals(form);
+        /** The control that edits the value, decided from its kind and its form. */
+        public SettingControl control() {
+            return SettingControl.of(kind, form);
         }
 
-        /** Whether the value is several values on one line, which a form edits as one removable entry each, added
-         *  from the {@link #options() values the setting knows}. */
-        public boolean values() {
-            return "VALUES".equals(form);
-        }
-
-        /** Whether the value is a JSON document, which a form edits in a fixed-width face. */
-        public boolean json() {
-            return "JSON".equals(form);
-        }
-
-        /** Whether the value is a repository's routing, which a form edits as its clauses. */
-        public boolean routing() {
-            return "ROUTING".equals(form);
-        }
-
-        /** Whether the value is a duration, which a form edits as an amount and a unit. */
-        public boolean duration() {
-            return "DURATION".equals(kind) || "DURATION_OR_NONE".equals(kind);
-        }
-
-        /** Whether a duration may be switched off ({@link Setting#NONE}), which a form offers as "never". */
-        public boolean durationOrNone() {
-            return "DURATION_OR_NONE".equals(kind);
-        }
-
-        /** A CHOICE renders as a select of its catalogued options; a BOOLEAN as a {@link #toggle() switch}; every
-         *  other kind as a typed text input. */
-        public boolean dropdown() {
-            return "CHOICE".equals(kind);
-        }
-
-        /** A BOOLEAN renders as a switch showing its effective value, saving the opposite in one click. */
-        public boolean toggle() {
-            return "BOOLEAN".equals(kind);
-        }
-
-        /** Whether a {@link #toggle() switch} is on: the effective value, as the switch shows it. */
+        /** Whether a switch is on: the effective value, as the switch shows it. */
         public boolean on() {
             return Boolean.parseBoolean(value.trim());
         }
 
-        /** The value a {@link #toggle() switch} saves when pressed: the opposite of its effective value. */
+        /** The value a switch saves when pressed: the opposite of its effective value. */
         public String flipped() {
             return Boolean.toString(!on());
         }
 
-        /** The fixed options a {@link #dropdown()} offers: the catalogued choices, or true/false for a boolean. */
+        /** The fixed options a drop-down offers: the catalogued choices, or true/false for a switch. */
         public List<String> options() {
-            return "BOOLEAN".equals(kind) ? List.of("true", "false") : choices;
-        }
-
-        /** The HTML input type that gives a text control inline validation for its kind (a number spinner for the
-         *  integral kinds, a URL check for a URI, a masked field for a secret), plain text otherwise. */
-        public String inputType() {
-            return switch (kind) {
-                case "INTEGER", "LONG" -> "number";
-                case "URI" -> "url";
-                case "SECRET" -> "password";
-                default -> "text";
-            };
+            return control() == SettingControl.SWITCH ? List.of("true", "false") : choices;
         }
 
         public boolean secret() {
-            return "SECRET".equals(kind);
+            return control() == SettingControl.SECRET;
         }
 
         /** The effective value for display: a set secret is masked (whether stored or pinned), a boolean reads as
@@ -979,7 +931,7 @@ public class SettingsAdmin {
             return secret() && !chosen.isBlank() ? "••••••" : display(chosen);
         }
 
-        /** What a {@link #dropdown()} option reads as: the value as {@link #effectiveDisplay()} would show it, marked
+        /** What a drop-down's option reads as: the value as {@link #effectiveDisplay()} would show it, marked
          *  {@code (default)} after it where it is the default - "enabled (default)". */
         public String optionLabel(String option) {
             return option.equals(defaultValue) ? display(option) + " (default)" : display(option);
@@ -994,16 +946,12 @@ public class SettingsAdmin {
             if (raw.isBlank()) {
                 return NOTHING;
             }
-            if ("BOOLEAN".equals(kind)) {
-                return Boolean.parseBoolean(raw.trim()) ? "enabled" : "disabled";
-            }
-            if ("CHOICE".equals(kind)) {
-                return choiceOf(raw.trim()).name();
-            }
-            if (duration()) {
-                return DurationWords.describe(raw);
-            }
-            return raw;
+            return switch (control()) {
+                case SWITCH -> Boolean.parseBoolean(raw.trim()) ? "enabled" : "disabled";
+                case SELECT -> choiceOf(raw.trim()).name();
+                case DURATION, DURATION_OR_NONE -> DurationWords.describe(raw);
+                default -> raw;
+            };
         }
 
         /** The edit control's prefill: the current override, but never a secret's, which a masked field would still
