@@ -11,7 +11,7 @@ import build.jenesis.repository.search.SearchQuery;
 import build.jenesis.repository.search.lucene.LuceneSearchQueryProvider;
 import build.jenesis.repository.search.lucene.SearchIndexTask;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.walk.ArtifactWalk;
@@ -315,77 +315,14 @@ class SearchSharedWalkTest {
     }
 
     /** Delegates everything to the backend; subclasses observe or fail single calls. */
-    private static abstract class ForwardingStore implements PrimitiveArtifactStore {
-
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a forwarding base forwards its subspace, so every subclass inherits it
-        }
-
-        final ArtifactStore delegate;
-
+    private static abstract class ForwardingStore extends ForwardingArtifactStore {
         ForwardingStore(ArtifactStore delegate) {
-            this.delegate = delegate;
+            super(delegate);
         }
 
         @Override
         public ArtifactStore scope(String tenant) {
             return delegate.scope(tenant);
-        }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public List<String> list(String prefix) {
-            return delegate.list(prefix);
-        }
-
-        @Override
-        public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-            delegate.page(prefix, startAfter, limit, consumer);   // the backend's native paging, never list()
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
         }
     }
 
@@ -413,12 +350,7 @@ class SearchSharedWalkTest {
             }
             return super.readVersioned(key);
         }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
-}
 
     /** Counts release document reads per key - the sweep reads a delivered release's document once per
      *  enumeration, so a positive count is proof the release was enumerated again. */
@@ -437,12 +369,7 @@ class SearchSharedWalkTest {
             }
             return super.readVersioned(key);
         }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
     }
-}
 
     /** Wraps the task's walk so its first {@code walk} call races a foreign worker into the same pass: the foreign
      *  instance completes one whole segment, dies mid-way through the next, and its claim is left to expire before

@@ -8,7 +8,7 @@ import build.jenesis.repository.format.oci.OciFormat;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.walk.store.StoreArtifactWalk;
@@ -221,15 +221,18 @@ class OciBlobReferencesTest {
 
     /** A store whose blob reads fail the way a backend outage fails: {@code exists} still answers, the read does not.
      *  Everything else is the real store, so the only difference from the passing case is the failure itself. */
-    private record FailingReads(ArtifactStore delegate) implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
+    private static final class FailingReads extends ForwardingArtifactStore {
+        private FailingReads(ArtifactStore delegate) {
+            super(delegate);
         }
-
 
         @Override
         public InputStream open(String key) throws IOException {
+            throw new IOException("the store is unreachable: " + key);
+        }
+
+        @Override
+        public InputStream open(String key, long offset) throws IOException {
             throw new IOException("the store is unreachable: " + key);
         }
 
@@ -242,52 +245,7 @@ class OciBlobReferencesTest {
         public ArtifactStore scope(String tenant) {
             return new FailingReads(delegate.scope(tenant));
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public List<String> list(String prefix) {
-            return delegate.list(prefix);
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
-}
 
     @Test
     void a_manifest_blob_that_is_already_gone_lends_only_itself() throws IOException {

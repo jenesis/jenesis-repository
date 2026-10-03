@@ -5,7 +5,7 @@ import module java.base;
 
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.QuotaArtifactStore;
 import build.jenesis.repository.store.StoredCounter;
@@ -309,11 +309,9 @@ class QuotaArtifactStoreTest {
     /** Forwards to a real store but reports every write of the quota counter ({@code quota/used}) as a compare-and-set
      *  conflict, so a test can drive the counter's exhausted-retry paths - store()'s stale-counter forfeit and
      *  adjust()'s dropped-delta drift - while blob writes and reads pass through untouched. */
-    private record ConflictingCounterStore(ArtifactStore delegate) implements PrimitiveArtifactStore {
-
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's, so a deferred delta is one key across views
+    private static final class ConflictingCounterStore extends ForwardingArtifactStore {
+        private ConflictingCounterStore(ArtifactStore delegate) {
+            super(delegate);
         }
 
         @Override
@@ -325,75 +323,21 @@ class QuotaArtifactStoreTest {
         }
 
         @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-
-        @Override
         public ArtifactStore scope(String tenant) {
             return delegate.scope(tenant);
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public List<String> list(String prefix) {
-            return delegate.list(prefix);
-        }
-
-        @Override
-        public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-            delegate.page(prefix, startAfter, limit, consumer);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
-}
 
     /** Forwards to a real store but fails {@link ArtifactStore#delete} for one key, standing in for a delete that
      *  the backend rejects (a permission error, a transient outage), so the counter can be asserted to hold when the
      *  blob it names is still stored. */
-    private record FailingDeleteDelegate(ArtifactStore delegate, String failKey) implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
-        }
+    private static final class FailingDeleteDelegate extends ForwardingArtifactStore {
+        private final String failKey;
 
+        private FailingDeleteDelegate(ArtifactStore delegate, String failKey) {
+            super(delegate);
+            this.failKey = failKey;
+        }
 
         @Override
         public void delete(String key) throws IOException {
@@ -407,72 +351,17 @@ class QuotaArtifactStoreTest {
         public ArtifactStore scope(String tenant) {
             return delegate.scope(tenant);
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public List<String> list(String prefix) {
-            return delegate.list(prefix);
-        }
-
-        @Override
-        public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-            delegate.page(prefix, startAfter, limit, consumer);
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
-}
 
     /** Forwards to a real store but tallies every {@link ArtifactStore#write} per key, so a test can prove an
      *  already-stored content blob is deduped away rather than re-uploaded (its key stays at a single write). */
-    private record CountingWriteDelegate(ArtifactStore delegate, java.util.Map<String, Integer> counts)
-            implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
-        }
+    private static final class CountingWriteDelegate extends ForwardingArtifactStore {
+        private final java.util.Map<String, Integer> counts;
 
+        private CountingWriteDelegate(ArtifactStore delegate, java.util.Map<String, Integer> counts) {
+            super(delegate);
+            this.counts = counts;
+        }
 
         CountingWriteDelegate(ArtifactStore delegate) {
             this(delegate, new java.util.HashMap<>());
@@ -492,72 +381,18 @@ class QuotaArtifactStoreTest {
         public ArtifactStore scope(String tenant) {
             return delegate.scope(tenant);
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public List<String> list(String prefix) {
-            return delegate.list(prefix);
-        }
-
-        @Override
-        public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-            delegate.page(prefix, startAfter, limit, consumer);
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
-}
 
     /** Forwards to a real store but fails {@link ArtifactStore#list} outright, so the recompute provably streams
      *  through the ordered {@link ArtifactStore#page} primitive - a millions-entry {@code blobs/} never materialises
      *  as one list - while the recorded page limits pin that every page stays bounded. */
-    private record PagingDelegate(ArtifactStore delegate, List<Integer> pages) implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
-        }
+    private static final class PagingDelegate extends ForwardingArtifactStore {
+        private final List<Integer> pages;
 
+        private PagingDelegate(ArtifactStore delegate, List<Integer> pages) {
+            super(delegate);
+            this.pages = pages;
+        }
 
         @Override
         public List<String> list(String prefix) {
@@ -574,55 +409,5 @@ class QuotaArtifactStoreTest {
         public ArtifactStore scope(String tenant) {
             return delegate.scope(tenant);
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
-}
 }

@@ -5,7 +5,7 @@ import module java.base;
 
 import build.jenesis.repository.format.oci.OciFormat;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -73,19 +73,12 @@ class OciHardeningTest {
 
     /** A store decorator that fails the very first {@code writeVersioned} once - the concurrent conflict the tag-link
      *  retry absorbs - then delegates untouched. */
-    private static final class ConflictOnceStore implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
-        }
-
-
-        private final ArtifactStore delegate;
+    private static final class ConflictOnceStore extends ForwardingArtifactStore {
         private boolean armed = true;
         private int conflictsInjected;
 
         private ConflictOnceStore(ArtifactStore delegate) {
-            this.delegate = delegate;
+            super(delegate);
         }
 
         @Override
@@ -102,55 +95,5 @@ class OciHardeningTest {
         public ArtifactStore scope(String tenant) {
             return delegate.scope(tenant);
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public List<String> list(String prefix) {
-            return delegate.list(prefix);
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
     }
-}
 }

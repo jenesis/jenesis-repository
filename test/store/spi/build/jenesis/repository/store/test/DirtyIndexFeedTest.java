@@ -4,7 +4,7 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.DirtyIndexFeed;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
@@ -316,12 +316,10 @@ class DirtyIndexFeedTest {
 
     /** Forwards to a real store but reports every versioned write as a compare-and-set conflict, so a test can drive
      *  the marker write's exhausted-attempts path (the loud failure a persistently contended mark takes). */
-    private record AlwaysConflictingStore(ArtifactStore delegate) implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
+    private static final class AlwaysConflictingStore extends ForwardingArtifactStore {
+        private AlwaysConflictingStore(ArtifactStore delegate) {
+            super(delegate);
         }
-
 
         @Override
         public boolean writeVersioned(String key, byte[] content, Object expected) {
@@ -329,60 +327,10 @@ class DirtyIndexFeedTest {
         }
 
         @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-
-        @Override
         public ArtifactStore scope(String tenant) {
             return delegate.scope(tenant);
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public List<String> list(String prefix) {
-            return delegate.list(prefix);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
-}
 
     /**
      * An {@link ArtifactStore} decorator that counts the enumeration and small-object reads a sweep issues, so a test
@@ -390,19 +338,12 @@ class DirtyIndexFeedTest {
      * set. Every mutating and streaming method delegates untouched; only {@link #list}, {@link #page} and
      * {@link #readVersioned} are tallied.
      */
-    private static final class CountingStore implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
-        }
-
-
-        private final ArtifactStore delegate;
+    private static final class CountingStore extends ForwardingArtifactStore {
         private final Map<String, Integer> lists = new HashMap<>();
         private int readVersioned;
 
         private CountingStore(ArtifactStore delegate) {
-            this.delegate = delegate;
+            super(delegate);
         }
 
         void reset() {
@@ -446,50 +387,5 @@ class DirtyIndexFeedTest {
         public ArtifactStore scope(String tenant) {
             return delegate.scope(tenant);
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
     }
-}
 }

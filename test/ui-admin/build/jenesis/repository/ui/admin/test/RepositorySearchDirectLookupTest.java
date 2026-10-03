@@ -7,7 +7,7 @@ import build.jenesis.repository.search.SearchMode;
 import build.jenesis.repository.search.SearchQuery;
 import build.jenesis.repository.search.SearchQueryProvider;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.ui.store.RepositoryBrowse;
@@ -82,18 +82,11 @@ public class RepositorySearchDirectLookupTest {
      *  delegate. A direct hit lookup reads only point keys and bounded pages, so it passes; a full-walk search would
      *  throw here. Reads and writes delegate untouched; {@link #scope} propagates the guard. A test double, never a
      *  backend. */
-    private static final class ListRefusingStore implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
-        }
-
+    private static final class ListRefusingStore extends ForwardingArtifactStore {
         private static final Pattern ECOSYSTEM_FOLDER = Pattern.compile("meta/[^/]+");
 
-        private final ArtifactStore delegate;
-
         private ListRefusingStore(ArtifactStore delegate) {
-            this.delegate = delegate;
+            super(delegate);
         }
 
         @Override
@@ -110,62 +103,12 @@ public class RepositorySearchDirectLookupTest {
         }
 
         @Override
-        public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
-            delegate.pageListed(prefix, startAfter, limit, consumer);
+        public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+            if (ECOSYSTEM_FOLDER.matcher(prefix.endsWith("/") ? prefix.substring(0, prefix.length() - 1) : prefix)
+                    .matches()) {
+                throw new AssertionError("full coordinate walk: paged every coordinate under " + prefix);
+            }
+            return delegate.scan(prefix, startAfter, limit, consumer);
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        if (ECOSYSTEM_FOLDER.matcher(prefix.endsWith("/") ? prefix.substring(0, prefix.length() - 1) : prefix)
-                .matches()) {
-            throw new AssertionError("full coordinate walk: paged every coordinate under " + prefix);
-        }
-        return delegate.scan(prefix, startAfter, limit, consumer);
     }
-}
 }

@@ -4,7 +4,7 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.Condemned;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
@@ -247,18 +247,11 @@ class PublicationTest {
     }
 
     /** A store whose next {@code n} versioned writes report a benign compare-and-set conflict, then behave. */
-    private static final class ConflictingStore implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
-        }
-
-
-        private final ArtifactStore delegate;
+    private static final class ConflictingStore extends ForwardingArtifactStore {
         int conflicts;
 
         private ConflictingStore(ArtifactStore delegate, int conflicts) {
-            this.delegate = delegate;
+            super(delegate);
             this.conflicts = conflicts;
         }
 
@@ -275,57 +268,7 @@ class PublicationTest {
         public ArtifactStore scope(String tenant) {
             return delegate.scope(tenant);
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public List<String> list(String prefix) {
-            return delegate.list(prefix);
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
     }
-}
 
     @Test
     void unpublish_removes_the_pointer_and_located_reflects_a_missing_blob() throws IOException {

@@ -6,7 +6,7 @@ import module java.base;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
@@ -63,19 +63,12 @@ class GcConcurrentRepublishTest {
     /** A store that, the first time the sweep reads the given marker key, deletes it after answering - simulating a
      *  concurrent {@link Publication#link} that re-referenced the blob and cleared its condemned marker in the window
      *  between the sweep's judgement read and its delete. Every other operation delegates to the real store. */
-    private static final class MarkerClearingStore implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
-        }
-
-
-        private final ArtifactStore delegate;
+    private static final class MarkerClearingStore extends ForwardingArtifactStore {
         private final String marker;
         private boolean armed = true;
 
         private MarkerClearingStore(ArtifactStore delegate, String marker) {
-            this.delegate = delegate;
+            super(delegate);
             this.marker = marker;
         }
 
@@ -93,55 +86,5 @@ class GcConcurrentRepublishTest {
         public ArtifactStore scope(String tenant) {
             return delegate.scope(tenant);
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public List<String> list(String prefix) {
-            return delegate.list(prefix);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
     }
-}
 }

@@ -12,7 +12,7 @@ import build.jenesis.repository.search.lucene.SearchPublicationObserver;
 import build.jenesis.repository.search.lucene.SearchRebuildConsumer;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.DirtyIndexFeed;
 import build.jenesis.repository.store.Publication;
@@ -401,17 +401,11 @@ class SearchIncrementalTest {
 
     /** A read-recording {@link ArtifactStore} decorator: every key read (list, versioned read, open, read) is recorded
      *  so a test can prove the incremental sweep touched only the changed coordinate's keys - never the whole set. */
-    private static final class CountingStore implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
-        }
-
-        private final ArtifactStore delegate;
+    private static final class CountingStore extends ForwardingArtifactStore {
         private final List<String> reads = Collections.synchronizedList(new ArrayList<>());
 
         private CountingStore(ArtifactStore delegate) {
-            this.delegate = delegate;
+            super(delegate);
         }
 
         @Override
@@ -438,24 +432,9 @@ class SearchIncrementalTest {
         }
 
         @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
         public long size(String key) throws IOException {
             reads.add(key);
             return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
         }
 
         @Override
@@ -469,17 +448,7 @@ class SearchIncrementalTest {
             reads.add(key);
             return delegate.readVersioned(key);
         }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
     }
-}
 
     /** The coordinates one full page of {@code query} matches, or {@code null} when this repository has no usable
      *  index yet - which the SPI now says with an empty {@link Optional} rather than a {@code null} list.

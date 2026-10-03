@@ -8,7 +8,7 @@ import build.jenesis.repository.observation.HealthCheck;
 import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilityReport;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.QuotaArtifactStore;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -117,12 +117,10 @@ class QuotaArtifactStoreObservabilityTest {
     }
 
     /** A store that fails the versioned read the quota counter is kept on, to drive the counter-unreadable branch. */
-    private record ThrowingMeter(ArtifactStore delegate) implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
+    private static final class ThrowingMeter extends ForwardingArtifactStore {
+        private ThrowingMeter(ArtifactStore delegate) {
+            super(delegate);
         }
-
 
         @Override
         public ArtifactStore scope(String tenant) {
@@ -133,55 +131,5 @@ class QuotaArtifactStoreObservabilityTest {
         public Optional<Versioned> readVersioned(String key) throws IOException {
             throw new IOException("counter read failed");
         }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public List<String> list(String prefix) {
-            return delegate.list(prefix);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
-}
 }

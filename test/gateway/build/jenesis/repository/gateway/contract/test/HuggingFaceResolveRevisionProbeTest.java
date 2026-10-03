@@ -4,7 +4,7 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -100,19 +100,13 @@ public class HuggingFaceResolveRevisionProbeTest {
      * the largest limit seen), so the test proves the single-file download's existence check pages one child rather
      * than listing the whole revision. Every other operation delegates untouched.
      */
-    private static final class ProbeStore implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
-        }
-
-        private final ArtifactStore delegate;
+    private static final class ProbeStore extends ForwardingArtifactStore {
         boolean forbidFileList;
         int filePageCount;
         int maxFilePageLimit;
 
         private ProbeStore(ArtifactStore delegate) {
-            this.delegate = delegate;
+            super(delegate);
         }
 
         @Override
@@ -134,23 +128,5 @@ public class HuggingFaceResolveRevisionProbeTest {
         }
 
         @Override public ArtifactStore scope(String tenant) { return delegate.scope(tenant); }
-        @Override public boolean exists(String key) { return delegate.exists(key); }
-        @Override public void read(String key, OutputStream out) throws IOException { delegate.read(key, out); }
-        @Override public InputStream open(String key) throws IOException { return delegate.open(key); }
-        @Override public void write(String key, InputStream in) throws IOException { delegate.write(key, in); }
-        @Override public String writeBlob(InputStream in) throws IOException { return delegate.writeBlob(in); }
-        @Override public long size(String key) throws IOException { return delegate.size(key); }
-        @Override public void delete(String key) throws IOException { delegate.delete(key); }
-        @Override public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-        @Override public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
     }
-}
 }

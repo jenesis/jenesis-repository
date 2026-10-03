@@ -2,7 +2,7 @@ package build.jenesis.repository.inventory.test;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 
 /**
  * An {@link ArtifactStore} decorator that <b>refuses to materialise a wide level</b>: {@link #list} throws once a
@@ -20,19 +20,12 @@ import build.jenesis.repository.store.PrimitiveArtifactStore;
  * bounded tree walk ({@code PagedTreeWalk}, which consumes the store exclusively through {@code page}) is not. A test
  * that seeds a container past {@link #MAX_LEVEL} therefore fails <em>before</em> the migration and passes after it.
  */
-final class LevelBoundedStore implements PrimitiveArtifactStore {
-    @Override
-    public Object identity() {
-        return delegate.identity();   // a decorator answers its delegate's subspace
-    }
-
+final class LevelBoundedStore extends ForwardingArtifactStore {
     /** The widest level this store will hand back as one {@code List}. Small on purpose: a test seeds just past it. */
     static final int MAX_LEVEL = 8;
 
-    private final ArtifactStore delegate;
-
     LevelBoundedStore(ArtifactStore delegate) {
-        this.delegate = delegate;
+        super(delegate);
     }
 
     @Override
@@ -47,67 +40,7 @@ final class LevelBoundedStore implements PrimitiveArtifactStore {
     }
 
     @Override
-    public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-        delegate.page(prefix, startAfter, limit, consumer);
-    }
-
-    @Override
-    public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
-        delegate.pageListed(prefix, startAfter, limit, consumer);   // the primitive the walk pages through; page derives from it
-    }
-
-    @Override
     public ArtifactStore scope(String tenant) {
         return new LevelBoundedStore(delegate.scope(tenant));
-    }
-
-    @Override
-    public boolean exists(String key) {
-        return delegate.exists(key);
-    }
-
-    @Override
-    public void read(String key, OutputStream out) throws IOException {
-        delegate.read(key, out);
-    }
-
-    @Override
-    public InputStream open(String key) throws IOException {
-        return delegate.open(key);
-    }
-
-    @Override
-    public void write(String key, InputStream in) throws IOException {
-        delegate.write(key, in);
-    }
-
-    @Override
-    public String writeBlob(InputStream in) throws IOException {
-        return delegate.writeBlob(in);
-    }
-
-    @Override
-    public long size(String key) throws IOException {
-        return delegate.size(key);
-    }
-
-    @Override
-    public void delete(String key) throws IOException {
-        delegate.delete(key);
-    }
-
-    @Override
-    public Optional<Versioned> readVersioned(String key) throws IOException {
-        return delegate.readVersioned(key);
-    }
-
-    @Override
-    public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-        return delegate.writeVersioned(key, content, expected);
-    }
-
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
     }
 }

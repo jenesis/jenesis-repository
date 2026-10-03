@@ -5,7 +5,7 @@ import module java.base;
 
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.ReadOnlyArtifactStore;
 import build.jenesis.repository.ui.ConsoleAdministrators;
@@ -97,39 +97,16 @@ class KnownPrincipalsTest {
 
     /** Counts writes reaching the backend, so "a returning sign-in writes nothing" is a measurement rather than a
      *  reading of the code. Everything else passes straight through to a real store. */
-    private static final class Counting implements PrimitiveArtifactStore {
-
-        private final ArtifactStore delegate;
-
+    private static final class Counting extends ForwardingArtifactStore {
         private int writes;
 
         private Counting(ArtifactStore delegate) {
-            this.delegate = delegate;
+            super(delegate);
         }
 
         @Override
         public ArtifactStore scope(String tenant) {
             return new Counting(delegate.scope(tenant));
-        }
-
-        @Override
-        public Object identity() {
-            return delegate.identity();
-        }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
         }
 
         @Override
@@ -145,34 +122,16 @@ class KnownPrincipalsTest {
         }
 
         @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public List<String> list(String prefix) {
-            return delegate.list(prefix);
-        }
-
-        @Override
-        public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-            return delegate.scan(prefix, startAfter, limit, consumer);
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-
-        @Override
         public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
             writes++;
             return delegate.writeVersioned(key, content, expected);
+        }
+
+        @Override
+        public boolean writeVersioned(String key, InputStream content, long length, Object expected)
+                throws IOException {
+            writes++;
+            return delegate.writeVersioned(key, content, length, expected);
         }
     }
 }

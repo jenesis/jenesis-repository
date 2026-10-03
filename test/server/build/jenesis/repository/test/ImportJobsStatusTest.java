@@ -5,7 +5,7 @@ import module java.base;
 
 import build.jenesis.repository.server.ImportJobs;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -74,19 +74,12 @@ class ImportJobsStatusTest {
 
     /** Wraps a real filesystem store, counting the {@code readVersioned} and {@code exists} calls so the round-trip
      *  shape of a status read is demonstrable rather than assumed. */
-    private static final class CountingStore implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
-        }
-
-
-        private final ArtifactStore delegate;
+    private static final class CountingStore extends ForwardingArtifactStore {
         private final AtomicInteger reads = new AtomicInteger();
         private final AtomicInteger exists = new AtomicInteger();
 
         private CountingStore(ArtifactStore delegate) {
-            this.delegate = delegate;
+            super(delegate);
         }
 
         void reset() {
@@ -118,50 +111,5 @@ class ImportJobsStatusTest {
         public ArtifactStore scope(String tenant) {
             return delegate.scope(tenant);
         }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public List<String> list(String prefix) {
-            return delegate.list(prefix);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
     }
-}
 }

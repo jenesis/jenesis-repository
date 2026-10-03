@@ -15,7 +15,7 @@ import build.jenesis.repository.server.NodeDivergence;
 import build.jenesis.repository.server.NodeDivergenceAdvisor;
 import build.jenesis.repository.server.NodeFingerprint;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Tenants;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -350,20 +350,13 @@ class MultiNodeConsistencyTest {
 
     /** An {@link ArtifactStore} decorator that counts the reads a consistency check makes, so a test can prove the
      *  check lists only the node prefix and opens no blob - it is bounded by node count, never a store scan. */
-    private static final class CountingStore implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
-        }
-
-
-        private final ArtifactStore delegate;
+    private static final class CountingStore extends ForwardingArtifactStore {
         int listCalls;
         int versionedReads;
         int blobReads;
 
         CountingStore(ArtifactStore delegate) {
-            this.delegate = delegate;
+            super(delegate);
         }
 
         void reset() {
@@ -406,40 +399,5 @@ class MultiNodeConsistencyTest {
         public ArtifactStore scope(String tenant) {
             return delegate.scope(tenant);
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
     }
-}
 }

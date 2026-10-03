@@ -2,8 +2,7 @@ package build.jenesis.repository.store.testkit;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
-import build.jenesis.repository.store.StoreBindings;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 
 /**
  * An {@link ArtifactStore} decorator that injects a store fault at a chosen point, so a crash-recovery test can drive
@@ -26,7 +25,7 @@ import build.jenesis.repository.store.StoreBindings;
  * re-attempted rather than silently dropping the write. Thread-safe: the matrices run concurrent writers against one
  * instance. This is a test double, never a production backend.
  */
-public final class FaultInjectingStore implements PrimitiveArtifactStore {
+public final class FaultInjectingStore extends ForwardingArtifactStore {
 
     /** The store operations a fault can be armed against. {@code WRITE_BLOB} carries no key, so it matches only a
      *  fault armed with {@link #anyKey}. */
@@ -65,7 +64,6 @@ public final class FaultInjectingStore implements PrimitiveArtifactStore {
         }
     }
 
-    private final ArtifactStore delegate;
     private final List<Rule> rules = new ArrayList<>();
     private final Map<Op, Integer> counts = new EnumMap<>(Op.class);
 
@@ -82,7 +80,7 @@ public final class FaultInjectingStore implements PrimitiveArtifactStore {
     private final Object peer;
 
     private FaultInjectingStore(ArtifactStore delegate, Object peer) {
-        this.delegate = delegate;
+        super(delegate);
         this.peer = peer;
     }
 
@@ -339,12 +337,6 @@ public final class FaultInjectingStore implements PrimitiveArtifactStore {
     }
 
     @Override
-    public Optional<URI> presign(String key, Duration ttl) {
-        // No fault is armed against presign (a read-only capability); pass through so a presigning backend still mints.
-        return delegate.presign(key, ttl);
-    }
-
-    @Override
     public void delete(String key) throws IOException {
         Mode mode = intercept(Op.DELETE, key);
         if (mode == Mode.THROW_BEFORE) {
@@ -371,21 +363,26 @@ public final class FaultInjectingStore implements PrimitiveArtifactStore {
         return peer != null ? peer : delegate.identity();
     }
 
-    /** A decorator answers its delegate's bindings, so a deployment's binding reaches a screen through the fault
-     *  injection as it reaches it through any production decorator. */
-    @Override
-    public StoreBindings bindings() {
-        return delegate.bindings();
-    }
-
     @Override
     public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
-        // The paging primitive is forwarded, as a decorator must: left to the SPI's fallback it would page by listing
-        // and report no sizes, and a pass measured through this store would read as paying a request per child. A
-        // fault against it is a silent empty page, the SPI's absent-container shape, as for list().
+        // A fault against a page is a silent empty page, the SPI's absent-container shape, as for list().
         if (intercept(Op.PAGE, prefix) == null) {
             delegate.pageListed(prefix, startAfter, limit, consumer);
         }
+    }
+
+    @Override
+    public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
+        if (intercept(Op.PAGE, prefix) == null) {
+            delegate.page(prefix, startAfter, limit, consumer);
+        }
+    }
+
+    /** The one-child page it stands for, counted and faulted as that page: a faulted probe finds the container
+     *  empty, the shape an empty page takes. */
+    @Override
+    public boolean isEmpty(String prefix) throws IOException {
+        return intercept(Op.PAGE, prefix) != null || delegate.isEmpty(prefix);
     }
 
     @Override
@@ -427,18 +424,36 @@ public final class FaultInjectingStore implements PrimitiveArtifactStore {
         return written;
     }
 
+    /** The streamed compare-and-set, counted and faulted as the one {@link Op#WRITE_VERSIONED} it is. */
+    @Override
+    public boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException {
+        Mode mode = intercept(Op.WRITE_VERSIONED, key);
+        if (mode == Mode.THROW_BEFORE) {
+            throw fault(Op.WRITE_VERSIONED, key);
+        }
+        if (mode == Mode.CONFLICT) {
+            return false;
+        }
+        boolean written = delegate.writeVersioned(key, content, length, expected);
+        if (mode == Mode.THROW_AFTER) {
+            throw fault(Op.WRITE_VERSIONED, key);
+        }
+        if (mode == Mode.CONFLICT_AFTER) {
+            return false;
+        }
+        return written;
+    }
+
     private static IOException fault(Op op, String key) {
         return new IOException("injected " + op + " fault at " + key);
     }
 
     /** A scoped view that routes every call back through the parent's fault decision, so an armed fault fires on the
      *  scoped keys the sweeps use ({@code publish/...}, {@code meta/...}) exactly as it would unscoped. */
-    final class Scoped implements PrimitiveArtifactStore {
-
-        private final ArtifactStore scoped;
+    final class Scoped extends ForwardingArtifactStore {
 
         private Scoped(ArtifactStore scoped) {
-            this.scoped = scoped;
+            super(scoped);
         }
 
         /** The arranged choreography is the store's, not the view's: scoping narrows keys, never the deployment. */
@@ -448,12 +463,12 @@ public final class FaultInjectingStore implements PrimitiveArtifactStore {
 
         @Override
         public ArtifactStore scope(String tenant) {
-            return new Scoped(scoped.scope(tenant));
+            return new Scoped(delegate.scope(tenant));
         }
 
         @Override
         public boolean exists(String key) {
-            return intercept(Op.EXISTS, key) == null && scoped.exists(key);
+            return intercept(Op.EXISTS, key) == null && delegate.exists(key);
         }
 
         @Override
@@ -462,7 +477,7 @@ public final class FaultInjectingStore implements PrimitiveArtifactStore {
             if (mode == Mode.THROW_BEFORE) {
                 throw fault(Op.READ, key);
             }
-            scoped.read(key, out);
+            delegate.read(key, out);
             if (mode == Mode.THROW_AFTER) {
                 throw fault(Op.READ, key);
             }
@@ -474,7 +489,7 @@ public final class FaultInjectingStore implements PrimitiveArtifactStore {
             if (mode == Mode.THROW_BEFORE) {
                 throw fault(Op.OPEN, key);
             }
-            InputStream stream = scoped.open(key);
+            InputStream stream = delegate.open(key);
             if (mode == Mode.THROW_AFTER) {
                 stream.close();
                 throw fault(Op.OPEN, key);
@@ -488,7 +503,7 @@ public final class FaultInjectingStore implements PrimitiveArtifactStore {
             if (mode == Mode.THROW_BEFORE) {
                 throw fault(Op.OPEN_FROM, key);
             }
-            InputStream stream = scoped.open(key, offset);
+            InputStream stream = delegate.open(key, offset);
             if (mode == Mode.THROW_AFTER) {
                 stream.close();
                 throw fault(Op.OPEN_FROM, key);
@@ -502,7 +517,7 @@ public final class FaultInjectingStore implements PrimitiveArtifactStore {
             if (mode == Mode.THROW_BEFORE) {
                 throw fault(Op.WRITE, key);
             }
-            scoped.write(key, in);
+            delegate.write(key, in);
             if (mode == Mode.THROW_AFTER) {
                 throw fault(Op.WRITE, key);
             }
@@ -514,7 +529,7 @@ public final class FaultInjectingStore implements PrimitiveArtifactStore {
             if (mode == Mode.THROW_BEFORE) {
                 throw fault(Op.WRITE_BLOB, "blobs/");
             }
-            String hash = scoped.writeBlob(in);
+            String hash = delegate.writeBlob(in);
             if (mode == Mode.THROW_AFTER) {
                 throw fault(Op.WRITE_BLOB, "blobs/" + hash);
             }
@@ -526,7 +541,7 @@ public final class FaultInjectingStore implements PrimitiveArtifactStore {
             if (intercept(Op.SIZE, key) != null) {
                 throw fault(Op.SIZE, key);
             }
-            return scoped.size(key);
+            return delegate.size(key);
         }
 
         @Override
@@ -534,12 +549,7 @@ public final class FaultInjectingStore implements PrimitiveArtifactStore {
             if (intercept(Op.SIZE, key) != null) {
                 throw fault(Op.SIZE, key);
             }
-            return scoped.listed(key);
-        }
-
-        @Override
-        public Optional<URI> presign(String key, Duration ttl) {
-            return scoped.presign(key, ttl);
+            return delegate.listed(key);
         }
 
         @Override
@@ -548,7 +558,7 @@ public final class FaultInjectingStore implements PrimitiveArtifactStore {
             if (mode == Mode.THROW_BEFORE) {
                 throw fault(Op.DELETE, key);
             }
-            scoped.delete(key);
+            delegate.delete(key);
             if (mode == Mode.THROW_AFTER) {
                 throw fault(Op.DELETE, key);
             }
@@ -557,24 +567,31 @@ public final class FaultInjectingStore implements PrimitiveArtifactStore {
         @Override
         public List<String> list(String prefix) {
             // As on the outer store: an armed LIST fault is a silent empty listing, the SPI's absent-container shape.
-            return intercept(Op.LIST, prefix) != null ? List.of() : scoped.list(prefix);
+            return intercept(Op.LIST, prefix) != null ? List.of() : delegate.list(prefix);
         }
 
         @Override
         public Object identity() {
-            return peer != null ? List.of(peer, scoped.identity()) : scoped.identity();
-        }
-
-        @Override
-        public StoreBindings bindings() {
-            return scoped.bindings();
+            return peer != null ? List.of(peer, delegate.identity()) : delegate.identity();
         }
 
         @Override
         public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
             if (intercept(Op.PAGE, prefix) == null) {
-                scoped.pageListed(prefix, startAfter, limit, consumer);
+                delegate.pageListed(prefix, startAfter, limit, consumer);
             }
+        }
+
+        @Override
+        public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
+            if (intercept(Op.PAGE, prefix) == null) {
+                delegate.page(prefix, startAfter, limit, consumer);
+            }
+        }
+
+        @Override
+        public boolean isEmpty(String prefix) throws IOException {
+            return intercept(Op.PAGE, prefix) != null || delegate.isEmpty(prefix);
         }
 
         @Override
@@ -582,7 +599,7 @@ public final class FaultInjectingStore implements PrimitiveArtifactStore {
             if (intercept(Op.READ_VERSIONED, key) != null) {
                 throw fault(Op.READ_VERSIONED, key);
             }
-            return scoped.readVersioned(key);
+            return delegate.readVersioned(key);
         }
 
         @Override
@@ -590,7 +607,7 @@ public final class FaultInjectingStore implements PrimitiveArtifactStore {
             if (intercept(Op.READ_VERSIONED, key) != null) {
                 throw fault(Op.READ_VERSIONED, key);
             }
-            return scoped.version(key);
+            return delegate.version(key);
         }
 
         @Override
@@ -602,21 +619,28 @@ public final class FaultInjectingStore implements PrimitiveArtifactStore {
             if (mode == Mode.CONFLICT) {
                 return false;
             }
-            boolean written = scoped.writeVersioned(key, content, expected);
+            boolean written = delegate.writeVersioned(key, content, expected);
             if (mode == Mode.THROW_AFTER) {
                 throw fault(Op.WRITE_VERSIONED, key);
             }
             return written;
         }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return scoped.scan(prefix, startAfter, limit, consumer);
-    }
-}
 
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
+        @Override
+        public boolean writeVersioned(String key, InputStream content, long length, Object expected)
+                throws IOException {
+            Mode mode = intercept(Op.WRITE_VERSIONED, key);
+            if (mode == Mode.THROW_BEFORE) {
+                throw fault(Op.WRITE_VERSIONED, key);
+            }
+            if (mode == Mode.CONFLICT) {
+                return false;
+            }
+            boolean written = delegate.writeVersioned(key, content, length, expected);
+            if (mode == Mode.THROW_AFTER) {
+                throw fault(Op.WRITE_VERSIONED, key);
+            }
+            return written;
+        }
     }
 }

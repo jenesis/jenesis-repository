@@ -5,7 +5,7 @@ import module org.junit.jupiter.api;
 
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.Publication;
@@ -65,19 +65,12 @@ class GcMarkRoundTripsTest {
     }
 
     /** An {@link ArtifactStore} that forwards everything and counts the calls a mark pass is allowed to make. */
-    private static final class Counting implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
-        }
-
-
-        private final ArtifactStore delegate;
+    private static final class Counting extends ForwardingArtifactStore {
         private int sized;
         private final List<String> probed = new ArrayList<>();
 
         private Counting(ArtifactStore delegate) {
-            this.delegate = delegate;
+            super(delegate);
         }
 
         @Override
@@ -95,61 +88,6 @@ class GcMarkRoundTripsTest {
         @Override
         public ArtifactStore scope(String tenant) {
             return new Counting(delegate.scope(tenant));
-        }
-
-        @Override
-        public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
-            delegate.pageListed(prefix, startAfter, limit, consumer);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public List<String> list(String prefix) {
-            return delegate.list(prefix);
-        }
-
-        @Override
-        public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-            delegate.page(prefix, startAfter, limit, consumer);
-        }
-
-        @Override
-        public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-            return delegate.scan(prefix, startAfter, limit, consumer);
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
         }
     }
 }

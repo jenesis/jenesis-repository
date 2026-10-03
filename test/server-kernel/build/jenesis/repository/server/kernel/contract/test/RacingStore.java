@@ -2,7 +2,7 @@ package build.jenesis.repository.server.kernel.contract.test;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 
 /**
  * A reusable delegating {@link ArtifactStore} that injects a rival concurrent writer's mutations <em>between</em> a
@@ -40,12 +40,7 @@ import build.jenesis.repository.store.PrimitiveArtifactStore;
  * interceptable - the write verbs a race turns on; every other method delegates untouched. A test double, never a
  * production backend.
  */
-public final class RacingStore implements PrimitiveArtifactStore {
-    @Override
-    public Object identity() {
-        return delegate.identity();   // a decorator answers its delegate's subspace
-    }
-
+public final class RacingStore extends ForwardingArtifactStore {
     /** A concurrent rival's durable writes, run at an injection point against the delegate store. Given the matched key
      *  so an interceptor keyed on a predicate can react to exactly which key fired (the lease-steal records the released
      *  path it saw). Declares {@code IOException} so a rival mutation can propagate a genuine store failure unchanged. */
@@ -73,11 +68,10 @@ public final class RacingStore implements PrimitiveArtifactStore {
         }
     }
 
-    private final ArtifactStore delegate;
     private final List<Interceptor> interceptors = new ArrayList<>();
 
     private RacingStore(ArtifactStore delegate) {
-        this.delegate = delegate;
+        super(delegate);
     }
 
     /** Wrap {@code delegate} so interceptors can be registered over it. */
@@ -136,6 +130,16 @@ public final class RacingStore implements PrimitiveArtifactStore {
         return ok;
     }
 
+    /** The streamed compare-and-set is the same {@code writeVersioned} verb, so an interceptor on it fires either way. */
+    @Override
+    public boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException {
+        runInsteadFail("writeVersioned", key);
+        runBefore("writeVersioned", key);
+        boolean ok = delegate.writeVersioned(key, content, length, expected);
+        runAfter("writeVersioned", key, ok);
+        return ok;
+    }
+
     private void runInsteadFail(String op, String key) throws IOException {
         Interceptor hit = match(op, key, When.INSTEAD_FAIL);
         if (hit != null) {
@@ -179,50 +183,5 @@ public final class RacingStore implements PrimitiveArtifactStore {
     @Override
     public ArtifactStore scope(String tenant) {
         return delegate.scope(tenant);
-    }
-
-    @Override
-    public boolean exists(String key) {
-        return delegate.exists(key);
-    }
-
-    @Override
-    public void read(String key, OutputStream out) throws IOException {
-        delegate.read(key, out);
-    }
-
-    @Override
-    public InputStream open(String key) throws IOException {
-        return delegate.open(key);
-    }
-
-    @Override
-    public String writeBlob(InputStream in) throws IOException {
-        return delegate.writeBlob(in);
-    }
-
-    @Override
-    public long size(String key) throws IOException {
-        return delegate.size(key);
-    }
-
-    @Override
-    public List<String> list(String prefix) {
-        return delegate.list(prefix);
-    }
-
-    @Override
-    public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-        delegate.page(prefix, startAfter, limit, consumer);
-    }
-
-    @Override
-    public Optional<Versioned> readVersioned(String key) throws IOException {
-        return delegate.readVersioned(key);
-    }
-
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
     }
 }

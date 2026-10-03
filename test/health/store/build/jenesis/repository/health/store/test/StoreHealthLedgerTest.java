@@ -8,7 +8,7 @@ import build.jenesis.repository.health.HealthLedger;
 import build.jenesis.repository.health.HealthLedgerProvider;
 import build.jenesis.repository.health.store.StoreHealthLedger;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -107,10 +107,9 @@ class StoreHealthLedgerTest {
     /** A store that refuses {@code list} under the health ledger's own key spaces while paging exactly as the
      *  delegate does - so a streaming leg that still materialises a level fails by name rather than merely costing
      *  memory. The same fixture shape {@code LevelBoundedStore} uses for the inventory sweeps. */
-    private record ListRefusingStore(ArtifactStore delegate) implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
+    private static final class ListRefusingStore extends ForwardingArtifactStore {
+        private ListRefusingStore(ArtifactStore delegate) {
+            super(delegate);
         }
 
         @Override
@@ -122,64 +121,9 @@ class StoreHealthLedgerTest {
         }
 
         @Override
-        public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-            delegate.page(prefix, startAfter, limit, consumer);
-        }
-
-        @Override
         public ArtifactStore scope(String tenant) {
             return new ListRefusingStore(delegate.scope(tenant));
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
-}
 
 }

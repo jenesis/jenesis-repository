@@ -2,12 +2,12 @@ package build.jenesis.repository.staging.store.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.staging.store.StoreStaging;
 import build.jenesis.repository.store.Lease;
 import build.jenesis.repository.staging.StagingState;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.staging.store.StagingWithholdInterceptor;
@@ -453,19 +453,13 @@ class StoreStagingTest {
     /** A store decorator that, once {@link #arm armed}, fails the very next {@code writeVersioned} to a
      *  {@code staging-state/} marker key once - the concurrent CAS conflict the seal's retry must absorb - then
      *  delegates untouched. */
-    private static final class ConflictOnceOnStateStore implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
-        }
-
-        private final ArtifactStore delegate;
+    private static final class ConflictOnceOnStateStore extends ForwardingArtifactStore {
         private boolean armed;
         private boolean always;
         private int stateConflicts;
 
         private ConflictOnceOnStateStore(ArtifactStore delegate) {
-            this.delegate = delegate;
+            super(delegate);
         }
 
         private void arm() {
@@ -492,72 +486,16 @@ class StoreStagingTest {
         public ArtifactStore scope(String tenant) {
             return delegate.scope(tenant);
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public List<String> list(String prefix) {
-            return delegate.list(prefix);
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
     }
-}
 
     /** A store decorator that throws when the release pointer for one chosen release path is linked - the mid-set
      *  re-publish failure promotion's rollback must absorb (the failing artifact never releases; any sibling already
      *  released in the same pass is rolled back) - and delegates everything else untouched. */
-    private static final class FailLinkingPath implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
-        }
-
-        private final ArtifactStore delegate;
+    private static final class FailLinkingPath extends ForwardingArtifactStore {
         private final String failKey;
 
         private FailLinkingPath(ArtifactStore delegate, String failReleasePath) {
-            this.delegate = delegate;
+            super(delegate);
             this.failKey = "publish" + failReleasePath;
         }
 
@@ -573,57 +511,7 @@ class StoreStagingTest {
         public ArtifactStore scope(String tenant) {
             return delegate.scope(tenant);
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public List<String> list(String prefix) {
-            return delegate.list(prefix);
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
     }
-}
 
     /** Build a {@link RacingStore} reproducing the losing interleaving: the FIRST staged release
      *  link records {@code firstReleased}, then the SECOND path's slow {@code format.handle} fails - and, when

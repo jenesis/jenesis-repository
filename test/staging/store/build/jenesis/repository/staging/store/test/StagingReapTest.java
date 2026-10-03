@@ -10,7 +10,7 @@ import build.jenesis.repository.staging.store.StagingReapTask;
 import build.jenesis.repository.staging.store.StagingReapTaskProvider;
 import build.jenesis.repository.staging.store.StoreStaging;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 
@@ -83,19 +83,13 @@ class StagingReapTest {
     /** A store that, on the FIRST {@code readVersioned} of one marker key, re-stamps the underlying marker to
      *  {@code refreshed} (standing in for a stage/promote that won the single-writer lock in the reap's check-then-act
      *  window) and returns the ORIGINAL, stale value the reap decided on. Every other call delegates unchanged. */
-    private static final class RefreshOnFirstMarkerRead implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
-        }
-
-        private final ArtifactStore delegate;
+    private static final class RefreshOnFirstMarkerRead extends ForwardingArtifactStore {
         private final String markerKey;
         private final Instant refreshed;
         private boolean refreshedOnce;
 
         private RefreshOnFirstMarkerRead(ArtifactStore delegate, String markerKey, Instant refreshed) {
-            this.delegate = delegate;
+            super(delegate);
             this.markerKey = markerKey;
             this.refreshed = refreshed;
         }
@@ -116,57 +110,7 @@ class StagingReapTest {
         public ArtifactStore scope(String tenant) {
             return delegate.scope(tenant);
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public List<String> list(String prefix) {
-            return delegate.list(prefix);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
     }
-}
 
     @Test
     void a_rival_that_steals_the_lapsed_lease_mid_reap_is_not_wiped_by_the_reap() throws IOException {
@@ -189,28 +133,39 @@ class StagingReapTest {
                 .as("the rival's marker is NOT deleted by the lease-losing reap").containsExactly("big");
     }
 
-    /** A store that, on the reap's FIRST {@code list} of an id's {@code publish/staging/<id>} tree (the {@code staged}
-     *  walk, run just before the guarded unpublish loop), overwrites the id's {@code staging-lock/<id>} lease with a
+    /** A store that, on the reap's FIRST listing - whole or a page - of an id's {@code publish/staging/<id>} tree (the
+     *  {@code staged} walk, run just before the guarded unpublish loop), overwrites the id's {@code staging-lock/<id>} lease with a
      *  DIFFERENT owner - standing in for a rival {@code stage()} that stole the lapsed lease mid-reap. Every other call
      *  delegates unchanged, so the reap's guarded ownership re-assertion reads the stolen lease through this same view
      *  and fails, stopping the reap. */
-    private static final class StealLeaseOnStagedWalk implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
-        }
-
-        private final ArtifactStore delegate;
+    private static final class StealLeaseOnStagedWalk extends ForwardingArtifactStore {
         private final String id;
         private boolean stolen;
 
         private StealLeaseOnStagedWalk(ArtifactStore delegate, String id) {
-            this.delegate = delegate;
+            super(delegate);
             this.id = id;
         }
 
         @Override
         public List<String> list(String prefix) {
+            steal(prefix);
+            return delegate.list(prefix);
+        }
+
+        @Override
+        public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
+            steal(prefix);
+            delegate.page(prefix, startAfter, limit, consumer);
+        }
+
+        @Override
+        public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
+            steal(prefix);
+            delegate.pageListed(prefix, startAfter, limit, consumer);
+        }
+
+        private void steal(String prefix) {
             if (!stolen && prefix.startsWith("publish/staging/" + id)) {
                 stolen = true;                                   // the rival wins the lapsed lease exactly once
                 try {
@@ -225,64 +180,13 @@ class StagingReapTest {
                     throw new UncheckedIOException(e);
                 }
             }
-            return delegate.list(prefix);
         }
 
         @Override
         public ArtifactStore scope(String tenant) {
             return delegate.scope(tenant);
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
     }
-}
 
     @Test
     void a_sealed_marker_is_removed_after_the_ttl_but_guards_within_it() throws IOException {

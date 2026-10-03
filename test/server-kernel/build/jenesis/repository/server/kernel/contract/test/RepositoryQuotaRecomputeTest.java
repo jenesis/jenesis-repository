@@ -11,7 +11,7 @@ import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.staging.StagingProvider;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.QuotaArtifactStore;
 
@@ -79,10 +79,14 @@ class RepositoryQuotaRecomputeTest {
      *  so the recount provably streams each repository's blobs through the ordered {@link ArtifactStore#page}
      *  primitive at every scoping depth, while the recorded page limits pin that every page stays bounded. The
      *  scope-free {@code list} of the repository names themselves (a small, human-sized set) stays permitted. */
-    private record PagingStore(ArtifactStore delegate, List<Integer> pages, List<String> sized) implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
+    private static final class PagingStore extends ForwardingArtifactStore {
+        private final List<Integer> pages;
+        private final List<String> sized;
+
+        private PagingStore(ArtifactStore delegate, List<Integer> pages, List<String> sized) {
+            super(delegate);
+            this.pages = pages;
+            this.sized = sized;
         }
 
         @Override
@@ -111,54 +115,9 @@ class RepositoryQuotaRecomputeTest {
         }
 
         @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
         public long size(String key) throws IOException {
             sized.add(key);
             return delegate.size(key);
         }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
-}
 }

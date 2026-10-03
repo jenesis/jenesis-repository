@@ -2,7 +2,7 @@ package build.jenesis.repository.format.testkit;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 
 /**
  * The store decorator that turns two streaming claims from assertions into proofs.
@@ -25,13 +25,7 @@ import build.jenesis.repository.store.PrimitiveArtifactStore;
  * double; a tripped tripwire throws {@link AssertionError} naming what happened, so it reads as a test failure rather
  * than as a store outage the format might legitimately handle.
  */
-public final class WitnessStore implements PrimitiveArtifactStore {
-    @Override
-    public Object identity() {
-        return delegate.identity();   // a decorator answers its delegate's subspace
-    }
-
-
+public final class WitnessStore extends ForwardingArtifactStore {
     /** State shared with every {@link #scope} derived from this witness, so a tripwire armed on the root still fires
      *  on a scoped view and the counters read back on one instance. */
     private static final class Witness {
@@ -43,11 +37,10 @@ public final class WitnessStore implements PrimitiveArtifactStore {
         private volatile long bufferedCap = Long.MAX_VALUE;
     }
 
-    private final ArtifactStore delegate;
     private final Witness witness;
 
     private WitnessStore(ArtifactStore delegate, Witness witness) {
-        this.delegate = delegate;
+        super(delegate);
         this.witness = witness;
     }
 
@@ -113,11 +106,6 @@ public final class WitnessStore implements PrimitiveArtifactStore {
     }
 
     @Override
-    public boolean exists(String key) {
-        return delegate.exists(key);
-    }
-
-    @Override
     public void read(String key, OutputStream out) throws IOException {
         refuseSealed(key, "read");
         delegate.read(key, out);
@@ -130,13 +118,9 @@ public final class WitnessStore implements PrimitiveArtifactStore {
     }
 
     @Override
-    public Optional<URI> presign(String key, Duration ttl) {
-        return delegate.presign(key, ttl);
-    }
-
-    @Override
-    public void write(String key, InputStream in) throws IOException {
-        delegate.write(key, in);
+    public InputStream open(String key, long offset) throws IOException {
+        refuseSealed(key, "open");
+        return delegate.open(key, offset);
     }
 
     @Override
@@ -150,31 +134,6 @@ public final class WitnessStore implements PrimitiveArtifactStore {
         }
         witness.blobWrites.incrementAndGet();
         return delegate.writeBlob(in);
-    }
-
-    @Override
-    public long size(String key) throws IOException {
-        return delegate.size(key);
-    }
-
-    @Override
-    public void delete(String key) throws IOException {
-        delegate.delete(key);
-    }
-
-    @Override
-    public List<String> list(String prefix) {
-        return delegate.list(prefix);
-    }
-
-    @Override
-    public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-        delegate.page(prefix, startAfter, limit, consumer);
-    }
-
-    @Override
-    public Optional<Versioned> readVersioned(String key) throws IOException {
-        return delegate.readVersioned(key);
     }
 
     @Override
@@ -198,10 +157,5 @@ public final class WitnessStore implements PrimitiveArtifactStore {
                     + "byte[] path, past this check's " + witness.bufferedCap + "-byte cap. Only pointers, indexes and "
                     + "metadata may be materialised; an artifact streams through write/writeBlob.");
         }
-    }
-
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
     }
 }

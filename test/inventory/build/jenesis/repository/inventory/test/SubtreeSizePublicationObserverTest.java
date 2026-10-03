@@ -6,7 +6,7 @@ import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.inventory.SubtreeSizePublicationObserver;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 
@@ -178,7 +178,13 @@ class SubtreeSizePublicationObserverTest {
     /** Forwards to a real store but tallies every {@link ArtifactStore#list} call, so a test can prove the publish hot
      *  path folds sizes through O(depth) point reads and compare-and-set writes without ever listing (walking) the
      *  tree - the whole-tree walk this observer exists to retire off the hot path. */
-    private record ListCountingStore(ArtifactStore delegate, int[] count) implements PrimitiveArtifactStore {
+    private static final class ListCountingStore extends ForwardingArtifactStore {
+        private final int[] count;
+
+        private ListCountingStore(ArtifactStore delegate, int[] count) {
+            super(delegate);
+            this.count = count;
+        }
 
         ListCountingStore(ArtifactStore delegate) {
             this(delegate, new int[1]);
@@ -188,13 +194,6 @@ class SubtreeSizePublicationObserverTest {
             return count[0];
         }
 
-        /** The delegate's: a decorator is the same store, so what the node keeps per store identity - here the
-         *  observer's deferred deltas - is what the inventory reading the delegate sees. */
-        @Override
-        public Object identity() {
-            return delegate.identity();
-        }
-
         @Override
         public List<String> list(String prefix) {
             count[0]++;
@@ -202,65 +201,10 @@ class SubtreeSizePublicationObserverTest {
         }
 
         @Override
-        public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-            delegate.page(prefix, startAfter, limit, consumer);
-        }
-
-        @Override
         public ArtifactStore scope(String tenant) {
             return delegate.scope(tenant);
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
-}
 
     /**
      * A re-publish at the same path folds the difference, not the whole size again.

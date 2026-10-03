@@ -15,7 +15,7 @@ import build.jenesis.repository.metadata.State;
 import build.jenesis.repository.metadata.store.MetadataMetrics;
 import build.jenesis.repository.metadata.store.StoreMetadata;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -242,12 +242,7 @@ class StoreMetadataTest {
             writes.incrementAndGet();
             return super.writeVersioned(key, content, expected);
         }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
-}
 
     /** A store wrapper that, on the first CAS write to a target key, first commits a competing section underneath -
      *  so the caller's token goes stale and its write conflicts exactly once, exercising the re-read-and-retry
@@ -279,85 +274,17 @@ class StoreMetadataTest {
             }
             return super.writeVersioned(key, content, expected);
         }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
-}
 
     /** Delegates every {@link ArtifactStore} method to a backing store, so a wrapper overrides only what it tests. */
-    private abstract static class DelegatingStore implements PrimitiveArtifactStore {
-
-        private final ArtifactStore delegate;
-
+    private abstract static class DelegatingStore extends ForwardingArtifactStore {
         DelegatingStore(ArtifactStore delegate) {
-            this.delegate = delegate;
-        }
-
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a forwarding base forwards its subspace, so every subclass inherits it
+            super(delegate);
         }
 
         @Override
         public ArtifactStore scope(String tenant) {
             return delegate.scope(tenant);
-        }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public List<String> list(String prefix) {
-            return delegate.list(prefix);
-        }
-
-        @Override
-        public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-            delegate.page(prefix, startAfter, limit, consumer);
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
         }
     }
 }

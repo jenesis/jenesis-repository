@@ -2,7 +2,7 @@ package build.jenesis.repository.format.contract.ecosystem.test;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 
 /**
  * A pass-through {@link ArtifactStore} that records every key and prefix its caller touches.
@@ -24,19 +24,12 @@ import build.jenesis.repository.store.PrimitiveArtifactStore;
  * rather than hoped for: concurrent publishes held there until every one has stored its bytes have all passed
  * whatever a format checks before storing, and none of them has linked yet.
  */
-final class WatchingStore implements PrimitiveArtifactStore {
-    @Override
-    public Object identity() {
-        return delegate.identity();   // a decorator answers its delegate's subspace
-    }
-
-
-    private final ArtifactStore delegate;
+final class WatchingStore extends ForwardingArtifactStore {
     private final List<String> touched;
     private final Runnable beforeBlob;
 
     private WatchingStore(ArtifactStore delegate, List<String> touched, Runnable beforeBlob) {
-        this.delegate = delegate;
+        super(delegate);
         this.touched = touched;
         this.beforeBlob = beforeBlob;
     }
@@ -88,6 +81,11 @@ final class WatchingStore implements PrimitiveArtifactStore {
     }
 
     @Override
+    public InputStream open(String key, long offset) throws IOException {
+        return delegate.open(watch(key), offset);
+    }
+
+    @Override
     public Optional<URI> presign(String key, Duration ttl) {
         return delegate.presign(watch(key), ttl);
     }
@@ -109,6 +107,16 @@ final class WatchingStore implements PrimitiveArtifactStore {
     }
 
     @Override
+    public Optional<Listed> listed(String key) throws IOException {
+        return delegate.listed(watch(key));
+    }
+
+    @Override
+    public void touch(String key) throws IOException {
+        delegate.touch(watch(key));
+    }
+
+    @Override
     public void delete(String key) throws IOException {
         delegate.delete(watch(key));
     }
@@ -124,8 +132,23 @@ final class WatchingStore implements PrimitiveArtifactStore {
     }
 
     @Override
+    public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
+        delegate.pageListed(watch(prefix), startAfter, limit, consumer);
+    }
+
+    @Override
+    public boolean isEmpty(String prefix) throws IOException {
+        return delegate.isEmpty(watch(prefix));
+    }
+
+    @Override
     public Optional<Versioned> readVersioned(String key) throws IOException {
         return delegate.readVersioned(watch(key));
+    }
+
+    @Override
+    public Optional<Object> version(String key) throws IOException {
+        return delegate.version(watch(key));
     }
 
     @Override
@@ -134,7 +157,7 @@ final class WatchingStore implements PrimitiveArtifactStore {
     }
 
     @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
+    public boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException {
+        return delegate.writeVersioned(watch(key), content, length, expected);
     }
 }

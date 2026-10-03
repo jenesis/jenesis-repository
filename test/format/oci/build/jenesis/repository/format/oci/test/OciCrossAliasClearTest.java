@@ -4,7 +4,7 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Withheld;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -207,20 +207,13 @@ class OciCrossAliasClearTest {
      *  (which links a byte-identical sibling's {@code /quarantine} pointer) and then performs the delete - modelling a
      *  concurrent enforce sweep that lands its hold between the guard read and the clear. Every other operation is a
      *  straight pass-through to the real store, so the post-clear re-verify reads fresh truth through this same view. */
-    private static final class InjectingStore implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
-        }
-
-
-        private final ArtifactStore delegate;
+    private static final class InjectingStore extends ForwardingArtifactStore {
         private final String markerKey;
         private final StoreAction inject;
         private boolean injected;
 
         private InjectingStore(ArtifactStore delegate, String markerKey, StoreAction inject) {
-            this.delegate = delegate;
+            super(delegate);
             this.markerKey = markerKey;
             this.inject = inject;
         }
@@ -238,60 +231,5 @@ class OciCrossAliasClearTest {
         public ArtifactStore scope(String tenant) {
             return delegate.scope(tenant);
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public List<String> list(String prefix) {
-            return delegate.list(prefix);
-        }
-
-        @Override
-        public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-            delegate.page(prefix, startAfter, limit, consumer);
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
     }
-}
 }

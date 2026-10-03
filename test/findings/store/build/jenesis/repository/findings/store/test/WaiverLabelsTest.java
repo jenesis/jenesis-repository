@@ -14,7 +14,7 @@ import build.jenesis.repository.findings.Findings;
 import build.jenesis.repository.findings.WaiverLabels;
 import build.jenesis.repository.findings.store.StoreFindings;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -178,19 +178,13 @@ class WaiverLabelsTest {
         assertThat(counting.lists()).as("the whole-ledger overlay walks the tree").isPositive();
     }
 
-    /** A store that counts the {@code list} (walk) calls made through it, delegating everything else, so a test can
-     *  prove a read path is a point lookup rather than a listing walk. */
-    private static final class CountingStore implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
-        }
-
-        private final ArtifactStore delegate;
+    /** A store that counts the listing calls made through it - a whole {@code list} or a page of one - delegating
+     *  everything else, so a test can prove a read path is a point lookup rather than a listing walk. */
+    private static final class CountingStore extends ForwardingArtifactStore {
         private int lists;
 
         private CountingStore(ArtifactStore delegate) {
-            this.delegate = delegate;
+            super(delegate);
         }
 
         int lists() {
@@ -208,60 +202,22 @@ class WaiverLabelsTest {
         }
 
         @Override
+        public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
+            lists++;
+            delegate.page(prefix, startAfter, limit, consumer);
+        }
+
+        @Override
+        public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
+            lists++;
+            delegate.pageListed(prefix, startAfter, limit, consumer);
+        }
+
+        @Override
         public ArtifactStore scope(String tenant) {
             return this;
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
     }
-}
 
     @Test
     void an_expired_waiver_is_not_projected() throws IOException {

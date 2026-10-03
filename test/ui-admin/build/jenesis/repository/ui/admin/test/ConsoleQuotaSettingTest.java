@@ -4,7 +4,7 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.PrimitiveArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.QuotaArtifactStore;
 import build.jenesis.repository.ui.store.SettingsAdmin;
@@ -62,18 +62,15 @@ class ConsoleQuotaSettingTest {
     }
 
     /**
-     * A store that fails any attempt to enumerate a blob namespace, by {@code list} or by {@code page}.
+     * A store that fails any attempt to enumerate a blob namespace, by {@code list}, a page or a scan.
      *
      * <p>The assertion above could be satisfied by a recount that happened to produce 999, so the guarantee is made
      * structural instead: if setting a quota touches the blobs at all this throws, and the test fails for the right
-     * reason rather than on an arithmetic coincidence. The method set is the one the previous suite's double
-     * carried, kept rather than rewritten - {@code ArtifactStore} is wide, and a hand-rolled subset compiles only
-     * by accident of which methods happen to have defaults.
+     * reason rather than on an arithmetic coincidence. Everything else reaches the wrapped store unchanged.
      */
-    private record RefusingStore(ArtifactStore delegate) implements PrimitiveArtifactStore {
-        @Override
-        public Object identity() {
-            return delegate.identity();   // a decorator answers its delegate's subspace
+    private static final class RefusingStore extends ForwardingArtifactStore {
+        private RefusingStore(ArtifactStore delegate) {
+            super(delegate);
         }
 
         @Override
@@ -93,58 +90,24 @@ class ConsoleQuotaSettingTest {
         }
 
         @Override
+        public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
+            if (prefix.startsWith("blobs")) {
+                throw new AssertionError("setting a quota paged '" + prefix + "'; it must not walk the tenant");
+            }
+            delegate.pageListed(prefix, startAfter, limit, consumer);
+        }
+
+        @Override
+        public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
+            if (prefix.startsWith("blobs")) {
+                throw new AssertionError("setting a quota scanned '" + prefix + "'; it must not walk the tenant");
+            }
+            return delegate.scan(prefix, startAfter, limit, consumer);
+        }
+
+        @Override
         public ArtifactStore scope(String tenant) {
             return new RefusingStore(delegate.scope(tenant));
         }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
-        }
-    
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return ArtifactStore.scanByListing(this, prefix, startAfter, limit, consumer);
     }
-}
 }
