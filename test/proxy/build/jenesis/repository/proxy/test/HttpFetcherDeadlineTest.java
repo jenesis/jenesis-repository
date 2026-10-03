@@ -44,7 +44,10 @@ class HttpFetcherDeadlineTest {
 
     @Test
     void a_fetch_past_the_deadline_set_is_abandoned_by_name() throws Exception {
-        System.setProperty(PROPERTY, "1s");
+        // Five seconds, so the deadline falls in the body on a cold, busy machine too: the first request a JVM's
+        // HTTP client makes can take a second or more to reach its headers, and a deadline that ends the exchange
+        // before them answers no download at all rather than the abandoned body this asserts.
+        System.setProperty(PROPERTY, "5s");
 
         try (Trickle upstream = new Trickle(1000)) {
             long started = System.nanoTime();
@@ -53,10 +56,10 @@ class HttpFetcherDeadlineTest {
                     .isInstanceOf(IOException.class)
                     .rootCause().isInstanceOf(HttpTimeoutException.class)
                     .hasMessageContaining(upstream.url().toString())
-                    .hasMessageContaining("deadline of 1000 ms");
+                    .hasMessageContaining("deadline of 5000 ms");
             assertThat(Duration.ofNanos(System.nanoTime() - started))
                     .as("cut at the deadline, not at the hundred seconds the body would take")
-                    .isLessThan(Duration.ofSeconds(10));
+                    .isLessThan(Duration.ofSeconds(30));
         }
     }
 
