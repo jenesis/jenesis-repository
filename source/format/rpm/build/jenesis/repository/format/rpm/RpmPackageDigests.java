@@ -274,7 +274,8 @@ final class RpmPackageDigests {
         };
     }
 
-    private static XMLInputFactory factory() {
+    /** A reader factory that resolves no DTD and no external entity, since an upstream's metadata is untrusted. */
+    static XMLInputFactory factory() {
         XMLInputFactory factory = XMLInputFactory.newInstance();
         factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
         factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);

@@ -147,6 +147,11 @@ public final class UpstreamMemory {
         documents.put(id(repository, url), new Entry(new Remembered(body, kept), clock.instant()));
     }
 
+    /** Forget what the upstream served at {@code url} for {@code repository}, so the next read fetches it. */
+    public void forget(ArtifactStore repository, URI url) {
+        documents.invalidate(id(repository, url));
+    }
+
     /** Drop every document and answer how many went. */
     public int clear() {
         documents.cleanUp();

@@ -460,8 +460,16 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         }
         // repodata is an enumeration dnf resolves against, where an absent repomd means "not a repository", so a fetch
         // that could not be made must not be served as one; only an upstream that answered 404/410 reaches the client
-        // as a 404.
-        return ProxyRelay.streamFresh(fetcher, target, null, exchange, ProxyRelay.Document.ENUMERATION);
+        // as a 404. repomd.xml is remembered with its signature and key where the files it names are named by their
+        // checksums (RpmRepodataMemory); a file it names that the upstream has since removed forgets it.
+        if (RpmRepodataMemory.member(rest)) {
+            return RpmRepodataMemory.relay(fetcher, root, rest, exchange, store);
+        }
+        boolean served = ProxyRelay.streamFresh(fetcher, target, null, exchange, ProxyRelay.Document.ENUMERATION);
+        if (!served) {
+            RpmRepodataMemory.forget(root, rest, store);
+        }
+        return served;
     }
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RpmFormat.class);
