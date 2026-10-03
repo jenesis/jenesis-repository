@@ -18,7 +18,8 @@ import build.jenesis.repository.compliance.Verdict;
  * different policies:
  * <ul>
  *   <li><b>Invalid</b> - the bytes do not match the signature: tampering or corruption, REJECT by default.</li>
- *   <li><b>Untrusted</b> - a good signature by a signer the deployment has no reason to believe: held for review.</li>
+ *   <li><b>Untrusted</b> - a good signature by a signer the deployment has no reason to believe: recorded and served,
+ *       since that is every signer before an operator admits any.</li>
  *   <li><b>Signer changed</b> - earlier versions carried another signer: held for a person, since a key rotation looks
  *       the same as a takeover.</li>
  *   <li><b>Missing</b> - the format expected a signature and none arrived.</li>
@@ -42,12 +43,14 @@ final class SignaturePolicy implements GatePolicy {
     static final String QUALITY_ACTION = "signature-quality-action";
 
     /**
-     * The dials' defaults, defined here and referenced by the settings catalogue. Evidence that arrived is judged:
-     * invalid is {@link Verdict#REJECT}, untrusted and changed {@link Verdict#QUARANTINE}. Missing is
-     * {@link Verdict#ALLOW}, since at screening time it usually means the {@code .asc} is still in flight.
+     * The dials' defaults, defined here and referenced by the settings catalogue. Evidence of something wrong is
+     * acted on: invalid is {@link Verdict#REJECT} and changed {@link Verdict#QUARANTINE}. Untrusted is
+     * {@link Verdict#ALLOW}: a deployment that admitted no signer would otherwise hold every signed artifact it is
+     * sent, and the outcome is recorded on the version for an operator to see. Missing is {@link Verdict#ALLOW},
+     * since at screening time it usually means the {@code .asc} is still in flight.
      */
     static final String INVALID_DEFAULT = "REJECT";
-    static final String UNTRUSTED_DEFAULT = "QUARANTINE";
+    static final String UNTRUSTED_DEFAULT = "ALLOW";
     static final String CHANGED_DEFAULT = "QUARANTINE";
     static final String MISSING_DEFAULT = "ALLOW";
 

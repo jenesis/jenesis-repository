@@ -144,9 +144,10 @@ public final class SignatureSettingsContributor implements SettingsContributor {
                         Setting.Scope.TENANT).standard(),
                 new Setting(SignaturePolicy.UNTRUSTED, "Compliance", "Untrusted-signer action",
                         "Verdict for a well-formed signature by a signer this deployment has no reason to believe - no "
-                                + "key for it, or a key not admitted for that namespace. It is the common outcome the "
-                                + "day enforcement is switched on, and a decision waiting on a human rather than "
-                                + "something known to be wrong, which is what holding it for review is for.",
+                                + "key for it, or a key not admitted for that namespace. It is what every signed "
+                                + "artifact reads as until an operator admits a signer, and nothing known to be wrong, "
+                                + "so by default it is served and the outcome recorded on the version. A deployment "
+                                + "that has admitted the signers it relies on holds or refuses the rest.",
                         Setting.Choice.VERDICTS, SignaturePolicy.UNTRUSTED_DEFAULT, true,
                         Setting.Scope.TENANT).standard(),
                 new Setting(SignaturePolicy.CHANGED, "Compliance", "Signer-changed action",
