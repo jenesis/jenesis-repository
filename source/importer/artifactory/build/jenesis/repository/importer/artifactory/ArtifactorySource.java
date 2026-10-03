@@ -1,6 +1,7 @@
 package build.jenesis.repository.importer.artifactory;
 
 import module java.base;
+import build.jenesis.repository.importer.ImportDownloads;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.importer.ImportFailure;
 import build.jenesis.repository.importer.ImportSource;
@@ -238,13 +239,7 @@ public final class ArtifactorySource implements ImportSource {
     }
 
     private InputStream open(URI url) throws IOException {
-        ProxyFormat.Download download = fetcher.download(url, headers())
-                .orElseThrow(() -> ImportFailure.unreachable(url));
-        if (download.status() != 200) {
-            download.close();
-            throw ImportFailure.status(download.status(), url, "Download");
-        }
-        return download.body();
+        return ImportDownloads.open(fetcher, base, url, headers());
     }
 
     private ProxyFormat.Fetched get(URI url) throws IOException {

@@ -1,7 +1,7 @@
 package build.jenesis.repository.importer.nexus;
 
 import module java.base;
-import build.jenesis.repository.net.Origins;
+import build.jenesis.repository.importer.ImportDownloads;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.importer.ImportFailure;
 import build.jenesis.repository.importer.ImportScreen;
@@ -108,18 +108,8 @@ public final class NexusSource implements ImportSource {
     }
 
     private InputStream open(URI url) throws IOException {
-        // Credentials travel only to the Nexus they belong to: a cross-origin URL downloads unauthenticated, and a 401
-        // then fails the import.
-        Map<String, String> headers = authorization == null || !Origins.same(base, url)
-                ? Map.of()
-                : Map.of("Authorization", authorization);
-        ProxyFormat.Download download = fetcher.download(url, headers)
-                .orElseThrow(() -> ImportFailure.unreachable(url));
-        if (download.status() != 200) {
-            download.close();
-            throw ImportFailure.status(download.status(), url, "Download");
-        }
-        return download.body();
+        return ImportDownloads.open(fetcher, base, url,
+                authorization == null ? Map.of() : Map.of("Authorization", authorization));
     }
 
     private ProxyFormat.Fetched get(URI url) throws IOException {

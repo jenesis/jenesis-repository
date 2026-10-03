@@ -2,6 +2,7 @@ package build.jenesis.repository.importer.index;
 
 import module java.base;
 
+import build.jenesis.repository.importer.ImportDownloads;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.importer.ImportFailure;
@@ -91,12 +92,6 @@ public final class IndexSource implements ImportSource {
         URI url = coordinate.url();
         // The download URL derives from a foreign index and is an initial request rather than a redirect, so it is
         // screened by the ImportScreen wrapped around this source's fetcher, the one rule for every connector.
-        ProxyFormat.Download download = fetcher.download(url, coordinate.headers())
-                .orElseThrow(() -> ImportFailure.unreachable(url));
-        if (download.status() != 200) {
-            download.close();
-            throw ImportFailure.status(download.status(), url, "Download");
-        }
-        return download.body();
+        return ImportDownloads.open(fetcher, url, coordinate.headers());
     }
 }
