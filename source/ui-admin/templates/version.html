@@ -46,16 +46,8 @@
                 <th scope="row">Pinned</th>
                 <td><div class="app-actions">
                     <span th:text="${detail.pinned} ? 'yes' : 'no'">no</span>
-                    <form th:if="${isEditor and !detail.cached}" method="post"
-                          th:action="${detail.pinned} ? @{'/ui/repositories/' + ${repo} + '/pins/remove'} : @{'/ui/repositories/' + ${repo} + '/pins'}"
-                          th:with="here=@{/ui/repositories/{repo}/version(repo=${repo},ecosystem=${detail.ecosystem},coordinate=${detail.coordinate},version=${detail.version})}">
-                        <input type="hidden" name="ecosystem" th:value="${detail.ecosystem}">
-                        <input type="hidden" name="coordinate" th:value="${detail.coordinate}">
-                        <input type="hidden" name="version" th:value="${detail.version}">
-                        <input type="hidden" name="returnTo" th:value="${here}">
-                        <th:block th:if="${detail.pinned}"><button th:replace="~{base :: cautionButton('Unpin', 'Lift this pin? The version becomes eligible for retention eviction.')}">Unpin</button></th:block>
-                        <th:block th:unless="${detail.pinned}"><button th:replace="~{base :: secondaryButton('Pin')}">Pin</button></th:block>
-                    </form>
+                    <th:block th:if="${isEditor and !detail.cached}"><form
+                            th:replace="~{fragments :: pinToggle(${repo}, ${detail.ecosystem}, ${detail.coordinate}, ${detail.version}, ${detail.pinned}, @{/ui/repositories/{repo}/version(repo=${repo},ecosystem=${detail.ecosystem},coordinate=${detail.coordinate},version=${detail.version})})}"></form></th:block>
                 </div></td>
             </tr>
             <tr th:if="${downloadsTracked}">

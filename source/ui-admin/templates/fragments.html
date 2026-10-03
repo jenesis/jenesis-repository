@@ -274,5 +274,17 @@
         </th:block>
     </th:block>
 </th:block>
+<!--/* A version's pin toggle: Pin, or Unpin behind the caution a lifted pin deserves, posting back to the page it was
+     rendered on. One rendering wherever a version is listed or shown; the page decides who may use it and for which
+     versions - an editor, and never a cached copy, which no pin keeps. */-->
+<form th:fragment="pinToggle(repo, ecosystem, coordinate, version, pinned, here)" method="post"
+      th:action="${pinned} ? @{'/ui/repositories/' + ${repo} + '/pins/remove'} : @{'/ui/repositories/' + ${repo} + '/pins'}">
+    <input type="hidden" name="ecosystem" th:value="${ecosystem}">
+    <input type="hidden" name="coordinate" th:value="${coordinate}">
+    <input type="hidden" name="version" th:value="${version}">
+    <input type="hidden" name="returnTo" th:value="${here}">
+    <th:block th:if="${pinned}"><button th:replace="~{base :: cautionButton('Unpin', 'Lift this pin? The version becomes eligible for retention eviction.')}">Unpin</button></th:block>
+    <th:block th:unless="${pinned}"><button th:replace="~{base :: secondaryButton('Pin')}">Pin</button></th:block>
+</form>
 </body>
 </html>
