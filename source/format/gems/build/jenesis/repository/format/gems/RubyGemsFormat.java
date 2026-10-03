@@ -621,6 +621,12 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
      * that, and bundler would drop the connection and fall back to the legacy full index.
      * {@link ProxyRelay#streamFresh} sends the first byte as the upstream does.
      *
+     * <p><b>Fresh, never remembered.</b> {@code /versions} names each {@code /info/<gem>} by an MD5 bundler holds the
+     * file to, so the two are a family that agrees only when read at one moment. Unlike a Debian suite's or an RPM
+     * repository's, it cannot be pinned: no upstream URL serves an {@code info} file by that digest, and
+     * {@code /versions} is past the size the node's upstream memory keeps. So both are relayed fresh, as one moment's
+     * answers, and bundler's own {@code ETag} and range requests keep a refresh small.
+     *
      * <p>The legacy index ({@code specs.4.8.gz} and its siblings) is not proxied: a client asks for it only once the
      * compact index has failed, and serving it would hide that failure.
      */
