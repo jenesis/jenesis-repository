@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class HttpFetcherUnreachableTest {
 
-    private final HttpFetcher fetcher = new HttpFetcher(Duration.ofSeconds(10), host -> false);
+    private final HttpFetcher fetcher = new HttpFetcher(Duration.ofSeconds(10), true);
 
     @Test
     void a_refused_connection_is_the_empty_answer_on_every_leg() throws IOException {

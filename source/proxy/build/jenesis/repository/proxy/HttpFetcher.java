@@ -2,10 +2,8 @@ package build.jenesis.repository.proxy;
 
 import module java.base;
 import module java.net.http;
-import build.jenesis.repository.net.Origins;
 import build.jenesis.repository.net.http.ScreenedHttpClient;
 import build.jenesis.repository.store.Features;
-import build.jenesis.repository.net.PrivateHosts;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.store.Durations;
 
@@ -20,28 +18,17 @@ import build.jenesis.repository.store.Durations;
  * connection, an unresolvable host, a dead route - is the contract's transport failure (an empty result), so a proxy
  * leg reaches clause 2's classification and an import is refused rather than a {@code 5xx} escaping. The timeout bounds
  * the response's arrival, not a large body's transfer; a body ending short of its {@code Content-Length} throws on the
- * read, so a truncated response is never cached as complete. One minute by default, or
- * {@code jenrepo.proxy.request-timeout} ({@code PT30S}, {@code 30s}).
+ * read, so a truncated response is never cached as complete. The timeout is the
+ * {@value ProxySettingsContributor#REQUEST_TIMEOUT_KEY} setting, read per request.
  *
- * <p>Redirects are followed by hand rather than by the JDK's {@code NORMAL} policy, which re-sends
- * {@code Authorization} across a change of host: an import or proxy fetch may redirect to a presigned object-store URL
- * or a CDN, and the operator's credentials must not travel there. A redirect leaving the origin drops the sensitive
- * headers, as a browser or {@code docker} does.
- *
- * <p>Each upstream-chosen hop is also re-judged by the shared {@link PrivateHosts} screen, since a public URL could
- * otherwise redirect to {@code 169.254.169.254} or a loopback control plane: a hop to a private, loopback, link-local,
- * site-local, CGNAT, multicast or unique-local host fails with an {@link IOException} rather than being fetched. The
- * initial URL is the trigger's or the operator's to judge. Every hop goes through the product's HTTP client, which
- * holds an admitted host to public addresses, so a rebinding name is refused.
+ * <p>Redirects follow the product's HTTP client's one policy ({@link ScreenedHttpClient}): never from {@code https} to
+ * {@code http}, never off http(s), at most five hops, and with the caller's credentials dropped once a hop leaves the
+ * origin - an import or a proxy fetch may be redirected to a presigned object-store URL or a CDN, and the operator's
+ * credentials must not travel there. A hop the upstream aims at a private, loopback or link-local host from another
+ * origin is refused ({@link ScreenedHttpClient.RedirectRefused}), since a public URL could otherwise redirect to
+ * {@code 169.254.169.254} or a loopback control plane. The initial URL is the trigger's or the operator's to judge.
  */
 public final class HttpFetcher implements ProxyFormat.Fetcher {
-
-    /** Headers carrying a caller credential, dropped when a redirect crosses to another origin. */
-    private static final Set<String> SENSITIVE = Set.of(
-            "authorization", "proxy-authorization", "cookie", "jenesis-repository-key");
-
-    /** A bound on the redirect chain, so a redirect loop cannot spin an import or a proxy fetch forever. */
-    private static final int MAX_REDIRECTS = 5;
 
     /** A ceiling on a buffered {@link #fetch} body - the small mutable index path (a packument, maven-metadata, an OCI
      *  manifest, a tags page, a token document) - so a hostile or substituted upstream cannot return a multi-GB "index"
@@ -49,34 +36,35 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
      *  {@link #download} path copies network-to-store unbuffered and is uncapped. */
     private static final int MAX_FETCH_BODY = 64 * 1024 * 1024;
 
-    private final HttpClient client = ScreenedHttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5))
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .throughputFloor(HttpFetcher::throughputFloor, ScreenedHttpClient.FLOOR_WINDOW)
-            .deadline(HttpFetcher::deadline)
-            .build();
-    private final Duration requestTimeout;
-    /** The SSRF screen applied to each redirect target's host; {@code true} refuses the hop.
-     *  {@link PrivateHosts#resolvesToPrivate} in a deployment; a test injects a permissive one to drive redirects
-     *  against a loopback fixture. */
-    private final Predicate<String> blockedRedirectHost;
+    private final HttpClient client;
+    private final Supplier<Duration> requestTimeout;
 
-    /** The default fetcher: a per-request timeout from {@code jenrepo.proxy.request-timeout}, or one minute. */
+    /** The deployment's fetcher: the configured per-request timeout, and no redirect to a private host. */
     public HttpFetcher() {
-        this(requestTimeout());
+        this(HttpFetcher::requestTimeout, false);
     }
 
-    /** A fetcher with an explicit per-request timeout (a test's seam for a stalled upstream), screening redirect
-     *  targets with {@link PrivateHosts}. */
+    /** A fetcher with an explicit per-request timeout (a test's seam for a stalled upstream), refusing a redirect to a
+     *  private host. */
     public HttpFetcher(Duration requestTimeout) {
-        this(requestTimeout, PrivateHosts::resolvesToPrivate);
+        this(() -> requestTimeout, false);
     }
 
-    /** A fetcher with an explicit timeout and redirect-host screen - a test's seam for redirects against a loopback
-     *  fixture or for the private-host refusal. */
-    public HttpFetcher(Duration requestTimeout, Predicate<String> blockedRedirectHost) {
+    /** A fetcher with an explicit timeout that may follow a redirect to a private host - a test's seam for redirects
+     *  between loopback fixtures standing in for public hosts. */
+    public HttpFetcher(Duration requestTimeout, boolean privateRedirects) {
+        this(() -> requestTimeout, privateRedirects);
+    }
+
+    private HttpFetcher(Supplier<Duration> requestTimeout, boolean privateRedirects) {
         this.requestTimeout = requestTimeout;
-        this.blockedRedirectHost = blockedRedirectHost;
+        this.client = ScreenedHttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(5))
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .redirectsToPrivateHosts(() -> privateRedirects)
+                .throughputFloor(HttpFetcher::throughputFloor, ScreenedHttpClient.FLOOR_WINDOW)
+                .deadline(HttpFetcher::deadline)
+                .build();
     }
 
     @Override
@@ -117,8 +105,8 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
     }
 
     /** A real HTTP {@code HEAD}: status and headers without a body, so an uncached large artifact costs a header
-     *  exchange. Redirects follow the same manual chain, credentials dropped on a cross-origin hop, reissuing
-     *  {@code HEAD} at each; the discarding handler buffers nothing even if an upstream sends a body. */
+     *  exchange, reissued as {@code HEAD} at each redirect; the discarding handler buffers nothing even if an
+     *  upstream sends a body. */
     @Override
     public Optional<ProxyFormat.Head> head(URI url, Map<String, String> requestHeaders) throws IOException {
         try {
@@ -151,54 +139,14 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
         }
     }
 
-    /** Issue the request with {@code method} ({@code GET} or {@code HEAD}) and follow redirects by hand, dropping the
-     *  {@link #SENSITIVE} headers once the chain leaves the original origin; the method is kept across hops. An
-     *  intermediate redirect's body is closed; the final response returns with its body intact. */
+    /** Issue the request with {@code method} ({@code GET} or {@code HEAD}); the client follows its redirects. */
     private <T> HttpResponse<T> send(URI url, Map<String, String> requestHeaders, String method,
                                      HttpResponse.BodyHandler<T> handler)
             throws IOException, InterruptedException {
-        URI origin = url;
-        URI current = url;
-        Map<String, String> headers = new LinkedHashMap<>(requestHeaders);
-        for (int redirect = 0; ; redirect++) {
-            HttpRequest.Builder request = HttpRequest.newBuilder(current).timeout(requestTimeout)
-                    .method(method, HttpRequest.BodyPublishers.noBody());
-            headers.forEach(request::header);
-            HttpResponse<T> response = client.send(request.build(), handler);
-            Optional<String> location = redirect < MAX_REDIRECTS && isRedirect(response.statusCode())
-                    ? response.headers().firstValue("Location")
-                    : Optional.empty();
-            if (location.isEmpty()) {
-                return response;
-            }
-            if (response.body() instanceof Closeable body) {
-                body.close(); // release the intermediate redirect's connection before the next hop
-            }
-            current = current.resolve(location.get());
-            // The scheme first, since the host screen cannot judge a URI without a host: `Location: file:///etc/passwd`
-            // has a null host, which the classifier admits, and a non-http(s) URI would make HttpRequest.newBuilder
-            // throw an unchecked IllegalArgumentException, turning an upstream's header into a 500. A redirect off
-            // http(s) is never followed.
-            String scheme = current.getScheme();
-            if (scheme == null || !("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))) {
-                throw new IOException("refusing to follow a redirect off http(s), which is not a scheme an upstream "
-                        + "fetch may take: " + current.getScheme() + " (from " + location.get() + ")");
-            }
-            if (current.getHost() == null || current.getHost().isBlank()) {
-                throw new IOException("refusing to follow a redirect to a URI carrying no host: " + location.get());
-            }
-            if (blockedRedirectHost.test(current.getHost())) {
-                throw new IOException("refusing to follow a redirect to a private, loopback, link-local or "
-                        + "cloud-metadata host (SSRF): " + current.getHost());
-            }
-            if (!Origins.same(origin, current)) {
-                headers.keySet().removeIf(name -> SENSITIVE.contains(name.toLowerCase(Locale.ROOT)));
-            }
-        }
-    }
-
-    private static boolean isRedirect(int status) {
-        return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
+        HttpRequest.Builder request = HttpRequest.newBuilder(url).timeout(requestTimeout.get())
+                .method(method, HttpRequest.BodyPublishers.noBody());
+        requestHeaders.forEach(request::header);
+        return client.send(request.build(), handler);
     }
 
     /** The throughput floor an upstream fetch is held to, read now: {@link ProxySettingsContributor#FLOOR_KEY}, else
@@ -230,11 +178,20 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
         }
     }
 
-    /** The configured per-request timeout, {@code jenrepo.proxy.request-timeout} ({@code PT30S}, {@code 30s}), or a
-     *  minute. */
-    private static Duration requestTimeout() {
-        String value = System.getProperty("jenrepo.proxy.request-timeout");
-        return value == null || value.isBlank() ? Duration.ofSeconds(60) : Durations.parse(value);
+    /** The per-request timeout, read now: {@link ProxySettingsContributor#REQUEST_TIMEOUT_KEY}, else its default;
+     *  an unparseable or non-positive value is the default. */
+    static Duration requestTimeout() {
+        Duration fallback = Durations.parse(ProxySettingsContributor.REQUEST_TIMEOUT_TEXT);
+        String configured = Features.lookup().apply("jenrepo." + ProxySettingsContributor.REQUEST_TIMEOUT_KEY);
+        if (configured == null || configured.isBlank()) {
+            return fallback;
+        }
+        try {
+            Duration timeout = Durations.parse(configured);
+            return timeout.isPositive() ? timeout : fallback;
+        } catch (IllegalArgumentException malformed) {
+            return fallback;
+        }
     }
 
     private static Map<String, String> headers(HttpResponse<?> response) {

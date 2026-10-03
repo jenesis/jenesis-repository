@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class HttpFetcherTimeoutTest {
 
     // A tight per-request timeout; the upstream below delays far longer, so every verb trips the timeout deterministically.
-    private final HttpFetcher fetcher = new HttpFetcher(Duration.ofMillis(300), host -> false);
+    private final HttpFetcher fetcher = new HttpFetcher(Duration.ofMillis(300), true);
 
     @Test
     void fetch_download_and_head_each_fail_closed_to_empty_on_a_stalled_upstream() {

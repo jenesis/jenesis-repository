@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * compromised or MITM-substituted upstream that returns a multi-GB "index" is refused with an {@link IOException}
  * before it materialises on the heap, while a body at or under the ceiling is served whole. A WireMock upstream stands
  * in for the substituted origin, answering {@code /index} with a body of the chosen length; the loopback host stands
- * in for a public one (a permissive redirect screen), the cap being orthogonal to the SSRF screen.
+ * in for a public one (private redirects admitted), the cap being orthogonal to the redirect screen.
  */
 class HttpFetcherFetchCapTest {
 
@@ -34,7 +34,7 @@ class HttpFetcherFetchCapTest {
      */
     private static final Duration UNHURRIED = Duration.ofMinutes(5);
 
-    private final HttpFetcher fetcher = new HttpFetcher(UNHURRIED, host -> false);
+    private final HttpFetcher fetcher = new HttpFetcher(UNHURRIED, true);
 
     @Test
     void a_body_over_the_cap_is_refused_with_a_fetch_limit_error() {

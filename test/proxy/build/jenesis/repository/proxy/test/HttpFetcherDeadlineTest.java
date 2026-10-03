@@ -64,7 +64,7 @@ class HttpFetcherDeadlineTest {
     }
 
     private static byte[] read(Trickle upstream) throws IOException {
-        ProxyFormat.Download download = new HttpFetcher(Duration.ofSeconds(30), host -> false)
+        ProxyFormat.Download download = new HttpFetcher(Duration.ofSeconds(30), true)
                 .download(upstream.url(), Map.of()).orElseThrow();
         try (InputStream body = download.body()) {
             return body.readAllBytes();

@@ -66,10 +66,9 @@ public class HttpFetcherWireTest {
         try (LoopbackUpstream upstream = LoopbackUpstream.start()) {
             upstream.serve("/final.bin", 200, "application/octet-stream", BLOB);
             upstream.redirect("/moved.bin", "/final.bin", 302);
-            // 0.7.0 HttpFetcher screens redirect targets for SSRF (loopback/private hosts refused). Drive the
-            // redirect-follow behaviour against the loopback LoopbackUpstream with the permissive screen the core
-            // documents for exactly this fixture (HttpFetcher(Duration, Predicate) - a screen that never blocks).
-            HttpFetcher fetcher = new HttpFetcher(Duration.ofMinutes(1), host -> false);
+            // The fetcher refuses a redirect to a private host, which a loopback fixture is; the seam admitting one
+            // lets the fixture stand in for a public upstream.
+            HttpFetcher fetcher = new HttpFetcher(Duration.ofMinutes(1), true);
 
             ProxyFormat.Fetched followed = fetcher.fetch(upstream.base().resolve("/moved.bin"), Map.of()).orElseThrow();
             assertThat(followed.status()).isEqualTo(200);

@@ -5,7 +5,8 @@ import build.jenesis.repository.net.http.ScreenedHttpClient;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
-/** Describes the upstream fetch's throughput floor and deadline, read live by the {@link HttpFetcher}. */
+/** Describes the upstream fetch's request timeout, throughput floor and deadline, read live by the
+ *  {@link HttpFetcher}. */
 public final class ProxySettingsContributor implements SettingsContributor {
 
     /** The throughput floor's key. */
@@ -14,9 +15,20 @@ public final class ProxySettingsContributor implements SettingsContributor {
     /** The deadline's key. */
     public static final String DEADLINE_KEY = "proxy-fetch-deadline";
 
+    /** The request timeout's key. */
+    public static final String REQUEST_TIMEOUT_KEY = "proxy-request-timeout";
+
+    /** The request timeout's default. */
+    public static final String REQUEST_TIMEOUT_TEXT = "PT1M";
+
     @Override
     public List<Setting> settings() {
         return List.of(
+                new Setting(REQUEST_TIMEOUT_KEY, "Proxy", "Upstream request timeout",
+                        "The longest an upstream fetch waits for the upstream to start answering before it is "
+                                + "abandoned as unreachable. It bounds the answer's arrival, not a large body's "
+                                + "transfer, which the throughput floor and the deadline govern. Applies live.",
+                        Setting.Kind.DURATION, REQUEST_TIMEOUT_TEXT, true).advanced(),
                 new Setting(FLOOR_KEY, "Proxy", "Upstream throughput floor",
                         "The least an upstream fetch must deliver over each minute spent waiting on it, in bytes, or "
                                 + "it is abandoned as the idle timeout abandons one that goes silent. The idle timeout "

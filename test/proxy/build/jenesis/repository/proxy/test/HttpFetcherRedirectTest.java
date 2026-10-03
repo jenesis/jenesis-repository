@@ -14,19 +14,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The fetcher follows redirects itself so it can drop a caller credential when the chain crosses to another origin -
- * an importer download or a proxy fetch that a legitimate server 302s to a presigned object-store URL must not carry
- * the operator's {@code Authorization} to that third host, but a same-origin redirect keeps it - and so it can refuse
- * a redirect that aims the fetch at a private/loopback/cloud-metadata host (an SSRF the up-front import screen cannot
- * see, the target being chosen by the upstream). The header tests inject a permissive host screen so their loopback
- * WireMock fixtures stand in for public hosts; {@link #a_redirect_to_a_private_host_is_refused} drives the shipped
- * screen. The request journal proves which hop carried the credential.
+ * The fetcher follows redirects by the product's HTTP client's one policy: a caller credential is dropped when the
+ * chain crosses to another origin - an importer download or a proxy fetch that a legitimate server 302s to a presigned
+ * object-store URL must not carry the operator's {@code Authorization} to that third host, but a same-origin redirect
+ * keeps it - a redirect that aims the fetch at a private/loopback/cloud-metadata host from another origin is refused (an
+ * SSRF the up-front import screen cannot see, the target being chosen by the upstream), and a redirect off http(s) is
+ * not followed. The header tests admit private redirects so their loopback WireMock fixtures stand in for public hosts;
+ * {@link #a_redirect_to_a_private_host_is_refused} drives the shipped fetcher. The request journal proves which hop
+ * carried the credential.
  */
 class HttpFetcherRedirectTest {
 
     // The loopback fixtures below stand in for public hosts, so the header behaviour is exercised without the shipped
-    // private-range screen refusing the hop; the SSRF refusal itself is asserted by its own test with the real screen.
-    private final HttpFetcher fetcher = new HttpFetcher(Duration.ofSeconds(10), host -> false);
+    // private-host refusal; the refusal itself is asserted by its own test with the shipped fetcher.
+    private final HttpFetcher fetcher = new HttpFetcher(Duration.ofSeconds(10), true);
 
     @Test
     void a_cross_origin_redirect_drops_the_authorization_header() throws IOException {
@@ -105,19 +106,34 @@ class HttpFetcherRedirectTest {
         WireMockServer origin = start();
         origin.stubFor(get(urlPathEqualTo("/asset")).willReturn(aResponse().withStatus(302)
                 .withHeader("Location", "http://127.0.0.1:" + target.port() + "/latest/meta-data/")));
-        HttpFetcher guarded = new HttpFetcher(Duration.ofSeconds(10)); // shipped PrivateHosts screen, no permissive seam
+        HttpFetcher guarded = new HttpFetcher(Duration.ofSeconds(10)); // as shipped: no redirect to a private host
         try {
             URI publicUrl = URI.create("http://127.0.0.1:" + origin.port() + "/asset");
 
             assertThatThrownBy(() -> guarded.fetch(publicUrl, Map.of("Authorization", "Basic c3VwZXItc2VjcmV0")))
                     .as("a redirect onto a private/loopback host is an SSRF, refused rather than followed")
                     .isInstanceOf(IOException.class)
-                    .hasMessageContaining("SSRF");
+                    .hasMessageContaining("refusing to follow the redirect");
             assertThat(target.getAllServeEvents()).as("the fetch (and its credential) never reaches the private redirect target")
                     .isEmpty();
         } finally {
             origin.stop();
             target.stop();
+        }
+    }
+
+    @Test
+    void a_redirect_off_http_is_answered_as_the_redirect_rather_than_followed() throws IOException {
+        WireMockServer server = start();
+        server.stubFor(get(urlPathEqualTo("/asset")).willReturn(aResponse().withStatus(302)
+                .withHeader("Location", "file:///etc/passwd")));
+        try {
+            ProxyFormat.Fetched fetched = fetcher.fetch(
+                    URI.create("http://127.0.0.1:" + server.port() + "/asset"), Map.of()).orElseThrow();
+
+            assertThat(fetched.status()).as("the upstream's redirect, which no upstream fetch may take").isEqualTo(302);
+        } finally {
+            server.stop();
         }
     }
 
