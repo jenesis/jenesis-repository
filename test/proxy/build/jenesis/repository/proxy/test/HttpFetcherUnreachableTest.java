@@ -63,6 +63,10 @@ class HttpFetcherUnreachableTest {
         try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
             Thread.ofVirtual().start(() -> {
                 try (Socket accepted = server.accept(); OutputStream out = accepted.getOutputStream()) {
+                    // The request is read before the answer, so the exchange is established when the body dies: closed
+                    // before the client had sent it, the connection would reset on the send, which is a failure to
+                    // establish the exchange and folds - correctly - to the empty answer this does not test.
+                    accepted.getInputStream().read(new byte[8192]);
                     out.write(("HTTP/1.1 200 OK\r\nContent-Length: 4096\r\n\r\nshort").getBytes(StandardCharsets.UTF_8));
                     out.flush();
                 } catch (IOException _) {
