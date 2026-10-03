@@ -200,17 +200,21 @@ final class AdminCommands {
     static int limits(String[] args, Path home) throws Exception {
         RepositoryClient client = CliSupport.client(home);
         if (args.length > 1 && args[1].equals("set")) {
-            if (args.length != 4 || !(args[2].equals("quota") || args[2].equals("rate"))) {
-                throw new IllegalArgumentException("Usage: limits set quota <bytes>  (0 falls back to the "
+            boolean named = args.length == 6 && args[4].equals("--tenant");
+            if (!(args.length == 4 || named) || !(args[2].equals("quota") || args[2].equals("rate"))) {
+                throw new IllegalArgumentException("Usage: limits set quota <bytes> [--tenant N]  (0 falls back to "
+                        + "the deployment's)\n"
+                        + "       limits set rate <permits-per-minute> [--tenant N]  (0 falls back to the "
                         + "deployment's)\n"
-                        + "       limits set rate <permits-per-minute>  (0 falls back to the deployment's)");
+                        + "A tenant's limits are the operator's to set, with a key of the operator tenant.");
             }
+            String tenant = named ? args[5] : null;
             if (args[2].equals("quota")) {
-                client.settings().setQuota(Long.parseLong(args[3]));
+                client.settings().setQuota(tenant, Long.parseLong(args[3]));
                 System.out.println("Set the storage quota.");
                 return 0;
             }
-            if (!client.settings().setRateLimit(Long.parseLong(args[3]))) {
+            if (!client.settings().setRateLimit(tenant, Long.parseLong(args[3]))) {
                 System.out.println("Rate limiting is not installed on this deployment.");
                 return 1;
             }

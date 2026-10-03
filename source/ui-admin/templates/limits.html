@@ -7,8 +7,8 @@
     <div th:replace="~{fragments :: messages}"></div>
     <header th:replace="~{base :: pageHeader('Limits')}"></header>
     <p><small>What the repositories may use together: each limit applies to all of them at once, never to
-        one.<th:block th:if="${multiTenant}"> Each is a tenant setting: the deployment's value applies until this
-        tenant sets its own.</th:block></small></p>
+        one. The limits are the operator's to set.<th:block th:if="${multiTenant}"> Each is a tenant setting: the
+        deployment's value applies until the operator sets this tenant's own.</th:block></small></p>
     <article>
         <h2>Storage used</h2>
         <!--/* The meter runs only under a limit: without one, the store passes writes through uncounted, so a count
@@ -20,12 +20,12 @@
             already stored on the next cleanup pass.</small></p>
     </article>
     <!--/* The ceilings are the catalogue's own settings of the Limits group, rendered as every settings screen renders
-         them; an administrator edits them, anyone else reads them. */-->
-    <th:block th:if="${isAdmin}" th:each="g : ${groups}">
+         them; a super-admin edits them, anyone else reads them. */-->
+    <th:block th:if="${isSuperadmin}" th:each="g : ${groups}">
         <article th:replace="~{fragments :: settingGroup(${g}, '/ui/limits/save', null,
                 'deployment', 'the deployment value', ${' for this ' + scopeWord})}"></article>
     </th:block>
-    <th:block th:unless="${isAdmin}" th:each="g : ${groups}">
+    <th:block th:unless="${isSuperadmin}" th:each="g : ${groups}">
         <article class="setting-group">
             <h2 th:text="${g.name}">Limits</h2>
             <dl>

@@ -143,10 +143,12 @@ public final class SettingsClient extends ClientCalls {
         return JSON.readValue(response.body(), QuotaView.class);
     }
 
-    /** Set ({@code > 0}) or clear ({@code 0}, so the deployment's applies) the tenant's storage quota in bytes; the
-     *  stored usage is recounted by the next cleanup pass. */
-    public void setQuota(long maxBytes) throws IOException, InterruptedException {
-        require(send("PUT", "/api/quota", body(Map.of("maxBytes", maxBytes)), "application/json"),
+    /** Set ({@code > 0}) or clear ({@code 0}, so the deployment's applies) a tenant's storage quota in bytes - the
+     *  operator's to set, {@code tenant} naming whose, or {@code null} for the tenant the key routes to; the stored
+     *  usage is recounted by the next cleanup pass. */
+    public void setQuota(String tenant, long maxBytes) throws IOException, InterruptedException {
+        String path = tenant == null ? "/api/quota" : "/api/quota?tenant=" + enc(tenant);
+        require(send("PUT", path, body(Map.of("maxBytes", maxBytes)), "application/json"),
                 200, "set the storage quota");
     }
 
@@ -161,10 +163,11 @@ public final class SettingsClient extends ClientCalls {
         return JSON.readValue(response.body(), RateLimitView.class);
     }
 
-    /** Set ({@code > 0}) or clear ({@code 0}) the tenant's request-rate ceiling; {@code false} when rate limiting is
-     *  not installed (HTTP 501). */
-    public boolean setRateLimit(long permitsPerMinute) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("PUT", "/api/rate-limit",
+    /** Set ({@code > 0}) or clear ({@code 0}) a tenant's request-rate ceiling - the operator's to set, as the quota
+     *  is; {@code false} when rate limiting is not installed (HTTP 501). */
+    public boolean setRateLimit(String tenant, long permitsPerMinute) throws IOException, InterruptedException {
+        String path = tenant == null ? "/api/rate-limit" : "/api/rate-limit?tenant=" + enc(tenant);
+        HttpResponse<String> response = send("PUT", path,
                 body(Map.of("permitsPerMinute", permitsPerMinute)), "application/json");
         if (response.statusCode() == 501) {
             return false;

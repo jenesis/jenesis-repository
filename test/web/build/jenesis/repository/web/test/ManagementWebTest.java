@@ -77,7 +77,7 @@ class ManagementWebTest {
 
     @Test
     void a_quota_is_the_ceiling_set_beside_what_is_stored() throws IOException {
-        controller.setQuota(null, new ManagementController.QuotaRequest(1_048_576), request(),
+        controller.setQuota(null, null, new ManagementController.QuotaRequest(1_048_576), request(),
                 Servlets.response().servlet());
 
         assertThat(controller.quota(request())).isEqualTo(new ManagementController.QuotaView(1_048_576, 0));
@@ -87,13 +87,22 @@ class ManagementWebTest {
                     assertThat(row.target()).isEqualTo("default/tenant-quota");
                 });
 
-        controller.setQuota(null, new ManagementController.QuotaRequest(0), request(), Servlets.response().servlet());
+        controller.setQuota(null, null, new ManagementController.QuotaRequest(0), request(), Servlets.response().servlet());
         assertThat(controller.quota(request()).maxBytes()).as("zero clears the ceiling").isZero();
     }
 
     @Test
+    void the_operator_names_the_tenant_whose_quota_it_sets() throws IOException {
+        controller.setQuota(null, "acme", new ManagementController.QuotaRequest(2_048), request(),
+                Servlets.response().servlet());
+
+        assertThat(audit.rows()).singleElement().satisfies(row ->
+                assertThat(row.target()).as("the named tenant's, not the routed one's").isEqualTo("acme/tenant-quota"));
+    }
+
+    @Test
     void a_rate_ceiling_reads_back_as_written() throws IOException {
-        controller.setRateLimit(null, new ManagementController.RateLimitRequest(600), request(),
+        controller.setRateLimit(null, null, new ManagementController.RateLimitRequest(600), request(),
                 Servlets.response().servlet());
 
         assertThat(controller.rateLimit(request(), Servlets.response().servlet()).permitsPerMinute()).isEqualTo(600);

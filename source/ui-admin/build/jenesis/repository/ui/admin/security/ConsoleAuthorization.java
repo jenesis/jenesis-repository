@@ -48,13 +48,13 @@ final class ConsoleAuthorization {
                 // The caches belong to no tenant.
                 .requestMatchers("/ui/caches", "/ui/caches/**").hasRole(SuperadminRole.ROLE)
                 .requestMatchers("/ui/admin/**").access(tenants.require(UserDirectory.Role.ADMIN))
-                // Credential administration and the limits are admin-grade, as the API's manage:write: an editor
-                // must not mint an admin key, add a trust exchanging to admin, or relax a limit.
+                // Credential administration is admin-grade, as the API's manage:write: an editor must not mint an
+                // admin key or add a trust exchanging to admin.
                 .requestMatchers("/ui/credentials/**").access(tenants.require(UserDirectory.Role.ADMIN))
                 // Publishing from the console is admin-grade, the form included.
                 .requestMatchers("/ui/repositories/*/deploy").access(tenants.require(UserDirectory.Role.ADMIN))
-                .requestMatchers(HttpMethod.POST, "/ui/limits/**")
-                        .access(tenants.require(UserDirectory.Role.ADMIN))
+                // A tenant's limits are the operator's ceilings on it, so only a super-admin sets them.
+                .requestMatchers(HttpMethod.POST, "/ui/limits/**").hasRole(SuperadminRole.ROLE)
                 // Deleting a repository removes everything it holds.
                 .requestMatchers(HttpMethod.POST, "/ui/repositories/*/delete")
                         .access(tenants.require(UserDirectory.Role.ADMIN))

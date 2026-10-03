@@ -99,13 +99,16 @@ public class ManagementController {
         return new QuotaView(repositories.quotaLimit(tenant), repositories.quotaUsed(tenant));
     }
 
-    /** Set ({@code > 0}) or clear ({@code 0}, so the deployment's applies) the tenant's storage quota in bytes, its
-     *  {@code tenant-quota} setting, through the settings editor, which records it on the trail. */
+    /** Set ({@code > 0}) or clear ({@code 0}, so the deployment's applies) a tenant's storage quota in bytes, its
+     *  {@code tenant-quota} setting, through the settings editor, which records it on the trail. The operator's to
+     *  set - the authorization takes the operator tenant's key for it - so it names the tenant in {@code ?tenant=},
+     *  else sets the tenant the request routes to. */
     @PutMapping("/api/quota")
     public void setQuota(@RequestHeader(value = Repositories.KEY, required = false) String key,
+                         @RequestParam(value = "tenant", required = false) String named,
                          @RequestBody QuotaRequest request,
                          HttpServletRequest http, HttpServletResponse response) throws IOException {
-        String tenant = routing.tenant(http);
+        String tenant = named == null || named.isBlank() ? routing.tenant(http) : named;
         long maxBytes = request == null ? 0L : request.maxBytes();
         editor.tenant(tenant, Map.of(QuotaSettingsContributor.KEY, maxBytes == 0 ? "" : Long.toString(maxBytes)),
                 false, actor(tenant, key));
@@ -131,10 +134,12 @@ public class ManagementController {
     /** The rate ceiling's key, spelled here since the limiter module declaring it is optional. */
     private static final String RATE_LIMIT = "rate-limit";
 
-    /** Set ({@code > 0}) or clear ({@code 0}) the tenant's request rate ceiling in permits per minute, its
-     *  {@code rate-limit} setting, through the settings editor. */
+    /** Set ({@code > 0}) or clear ({@code 0}) a tenant's request rate ceiling in permits per minute, its
+     *  {@code rate-limit} setting, through the settings editor - the operator's to set, as the quota is, naming the
+     *  tenant in {@code ?tenant=} or setting the routed one. */
     @PutMapping("/api/rate-limit")
     public void setRateLimit(@RequestHeader(value = Repositories.KEY, required = false) String key,
+                             @RequestParam(value = "tenant", required = false) String named,
                              @RequestBody RateLimitRequest request, HttpServletRequest http,
                              HttpServletResponse response) throws IOException {
         if (!rateLimiting) {
@@ -142,7 +147,7 @@ public class ManagementController {
             return;
         }
         long permitsPerMinute = request == null ? 0L : request.permitsPerMinute();
-        String tenant = routing.tenant(http);
+        String tenant = named == null || named.isBlank() ? routing.tenant(http) : named;
         editor.tenant(tenant, Map.of(RATE_LIMIT, permitsPerMinute == 0 ? "" : Long.toString(permitsPerMinute)),
                 false, actor(tenant, key));
         response.setStatus(200);

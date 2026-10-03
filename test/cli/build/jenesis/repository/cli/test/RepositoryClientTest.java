@@ -664,7 +664,7 @@ public class RepositoryClientTest {
         assertThat(view.maxBytes()).isEqualTo(1073741824L);
         assertThat(view.usedBytes()).isEqualTo(2048L);
 
-        client.settings().setQuota(500L);
+        client.settings().setQuota(null, 500L);
         assertThat(lastMethod).isEqualTo("PUT");
         assertThat(lastBody).isEqualTo("{\"maxBytes\":500}");
     }
@@ -672,7 +672,7 @@ public class RepositoryClientTest {
     @Test
     void the_rate_limit_and_policy_are_read_and_set() throws IOException, InterruptedException {
         assertThat(client.settings().rateLimit().permitsPerMinute()).isEqualTo(600L);
-        assertThat(client.settings().setRateLimit(120L)).as("a 200 means it was set").isTrue();
+        assertThat(client.settings().setRateLimit(null, 120L)).as("a 200 means it was set").isTrue();
         assertThat(lastPath).isEqualTo("/api/rate-limit");
         assertThat(lastBody).isEqualTo("{\"permitsPerMinute\":120}");
 

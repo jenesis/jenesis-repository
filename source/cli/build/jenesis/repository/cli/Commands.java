@@ -384,9 +384,11 @@ public final class Commands {
                     noun("limits", "what the tenant's repositories may use together: a storage quota and a "
                                     + "request rate", AdminCommands::limits,
                             act("limits", "the storage quota with what is stored, and the request-rate ceiling"),
-                            act("limits set quota <bytes>", "set the storage quota (0 falls back to the deployment's)"),
-                            act("limits set rate <permits-per-minute>",
-                                    "set the request-rate ceiling (0 falls back to the deployment's)")),
+                            act("limits set quota <bytes> [--tenant N]", "set a tenant's storage quota (0 falls "
+                                    + "back to the deployment's); the operator's to set"),
+                            act("limits set rate <permits-per-minute> [--tenant N]",
+                                    "set a tenant's request-rate ceiling (0 falls back to the deployment's); the "
+                                    + "operator's to set")),
                     noun("capabilities", "what this deployment carries", AdminCommands::capabilities,
                             act("capabilities",
                                     "installed formats, import sources, modules, features and build tools")),

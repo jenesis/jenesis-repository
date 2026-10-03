@@ -38,7 +38,8 @@ import org.springframework.web.util.UriUtils;
  *       The routes that read or write the deployment rather than a tenant - its settings, repository definitions,
  *       upstreams, the {@code /api/admin/} verbs, the logs, the fleet's consistency and the actuator - further
  *       require a key of the operator tenant ({@code jenrepo.operator-tenant}, else {@code default-tenant}): a
- *       tenant administering its own keys cannot repoint an upstream, relax the policy or read every tenant's logs.</li>
+ *       tenant administering its own keys cannot repoint an upstream, relax the policy, lift its own quota or rate
+ *       limit, or read every tenant's logs.</li>
  * </ul>
  *
  * <p><b>There is no weaker twin.</b> Taking the repository rights on every {@code /api/} route would let a key with
@@ -143,7 +144,7 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
         }
         // The operator tenant, for a route that reads or writes the whole deployment. This also refuses a keyless
         // caller there when the public-mirror opt-in grants anonymous rights at "*": no key names the operator tenant.
-        if (decision == Authorization.Decision.ALLOWED && global(path)
+        if (decision == Authorization.Decision.ALLOWED && global(path, read)
                 && !operatorTenant.equals(Authorization.tenantOf(key))) {
             decision = Authorization.Decision.FORBIDDEN;
         }
@@ -179,9 +180,12 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
 
     /** Whether a path reads or writes the whole deployment rather than a tenant's own space, so that a manage right
      *  is not enough and the caller must also be the operator tenant. The issued login keys are among them: a login
-     *  key can bind a principal into any tenant, so a tenant's own administrator issuing one would reach past it. */
-    private static boolean global(String path) {
-        return path.startsWith("/api/settings") || path.startsWith("/api/repositories")
+     *  key can bind a principal into any tenant, so a tenant's own administrator issuing one would reach past it. So
+     *  is setting a tenant's quota or rate limit: they are the operator's ceilings on the tenant, and a tenant's own
+     *  administrator lifting them would make them no ceiling at all; reading them stays the tenant's. */
+    private static boolean global(String path, boolean read) {
+        return !read && (path.equals("/api/quota") || path.equals("/api/rate-limit"))
+                || path.startsWith("/api/settings") || path.startsWith("/api/repositories")
                 || path.equals("/api/keylogin") || path.startsWith("/api/keylogin/")
                 || path.startsWith("/api/upstreams") || path.startsWith("/api/admin/")
                 || path.equals("/api/logs") || path.startsWith("/api/logs/")
