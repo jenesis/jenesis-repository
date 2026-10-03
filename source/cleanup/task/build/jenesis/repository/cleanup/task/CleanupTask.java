@@ -92,7 +92,8 @@ public final class CleanupTask implements MaintenanceTask {
     }
 
     /**
-     * Dismiss the repository's finished jobs of one kind: a job no longer {@code running} - its {@code imports/<id>}
+     * Dismiss the repository's finished jobs of one kind: a job no longer running - one that ended, or whose run no
+     * longer holds it ({@link JobState#effective}) - its {@code imports/<id>}
      * record and remembered {@code import-source/<id>}, or its {@code exports/<id>} record - is removed once it has sat
      * terminal for its kind's TTL, so one-shot jobs do not accumulate forever. The record carries no timestamp, so the
      * sweep stamps an expiry marker ({@code import-expiry/<id>}, {@code export-expiry/<id>}) when it first sees the
@@ -124,7 +125,8 @@ public final class CleanupTask implements MaintenanceTask {
                 continue;                                        // not a job record we understand - never delete it
             }
             String expiry = jobs.expiry() + "/" + id;
-            if (state == null || state.equals("running")) {
+            // A running record no run holds is an interrupted job, finished as far as a reap is concerned.
+            if (state == null || JobState.RUNNING.equals(JobState.effective(store, jobs.records(), id, state))) {
                 store.delete(expiry);                            // a resumed job runs again; its old marker is stale
                 continue;
             }

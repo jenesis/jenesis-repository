@@ -613,7 +613,7 @@ public class RepositoryAdminController {
             job = migrations.startImport(repo, source, url, repository,
                     format.isBlank() ? null : format, username.isBlank() ? null : username,
                     password.isBlank() ? null : password, resume.isBlank() ? null : resume);
-        } catch (IllegalArgumentException | JobState.Dismissed refused) {
+        } catch (IllegalArgumentException | JobState.Dismissed | JobState.Running refused) {
             redirect.addFlashAttribute("error", refused.getMessage());
             return "redirect:/ui/repositories/" + repo + "/import";
         }

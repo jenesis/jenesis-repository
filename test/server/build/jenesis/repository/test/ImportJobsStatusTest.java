@@ -14,7 +14,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code read()} (two round trips - a real second network call on an object-store backend - on the endpoint a
  * migration client polls). The counting store here demonstrates, not merely asserts, that a present job costs one
  * lookup and no separate existence probe, and an absent job the same, so the poll cannot regress to the double-probe
- * the sweep removed.
+ * the sweep removed. A running job costs one more point read, of the hold its run keeps on it, which is what tells a
+ * running job from one whose node stopped.
  */
 class ImportJobsStatusTest {
 
@@ -30,7 +31,7 @@ class ImportJobsStatusTest {
     void a_present_status_read_is_a_single_round_trip_with_no_existence_probe() throws IOException {
         CountingStore store = store();
         ImportJobs jobs = new ImportJobs();
-        byte[] state = "{\"state\":\"running\",\"imported\":3}".getBytes(StandardCharsets.UTF_8);
+        byte[] state = "{\"state\":\"completed\",\"imported\":3}".getBytes(StandardCharsets.UTF_8);
         store.write("imports/job-1", new ByteArrayInputStream(state));
         store.reset();
 
@@ -40,6 +41,23 @@ class ImportJobsStatusTest {
         assertThat(new String(status.get(), StandardCharsets.UTF_8)).contains("\"imported\":3");
         assertThat(store.reads()).as("one store read serves the status").isEqualTo(1);
         assertThat(store.existsProbes()).as("no separate existence probe precedes the read").isZero();
+    }
+
+    @Test
+    void a_running_job_costs_the_read_of_its_hold_and_reads_interrupted_without_one() throws IOException {
+        CountingStore store = store();
+        ImportJobs jobs = new ImportJobs();
+        byte[] state = "{\"state\":\"running\",\"imported\":3}".getBytes(StandardCharsets.UTF_8);
+        store.write("imports/job-2", new ByteArrayInputStream(state));
+        store.reset();
+
+        Optional<byte[]> status = jobs.status(store, "job-2");
+
+        assertThat(new String(status.orElseThrow(), StandardCharsets.UTF_8))
+                .as("no run holds it, so its node stopped").contains("\"state\":\"interrupted\"")
+                .contains("\"imported\":3");
+        assertThat(store.reads()).as("the record and its hold, two point reads").isEqualTo(2);
+        assertThat(store.existsProbes()).isZero();
     }
 
     @Test

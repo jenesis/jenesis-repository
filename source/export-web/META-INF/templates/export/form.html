@@ -37,7 +37,7 @@
                 <tr th:each="job : ${jobs}">
                     <td><code th:text="${job.id}">id</code></td>
                     <td><span class="app-badge"
-                              th:classappend="${job.running()} ? 'app-badge--info' : (${job.error} ? 'app-badge--danger' : 'app-badge--pass')"
+                              th:classappend="${job.running()} ? 'app-badge--info' : (${job.state == 'interrupted'} ? 'app-badge--warn' : (${job.error} ? 'app-badge--danger' : 'app-badge--pass'))"
                               th:text="${job.state}">running</span></td>
                     <td><code th:text="${job.target}">url</code></td>
                     <td class="app-list__num" th:text="${job.published}">0</td>

@@ -63,10 +63,27 @@ class ImportJobReapTest {
         task.repository(context(NOW, null));
         assertThat(store.readVersioned("import-expiry/failed-once")).isPresent();
 
-        job("failed-once", "running");                 // the operator resumed it
-        task.repository(context(NOW.plus(Duration.ofDays(30)), null));
+        // The operator resumed it, and the run holds it.
+        try (JobState.Run _ = JobState.Run.claim(store, "imports", "failed-once", record("running"),
+                store.readVersioned("imports/failed-once").orElseThrow().token())) {
+            task.repository(context(NOW.plus(Duration.ofDays(30)), null));
+        }
         assertThat(store.readVersioned("imports/failed-once")).as("running jobs are never dismissed").isPresent();
         assertThat(store.readVersioned("import-expiry/failed-once")).as("stale marker reset on resume").isEmpty();
+    }
+
+    /** A record left saying running by a node that stopped is no running job: no run holds it, so it is reaped as a
+     *  finished one is, and a reader is told it was interrupted. */
+    @Test
+    void a_job_whose_node_stopped_is_reaped_as_a_finished_one() throws IOException {
+        job("orphaned", "running");
+
+        assertThat(new ImportJobs().snapshot(store, "orphaned")).get()
+                .satisfies(job -> assertThat(job.state()).isEqualTo(JobState.INTERRUPTED));
+        task.repository(context(NOW, null));
+        assertThat(store.readVersioned("import-expiry/orphaned")).as("seen finished").isPresent();
+        task.repository(context(NOW.plus(Duration.ofDays(8)), null));
+        assertThat(store.readVersioned("imports/orphaned")).as("and dismissed a TTL later").isEmpty();
     }
 
     @Test
@@ -140,8 +157,12 @@ class ImportJobReapTest {
     }
 
     private void job(String id, String state) throws IOException {
-        String json = "{\"state\":\"" + state + "\",\"imported\":3,\"skipped\":0,\"cursor\":null}";
-        store.write("imports/" + id, new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
+        store.write("imports/" + id, new ByteArrayInputStream(record(state)));
+    }
+
+    private static byte[] record(String state) {
+        return ("{\"state\":\"" + state + "\",\"imported\":3,\"skipped\":0,\"cursor\":null}")
+                .getBytes(StandardCharsets.UTF_8);
     }
 
     private RepositoryContext context(Instant now, String ttl) {

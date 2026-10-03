@@ -453,6 +453,10 @@ final class AdminCommands {
         if (running) {
             return Refresh.Poll.State.running();
         }
+        if (INTERRUPTED.equalsIgnoreCase(status.state())) {
+            System.out.println(STOPPED);
+            return Refresh.Poll.State.done(1);
+        }
         return Refresh.Poll.State.done(status.error() == null || status.error().isEmpty() ? 0 : 1);
     }
 
@@ -593,8 +597,19 @@ final class AdminCommands {
         if ("running".equalsIgnoreCase(status.state())) {
             return Refresh.Poll.State.running();
         }
+        if (INTERRUPTED.equalsIgnoreCase(status.state())) {
+            System.out.println(STOPPED);
+            return Refresh.Poll.State.done(1);
+        }
         return Refresh.Poll.State.done(status.error() == null || status.error().isEmpty() ? 0 : 1);
     }
+
+    /** The state a job reads in once the node running it stopped before it finished. */
+    private static final String INTERRUPTED = "interrupted";
+
+    /** What a job in that state tells its reader. */
+    private static final String STOPPED = "The node running this job stopped before it finished; resuming it carries "
+            + "on from where it got to.";
 
     /** How fast a tenant's deletion moves: thousands of objects a second, so seconds for a small tenant and minutes
      *  for a large one - the cadence a bare {@code --refresh} watches it at. */

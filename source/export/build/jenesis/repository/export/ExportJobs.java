@@ -26,10 +26,16 @@ import tools.jackson.databind.json.JsonMapper;
  * {@code exports/<id>} in the repository's store, so status needs no in-memory registry and survives a restart. A
  * cursor is written after each coordinate; a resumed job skips to it and redoes at most the coordinate it stopped in,
  * which the target answers as present. The target's credential is never written.
+ *
+ * <p>A job runs as a {@link JobState.Run}, holding its record while it runs and writing it only while it holds it, so a
+ * job whose node died reads {@code interrupted} and resumes, and a run that lost its job to a resume stops.
  */
 public final class ExportJobs {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    /** Where a job's record lives, {@code exports/<id>}. */
+    private static final String RECORDS = "exports";
 
     /** A separator no coordinate or path can carry. */
     private static final String SEPARATOR = "\u0001";
@@ -68,17 +74,15 @@ public final class ExportJobs {
         Counts counts = prior == null ? new Counts() : new Counts(prior);
         String cursor = prior == null ? null : prior.cursor();
         // The claim: a new job's record is created, a resumed one's replaced only while it is the record the resume
-        // read, so a reap that dismissed it wins rather than the resume reviving a deleted job.
-        if (!store.writeVersioned("exports/" + jobId, body("running", url, counts, cursor, null, null),
-                prior == null ? null : prior.token())) {
-            throw new JobState.Dismissed(jobId);
-        }
-        Thread.ofVirtual().name("export-" + jobId).start(() -> run(store, target, url, jobId, formats, counts, cursor));
+        // read and no run holds it - a reap that dismissed it since wins, and so does a run still working on it.
+        JobState.Run job = JobState.Run.claim(store, RECORDS, jobId,
+                body(JobState.RUNNING, url, counts, cursor, null, null), prior == null ? null : prior.token());
+        Thread.ofVirtual().name("export-" + jobId).start(() -> run(job, store, target, url, formats, counts, cursor));
     }
 
-    private void run(ArtifactStore store, ExportTarget target, String url, String jobId,
+    private void run(JobState.Run job, ArtifactStore store, ExportTarget target, String url,
                      List<RepositoryFormat> formats, Counts counts, String resume) {
-        Walk walk = new Walk(store, target, url, jobId, counts, resume);
+        Walk walk = new Walk(job, store, target, url, counts, resume);
         try {
             for (RepositoryFormat format : formats) {
                 RepositoryExporter exporter = (RepositoryExporter) format;
@@ -88,13 +92,23 @@ public final class ExportJobs {
                     walk.coordinates(format, exporter);
                 }
             }
-            write(store, jobId, "completed", url, counts, null, walk.reached, null);
+            job.write(body("completed", url, counts, null, walk.reached, null));
+        } catch (JobState.Lost lost) {
+            // Another run has the job and writes its record; this one only stops.
         } catch (Exception e) {
             try {
-                write(store, jobId, "failed", url, counts, walk.cursor, walk.reached,
-                        e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
+                job.write(body("failed", url, counts, walk.cursor, walk.reached,
+                        e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
+            } catch (JobState.Lost lost) {
+                // As above: the record is the other run's.
             } catch (IOException suppressed) {
                 throw new UncheckedIOException(suppressed);
+            }
+        } finally {
+            try {
+                job.close();
+            } catch (IOException unreleased) {
+                // The hold lapses on its own; until then a reader sees the job as its record says.
             }
         }
     }
@@ -102,21 +116,21 @@ public final class ExportJobs {
     /** One job's walk: where it resumes from, where it has got to, and what it has counted. */
     private final class Walk {
 
+        private final JobState.Run job;
         private final ArtifactStore store;
         private final ExportTarget target;
         private final String url;
-        private final String jobId;
         private final Counts counts;
         private final String resume;
         private boolean resumed;
         private String cursor;
         private String reached;
 
-        Walk(ArtifactStore store, ExportTarget target, String url, String jobId, Counts counts, String resume) {
+        Walk(JobState.Run job, ArtifactStore store, ExportTarget target, String url, Counts counts, String resume) {
+            this.job = job;
             this.store = store;
             this.target = target;
             this.url = url;
-            this.jobId = jobId;
             this.counts = counts;
             this.resume = resume;
             this.resumed = resume == null;
@@ -168,7 +182,7 @@ public final class ExportJobs {
             }
             exporter.exported(store, coordinate, target);
             cursor = key;
-            write(store, jobId, "running", url, counts, cursor, reached, null);
+            job.write(body(JobState.RUNNING, url, counts, cursor, reached, null));
         }
 
         /** Every path the format has published, each a unit, checkpointed every {@value #PATH_CHECKPOINT}. */
@@ -192,7 +206,7 @@ public final class ExportJobs {
                     count(export(exporter, path, ""));
                     if (++sinceCheckpoint >= PATH_CHECKPOINT) {
                         cursor = format.name() + SEPARATOR + path.substring(format.mount().length() + 1);
-                        write(store, jobId, "running", url, counts, cursor, reached, null);
+                        job.write(body(JobState.RUNNING, url, counts, cursor, reached, null));
                         sinceCheckpoint = 0;
                     }
                 }
@@ -225,12 +239,23 @@ public final class ExportJobs {
 
     /** A job's persisted state as raw JSON bytes, or empty when there is no such job. */
     public Optional<byte[]> status(ArtifactStore store, String jobId) throws IOException {
-        return store.readVersioned("exports/" + jobId).map(ArtifactStore.Versioned::content);
+        Optional<ArtifactStore.Versioned> stored = store.readVersioned(RECORDS + "/" + jobId);
+        if (stored.isEmpty()) {
+            return Optional.empty();
+        }
+        // The record as its run wrote it, except that a running record no run holds is told as interrupted.
+        JsonNode state = JSON.readTree(stored.get().content());
+        String effective = JobState.effective(store, RECORDS, jobId, state.path("state").asString(null));
+        if (Objects.equals(effective, state.path("state").asString(null))) {
+            return Optional.of(stored.get().content());
+        }
+        ((tools.jackson.databind.node.ObjectNode) state).put("state", effective);
+        return Optional.of(JSON.writeValueAsBytes(state));
     }
 
     /** A job's state parsed, for a status answer or to seed a resume. */
     public Optional<Snapshot> snapshot(ArtifactStore store, String jobId) throws IOException {
-        Optional<ArtifactStore.Versioned> stored = store.readVersioned("exports/" + jobId);
+        Optional<ArtifactStore.Versioned> stored = store.readVersioned(RECORDS + "/" + jobId);
         if (stored.isEmpty()) {
             return Optional.empty();
         }
@@ -238,15 +263,11 @@ public final class ExportJobs {
         if (JobState.DISMISSED.equals(state.path("state").asString(null))) {
             return Optional.empty();
         }
-        return Optional.of(new Snapshot(state.path("state").asString(null), state.path("target").asString(null),
+        String effective = JobState.effective(store, RECORDS, jobId, state.path("state").asString(null));
+        return Optional.of(new Snapshot(effective, state.path("target").asString(null),
                 state.path("published").asInt(0), state.path("present").asInt(0), state.path("withheld").asInt(0),
                 state.path("cursor").asString(null), state.path("reached").asString(null),
                 state.path("error").asString(null), stored.get().token()));
-    }
-
-    private void write(ArtifactStore store, String jobId, String state, String url, Counts counts, String cursor,
-                       String reached, String error) throws IOException {
-        store.write("exports/" + jobId, new ByteArrayInputStream(body(state, url, counts, cursor, reached, error)));
     }
 
     private static byte[] body(String state, String url, Counts counts, String cursor, String reached, String error)

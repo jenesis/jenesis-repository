@@ -19,10 +19,17 @@ import tools.jackson.databind.json.JsonMapper;
  * migration resumable: a re-submit naming a prior job continues its walk from the recorded cursor and counts, and
  * the content-addressed store dedupes anything a resumed run repeats. The
  * store is the only state, so progress survives a restart and a status read needs no in-memory registry.
+ *
+ * <p>A job runs as a {@link JobState.Run}, holding its record while it runs and writing it only while it holds it, so a
+ * job whose node died reads {@code interrupted} and resumes, rather than reading {@code running} for good, and a run
+ * that lost its job to a resume stops rather than writing over the run that took it over.
  */
 public final class ImportJobs {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    /** Where a job's record lives, {@code imports/<id>}. */
+    private static final String RECORDS = "imports";
 
     public static String newId() {
         return UUID.randomUUID().toString();
@@ -49,12 +56,11 @@ public final class ImportJobs {
         int baseImported = prior == null ? 0 : prior.imported();
         int baseSkipped = prior == null ? 0 : prior.skipped();
         // The claim: a new job's record is created, a resumed one's replaced only while it is the record the resume
-        // read - a reap that dismissed it since wins, and the resume says so rather than reviving a deleted job.
-        if (!store.writeVersioned("imports/" + jobId, body("running", baseImported, baseSkipped, 0, 0,
-                new LinkedHashSet<>(), Map.of(), null, null, null), prior == null ? null : prior.token())) {
-            throw new JobState.Dismissed(jobId);
-        }
-        Runnable body = () -> run(store, source, jobId, baseImported, baseSkipped, listener, formats);
+        // read and no run holds it - a reap that dismissed it since wins, and so does a run still working on it.
+        JobState.Run claimed = JobState.Run.claim(store, RECORDS, jobId, body(JobState.RUNNING, baseImported,
+                baseSkipped, 0, 0, new LinkedHashSet<>(), Map.of(), null, null, null), prior == null ? null
+                : prior.token());
+        Runnable body = () -> run(claimed, source, jobId, baseImported, baseSkipped, listener, formats, store);
         Thread.ofVirtual().name("import-" + jobId).start(jobScope.apply(body));
     }
 
@@ -75,8 +81,8 @@ public final class ImportJobs {
                         + "first."));
     }
 
-    private void run(ArtifactStore store, ImportSource source, String jobId, int baseImported, int baseSkipped,
-                     RepositoryImport.Listener delegate, List<RepositoryFormat> formats) {
+    private void run(JobState.Run job, ImportSource source, String jobId, int baseImported, int baseSkipped,
+                     RepositoryImport.Listener delegate, List<RepositoryFormat> formats, ArtifactStore store) {
         AtomicInteger imported = new AtomicInteger(baseImported);
         AtomicInteger skipped = new AtomicInteger(baseSkipped);
         AtomicInteger held = new AtomicInteger();
@@ -122,20 +128,30 @@ public final class ImportJobs {
                 @Override
                 public void checkpoint(String reached) throws IOException {
                     cursor[0] = reached;
-                    write(store, jobId, "running", imported.get(), skipped.get(), held.get(), rejected.get(),
-                            skippedFormats, dropped, reached, asset.get(), null);
+                    job.write(body(JobState.RUNNING, imported.get(), skipped.get(), held.get(), rejected.get(),
+                            skippedFormats, dropped, reached, asset.get(), null));
                     delegate.checkpoint(reached);
                 }
             });
-            write(store, jobId, "completed", imported.get(), skipped.get(), held.get(), rejected.get(),
-                    skippedFormats, dropped, null, asset.get(), null);
+            job.write(body("completed", imported.get(), skipped.get(), held.get(), rejected.get(),
+                    skippedFormats, dropped, null, asset.get(), null));
+        } catch (JobState.Lost lost) {
+            // Another run has the job and writes its record; this one only stops.
         } catch (Exception e) {
             try {
-                write(store, jobId, "failed", imported.get(), skipped.get(), held.get(), rejected.get(),
+                job.write(body("failed", imported.get(), skipped.get(), held.get(), rejected.get(),
                         skippedFormats, dropped, cursor[0], asset.get(),
-                        e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
+                        e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
+            } catch (JobState.Lost lost) {
+                // As above: the record is the other run's.
             } catch (IOException suppressed) {
                 throw new UncheckedIOException(suppressed);
+            }
+        } finally {
+            try {
+                job.close();
+            } catch (IOException unreleased) {
+                // The hold lapses on its own; until then a reader sees the job as its record says.
             }
         }
     }
@@ -146,13 +162,24 @@ public final class ImportJobs {
         // together, rather than an exists() probe then a read() (two round trips on the endpoint a migration polls),
         // and hands the bytes back without a ByteArrayOutputStream copy - the same write-then-readVersioned pattern
         // the credential store uses.
-        return store.readVersioned("imports/" + jobId).map(ArtifactStore.Versioned::content);
+        Optional<ArtifactStore.Versioned> stored = store.readVersioned(RECORDS + "/" + jobId);
+        if (stored.isEmpty()) {
+            return Optional.empty();
+        }
+        // The record as its run wrote it, except that a running record no run holds is told as interrupted.
+        JsonNode state = JSON.readTree(stored.get().content());
+        String effective = JobState.effective(store, RECORDS, jobId, state.path("state").asString(null));
+        if (Objects.equals(effective, state.path("state").asString(null))) {
+            return Optional.of(stored.get().content());
+        }
+        ((tools.jackson.databind.node.ObjectNode) state).put("state", effective);
+        return Optional.of(JSON.writeValueAsBytes(state));
     }
 
     /** A job's state parsed for a status response or to seed a resume; empty for a job there is none of, or one a
      *  reap has dismissed. */
     public Optional<Snapshot> snapshot(ArtifactStore store, String jobId) throws IOException {
-        Optional<ArtifactStore.Versioned> stored = store.readVersioned("imports/" + jobId);
+        Optional<ArtifactStore.Versioned> stored = store.readVersioned(RECORDS + "/" + jobId);
         if (stored.isEmpty()) {
             return Optional.empty();
         }
@@ -160,6 +187,7 @@ public final class ImportJobs {
         if (JobState.DISMISSED.equals(state.path("state").asString(null))) {
             return Optional.empty();
         }
+        String effective = JobState.effective(store, RECORDS, jobId, state.path("state").asString(null));
         List<String> formats = new ArrayList<>();
         for (JsonNode format : state.path("skippedFormats")) {
             formats.add(format.asString(null));
@@ -167,18 +195,10 @@ public final class ImportJobs {
         Map<String, Integer> drops = new LinkedHashMap<>();
         JsonNode dropped = state.path("dropped");
         dropped.propertyNames().forEach(name -> drops.put(name, dropped.path(name).asInt(0)));
-        return Optional.of(new Snapshot(state.path("state").asString(null), state.path("imported").asInt(0),
+        return Optional.of(new Snapshot(effective, state.path("imported").asInt(0),
                 state.path("skipped").asInt(0), state.path("held").asInt(0), state.path("rejected").asInt(0),
                 formats, Map.copyOf(drops), state.path("cursor").asString(null),
                 state.path("asset").asString(null), state.path("error").asString(null), stored.get().token()));
-    }
-
-    private void write(ArtifactStore store, String jobId, String state, int imported, int skipped, int held,
-                       int rejected, Set<String> skippedFormats, Map<ImportSource.Reason, Integer> dropped,
-                       String cursor, String asset, String error)
-            throws IOException {
-        store.write("imports/" + jobId, new ByteArrayInputStream(body(state, imported, skipped, held, rejected,
-                skippedFormats, dropped, cursor, asset, error)));
     }
 
     private static byte[] body(String state, int imported, int skipped, int held, int rejected,

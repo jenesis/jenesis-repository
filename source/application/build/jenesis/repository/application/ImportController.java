@@ -232,12 +232,13 @@ public class ImportController {
         response.setStatus(400);
     }
 
-    /** A resume that lost to a reap: the job it named was dismissed meanwhile, and starting again is the answer. */
-    @ExceptionHandler(JobState.Dismissed.class)
-    public void dismissed(JobState.Dismissed dismissed, HttpServletResponse response) throws IOException {
+    /** A resume that lost to a reap - the job it named was dismissed meanwhile, and starting again is the answer -
+     *  or that named a job still running. */
+    @ExceptionHandler({JobState.Dismissed.class, JobState.Running.class})
+    public void taken(IOException taken, HttpServletResponse response) throws IOException {
         response.setStatus(409);
         response.setContentType("text/plain;charset=UTF-8");
-        response.getWriter().write(dismissed.getMessage());
+        response.getWriter().write(taken.getMessage());
     }
 
     /** The body of an import request: the source kind (an installed import-source module's name), its base URL and

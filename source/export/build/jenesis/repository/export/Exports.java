@@ -90,8 +90,8 @@ public final class Exports {
             jobs.submit(store.get(), new HttpExportTarget(target, credential), url, jobId, prior);
         } catch (IllegalArgumentException refused) {
             return new Started(400, null, refused.getMessage());
-        } catch (JobState.Dismissed dismissed) {
-            return new Started(409, null, dismissed.getMessage());
+        } catch (JobState.Dismissed | JobState.Running taken) {
+            return new Started(409, null, taken.getMessage());
         }
         return new Started(202, jobId, null);
     }

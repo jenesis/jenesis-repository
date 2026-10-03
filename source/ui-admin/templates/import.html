@@ -66,10 +66,11 @@
                 <tbody>
                 <tr th:each="job : ${jobs}">
                     <td><code th:text="${job.id}">id</code></td>
-                    <!--/* The state as a status badge: in-flight is info, a failed run (it recorded an error) is
-                         danger, a finished one is pass - the word itself always carries the meaning. */-->
+                    <!--/* The state as a status badge: in-flight is info, an interrupted run (its node stopped) is a
+                         warning, a failed run (it recorded an error) is danger, a finished one is pass - the word
+                         itself always carries the meaning. */-->
                     <td><span class="app-badge"
-                              th:classappend="${job.state == 'running'} ? 'app-badge--info' : (${job.error} ? 'app-badge--danger' : 'app-badge--pass')"
+                              th:classappend="${job.state == 'running'} ? 'app-badge--info' : (${job.state == 'interrupted'} ? 'app-badge--warn' : (${job.error} ? 'app-badge--danger' : 'app-badge--pass'))"
                               th:text="${job.state}">running</span></td>
                     <td class="app-list__num" th:text="${job.imported}">0</td>
                     <td class="app-list__num" th:text="${job.skipped}">0</td>

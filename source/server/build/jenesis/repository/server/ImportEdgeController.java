@@ -155,8 +155,8 @@ public class ImportEdgeController {
         } catch (IllegalArgumentException refused) {
             respond(response, 400, refused.getMessage());
             return;
-        } catch (JobState.Dismissed dismissed) {
-            respond(response, 409, dismissed.getMessage());
+        } catch (JobState.Dismissed | JobState.Running taken) {
+            respond(response, 409, taken.getMessage());
             return;
         }
         response.setHeader("Content-Type", "application/json");
