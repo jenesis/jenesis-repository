@@ -6,6 +6,7 @@ import module org.slf4j;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
+import build.jenesis.repository.walk.EndOfWalkConsumer;
 import build.jenesis.repository.walk.WalkConsumer;
 import build.jenesis.repository.walk.WalkPass;
 
@@ -18,7 +19,7 @@ import build.jenesis.repository.walk.WalkPass;
  * rides the walk instead of a daily pass of its own. Listens on the pointer stream only to be told which store's
  * pass it is riding.
  */
-public final class ListingRebuildConsumer implements WalkConsumer {
+public final class ListingRebuildConsumer extends EndOfWalkConsumer {
 
     /** The consumer's name: its toggle ({@code jenrepo.listing-rebuild}), its scenario, its settings row. */
     public static final String NAME = "listing-rebuild";
@@ -26,7 +27,6 @@ public final class ListingRebuildConsumer implements WalkConsumer {
     private static final Logger LOGGER = LoggerFactory.getLogger(ListingRebuildConsumer.class);
 
     private final List<StoredListing.Rebuilder> rebuilders;
-    private final Set<Object> riding = ConcurrentHashMap.newKeySet();
 
     public ListingRebuildConsumer() {
         this.rebuilders = StoredListing.Rebuilder.installed();
@@ -44,27 +44,13 @@ public final class ListingRebuildConsumer implements WalkConsumer {
     }
 
     @Override
-    public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) {
-        riding.add(store.identity());
-    }
-
-    @Override
-    public void onPassStarted(WalkPass pass, ArtifactStore store) {
-        riding.add(store.identity());
-    }
-
-    @Override
-    public void onPassCompleted(WalkPass pass, ArtifactStore store) {
-        if (!riding.remove(store.identity()) || rebuilders.isEmpty()) {
+    protected void atEnd(WalkPass pass, ArtifactStore store) throws IOException {
+        if (rebuilders.isEmpty()) {
             return;
         }
-        try {
-            int rebuilt = StoredListing.rebuildAll(store, rebuilders);
-            if (rebuilt > 0) {
-                LOGGER.info("listing-rebuild regenerated {} stored listing(s) after the walk", rebuilt);
-            }
-        } catch (IOException unrebuilt) {
-            throw new UncheckedIOException(unrebuilt);
+        int rebuilt = StoredListing.rebuildAll(store, rebuilders);
+        if (rebuilt > 0) {
+            LOGGER.info("listing-rebuild regenerated {} stored listing(s) after the walk", rebuilt);
         }
     }
 }

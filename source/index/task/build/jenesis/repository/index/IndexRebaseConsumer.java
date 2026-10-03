@@ -5,6 +5,7 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Features;
+import build.jenesis.repository.walk.EndOfWalkConsumer;
 import build.jenesis.repository.walk.WalkConsumer;
 import build.jenesis.repository.walk.WalkPass;
 
@@ -19,12 +20,10 @@ import build.jenesis.repository.walk.WalkPass;
  * <p>A chunk is immutable and cached by consumers, so this rebase is also what removes a retroactively withheld path
  * once the retraction flag was missed; carrying this consumer on no entry leaves the flag alone for that.
  */
-public final class IndexRebaseConsumer implements WalkConsumer {
+public final class IndexRebaseConsumer extends EndOfWalkConsumer {
 
     /** The consumer's name: its toggle ({@code jenrepo.index-rebase}) and how a walk entry names it. */
     public static final String NAME = "index-rebase";
-
-    private final Set<Object> riding = ConcurrentHashMap.newKeySet();
 
     @Override
     public String name() {
@@ -39,25 +38,8 @@ public final class IndexRebaseConsumer implements WalkConsumer {
     }
 
     @Override
-    public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) {
-        riding.add(store.identity());
-    }
-
-    @Override
-    public void onPassStarted(WalkPass pass, ArtifactStore store) {
-        riding.add(store.identity());
-    }
-
-    @Override
-    public void onPassCompleted(WalkPass pass, ArtifactStore store) {
-        if (!riding.remove(store.identity())) {
-            return;
-        }
-        try {
-            new PublishedIndexTask(Duration.ZERO, PublishedIndexTaskProvider.maxChunk(Features.settings()))
-                    .rebase(store, Instant.now());
-        } catch (IOException unrebased) {
-            throw new UncheckedIOException(unrebased);
-        }
+    protected void atEnd(WalkPass pass, ArtifactStore store) throws IOException {
+        new PublishedIndexTask(Duration.ZERO, PublishedIndexTaskProvider.maxChunk(Features.settings()))
+                .rebase(store, Instant.now());
     }
 }

@@ -9,6 +9,7 @@ import build.jenesis.repository.search.SearchMode;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Features;
+import build.jenesis.repository.walk.EndOfWalkConsumer;
 import build.jenesis.repository.walk.WalkConsumer;
 import build.jenesis.repository.walk.WalkPass;
 import build.jenesis.repository.walk.WalkProvider;
@@ -22,14 +23,12 @@ import build.jenesis.repository.walk.WalkProvider;
  * such repository. The document count and snapshot size are reported as {@code jenrepo.search.*}. It listens on the
  * pointer stream only to learn which store's pass it rides.
  */
-public final class SearchRebuildConsumer implements WalkConsumer {
+public final class SearchRebuildConsumer extends EndOfWalkConsumer {
 
     /** The consumer's name: its toggle ({@code jenrepo.search-rebuild}) and how a walk entry names it. */
     public static final String NAME = "search-rebuild";
 
     private static final Map<Object, Map<String, Double>> LAST = new ConcurrentHashMap<>();
-
-    private final Set<Object> riding = ConcurrentHashMap.newKeySet();
 
     /** Each store's repository configuration, handed over before the pass over it starts. */
     private final Map<Object, UnaryOperator<String>> configs = new ConcurrentHashMap<>();
@@ -52,40 +51,23 @@ public final class SearchRebuildConsumer implements WalkConsumer {
     }
 
     @Override
-    public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) {
-        riding.add(store.identity());
-    }
-
-    @Override
-    public void onPassStarted(WalkPass pass, ArtifactStore store) {
-        riding.add(store.identity());
-    }
-
-    @Override
-    public void onPassCompleted(WalkPass pass, ArtifactStore store) {
+    protected void atEnd(WalkPass pass, ArtifactStore store) throws IOException {
         UnaryOperator<String> config = configs.remove(store.identity());
-        if (!riding.remove(store.identity())) {
-            return;
-        }
         // A driver that names no repository hands no configuration, and the deployment's answers for it.
         UnaryOperator<String> effective = config == null ? Features.settings() : config;
-        try {
-            if (SearchMode.of(effective) != SearchMode.FULL_TEXT) {
-                SearchIndex index = new SearchIndex(store);
-                if (index.exists()) {
-                    index.remove();
-                }
-                LAST.remove(store.identity());
-                return;
+        if (SearchMode.of(effective) != SearchMode.FULL_TEXT) {
+            SearchIndex index = new SearchIndex(store);
+            if (index.exists()) {
+                index.remove();
             }
-            Map<String, Double> gauges = new ConcurrentHashMap<>();
-            new SearchIndexTask(Duration.ZERO, WalkProvider.resolve(Features.settings()).orElse(null))
-                    .rebuild(store, SearchIndexTaskProvider.CLAIM.resolve(effective), LicenseTable.of(effective),
-                            (name, description, value) -> gauges.put(name, value));
-            LAST.put(store.identity(), gauges);
-        } catch (IOException unrebuilt) {
-            throw new UncheckedIOException(unrebuilt);
+            LAST.remove(store.identity());
+            return;
         }
+        Map<String, Double> gauges = new ConcurrentHashMap<>();
+        new SearchIndexTask(Duration.ZERO, WalkProvider.resolve(Features.settings()).orElse(null))
+                .rebuild(store, SearchIndexTaskProvider.CLAIM.resolve(effective), LicenseTable.of(effective),
+                        (name, description, value) -> gauges.put(name, value));
+        LAST.put(store.identity(), gauges);
     }
 
     /** The last rebuild's gauges, summed over the repositories this node rebuilt, on the observability report. */

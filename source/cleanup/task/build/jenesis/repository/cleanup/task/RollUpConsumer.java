@@ -5,6 +5,7 @@ import module java.base;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.walk.EndOfWalkConsumer;
 import build.jenesis.repository.walk.WalkConsumer;
 import build.jenesis.repository.walk.WalkPass;
 
@@ -14,12 +15,10 @@ import build.jenesis.repository.walk.WalkPass;
  * pass, whose per-segment partials are bound to that pass's segments. The publish observers keep totals incrementally;
  * this is the repair, on the {@code retention} entry, daily by default.
  */
-public final class RollUpConsumer implements WalkConsumer {
+public final class RollUpConsumer extends EndOfWalkConsumer {
 
     /** The consumer's name: its walk-entry name and its toggle ({@code jenrepo.rollup}). */
     public static final String NAME = "rollup";
-
-    private final Set<Object> riding = ConcurrentHashMap.newKeySet();
 
     @Override
     public String name() {
@@ -33,24 +32,7 @@ public final class RollUpConsumer implements WalkConsumer {
     }
 
     @Override
-    public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) {
-        riding.add(store.identity());
-    }
-
-    @Override
-    public void onPassStarted(WalkPass pass, ArtifactStore store) {
-        riding.add(store.identity());
-    }
-
-    @Override
-    public void onPassCompleted(WalkPass pass, ArtifactStore store) {
-        if (!riding.remove(store.identity())) {
-            return;
-        }
-        try {
-            new StoreRepositoryInventory(store).rollUpSizes();
-        } catch (IOException unrolled) {
-            throw new UncheckedIOException(unrolled);
-        }
+    protected void atEnd(WalkPass pass, ArtifactStore store) throws IOException {
+        new StoreRepositoryInventory(store).rollUpSizes();
     }
 }
