@@ -3,6 +3,7 @@ package build.jenesis.repository.web.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.audit.AuditActions;
+import build.jenesis.repository.store.HeldWrites;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.management.web.CachesAdminController;
 import build.jenesis.repository.management.web.ManagementController;
@@ -240,5 +241,52 @@ class ManagementWebTest {
             assertThat(row.tenant()).isEqualTo("acme");
             assertThat(row.actor()).isEqualTo(Authorization.hash("operator-key"));
         });
+    }
+
+    @Test
+    void a_flush_asks_every_held_write_to_land_answers_what_each_held_and_is_recorded() throws IOException {
+        AtomicInteger asked = new AtomicInteger();
+        HeldWrites.Holder holder = new HeldWrites.Holder() {
+            @Override
+            public String what() {
+                return "test counts";
+            }
+
+            @Override
+            public String cadence() {
+                return "every PT6H";
+            }
+
+            @Override
+            public long pending() {
+                return asked.get() == 0 ? 4 : 0;
+            }
+
+            @Override
+            public void writeNow() {
+                asked.incrementAndGet();
+            }
+        };
+        HeldWrites.hold(holder);
+        try {
+            CachesAdminController caches = new CachesAdminController(audit, Authorization.enforcing(store),
+                    Web.routing(Web.repositories(store), "acme", "ops"));
+
+            assertThat(caches.caches().held()).as("what the node holds is listed beside its caches")
+                    .contains(new HeldWrites.Held("test counts", "every PT6H", 4));
+            CachesAdminController.FlushedView flushed = caches.flush("operator-key",
+                    Servlets.request("POST", "/api/admin/caches/flush"));
+
+            assertThat(asked).as("the holder was asked to write").hasValue(1);
+            assertThat(flushed.asked()).as("the answer says what was held when asked")
+                    .contains(new HeldWrites.Held("test counts", "every PT6H", 4));
+            assertThat(audit.rows()).singleElement().satisfies(row -> {
+                assertThat(row.action()).isEqualTo(AuditActions.CACHES_FLUSH);
+                assertThat(row.tenant()).isEqualTo("acme");
+                assertThat(row.actor()).isEqualTo(Authorization.hash("operator-key"));
+            });
+        } finally {
+            HeldWrites.release(holder);
+        }
     }
 }

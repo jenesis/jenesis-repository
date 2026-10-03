@@ -2,6 +2,8 @@ package build.jenesis.repository.server.spi;
 
 import module java.base;
 
+import build.jenesis.repository.store.HeldWrites;
+
 /**
  * A bounded in-memory queue drained by one worker thread in batches: the shape every best-effort tracker here has -
  * the request path offers a hit and never blocks, a full queue drops rather than back-pressures, and the worker
@@ -16,6 +18,9 @@ import module java.base;
  * for; when the queue is full the hit is counted as dropped and the request proceeds. A tracker whose store is
  * failing therefore shows on the health surface as dropping, not as slow requests.
  *
+ * <p><b>Held, and written on request.</b> A running worker is one of the node's {@link HeldWrites}: it says what it
+ * holds, and {@link #writeNow} asks it to write all of it after the batch it is folding, on its own thread.
+ *
  * <p><b>Close is a join, not a flush.</b> Asking the worker to stop and joining it with a grace window is all this
  * class does. It asks by waking the worker's poll with a stop marker rather than by interrupting it: an interrupt
  * that lands inside a batch's store write closes the file channel under it, so a write that landed answers as
@@ -25,10 +30,13 @@ import module java.base;
  *
  * @param <H> the hit type the request path offers
  */
-public abstract class BatchingWorker<H> {
+public abstract class BatchingWorker<H> implements HeldWrites.Holder {
 
     /** What {@link #close} queues to wake a worker waiting on an empty queue; never handed to {@link #drain}. */
     private static final Object STOP = new Object();
+
+    /** What {@link #writeNow} queues to wake the worker; never handed to {@link #drain}. */
+    private static final Object WRITE = new Object();
 
     /** The hits, and at most one {@link #STOP} once the worker has been asked to stop. */
     private final BlockingQueue<Object> queue;
@@ -37,6 +45,7 @@ public abstract class BatchingWorker<H> {
     private final boolean enabled;
     private final AtomicLong dropped = new AtomicLong();
     private volatile boolean running;
+    private volatile boolean writeRequested;
     // Written by start() and read by close(), which may run on different threads, so published safely - a stale
     // null in close() would neither interrupt nor join the worker and leak the thread on shutdown.
     private volatile Thread thread;
@@ -83,6 +92,22 @@ public abstract class BatchingWorker<H> {
         Thread worker = new Thread(this::loop, threadName);
         thread = worker;
         worker.start();
+        HeldWrites.hold(this);
+    }
+
+    /**
+     * Ask the worker to write everything it holds after the batch it is folding: it drains what is queued and hands
+     * it to {@link #onWriteRequested} on its own thread, the one that owns the accumulators, so the request never races
+     * a drain. A full queue refuses the wake-up, which costs nothing: a worker with a full queue is not waiting, and it
+     * reads the request after its batch. A worker that is not running holds nothing to write.
+     */
+    @Override
+    public final void writeNow() {
+        if (!running) {
+            return;
+        }
+        writeRequested = true;
+        queue.offer(WRITE);
     }
 
     /** Stop the worker: ask it to stop after the batch it is folding, join it for ten seconds, then hand the subclass
@@ -90,6 +115,7 @@ public abstract class BatchingWorker<H> {
      *  subclass must not flush over it. A full queue refuses the stop marker, which costs nothing: a worker with a
      *  full queue is not waiting, and it reads the cleared flag after its batch. */
     public void close() {
+        HeldWrites.release(this);
         running = false;
         Thread worker = thread;
         boolean terminated = worker == null;
@@ -109,6 +135,12 @@ public abstract class BatchingWorker<H> {
      *  it mutates is quiescent and a final flush is safe. When {@code false} the worker is still running and its
      *  next drain owns the tail; touching shared counters here would race it. */
     protected void onClosed(boolean terminated) {
+    }
+
+    /** On the worker's thread, after {@link #writeNow}: write everything held, cadence or not, the queue's tail
+     *  included ({@link #drainQueue}). Does nothing by default; a failure in it is reported through
+     *  {@link #onIterationFailure}. */
+    protected void onWriteRequested(Instant now) {
     }
 
     /** A drain iteration threw. The worker stays alive regardless; a subclass may log, back off or both. */
@@ -133,7 +165,7 @@ public abstract class BatchingWorker<H> {
     private List<H> hits(List<Object> taken) {
         List<H> hits = new ArrayList<>(taken.size());
         for (Object each : taken) {
-            if (each != STOP) {
+            if (each != STOP && each != WRITE) {
                 hits.add((H) each);
             }
         }
@@ -158,7 +190,7 @@ public abstract class BatchingWorker<H> {
                 if (first == STOP) {
                     continue;
                 }
-                if (first != null) {
+                if (first != null && first != WRITE) {
                     List<Object> taken = new ArrayList<>();
                     taken.add(first);
                     queue.drainTo(taken);
@@ -166,8 +198,12 @@ public abstract class BatchingWorker<H> {
                     if (!batch.isEmpty()) {
                         drain(batch, Instant.now());
                     }
-                } else {
+                } else if (first == null) {
                     onIdle(Instant.now());
+                }
+                if (writeRequested) {
+                    writeRequested = false;
+                    onWriteRequested(Instant.now());
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

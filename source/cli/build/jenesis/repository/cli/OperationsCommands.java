@@ -63,8 +63,12 @@ final class OperationsCommands {
             System.out.println(CliSupport.client(home).operations().cachesClear());
             return 0;
         }
+        if (args.length == 2 && args[1].equals("flush")) {
+            System.out.println(CliSupport.client(home).operations().cachesFlush());
+            return 0;
+        }
         if (args.length != 1) {
-            throw new IllegalArgumentException("Usage: caches [clear]");
+            throw new IllegalArgumentException("Usage: caches [clear|flush]");
         }
         System.out.println(CliSupport.client(home).operations().caches());
         return 0;

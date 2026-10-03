@@ -309,6 +309,7 @@ public class CliRequestShapeTest {
             action("posture [--tenant N]", "posture --tenant acme", get("/api/admin/posture", "tenant")),
             action("caches", "caches", get("/api/admin/caches")),
             action("caches clear", "caches clear", post("/api/admin/caches/clear")),
+            action("caches flush", "caches flush", post("/api/admin/caches/flush")),
             action("walks", "walks", get("/api/admin/walks")),
             action("walks run", "walks run", post("/api/admin/walks/run")),
             action("consistency", "consistency", get("/api/admin/consistency")),

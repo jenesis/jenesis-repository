@@ -316,11 +316,15 @@ public final class Commands {
                     noun("posture", "the security-posture report", 
                             OperationsCommands::posture,
                             act("posture [--tenant N]", "every advisor's verdict on this deployment")),
-                    noun("caches", "the read caches over the store, on the node this tool is pointed at",
+                    noun("caches", "the read caches over the store, and the writes held in memory, on the node this "
+                                    + "tool is pointed at",
                             OperationsCommands::caches,
-                            act("caches", "every cache on that node: ttl, hits, misses, entries"),
+                            act("caches", "every cache on that node: ttl, hits, misses, entries; and what it holds "
+                                    + "unwritten"),
                             act("caches clear", "drop every entry on that node, and every node's authorization "
-                                    + "cache - the listings are a pod, the grants are the fleet")),
+                                    + "cache - the listings are a pod, the grants are the fleet"),
+                            act("caches flush", "write what that node holds in memory now - download counts, "
+                                    + "credential use, deferred counters - rather than on its cadence")),
                     noun("walks", "walks of the store: the schedule, what each costs, and asking for one",
                             OperationsCommands::walks,
                             act("walks", "every scheduled walk with the consumers that ride it and what its last "

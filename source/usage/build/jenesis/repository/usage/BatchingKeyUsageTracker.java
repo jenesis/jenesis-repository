@@ -60,6 +60,40 @@ public final class BatchingKeyUsageTracker extends BatchingWorker<BatchingKeyUsa
         }
     }
 
+    @Override
+    public String what() {
+        return "credential use";
+    }
+
+    @Override
+    public String cadence() {
+        return "once a UTC day per credential";
+    }
+
+    /** The credentials holding uses not yet written, and the uses still queued. */
+    @Override
+    public long pending() {
+        long credentials = pending.values().stream().filter(value -> {
+            synchronized (value) {
+                return value.count > value.flushed;
+            }
+        }).count();
+        return credentials + queueDepth();
+    }
+
+    /** Asked to write now: fold what is queued and write every credential's delta, one already written today
+     *  included. */
+    @Override
+    protected void onWriteRequested(Instant now) {
+        for (Hit hit : drainQueue()) {
+            accumulate(hit, now);
+        }
+        LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
+        for (Map.Entry<String, Pending> entry : pending.entrySet()) {
+            flush(entry.getKey(), entry.getValue(), today);
+        }
+    }
+
     /**
      * The worker has terminated (or was never started), so every accumulator is quiescent. Drains what the stopped
      * worker left queued, so a clean shutdown forfeits no accepted hit, then flushes every residual delta, including

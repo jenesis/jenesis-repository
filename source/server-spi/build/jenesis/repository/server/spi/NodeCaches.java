@@ -1,6 +1,8 @@
 package build.jenesis.repository.server.spi;
 
 import module java.base;
+
+import build.jenesis.repository.store.HeldWrites;
 import build.jenesis.repository.store.StoreCache;
 
 /**
@@ -15,6 +17,9 @@ import build.jenesis.repository.store.StoreCache;
  * calls {@link Authorization#invalidateAcrossNodes()}, which bumps one small document every node reads on its own
  * schedule. The answer says which half went where, because "cleared" over a fleet is otherwise read as more than it
  * is.
+ *
+ * <p>Beside the read caches sit the writes this node holds before it lands them ({@link HeldWrites}): what each holds,
+ * and the act that asks them all to write now, node-local for the same reason.
  */
 public final class NodeCaches {
 
@@ -29,6 +34,20 @@ public final class NodeCaches {
      *  rest of the fleet. The last is not decoration - an open deployment holds no grants and keeps no epoch, so it
      *  answers {@code false}, and without it a caller reads one node's count as a fleet-wide result. */
     public record Cleared(String node, int cleared, boolean grantsEverywhere) {
+    }
+
+    /** What a write-now asked: whose held writes, and what each held when asked. */
+    public record Written(String node, List<HeldWrites.Held> asked) {
+    }
+
+    /** What this node holds unwritten - {@link HeldWrites#held()}. */
+    public static List<HeldWrites.Held> held() {
+        return HeldWrites.held();
+    }
+
+    /** Ask every held write on this node to land now - {@link HeldWrites#writeNow()} - and answer what each held. */
+    public static Written writeHeld() {
+        return new Written(node(), HeldWrites.writeNow());
     }
 
     /** Every cache on this node, by name. */

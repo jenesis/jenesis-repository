@@ -115,6 +115,37 @@ public final class BatchingDownloadTracker extends BatchingWorker<DownloadTracke
         flush(now, false);
     }
 
+    @Override
+    public String what() {
+        return "download counts";
+    }
+
+    @Override
+    public String cadence() {
+        return flushInterval == null ? "as they arrive" : "every " + flushInterval + " per version "
+                + "(download-flush-interval)";
+    }
+
+    /** The versions holding hits not yet written, and the hits still queued. */
+    @Override
+    public long pending() {
+        long versions = pending.values().stream().filter(value -> {
+            synchronized (value) {
+                return value.count > value.flushed;
+            }
+        }).count();
+        return versions + queueDepth();
+    }
+
+    /** Asked to write now: fold what is queued and write every version's delta, interval or not. */
+    @Override
+    protected void onWriteRequested(Instant now) {
+        for (Hit hit : drainQueue()) {
+            accumulate(hit, now);
+        }
+        flush(now, true);
+    }
+
     /**
      * The worker has terminated (or was never started), so every accumulator is quiescent: drain what the
      * stopped worker left queued and flush every residual delta, interval or not, so a clean shutdown forfeits

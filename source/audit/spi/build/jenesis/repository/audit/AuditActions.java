@@ -48,6 +48,9 @@ public final class AuditActions {
     /** The node-local read caches over the store dropped - one node, never the fleet. */
     public static final String CACHES_CLEAR = action("caches.clear");
 
+    /** The writes one node held in memory asked to land now - one node, never the fleet. */
+    public static final String CACHES_FLUSH = action("caches.flush");
+
     /** A walk of the store requested by an operator - a standing request the next scheduler tick runs. */
     public static final String WALKS_RUN = action("walks.run");
 

@@ -85,6 +85,33 @@ public final class StoredCounter {
     private static final AtomicReference<ScheduledExecutorService> FLUSHER = new AtomicReference<>();
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(StoredCounter.class);
 
+    /** The deferred deltas as the node's held writes list them, written now on a thread of their own. */
+    private static final HeldWrites.Holder HOLDER = new HeldWrites.Holder() {
+        @Override
+        public String what() {
+            return "deferred counters";
+        }
+
+        @Override
+        public String cadence() {
+            return "every " + flushCadence() + " (" + FLUSH_SETTING + ")";
+        }
+
+        @Override
+        public long pending() {
+            return held();
+        }
+
+        @Override
+        public void writeNow() {
+            Thread.ofVirtual().name("jenesis-counter-flush-now").start(StoredCounter::flushNow);
+        }
+    };
+
+    static {
+        HeldWrites.hold(HOLDER);
+    }
+
     /** A key's deltas this process has not yet written, with the counter that will write them. */
     private static final class Deferred {
         private final StoredCounter counter;

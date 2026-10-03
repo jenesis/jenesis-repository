@@ -33,6 +33,15 @@ public final class OperationsClient extends ClientCalls {
         return response.body();
     }
 
+    /** Ask every write the node this client is pointed at holds in memory - download counts, credential use,
+     *  deferred counters - to land now rather than on its cadence; answers what each held. Node-local: every other
+     *  node writes its own on its cadence. */
+    public String cachesFlush() throws IOException, InterruptedException {
+        HttpResponse<String> response = send("POST", "/api/admin/caches/flush", null, null);
+        require(response, 200, "write the node's held counts");
+        return response.body();
+    }
+
     /** The standing requests for work - a walk of the store among them. */
     public String walks() throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET", "/api/admin/walks", null, null);

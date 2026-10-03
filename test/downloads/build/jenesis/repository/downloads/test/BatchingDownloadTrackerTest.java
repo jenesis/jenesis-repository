@@ -8,6 +8,8 @@ import build.jenesis.repository.inventory.DownloadTrackerProvider;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.HeldWrites;
+import build.jenesis.repository.inventory.DownloadsSection;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import build.jenesis.repository.store.testkit.FaultInjectingStore.Op;
 
@@ -180,5 +182,50 @@ class BatchingDownloadTrackerTest {
         store.heal();
         tracker.drain(List.of(hit(COORD, VERSION)), T0.plusSeconds(1));
         assertThat(lastDownloaded(COORD, VERSION)).as("retried, not lost").contains(T0.plusSeconds(1));
+    }
+
+    @Test
+    void a_running_tracker_lists_what_it_holds_and_writes_it_when_asked_rather_than_after_its_interval()
+            throws Exception {
+        tracker.start();
+        try {
+            tracker.record(hit(COORD, VERSION));
+            await(() -> downloads() == 1);
+            tracker.record(hit(COORD, VERSION));
+            tracker.record(hit(COORD, VERSION));
+            await(() -> tracker.pending() == 1 && tracker.queueDepth() == 0);
+
+            assertThat(HeldWrites.held()).as("the node lists what it holds unwritten").contains(
+                    new HeldWrites.Held("download counts", "every PT6H per version (download-flush-interval)", 1));
+            assertThat(downloads()).as("held for the interval").isEqualTo(1);
+
+            HeldWrites.writeNow();
+
+            await(() -> downloads() == 3);
+            assertThat(tracker.pending()).isZero();
+        } finally {
+            tracker.close();
+        }
+        assertThat(HeldWrites.held()).as("a closed tracker holds nothing")
+                .noneMatch(held -> held.what().equals("download counts"));
+    }
+
+    private long downloads() throws IOException {
+        return new StoreRepositoryInventory(store).downloads(ECO, COORD, VERSION)
+                .map(DownloadsSection.Facts::count).orElse(0L);
+    }
+
+    @FunctionalInterface
+    private interface Condition {
+        boolean holds() throws IOException;
+    }
+
+    /** Wait for the worker thread, which writes on its own: ten seconds is far past one drain on a busy machine. */
+    private static void await(Condition condition) throws IOException, InterruptedException {
+        Instant deadline = Instant.now().plusSeconds(10);
+        while (!condition.holds()) {
+            assertThat(Instant.now()).as("the worker did not get there").isBefore(deadline);
+            Thread.sleep(20);
+        }
     }
 }
