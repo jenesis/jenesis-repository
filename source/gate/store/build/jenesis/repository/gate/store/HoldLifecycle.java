@@ -224,6 +224,71 @@ public final class HoldLifecycle {
     }
 
     /**
+     * Release the version {@code path} belongs to: every file of it held for review, {@code path} first, each through
+     * {@link #release(ArtifactStore, String, Iterable)}. A version is reviewed whole - a jar is no use without its POM,
+     * and a file left held would answer for the version a reviewer cleared - so the API and the console release
+     * versions. A path whose recorded subject names no version is released alone. Answers the paths released.
+     *
+     * @throws IllegalStateException when nothing is quarantined at {@code path}
+     */
+    public static List<String> releaseVersion(ArtifactStore store, String path, Iterable<HoldReleaseObserver> hooks)
+            throws IOException {
+        if (new Publication(store).blob("/quarantine" + path).isEmpty()) {
+            throw new IllegalStateException("Nothing quarantined at " + path);
+        }
+        List<String> released = new ArrayList<>();
+        for (String held : versionOf(store, path)) {
+            if (new Publication(store).blob("/quarantine" + held).isPresent()) {
+                release(store, held, hooks);
+                released.add(held);
+            }
+        }
+        return List.copyOf(released);
+    }
+
+    /** {@link #releaseVersion(ArtifactStore, String, Iterable)} with the discovered observers. */
+    public static List<String> releaseVersion(ArtifactStore store, String path) throws IOException {
+        return releaseVersion(store, path, HoldReleaseObserver.discovered());
+    }
+
+    /**
+     * Discard the version {@code path} belongs to: every file of it held for review, {@code path} first, each through
+     * {@link #discard(ArtifactStore, String, Iterable)}. Answers the paths discarded - none when nothing is held at
+     * {@code path}, so a duplicate or stale discard touches nothing.
+     */
+    public static List<String> discardVersion(ArtifactStore store, String path, Iterable<HoldReleaseObserver> hooks)
+            throws IOException {
+        if (new Publication(store).blob("/quarantine" + path).isEmpty()) {
+            return List.of();
+        }
+        List<String> discarded = new ArrayList<>();
+        for (String held : versionOf(store, path)) {
+            if (discard(store, held, hooks)) {
+                discarded.add(held);
+            }
+        }
+        return List.copyOf(discarded);
+    }
+
+    /** {@link #discardVersion(ArtifactStore, String, Iterable)} with the discovered observers. */
+    public static List<String> discardVersion(ArtifactStore store, String path) throws IOException {
+        return discardVersion(store, path, HoldReleaseObserver.discovered());
+    }
+
+    /** The held paths of the version {@code path} belongs to, {@code path} first; {@code path} alone where its
+     *  recorded subject names no version. */
+    private static SequencedSet<String> versionOf(ArtifactStore store, String path) throws IOException {
+        SequencedSet<String> paths = new LinkedHashSet<>();
+        paths.add(path);
+        Optional<HeldSubjects.Subject> subject = HeldSubjects.read(store, path).filter(HeldSubjects.Subject::versioned);
+        if (subject.isPresent()) {
+            paths.addAll(HeldSubjects.paths(store, subject.get().ecosystem(), subject.get().coordinate(),
+                    subject.get().version()));
+        }
+        return paths;
+    }
+
+    /**
      * Discard a quarantined path without releasing it: reap the quarantine log rows, findings document and
      * {@code holds/} records through the discovered observers, evict a retroactive hold's still-held release pointer,
      * and clear the hold. Returns {@code false} - touching nothing - when no live hold exists at {@code path}, so a

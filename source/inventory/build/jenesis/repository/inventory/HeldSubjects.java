@@ -249,6 +249,16 @@ public final class HeldSubjects {
         return paths;
     }
 
+    /** Whether a path of a version other than {@code path} is held for review: one page of at most two names of its
+     *  version face. */
+    public static boolean heldBesides(ArtifactStore store, String ecosystem, String coordinate, String version,
+                                      String path) {
+        String own = digest(path);
+        boolean[] other = new boolean[1];
+        store.page(versionRoot(ecosystem, coordinate, version), "", 2, name -> other[0] |= !name.equals(own));
+        return other[0];
+    }
+
     /** Drop the record for one held path - called beside the {@code /quarantine} pointer clear that ends the hold,
      *  never on a schedule and never because a module is absent. Delete-if-present on both faces, so a retry after a
      *  crash converges; the version face is reached through the row's own recorded coordinate, so a format that has

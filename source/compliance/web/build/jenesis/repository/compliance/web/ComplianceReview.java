@@ -44,6 +44,7 @@ import build.jenesis.repository.health.HealthLedgerProvider;
 import build.jenesis.repository.icon.Mark;
 import build.jenesis.repository.icon.Marks;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
+import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
 import build.jenesis.repository.store.ArtifactStore;
@@ -284,12 +285,17 @@ public class ComplianceReview extends TenantScope {
                         row.since() == null ? "" : row.since().toString(), row.last())).toList(), page.next());
     }
 
+    /** Release the version {@code path} belongs to - every file of it held for review. A path no longer held was
+     *  released with its version by an earlier call for another of its files, and is passed over. */
     public void releaseQuarantined(String repository, String path) throws IOException {
         RepositoryRequests.rejectTraversal(path);
+        if (new Publication(scope(repository)).blob("/quarantine" + path).isEmpty()) {
+            return;
+        }
         // Audited first, as the API's release is, so a crash leaves it recorded.
         audit(AuditActions.QUARANTINE_RELEASE, repository + path);
         // The primitive the API uses, with its crash-window ordering.
-        HoldLifecycle.release(scope(repository), path);
+        HoldLifecycle.releaseVersion(scope(repository), path);
     }
 
     /**
@@ -303,7 +309,7 @@ public class ComplianceReview extends TenantScope {
         RepositoryRequests.rejectTraversal(path);
         // Audited first, as the release is.
         audit(AuditActions.QUARANTINE_DISCARD, repository + path);
-        return HoldLifecycle.discard(scope(repository), path);
+        return !HoldLifecycle.discardVersion(scope(repository), path).isEmpty();
     }
 
     /**

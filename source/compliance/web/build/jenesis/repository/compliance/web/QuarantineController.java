@@ -103,10 +103,16 @@ public class QuarantineController {
         List<String> paths = request.targets();
         paths.forEach(RepositoryRequests::rejectTraversal);
         GatedRepository gated = new GatedRepository(repositories.writable(tenant, repo));
+        // A release releases the whole version, so a path a release earlier in this request took with it is done.
+        Set<String> released = new HashSet<>();
         for (String path : paths) {
+            String held = repositories.formatPath(tenant, repo, path);
+            if (released.contains(held)) {
+                continue;
+            }
             // Audited first, so a crash never leaves it unrecorded; the trail is best-effort and cannot block it.
             audit(tenant, key, AuditActions.QUARANTINE_RELEASE, repo + path);
-            gated.release(repositories.formatPath(tenant, repo, path));
+            released.addAll(gated.release(held));
         }
         response.setStatus(200);
     }
@@ -128,10 +134,16 @@ public class QuarantineController {
         GatedRepository gated = new GatedRepository(repositories.writable(tenant, repo));
         List<String> discarded = new ArrayList<>();
         List<String> absent = new ArrayList<>();
+        // A discard discards the whole version, so a path a discard earlier in this request took with it is done.
+        Set<String> dropped = new HashSet<>();
         for (String path : paths) {
-            // Audited first, as the release is.
-            audit(tenant, key, AuditActions.QUARANTINE_DISCARD, repo + path);
-            (gated.discard(repositories.formatPath(tenant, repo, path)) ? discarded : absent).add(path);
+            String held = repositories.formatPath(tenant, repo, path);
+            if (!dropped.contains(held)) {
+                // Audited first, as the release is.
+                audit(tenant, key, AuditActions.QUARANTINE_DISCARD, repo + path);
+                dropped.addAll(gated.discard(held));
+            }
+            (dropped.contains(held) ? discarded : absent).add(path);
         }
         response.setStatus(200);
         return new Discarded(discarded, absent);

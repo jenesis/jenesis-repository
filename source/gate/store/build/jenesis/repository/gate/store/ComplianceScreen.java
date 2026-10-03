@@ -15,6 +15,7 @@ import build.jenesis.repository.findings.Finding;
 import build.jenesis.repository.findings.FindingsProvider;
 import build.jenesis.repository.findings.WaiverLabels;
 import build.jenesis.repository.health.HealthLedgerProvider;
+import build.jenesis.repository.inventory.HeldSubjects;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
@@ -460,8 +461,31 @@ public final class ComplianceScreen implements PublishInterceptor {
         void run() throws IOException;
     }
 
+    /**
+     * The screen's verdict, holding the upload with its version when another file of that version is already held for
+     * review: a version is reviewed whole, and a file arriving while it waits - a Maven sources jar, another wheel -
+     * would otherwise serve beside the files a reviewer has not cleared. An upload the gate refuses stays refused, and
+     * a release replaying a held file's dispatch is not held again by the siblings it is releasing with it.
+     */
     @Override
     public Disposition assess(ArtifactDescriptor artifact, Content content) throws IOException {
+        Disposition screened = screen(artifact, content);
+        if (screened == Disposition.REJECT || RELEASING.get() || artifact.ecosystem() == null
+                || artifact.coordinate() == null || artifact.version() == null
+                || !HeldSubjects.heldBesides(content.store(), artifact.ecosystem(), artifact.coordinate(),
+                        artifact.version(), artifact.path())) {
+            return screened;
+        }
+        ComplianceGate.Assessment before = assessed.get();
+        List<ComplianceGate.Finding> findings = new ArrayList<>(before == null ? List.of() : before.findings());
+        findings.add(new ComplianceGate.Finding(Verdict.QUARANTINE, artifact.coordinate() + ":" + artifact.version()
+                + " is held for review, so a file arriving for it is held with it", ComplianceGate.Reachability.UNKNOWN,
+                null, VERSION_HELD_RULE));
+        assessed.set(new ComplianceGate.Assessment(Verdict.QUARANTINE, List.copyOf(findings)));
+        return Disposition.QUARANTINE;
+    }
+
+    private Disposition screen(ArtifactDescriptor artifact, Content content) throws IOException {
         assessed.remove();
         subjects.remove();
         unparseable.remove();
@@ -579,6 +603,9 @@ public final class ComplianceScreen implements PublishInterceptor {
         }
         return List.copyOf(rules);
     }
+
+    /** The rule a file arriving at a version already held for review is held for. */
+    static final String VERSION_HELD_RULE = "Version held";
 
     /** The rule an upload no inspector could parse is held for. */
     static final String UNREADABLE_RULE = "Unreadable artifact";
