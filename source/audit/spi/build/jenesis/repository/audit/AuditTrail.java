@@ -18,7 +18,9 @@ public interface AuditTrail {
     }
 
     /** A bounded slice of a tenant's trail: the page's events (newest first) and whether older events remain, so a
-     *  render pages rather than pulling the whole trail. */
+     *  render pages rather than pulling the whole trail. A page may hold fewer events than asked for, or none, and
+     *  still have more: a trail that must read an event to filter it stops at a bound on what one page reads, and its
+     *  {@code next} carries on from where it stopped. */
     record Page(List<Event> events, boolean more, String next) {
 
         public Page {

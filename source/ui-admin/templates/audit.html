@@ -32,9 +32,16 @@
             </tbody>
         </table>
     </figure>
-    <th:block th:if="${events.isEmpty()}">
+    <th:block th:if="${events.isEmpty() and !more}">
         <div th:replace="~{base :: empty(${'No audit events recorded for this ' + scopeWord + ' yet.'})}"></div>
     </th:block>
+    <!--/* A page short of its limit that has more stopped at the trail's bound on events read, so older events may
+         still match; the bound is shown, never left to read as the end of the trail. */-->
+    <th:block th:if="${events.isEmpty() and more}">
+        <div th:replace="~{base :: empty('None of the events read for this page match. Older events may: Older carries on where it stopped.')}"></div>
+    </th:block>
+    <p th:if="${more and !events.isEmpty() and events.size() < limit}"><small>This page stopped after reading as many
+        events as one page may, so older events may still match: Older carries on where it stopped.</small></p>
     <nav th:if="${hasPrev or more}" aria-label="Audit trail pages">
         <a th:if="${hasPrev}" th:href="@{/ui/admin/audit(action=${action},limit=${limit})}">Newest</a>
         <a th:if="${more}" th:href="@{/ui/admin/audit(action=${action},after=${next},limit=${limit})}">Older</a>
