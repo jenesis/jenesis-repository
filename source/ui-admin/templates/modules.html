@@ -42,21 +42,14 @@
                           title="This module has no enable flag; it is active whenever it is installed.">always on</span>
                     <span class="app-badge app-badge--danger" th:if="${m.orphaned()}"
                           title="This module's declared key-spaces still hold data. Nothing is deleted automatically; purge it explicitly if the removal was intentional.">orphaned data</span>
-                    <!--/* A boolean enable flag is the same switch every setting is: it flips at once and posts the
-                         opposite value through the settings write path after the grace (console.js). A numeric gate (a
-                         ceiling) or an ungated module has no switch. */-->
-                    <form method="post" th:action="@{/ui/settings/save}" class="module-toggle setting-switch"
-                          th:if="${m.installed and m.gated and m.toggleable}" data-grace="5">
-                        <input type="hidden" name="key" th:value="${m.enableKey}">
-                        <input type="hidden" name="value" th:value="${m.toggleValue()}">
-                        <button type="submit" role="switch" class="app-switch"
-                                th:attr="aria-checked=${m.enabled},aria-label=|${m.module} enabled|">
-                            <span class="app-switch__track" aria-hidden="true"></span>
-                            <span class="app-switch__state" th:text="${m.enabled} ? 'On' : 'Off'">On</span>
-                        </button>
-                        <span class="app-switch__slot"></span>
-                        <small class="app-switch__pending" aria-live="polite"></small>
-                    </form>
+                    <!--/* A module's on/off gate is a setting, drawn as every switch is. A numeric gate (a ceiling)
+                         or an ungated module has no switch. */-->
+                    <th:block th:if="${m.installed}" th:with="g=${m.gate().orElse(null)}">
+                        <th:block th:if="${g != null}">
+                            <div th:replace="~{fragments :: settingSwitch(${g}, '/ui/settings/save', null,
+                                    |Apply this high-impact change to ${m.module}?|)}"></div>
+                        </th:block>
+                    </th:block>
                 </div>
             </div>
             <p class="setting-doc" th:if="${m.installed and m.gated and !m.toggleable}"><small>Enabled by setting its

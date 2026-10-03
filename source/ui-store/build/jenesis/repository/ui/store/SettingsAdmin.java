@@ -837,10 +837,11 @@ public class SettingsAdmin {
             return gated && !live;
         }
 
-        /** The value a boolean toggle posts to flip this module's gate: {@code false} when it is on, {@code true} when
-         *  it is off. */
-        public String toggleValue() {
-            return enabled ? "false" : "true";
+        /** The module's gate as the setting it is, where it is a switch: the console draws it as every other switch,
+         *  through the setting. Empty for a module with no gate, or one gated by a value rather than on and off. */
+        public Optional<SettingView> gate() {
+            return toggleable ? settings.stream().filter(setting -> setting.key().equals(enableKey)).findFirst()
+                    : Optional.empty();
         }
 
         /** Whether this (removed) module's declared key-spaces still hold data the diagnostic should surface. */

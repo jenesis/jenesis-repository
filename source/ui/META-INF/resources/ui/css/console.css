@@ -1562,9 +1562,6 @@ main .setting-controls :is(button, [type=submit]):not(.app-quiet, .app-switch) {
     height: 2.625rem;
     min-width: 7rem;
 }
-.module-toggle {
-    margin: 0;
-}
 .setting-choice {
     flex-basis: 100%;
     margin: 0;
