@@ -82,7 +82,7 @@ public final class KevEnforceTask implements MaintenanceTask {
             String eco = release.ecosystem();
             String coordinate = release.coordinate();
             String version = release.version();
-            List<String> kevCves = knownExploitedCves(release);
+            List<String> kevCves = knownExploited.listed(advisories.advisories(eco, coordinate, version));
             if (kevCves.isEmpty()) {
                 return;   // report-only below KEV; a delisting leaves an existing hold in place (no auto-release)
             }
@@ -151,20 +151,5 @@ public final class KevEnforceTask implements MaintenanceTask {
                 "Released coordinates a repository is retroactively holding because their CVE is on a "
                         + "known-exploited catalogue",
                 Map.of("tenant", context.tenant(), "repository", context.repository()), held[0]);
-    }
-
-    /** The known-exploited CVEs among a release's advisories, de-duplicated in encounter order. Reads the advisory
-     *  feeds by coordinate, never an artifact blob. */
-    private List<String> knownExploitedCves(Release release) {
-        LinkedHashSet<String> cves = new LinkedHashSet<>();
-        for (AdvisorySource.Advisory advisory : advisories.advisories(
-                release.ecosystem(), release.coordinate(), release.version())) {
-            for (String cve : advisory.cves()) {
-                if (knownExploited.contains(cve)) {
-                    cves.add(cve);
-                }
-            }
-        }
-        return List.copyOf(cves);
     }
 }

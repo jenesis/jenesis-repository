@@ -118,7 +118,7 @@ public final class ReanalysisTask implements MaintenanceTask {
             String eco = release.ecosystem();
             String coordinate = release.coordinate();
             String version = release.version();
-            List<String> kevCves = knownExploitedCves(release);
+            List<String> kevCves = knownExploited.listed(advisories.advisories(eco, coordinate, version));
             if (!kevCves.isEmpty()) {
                 // still actively exploited: keep the finding current
                 raiseActive(ledger, context, release, kevCves, failed);
@@ -286,20 +286,5 @@ public final class ReanalysisTask implements MaintenanceTask {
                     context.repository(), release.coordinate(), release.version(), e);
             failed.record("supersede " + release.ecosystem() + ' ' + release.coordinate() + ':' + release.version(), e);
         }
-    }
-
-    /** The known-exploited CVEs among a release's advisories, de-duplicated in encounter order: the CVEs whose
-     *  clearance frees a retroactive hold. */
-    private List<String> knownExploitedCves(Release release) {
-        LinkedHashSet<String> cves = new LinkedHashSet<>();
-        for (AdvisorySource.Advisory advisory : advisories.advisories(
-                release.ecosystem(), release.coordinate(), release.version())) {
-            for (String cve : advisory.cves()) {
-                if (knownExploited.contains(cve)) {
-                    cves.add(cve);
-                }
-            }
-        }
-        return List.copyOf(cves);
     }
 }
