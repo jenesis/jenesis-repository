@@ -177,7 +177,7 @@ public final class PullThroughCache {
         // to its commit - the fill is screened, kept and recorded under that name, so one content is one version
         // however many names reach it; the leg still fetches what the client asked for (requestedPath).
         String asked = requested.path();
-        FormatExchange exchange = proxy.keptAs(requested, upstream, fetcher)
+        FormatExchange exchange = proxy.keptAs(requested, store, upstream, fetcher)
                 .filter(kept -> !kept.equals(asked))
                 .<FormatExchange>map(kept -> new Kept(requested, kept))
                 .orElse(requested);

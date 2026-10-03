@@ -232,10 +232,13 @@ public interface ProxyFormat {
      * makes the upstream round trip once, and its leg reads the answer off the kept path rather than asking again.
      *
      * @param exchange the request being filled, as the client sent it
+     * @param store    the repository's own store, which a resolution remembered in the node's {@code UpstreamMemory}
+     *                 is keyed by
      * @param upstream the upstream root the fill is served from
      * @param fetcher  the upstream fetcher, unscreened - a resolution reads headers, never an artifact's bytes
      */
-    default Optional<String> keptAs(FormatExchange exchange, URI upstream, Fetcher fetcher) throws IOException {
+    default Optional<String> keptAs(FormatExchange exchange, ArtifactStore store, URI upstream, Fetcher fetcher)
+            throws IOException {
         return Optional.empty();
     }
 

@@ -258,7 +258,8 @@ public class PullThroughHooksTest {
         private final List<String> proxied = new ArrayList<>();
 
         @Override
-        public Optional<String> keptAs(FormatExchange exchange, URI upstream, ProxyFormat.Fetcher fetcher) {
+        public Optional<String> keptAs(FormatExchange exchange, ArtifactStore store, URI upstream,
+                                       ProxyFormat.Fetcher fetcher) {
             return Optional.ofNullable(keptAs.get(exchange.path()));
         }
         private boolean keeps;

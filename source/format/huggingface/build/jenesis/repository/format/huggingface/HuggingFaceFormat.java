@@ -17,6 +17,7 @@ import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
+import build.jenesis.repository.store.UpstreamMemory;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.ArtifactDescriptor;
@@ -60,8 +61,9 @@ import build.jenesis.repository.walk.TraversalException;
  *
  * <p><b>Pull-through proxy.</b> A local miss is served from an upstream Hub (the canonical
  * {@code https://huggingface.co/} by default), the path mapping one for one after the alias. A branch is resolved to
- * its upstream commit by a HEAD and cached under that commit, so a moved branch re-resolves instead of serving a stale
- * weight; a {@code GET} streams into the store and serves through the hosted read path, and a {@code HEAD} on an
+ * its upstream commit by a HEAD, remembered in the node's {@code UpstreamMemory} for
+ * {@code jenrepo.cache.upstream-ttl}, and cached under that commit, so a moved branch re-resolves once the memory
+ * forgets it instead of serving a stale weight for good; a {@code GET} streams into the store and serves through the hosted read path, and a {@code HEAD} on an
  * uncached file answers from the upstream's headers without pulling the body. The {@code /api/...} index is streamed
  * fresh and needs no rewrite.
  */
@@ -559,11 +561,12 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
     /** A {@code GET} of a file at a branch is kept under the commit the upstream resolves the branch to, so one content
      *  is one version - a commit, which never changes under its name - rather than a {@code main} whose bytes move. It
      *  is how other Hugging Face proxies keep a model, and what lets {@link #describePointer} name a proxied pointer's
-     *  version from its key. The resolution is one HEAD; a {@code HEAD} request records nothing and keeps its path, as
-     *  does a branch the upstream cannot resolve, which the leg then declines. */
+     *  version from its key. The resolution is one HEAD, remembered for the upstream ttl so a burst of reads of one
+     *  branch costs the upstream one; a {@code HEAD} request records nothing and keeps its path, as does a branch the
+     *  upstream cannot resolve, which the leg then declines. */
     @Override
-    public Optional<String> keptAs(FormatExchange exchange, URI upstream, ProxyFormat.Fetcher fetcher)
-            throws IOException {
+    public Optional<String> keptAs(FormatExchange exchange, ArtifactStore store, URI upstream,
+                                   ProxyFormat.Fetcher fetcher) throws IOException {
         String path = exchange.path();
         if (!exchange.method().equals("GET") || !path.startsWith(PREFIX)) {
             return Optional.empty();
@@ -581,18 +584,38 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
                 || unsafeFilepath(resolve.filepath())) {
             return Optional.empty();
         }
-        ProxyFormat.Head head = fetcher.head(target(upstream, sub), Map.of()).orElse(null);
-        String commit = head == null || head.status() != 200 ? null : commitOf(head);
-        if (commit == null || !isCommit(commit)) {
+        String commit = branchCommit(target(upstream, sub), store, fetcher);
+        if (commit == null) {
             return Optional.empty();
         }
         return Optional.of(resolvePath(repo, resolve.type(), resolve.repoId(), commit, resolve.filepath()));
     }
 
     /**
+     * The commit the upstream resolves a branch's file to, remembered in the node's {@link UpstreamMemory} for the
+     * repository: a branch is mutable metadata, so it is asked of the upstream once per ttl rather than once per read,
+     * and refreshed once the memory forgets it. {@code null} when the upstream cannot resolve it to a commit sha.
+     */
+    private static String branchCommit(URI file, ArtifactStore store, ProxyFormat.Fetcher fetcher) throws IOException {
+        URI resolution = URI.create(file + "#commit");
+        Optional<UpstreamMemory.Remembered> remembered = UpstreamMemory.node().get(store, resolution);
+        if (remembered.isPresent()) {
+            return new String(remembered.get().body(), StandardCharsets.US_ASCII);
+        }
+        ProxyFormat.Head head = fetcher.head(file, Map.of()).orElse(null);
+        String commit = head == null || head.status() != 200 ? null : commitOf(head);
+        if (commit == null || !isCommit(commit)) {
+            return null;
+        }
+        UpstreamMemory.node().put(store, resolution, commit.getBytes(StandardCharsets.US_ASCII), _ -> null);
+        return commit;
+    }
+
+    /**
      * Proxy a Hugging Face miss to an upstream Hub: {@code /huggingface/<repo>/<sub>} maps to {@code <upstream>/<sub>},
-     * no path rewritten. A {@code resolve} file at a branch is resolved to its upstream commit by a HEAD on every read
-     * and cached under that commit, so a moved branch re-fetches; a commit sha is cached directly. A {@code GET}
+     * no path rewritten. A {@code resolve} file at a branch arrives here under the commit {@link #keptAs} resolved it to
+     * and is cached under that commit, so a moved branch re-fetches once its resolution is forgotten; a commit sha is
+     * cached directly. A {@code GET}
      * streams into the store and serves through {@link #file}; a {@code HEAD} on an uncached file answers
      * {@code Content-Length} from the upstream's headers without pulling the body. The {@code /api/...} index is
      * streamed fresh and carries no absolute URLs. {@code false} lets the local {@code 404} stand.
@@ -631,9 +654,9 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         }
         URI fileUrl = target(upstream, requested.startsWith(PREFIX + repo + "/")
                 ? requested.substring((PREFIX + repo + "/").length()) : sub);
-        // A 40-hex sha is cached directly; a branch is never a cache key, but resolved to its current commit by a HEAD
-        // on every read, so a moved branch re-fetches. The hosted read path never serves a branch from a cached commit,
-        // so a branch read always lands here, while a commit read is a local hit.
+        // A 40-hex sha is cached directly; a branch is never a cache key - a GET of one arrives under the commit keptAs
+        // resolved, and only a HEAD of one is resolved here. The hosted read path never serves a branch from a cached
+        // commit, so a branch read always lands here, while a commit read is a local hit.
         ProxyFormat.Head upstreamHead = null;
         String commit;
         if (isCommit(resolve.revision())) {
