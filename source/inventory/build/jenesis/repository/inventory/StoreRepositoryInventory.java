@@ -1455,4 +1455,16 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
             cursor = result.cursor().orElseThrow();
         }
     }
+
+    /** A Maven version's main jar among its served paths: the first {@code .jar} that is not its sources, javadoc or
+     *  tests, or {@code null} when it has none. */
+    public static String mainJar(List<String> paths) {
+        for (String path : paths) {
+            if (path.endsWith(".jar") && !path.endsWith("-sources.jar") && !path.endsWith("-javadoc.jar")
+                    && !path.endsWith("-tests.jar")) {
+                return path;
+            }
+        }
+        return null;
+    }
 }
