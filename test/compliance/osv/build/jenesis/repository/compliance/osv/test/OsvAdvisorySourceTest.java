@@ -46,6 +46,20 @@ class OsvAdvisorySourceTest {
     }
 
     @Test
+    void an_ecosystem_whose_name_holds_a_space_is_asked_for_whole() {
+        StringBuilder seen = new StringBuilder();
+        OsvAdvisorySource source = new OsvAdvisorySource(body -> {
+            seen.append(body);
+            return "{\"vulns\":[]}";
+        });
+        source.advisories("Hugging Face", "acme/model", "1.0");
+        assertThat(seen.toString())
+                .contains("\"ecosystem\":\"Hugging Face\"")
+                .contains("\"name\":\"acme/model\"")
+                .contains("\"version\":\"1.0\"");
+    }
+
+    @Test
     void a_conan_recipe_is_asked_for_in_the_ecosystem_osv_names_it() {
         // OSV answers only the ecosystems its schema defines, and it defines Conan's recipes as ConanCenter: asked as
         // "Conan", it answers nothing, and nothing reads as no advisory.

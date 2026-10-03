@@ -90,16 +90,16 @@ public final class OsvAdvisorySource implements AdvisorySource {
         return cache.get(key(ecosystem, coordinate, version));
     }
 
-    /** The cache key: the three coordinates joined by spaces, which none contains, so it reads back into a query and
-     *  reads well in the cache's failure. */
+    /** The cache key: the three coordinates joined by spaces, so it reads well in the cache's failure. A coordinate
+     *  and a version never contain one and an ecosystem may ("Hugging Face"), so the key reads back from its end. */
     private static String key(String ecosystem, String coordinate, String version) {
         return ecosystem + " " + coordinate + " " + version;
     }
 
     /** One coordinate version's query, the cache's loader: every page drawn through the shared client. */
     private List<Advisory> query(String key) throws IOException {
-        int first = key.indexOf(' '), last = key.lastIndexOf(' ');
-        String ecosystem = key.substring(0, first), coordinate = key.substring(first + 1, last),
+        int last = key.lastIndexOf(' '), middle = key.lastIndexOf(' ', last - 1);
+        String ecosystem = key.substring(0, middle), coordinate = key.substring(middle + 1, last),
                 version = key.substring(last + 1);
         try {
             return client.fetch(request(ecosystem, coordinate, version, null),
