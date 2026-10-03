@@ -9,7 +9,7 @@ import build.jenesis.repository.server.spi.TokenExchange;
 import build.jenesis.repository.server.spi.TokenExchangeProvider;
 import build.jenesis.repository.server.spi.KeyUsageTracker;
 import build.jenesis.repository.server.spi.KeyUsageTrackerProvider;
-import build.jenesis.repository.server.spi.AnonymousRights;
+import build.jenesis.repository.scope.AnonymousGrants;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.RateLimiter;
 import build.jenesis.repository.server.spi.RateLimiterProvider;
@@ -159,7 +159,7 @@ public class RepositoryAutoConfiguration {
         // jenrepo.anonymous.* security-posture advisories carry the governance escalation onto the console and
         // GET /api/posture. Default (empty) => no anonymous access and no warning.
         if (!anonymousRights.isEmpty()) {
-            if (AnonymousRights.grantsWriteOrAdmin(anonymousRights)) {
+            if (AnonymousGrants.grantsWriteOrAdmin(anonymousRights)) {
                 LOGGER.warn("SECURITY: anonymous access ENABLED with WRITE/ADMIN rights: {}. A keyless caller may "
                         + "mutate or administer artifacts with NO credential (a public drop-box / open admin) - the "
                         + "loudest anonymous combination. This is an explicit opt-in; unset "

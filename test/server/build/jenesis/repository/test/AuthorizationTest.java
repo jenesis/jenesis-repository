@@ -5,7 +5,7 @@ import module java.base;
 
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.Retries;
-import build.jenesis.repository.server.spi.AnonymousRights;
+import build.jenesis.repository.scope.AnonymousGrants;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.ClientAddresses;
 import build.jenesis.repository.server.spi.CredentialLifetimes;
@@ -396,13 +396,15 @@ class AuthorizationTest {
 
     @Test
     void the_write_or_admin_escalation_predicate_classifies_the_grant() {
-        assertThat(AnonymousRights.grantsWriteOrAdmin("")).isFalse();
-        assertThat(AnonymousRights.grantsWriteOrAdmin("repository:read")).isFalse();
-        assertThat(AnonymousRights.grantsWriteOrAdmin("releases=repository:read")).isFalse();
-        assertThat(AnonymousRights.grantsWriteOrAdmin("repository:read,repository:write")).isTrue();
-        assertThat(AnonymousRights.grantsWriteOrAdmin("manage:read")).as("any manage right is admin").isTrue();
-        assertThat(AnonymousRights.grantsWriteOrAdmin("repository:*")).as("a surface wildcard covers write").isTrue();
-        assertThat(AnonymousRights.grantsWriteOrAdmin("*")).as("all-privileges is write and admin").isTrue();
+        assertThat(AnonymousGrants.grantsWriteOrAdmin("")).isFalse();
+        assertThat(AnonymousGrants.grantsWriteOrAdmin("repository:read")).isFalse();
+        assertThat(AnonymousGrants.grantsWriteOrAdmin("releases=repository:read")).isFalse();
+        assertThat(AnonymousGrants.grantsWriteOrAdmin("repository:read,repository:write")).isTrue();
+        assertThat(AnonymousGrants.grantsWriteOrAdmin("manage:read")).as("any manage right is admin").isTrue();
+        assertThat(AnonymousGrants.grantsWriteOrAdmin("repository:*")).as("a surface wildcard covers write").isTrue();
+        assertThat(AnonymousGrants.grantsWriteOrAdmin("*")).as("all-privileges is write and admin").isTrue();
+        assertThat(AnonymousGrants.grantsWriteOrAdmin("=repository:write"))
+                .as("an entry naming no scope grants nothing, so it is not warned about either").isFalse();
     }
 
     @Test

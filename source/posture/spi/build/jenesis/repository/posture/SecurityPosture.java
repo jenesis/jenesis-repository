@@ -1,6 +1,7 @@
 package build.jenesis.repository.posture;
 
 import module java.base;
+import build.jenesis.repository.scope.AnonymousGrants;
 
 /**
  * The {@link SafetyAdvisor} for the deployment-cross-cutting advisories - properties of the whole deployment rather
@@ -74,7 +75,7 @@ public final class SecurityPosture implements SafetyAdvisor {
         // WARN, write or any manage right a CRITICAL. Silent when unset, or under auth=false where jenrepo.auth.open
         // applies.
         if (config.isSet("jenrepo.anonymous-rights") && config.flag("jenrepo.auth", true)) {
-            if (grantsWriteOrAdmin(config.value("jenrepo.anonymous-rights"))) {
+            if (AnonymousGrants.grantsWriteOrAdmin(config.value("jenrepo.anonymous-rights"))) {
                 advisories.add(SecurityAdvisory.deployment("jenrepo.anonymous.write", Severity.CRITICAL,
                         "Anonymous callers may write or administer",
                         "jenrepo.anonymous-rights grants a keyless caller write and/or manage/admin rights, "
@@ -96,30 +97,6 @@ public final class SecurityPosture implements SafetyAdvisor {
         }
 
         return advisories;
-    }
-
-    /** Whether an {@code anonymous-rights} value lets a keyless caller write or administer: the all-privileges
-     *  {@code *}, any {@code <surface>:write} or {@code <surface>:*}, or any {@code manage:<verb>}. Mirrors
-     *  {@code AnonymousRights.grantsWriteOrAdmin}, which this {@code java.base}-tier module cannot depend on. */
-    private static boolean grantsWriteOrAdmin(String rights) {
-        if (rights == null || rights.isBlank()) {
-            return false;
-        }
-        for (String element : rights.split(",")) {
-            String entry = element.strip();
-            int equals = entry.indexOf('=');
-            String token = (equals < 0 ? entry : entry.substring(equals + 1)).strip();
-            if (token.equals("*")) {
-                return true;
-            }
-            int colon = token.indexOf(':');
-            String surface = colon < 0 ? token : token.substring(0, colon);
-            String verb = colon < 0 ? "" : token.substring(colon + 1).strip();
-            if (surface.equals("manage") || verb.equals("write") || verb.equals("*")) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /** The active Spring profiles as a lowercase set, read from {@code spring.profiles.active} (comma-separated). */

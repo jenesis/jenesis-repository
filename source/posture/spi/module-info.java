@@ -8,15 +8,17 @@
  * disabled or absent module contributes nothing.
  *
  * <p>This reports the deployment's own configuration, not vulnerability advisories about published artifacts. The
- * module is {@code java.base}-only apart from the equally {@code java.base}-only observation module, so any SPI can
- * require it without Spring. The distribution collects one {@link build.jenesis.repository.posture.PostureReport}, logs
- * its deployment-wide advisories at boot and serves the same list on the console and the admin API.
+ * module is {@code java.base}-only apart from the equally {@code java.base}-only observation and scope modules, so any
+ * SPI can require it without Spring. The distribution collects one
+ * {@link build.jenesis.repository.posture.PostureReport}, logs its deployment-wide advisories at boot and serves the
+ * same list on the console and the admin API.
  *
  * @jenesis.release 25
  */
 module build.jenesis.repository.posture {
     // The observation module owns Contributions, the containment every collected report shares.
     requires build.jenesis.repository.observation;
+    requires build.jenesis.repository.scope;
     exports build.jenesis.repository.posture;
     uses build.jenesis.repository.posture.SafetyAdvisor;
     provides build.jenesis.repository.posture.SafetyAdvisor
