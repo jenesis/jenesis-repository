@@ -307,16 +307,24 @@ public final class ComplianceGate {
          * every file reached it.
          */
         public static Outcome worst(Collection<Signature> signatures) {
-            List<Outcome> precedence = List.of(Outcome.INVALID, Outcome.ABSENT, Outcome.UNREADABLE,
-                    Outcome.UNTRUSTED, Outcome.VALID);
             Outcome worst = null;
             for (Signature signature : signatures) {
-                if (worst == null || precedence.indexOf(signature.outcome()) < precedence.indexOf(worst)) {
-                    worst = signature.outcome();
-                }
+                worst = worse(worst, signature.outcome());
             }
             return worst;
         }
+
+        /** The worse of two outcomes in the order {@link #worst} states; a {@code null} is no outcome, so the other
+         *  one is answered. */
+        public static Outcome worse(Outcome one, Outcome other) {
+            if (one == null || other == null) {
+                return one == null ? other : one;
+            }
+            return PRECEDENCE.indexOf(other) < PRECEDENCE.indexOf(one) ? other : one;
+        }
+
+        private static final List<Outcome> PRECEDENCE = List.of(Outcome.INVALID, Outcome.ABSENT, Outcome.UNREADABLE,
+                Outcome.UNTRUSTED, Outcome.VALID);
 
         /** The signature a version's summary is written from: the one carrying {@link #worst} outcome, so the record
          *  names the signer of the thing that went wrong rather than of whichever file was inspected first. */

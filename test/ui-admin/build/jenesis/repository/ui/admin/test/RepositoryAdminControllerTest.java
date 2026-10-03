@@ -375,6 +375,7 @@ class RepositoryAdminControllerTest {
                 .recording("Maven", "org.acme:lib", "1.0", false, Instant.parse("2026-01-01T00:00:00Z"))
                 .licenses(List.of(new LicenseInventory.Declared("MIT", null)))
                 .about(new AboutSection.About("A library", List.of("util"), List.of("Acme")))
+                .file("/maven/org/acme/lib/1.0/lib-1.0.pom")
                 .dependencies(List.of(new DependencySection.Declared("org.acme:base", "1.0")))
                 .commit();
         ExtendedModelMap model = new ExtendedModelMap();

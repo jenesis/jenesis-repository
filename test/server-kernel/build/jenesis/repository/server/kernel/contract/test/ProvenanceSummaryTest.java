@@ -16,9 +16,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * The provenance summary section the accepted-publish path writes, over the real consolidated metadata
  * store: a verified summary is neutral, an unverified one carries the non-blocking WARNING signal, and both round-trip
- * as {@code {verified, sha256}}. Drives the {@link StoreRepositoryInventory#recordProvenance} seam
- * {@code ComplianceScreen} calls from the attestation verdict, so it exercises the codec, the signal mapping and the
- * document write end to end without booting the whole gate.
+ * as {@code {verified, sha256}}. Drives the inventory's recording, which the accepted-publish path fills from the
+ * attestation verdict, so it exercises the codec, the signal mapping and the document write end to end without
+ * booting the whole gate.
  */
 class ProvenanceSummaryTest {
 
@@ -40,7 +40,8 @@ class ProvenanceSummaryTest {
 
     @Test
     void a_verified_provenance_summary_is_neutral() throws IOException {
-        new StoreRepositoryInventory(store).recordProvenance(ECO, COORD, VERSION, true, SHA);
+        new StoreRepositoryInventory(store).recording(ECO, COORD, VERSION, false, Instant.parse("2026-07-25T10:00:00Z"))
+                .file("/maven/widget.jar").provenance(true, SHA).commit();
 
         MetadataStore metadata = MetadataProvider.installed().over(store);
         Section section = metadata.section(ECO, COORD, VERSION, ProvenanceSection.TAG).orElseThrow();
@@ -54,7 +55,8 @@ class ProvenanceSummaryTest {
     void an_unverified_provenance_summary_carries_a_non_blocking_warning() throws IOException {
         // The artifact was too large to hash whole (a null digest), so its binding could not be confirmed - the
         // gate admits it (some other policy may hold it, unchanged) but the summary flags provenance unconfirmed.
-        new StoreRepositoryInventory(store).recordProvenance(ECO, COORD, VERSION, false, null);
+        new StoreRepositoryInventory(store).recording(ECO, COORD, VERSION, false, Instant.parse("2026-07-25T10:00:00Z"))
+                .file("/maven/widget.jar").provenance(false, null).commit();
 
         MetadataStore metadata = MetadataProvider.installed().over(store);
         Section section = metadata.section(ECO, COORD, VERSION, ProvenanceSection.TAG).orElseThrow();
@@ -71,7 +73,8 @@ class ProvenanceSummaryTest {
     void the_summary_shares_the_document_with_the_other_sections() throws IOException {
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
         inventory.record(ECO, COORD, VERSION, java.time.Instant.parse("2026-07-25T10:00:00Z"));
-        inventory.recordProvenance(ECO, COORD, VERSION, true, SHA);
+        inventory.recording(ECO, COORD, VERSION, false, Instant.parse("2026-07-25T10:00:00Z"))
+                .file("/maven/widget.jar").provenance(true, SHA).commit();
 
         MetadataStore metadata = MetadataProvider.installed().over(store);
         assertThat(metadata.read(ECO, COORD, VERSION).orElseThrow().tags())

@@ -56,7 +56,7 @@ class PublishRecordingTest {
         inventory.recording(ECO, COORD, "1.0", false, PUBLISHED)
                 .origin("a".repeat(64))
                 .licenses(APACHE)
-                .provenance(true, "b".repeat(64))
+                .file("/maven/org/probe/lib/1.0/lib-1.0.jar").provenance(true, "b".repeat(64))
                 .about(new AboutSection.About("A small library", List.of("tooling"), List.of("Ada Lovelace")))
                 .commit();
 

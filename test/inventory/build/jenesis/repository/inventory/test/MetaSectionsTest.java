@@ -78,7 +78,8 @@ class MetaSectionsTest {
 
     @Test
     void the_provenance_section_summarises_the_attestation_and_warns_when_unverified() throws IOException {
-        inventory().recordProvenance(ECO, COORD, VERSION, false, "deadbeef");
+        inventory().recording(ECO, COORD, VERSION, false, Instant.parse("2026-07-25T10:00:00Z"))
+                .file("/maven/widget.jar").provenance(false, "deadbeef").commit();
 
         Optional<Section> unverified = section(ProvenanceSection.TAG);
         ProvenanceSection.Summary summary = ProvenanceSection.summary(unverified).orElseThrow();
@@ -87,7 +88,8 @@ class MetaSectionsTest {
         assertThat(unverified.orElseThrow().signal().severity())
                 .as("an unverified summary carries a non-blocking low-band WARNING signal").isEqualTo(Severity.LOW);
 
-        inventory().recordProvenance(ECO, COORD, VERSION, true, "cafebabe");
+        inventory().recording(ECO, COORD, VERSION, false, Instant.parse("2026-07-25T10:00:00Z"))
+                .file("/maven/widget.jar").provenance(true, "cafebabe").commit();
         ProvenanceSection.Summary verified = ProvenanceSection.summary(section(ProvenanceSection.TAG)).orElseThrow();
         assertThat(verified.verified()).isTrue();
         assertThat(verified.sha256()).isEqualTo("cafebabe");
@@ -96,6 +98,7 @@ class MetaSectionsTest {
     @Test
     void the_signature_section_keeps_the_source_and_what_the_material_stated() throws IOException {
         inventory().recording(ECO, COORD, VERSION, false, Instant.parse("2026-09-14T00:00:00Z"))
+                .file("/maven/widget.jar")
                 .signature("VALID", "sigstore:https%3A%2F%2Fissuer|https%3A%2F%2Fgithub.com%2Facme%2Fwidget", "STRONG",
                         "/maven/widget.jar.sigstore.json", "provenance",
                         Map.of("issuer", "https://issuer", "subject", "https://github.com/acme/widget",
@@ -110,6 +113,7 @@ class MetaSectionsTest {
                 .containsEntry("log-index", "7").containsEntry("integrated-time", "2026-09-14T00:00:01Z");
 
         inventory().recording(ECO, COORD, VERSION, false, Instant.parse("2026-09-14T00:00:00Z"))
+                .file("/maven/widget.jar")
                 .signature("UNTRUSTED", "openpgp:ABCD", "STRONG", "/maven/widget.jar.asc", null, null).commit();
         SignatureSection.Summary bare = SignatureSection.summary(section(SignatureSection.TAG)).orElseThrow();
         assertThat(bare.source()).as("a signature nobody admitted names no source").isNull();

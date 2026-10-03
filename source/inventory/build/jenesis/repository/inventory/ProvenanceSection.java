@@ -15,8 +15,10 @@ import build.jenesis.repository.metadata.Signal;
  * {@code licenses} and {@code published} sections, this summary is derived at publish from the gate's attestation
  * verdict alone.
  *
- * <p>The {@code data} payload is {@code {"verified":<bool>, "sha256":<hex>}}. The section's {@link Signal} realises the
- * gate-mirror at the envelope: an <em>unverified</em> summary carries a <strong>non-blocking WARNING</strong>
+ * <p>Each file that shipped an attestation keeps its own summary, and the version is verified only when every one of
+ * them is - the summary names the first that was not, else the first file. The {@code data} payload is
+ * {@code {"verified":<bool>, "sha256":<hex>, "files":{<path>:{"verified":<bool>, "sha256":<hex>}}}}. The section's
+ * {@link Signal} realises the gate-mirror at the envelope: an <em>unverified</em> summary carries a <strong>non-blocking WARNING</strong>
  * signal, a verified one is neutral. The {@link Severity} enum has no {@code WARNING} band, so the warning maps to
  * {@link Severity#LOW} - the lowest visible band, deliberately below any "reject HIGH and above" gate threshold, so the
  * signal surfaces and can contribute to a verdict without ever hard-failing a release on its own. Admission enforcement
@@ -55,14 +57,26 @@ public final class ProvenanceSection {
     public record Summary(boolean verified, String sha256) {
     }
 
-    /** Record the provenance summary derived at publish; idempotent and re-derivable each CAS attempt. */
-    public static SectionMutation record(boolean verified, String sha256, Instant updated) {
-        return current -> section(verified, sha256, updated);
+    /** Record {@code file}'s provenance summary, replacing what the file had and keeping every other file's;
+     *  idempotent and re-derivable each CAS attempt. */
+    public static SectionMutation record(String file, boolean verified, String sha256, Instant updated) {
+        return current -> section(FileFacts.with(current, file, entry(verified, sha256)), updated);
     }
 
-    /** A provenance summary section for the given verdict: neutral when verified, a non-blocking WARNING
-     *  ({@link Severity#LOW}) when not (the gate-mirror). */
-    public static Section section(boolean verified, String sha256, Instant updated) {
+    /** A section over {@code files}: neutral when every file verified, a non-blocking WARNING ({@link Severity#LOW})
+     *  when one did not (the gate-mirror). */
+    private static Section section(SortedMap<String, JsonNode> files, Instant updated) {
+        JsonNode summarising = files.values().stream()
+                .filter(entry -> !entry.path(VERIFIED_FIELD).asBoolean(false))
+                .findFirst()
+                .orElse(files.isEmpty() ? null : files.get(files.firstKey()));
+        ObjectNode data = summarising == null ? entry(false, null) : ((ObjectNode) summarising).deepCopy();
+        FileFacts.write(data, files);
+        Signal signal = data.path(VERIFIED_FIELD).asBoolean(false) ? Signal.NEUTRAL : Signal.of(Severity.LOW);
+        return Section.derived(TAG, SCHEMA, updated, signal, data);
+    }
+
+    private static ObjectNode entry(boolean verified, String sha256) {
         ObjectNode data = JSON.createObjectNode();
         data.put(VERIFIED_FIELD, verified);
         if (sha256 == null || sha256.isBlank()) {
@@ -70,8 +84,7 @@ public final class ProvenanceSection {
         } else {
             data.put(SHA256_FIELD, sha256);
         }
-        Signal signal = verified ? Signal.NEUTRAL : Signal.of(Severity.LOW);
-        return Section.derived(TAG, SCHEMA, updated, signal, data);
+        return data;
     }
 
     private static String text(JsonNode node) {

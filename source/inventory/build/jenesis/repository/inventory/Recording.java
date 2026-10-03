@@ -4,7 +4,8 @@ import module java.base;
 
 /**
  * One publish's inventory facts, recorded together: the published section, the local-upload origin, the declared
- * licences and the provenance summary land in a single compare-and-set of the version's metadata document, and the
+ * licences, and the file's own dependencies, provenance and signature land in a single compare-and-set of the
+ * version's metadata document, and the
  * identity index folds once, with the licences the document ends up holding. The gate builds one per accepted
  * publish from what it already knows and commits it.
  *
@@ -22,6 +23,7 @@ public final class Recording {
     final String version;
     final boolean prerelease;
     final Instant published;
+    private String file;
     String originSha256;
     List<LicenseInventory.Declared> licenses;
     Boolean provenanceVerified;
@@ -43,6 +45,24 @@ public final class Recording {
         this.version = Objects.requireNonNull(version, "version");
         this.prerelease = prerelease;
         this.published = Objects.requireNonNull(published, "published");
+    }
+
+    /** The file these facts are about, by its path in the repository: its dependencies, provenance and signature are
+     *  kept as its own, beside every other file's of the version, and the version's are derived from all of them. A
+     *  recording made for a request path names that path already. */
+    public Recording file(String path) {
+        this.file = Objects.requireNonNull(path, "path");
+        return this;
+    }
+
+    /** The file named by {@link #file(String)}; a recording carrying a file's own facts and no file is a caller's
+     *  mistake, refused rather than recorded against no file. */
+    String file() {
+        if (file == null) {
+            throw new IllegalStateException("a file's dependencies, provenance or signature need the file named, for "
+                    + ecosystem + " " + coordinate + " " + version);
+        }
+        return file;
     }
 
     /** The content hash of a hand-uploaded body - the store computed it on write, so an origin row never re-reads

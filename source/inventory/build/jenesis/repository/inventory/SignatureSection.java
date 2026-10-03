@@ -2,6 +2,7 @@ package build.jenesis.repository.inventory;
 
 import module java.base;
 import module tools.jackson.databind;
+import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.metadata.Section;
 import build.jenesis.repository.metadata.SectionMutation;
@@ -18,9 +19,12 @@ import build.jenesis.repository.metadata.Signal;
  * easily have one and not the other, and folding them together would make the absent half look like a failure of the
  * present one.
  *
- * <p>The {@code data} payload is {@code {"outcome":<name>, "signer":<wire>, "grade":<name>, "location":<path>,
- * "source":<trust source>, "details":{<name>:<value>}}} - the last two optional, so a record carrying neither reads
- * as unknown rather than as a signature that said nothing. The
+ * <p>Each file of the version keeps its own summary, and the version's is the one whose outcome is worst by
+ * {@link ComplianceGate.Signature#worse}: a version is as trustworthy as its least trustworthy file, so a signed jar
+ * beside an unsigned POM reads as unsigned whichever arrived last. The {@code data} payload is
+ * {@code {"outcome":<name>, "signer":<wire>, "grade":<name>, "location":<path>, "source":<trust source>,
+ * "details":{<name>:<value>}, "files":{<path>:{<the same fields>}}}} - source and details optional, so a record
+ * carrying neither reads as unknown rather than as a signature that said nothing. The
  * section's {@link Signal} realises the gate-mirror at the envelope: a signature that verified by a trusted signer is
  * neutral, and anything else carries a non-blocking signal. {@link Severity} has no WARNING band, so an untrusted,
  * absent or unreadable signature maps to {@link Severity#LOW} - visible, below any "reject HIGH and above" threshold,
@@ -58,13 +62,19 @@ public final class SignatureSection {
         if (section.isEmpty()) {
             return Optional.empty();
         }
-        return section.get().payload().map(data -> new Summary(
-                text(data.path(OUTCOME_FIELD)),
-                text(data.path(SIGNER_FIELD)),
-                text(data.path(GRADE_FIELD)),
-                text(data.path(LOCATION_FIELD)),
-                text(data.path(SOURCE_FIELD)),
-                details(data.path(DETAILS_FIELD))));
+        return section.get().payload().map(SignatureSection::summary);
+    }
+
+    /** Each file's own summary, by its path in the repository, in path order; empty when the section holds none. */
+    public static SequencedMap<String, Summary> files(Optional<Section> section) {
+        SequencedMap<String, Summary> files = new LinkedHashMap<>();
+        FileFacts.read(section).forEach((file, entry) -> files.put(file, summary(entry)));
+        return files;
+    }
+
+    private static Summary summary(JsonNode data) {
+        return new Summary(text(data.path(OUTCOME_FIELD)), text(data.path(SIGNER_FIELD)), text(data.path(GRADE_FIELD)),
+                text(data.path(LOCATION_FIELD)), text(data.path(SOURCE_FIELD)), details(data.path(DETAILS_FIELD)));
     }
 
     /**
@@ -111,15 +121,34 @@ public final class SignatureSection {
         }
     }
 
-    /** Record the signature summary derived at publish; idempotent and re-derivable on each compare-and-set attempt. */
-    public static SectionMutation record(String outcome, String signer, String grade, String location,
+    /** Record {@code file}'s signature summary, replacing what the file had and keeping every other file's;
+     *  idempotent and re-derivable on each compare-and-set attempt. */
+    public static SectionMutation record(String file, String outcome, String signer, String grade, String location,
                                          String source, Map<String, String> details, Instant updated) {
-        return current -> section(outcome, signer, grade, location, source, details, updated);
+        return current -> section(FileFacts.with(current, file,
+                entry(outcome, signer, grade, location, source, details)), updated);
     }
 
-    /** A signature summary section for the given outcome, with the signal that outcome warrants. */
-    public static Section section(String outcome, String signer, String grade, String location, String source,
-                                  Map<String, String> details, Instant updated) {
+    /** A section over {@code files}, its version-level fields those of the file whose outcome is worst - the first in
+     *  path order among equals - and its signal the one that outcome warrants. */
+    private static Section section(SortedMap<String, JsonNode> files, Instant updated) {
+        JsonNode summarising = null;
+        ComplianceGate.Signature.Outcome worst = null;
+        for (JsonNode entry : files.values()) {
+            ComplianceGate.Signature.Outcome outcome = outcome(entry);
+            boolean worse = outcome != worst && ComplianceGate.Signature.worse(worst, outcome) == outcome;
+            if (summarising == null || worse) {
+                summarising = entry;
+                worst = outcome;
+            }
+        }
+        ObjectNode data = summarising == null ? JSON.createObjectNode() : ((ObjectNode) summarising).deepCopy();
+        FileFacts.write(data, files);
+        return Section.derived(TAG, SCHEMA, updated, signal(text(data.path(OUTCOME_FIELD))), data);
+    }
+
+    private static ObjectNode entry(String outcome, String signer, String grade, String location, String source,
+                                    Map<String, String> details) {
         ObjectNode data = JSON.createObjectNode();
         put(data, OUTCOME_FIELD, outcome);
         put(data, SIGNER_FIELD, signer);
@@ -130,7 +159,14 @@ public final class SignatureSection {
         if (details != null) {
             details.forEach((name, value) -> put(recorded, name, value));
         }
-        return Section.derived(TAG, SCHEMA, updated, signal(outcome), data);
+        return data;
+    }
+
+    /** The outcome an entry records, or {@code null} for one it does not name or that this node does not know. */
+    private static ComplianceGate.Signature.Outcome outcome(JsonNode entry) {
+        String name = text(entry.path(OUTCOME_FIELD));
+        return name == null ? null : Arrays.stream(ComplianceGate.Signature.Outcome.values())
+                .filter(outcome -> outcome.name().equals(name)).findFirst().orElse(null);
     }
 
     /**

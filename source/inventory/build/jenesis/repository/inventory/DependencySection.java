@@ -16,9 +16,10 @@ import tools.jackson.databind.node.ObjectNode;
  * artifact that carries no SBOM of its own, which is every artifact but a jar that embeds one.
  *
  * <p>A declaration, not a resolution: the requirement is recorded exactly as written, and what a client would
- * install for it is the client's to decide. The section is replaced on each publish rather than unioned, since a
- * re-publish of a version is the same manifest. The {@code data} payload is
- * {@code {"declared":[{"coordinate":<coordinate>,"requirement":<requirement>}, ...]}}, neutral as a signal.
+ * install for it is the client's to decide. Each file an inspector read a manifest from keeps what it declared, and
+ * the version's declarations are their union in path order, so a Maven POM's dependencies survive the jar that
+ * follows it. The {@code data} payload is {@code {"declared":[{"coordinate":<coordinate>,"requirement":<requirement>},
+ * ...], "files":{<path>:{"declared":[...]}}}}, neutral as a signal.
  */
 public final class DependencySection {
 
@@ -52,31 +53,40 @@ public final class DependencySection {
         if (section.isEmpty()) {
             return Optional.empty();
         }
-        return section.get().payload().map(data -> {
-            List<Declared> declared = new ArrayList<>();
-            for (JsonNode entry : data.path(DECLARED_FIELD)) {
-                String coordinate = entry.path(COORDINATE_FIELD).asString("");
-                if (!coordinate.isBlank()) {
-                    declared.add(new Declared(coordinate, entry.path(REQUIREMENT_FIELD).asString("")));
-                }
+        return section.get().payload().map(DependencySection::declared);
+    }
+
+    private static List<Declared> declared(JsonNode data) {
+        List<Declared> declared = new ArrayList<>();
+        for (JsonNode entry : data.path(DECLARED_FIELD)) {
+            String coordinate = entry.path(COORDINATE_FIELD).asString("");
+            if (!coordinate.isBlank()) {
+                declared.add(new Declared(coordinate, entry.path(REQUIREMENT_FIELD).asString("")));
             }
-            return List.copyOf(declared);
-        });
+        }
+        return List.copyOf(declared);
     }
 
-    /** Record what the manifest declared, replacing what the section held; re-derivable each CAS attempt. */
-    public static SectionMutation record(List<Declared> declared, Instant updated) {
-        return current -> section(declared, updated);
+    /** Record what {@code file}'s manifest declared, replacing what the file had and keeping every other file's;
+     *  re-derivable each CAS attempt. */
+    public static SectionMutation record(String file, List<Declared> declared, Instant updated) {
+        return current -> {
+            SortedMap<String, JsonNode> files = FileFacts.with(current, file, entry(declared));
+            Set<Declared> union = new LinkedHashSet<>();
+            files.values().forEach(entry -> union.addAll(declared(entry)));
+            ObjectNode data = entry(List.copyOf(union));
+            FileFacts.write(data, files);
+            return Section.derived(TAG, SCHEMA, updated, Signal.NEUTRAL, data);
+        };
     }
 
-    /** A section recording {@code declared}. */
-    public static Section section(List<Declared> declared, Instant updated) {
+    private static ObjectNode entry(List<Declared> declared) {
         ObjectNode data = JSON.createObjectNode();
         ArrayNode list = data.putArray(DECLARED_FIELD);
         for (Declared dependency : declared) {
             list.addObject().put(COORDINATE_FIELD, dependency.coordinate())
                     .put(REQUIREMENT_FIELD, dependency.requirement());
         }
-        return Section.derived(TAG, SCHEMA, updated, Signal.NEUTRAL, data);
+        return data;
     }
 }

@@ -109,6 +109,7 @@ public final class SignatureCompletionObserver implements PublicationObserver {
         new StoreRepositoryInventory(store)
                 .recording(described.get().ecosystem(), described.get().coordinate(), described.get().version(),
                         described.get().prerelease(), Instant.now())
+                .file(covered)
                 .signature(summary.get().outcome().name(),
                         summary.get().signer() == null ? null : summary.get().signer().wire(),
                         summary.get().quality() == null ? null : summary.get().quality().grade().name(),

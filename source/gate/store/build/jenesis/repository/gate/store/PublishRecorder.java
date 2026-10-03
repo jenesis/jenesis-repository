@@ -447,7 +447,7 @@ final class PublishRecorder {
                 return;
             }
             recording = inventory.recording(named.get().ecosystem(), named.get().coordinate(), named.get().version(),
-                    false, now);
+                    false, now).file(artifact.path());
         }
         recording.origin(artifact.hash());
         if (subject != null) {

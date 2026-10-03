@@ -24,7 +24,7 @@ import build.jenesis.repository.metadata.SectionMutation;
  * publish facts land in the consolidated metadata document's {@code published} section (its presence is membership
  * of the published set). Each first publish folds the coordinate's member into the {@link InventoryIdentity} rollup so
  * a whole-repository export's ETag revalidates. The facade owns the seam - the {@code record}/{@code
- * recordProvenance}/{@code recordDownload}/ {@code publishedAt}/{@code lastDownloaded} methods delegate here - and this
+ * recordDownload}/{@code publishedAt}/{@code lastDownloaded} methods delegate here - and this
  * class shares the facade's compare-and-set {@code writeVersioned} and its store-key/codec helpers rather than
  * duplicating them.
  */
@@ -98,7 +98,7 @@ final class InventoryRecording {
         return resolve(path)
                 .filter(descriptor -> descriptor.coordinate() != null && descriptor.version() != null)
                 .map(descriptor -> new Recording(this, descriptor.ecosystem(), descriptor.coordinate(),
-                        descriptor.version(), descriptor.prerelease(), published));
+                        descriptor.version(), descriptor.prerelease(), published).file(path));
     }
 
     Recording recording(String ecosystem, String coordinate, String version, boolean prerelease, Instant published) {
@@ -138,17 +138,19 @@ final class InventoryRecording {
                 mutations.put(LicenseSection.TAG, LicenseSection.union(recording.licenses, now));
             }
             if (recording.dependencies != null) {
-                mutations.put(DependencySection.TAG, DependencySection.record(recording.dependencies, now));
+                mutations.put(DependencySection.TAG,
+                        DependencySection.record(recording.file(), recording.dependencies, now));
             }
             if (recording.about != null) {
                 mutations.put(AboutSection.TAG, AboutSection.record(recording.about, now));
             }
             if (recording.provenanceVerified != null) {
-                mutations.put(ProvenanceSection.TAG,
-                        ProvenanceSection.record(recording.provenanceVerified, recording.provenanceSha256, now));
+                mutations.put(ProvenanceSection.TAG, ProvenanceSection.record(recording.file(),
+                        recording.provenanceVerified, recording.provenanceSha256, now));
             }
             if (recording.signatureOutcome != null) {
-                mutations.put(SignatureSection.TAG, SignatureSection.record(recording.signatureOutcome,
+                mutations.put(SignatureSection.TAG, SignatureSection.record(recording.file(),
+                        recording.signatureOutcome,
                         recording.signatureSigner, recording.signatureGrade, recording.signatureLocation,
                         recording.signatureSource, recording.signatureDetails, now));
             }
@@ -342,14 +344,6 @@ final class InventoryRecording {
         return document.has(LicenseSection.TAG)
                 ? Optional.of(LicenseSection.declared(document.section(LicenseSection.TAG)))
                 : Optional.empty();
-    }
-
-    /** Record a coordinate version's provenance summary at publish - see
-     *  {@link StoreRepositoryInventory#recordProvenance}. */
-    void recordProvenance(String ecosystem, String coordinate, String version, boolean verified, String sha256)
-            throws IOException {
-        metadata.mutate(ecosystem, coordinate, version, ProvenanceSection.TAG,
-                ProvenanceSection.record(verified, sha256, Clocks.now()));
     }
 
     /** Record when a coordinate version was last downloaded - see {@link StoreRepositoryInventory#recordDownload}. */

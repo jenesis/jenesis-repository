@@ -185,15 +185,6 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         recording.record(ecosystem, coordinate, version, prerelease, published, originSha256);
     }
 
-    /** Record a coordinate version's provenance summary at publish: whether its inbound attestation
-     *  verified and bound to this artifact, and the SHA-256 it bound - the durable, GUI-facing summary that points at
-     *  the content-keyed attestation cache without duplicating it. A no-op when the consolidated metadata store is
-     *  absent (graceful), since the summary has nowhere to live. */
-    public void recordProvenance(String ecosystem, String coordinate, String version, boolean verified, String sha256)
-            throws IOException {
-        recording.recordProvenance(ecosystem, coordinate, version, verified, sha256);
-    }
-
     /** One publish's inventory facts in one write - see {@link Recording} - for the coordinate and version an
      *  installed format describes {@code path} to; empty when none describes it that far. */
     public Optional<Recording> recording(String path, Instant published) {
@@ -201,7 +192,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
     }
 
     /** As {@link #recording(String, Instant)}, for a coordinate the caller already holds - the inspected subject of
-     *  a publish whose request path carries no version. */
+     *  a publish whose request path carries no version. A file's own facts need {@link Recording#file} named. */
     public Recording recording(String ecosystem, String coordinate, String version, boolean prerelease,
                                Instant published) {
         return recording.recording(ecosystem, coordinate, version, prerelease, published);
