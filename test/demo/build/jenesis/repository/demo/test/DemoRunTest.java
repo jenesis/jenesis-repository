@@ -181,8 +181,8 @@ class DemoRunTest {
                         + RepositoryType.installed("npm").orElseThrow().formats().stream()
                                 .mapToLong(format -> format.demoArtifacts().size()).sum());
         assertThat(state.nothingFetched()).as("so the page can say the registries were not reached").isTrue();
-        assertThat(editor.effective(null, "osv", "")).as("the fail-closed feed is left off where nothing answered")
-                .isEmpty();
+        assertThat(editor.effective(null, "osv", "")).as("the fail-closed feed is switched off again where nothing "
+                + "answered").isEqualTo("false");
         assertThat(state.steps()).anySatisfy(step -> {
             assertThat(step.kind()).isEqualTo(DemoRun.Kind.SKIP);
             assertThat(step.what()).contains("OSV feed");
@@ -198,6 +198,7 @@ class DemoRunTest {
     void reads_the_registries_answered_switch_the_advisory_feed_on_and_ask_for_the_scan() throws IOException {
         DemoRun.Edge real = DemoRun.Edge.over(() -> edge);
         List<String> read = new ArrayList<>();
+        List<String> screened = new ArrayList<>();
         DemoRun.Edge answering = new DemoRun.Edge() {
             @Override
             public int publish(String tenant, String repository, String path, InputStream body) throws IOException {
@@ -207,6 +208,7 @@ class DemoRunTest {
             @Override
             public int fetch(String tenant, String repository, String path) {
                 read.add(repository + path);
+                screened.add(editor.effective(null, "osv", ""));
                 return 200;
             }
         };
@@ -219,7 +221,9 @@ class DemoRunTest {
                 .contains("demo-maven-proxy/maven/org/apache/logging/log4j/log4j-core/2.14.1/log4j-core-2.14.1.jar",
                         "demo-npm-proxy/lodash/-/lodash-4.17.11.tgz");
         assertThat(state.nothingFetched()).isFalse();
-        assertThat(editor.effective(null, "osv", "")).as("the advisory feed is switched on").isEqualTo("true");
+        assertThat(screened).as("the advisory feed is on before the first read, so a vulnerable version is screened "
+                + "as it arrives").isNotEmpty().containsOnly("true");
+        assertThat(editor.effective(null, "osv", "")).as("and stays on").isEqualTo("true");
         assertThat(Requests.pending(store, "scan")).as("the scan is asked for, a minute on").isPresent()
                 .get().satisfies(request -> assertThat(request.notBefore()).isAfter(Instant.now()));
         assertThat(state.requested("scan")).isTrue();

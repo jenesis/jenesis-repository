@@ -20,12 +20,12 @@ import build.jenesis.repository.store.Requests;
  *     ({@link RepositoryFormat#demoArtifacts()} over {@link ProxyFormat#defaultUpstream()}), and those artifacts - old
  *     releases with known vulnerabilities - read through it, so they are cached, recorded and screened.</li>
  * <li><b>A walk of the store</b> asked for once the content is in, so the walks screen reports a run over it.</li>
- * <li><b>The OSV advisory feed</b> switched on after the reads, where its module is installed and something was read
- *     through a proxy, and the scheduled scan asked for, so the vulnerability screens fill. It is switched on last,
- *     and only once the public registries answered, because it screens fail-closed: a publish it would screen while
- *     the database is unreachable is held, so switched on first it would hold the first-party packages on a deployment
- *     that cannot reach it, refuse the proxies' reads for the very vulnerabilities they are there to show, and on an
- *     offline deployment hold every publish after the demo.</li>
+ * <li><b>The OSV advisory feed</b> switched on after the first-party publishes and before the proxies are read, where
+ *     its module is installed, so a version with a critical advisory is held for review as it arrives and the
+ *     quarantine shows it held for that advisory; the scheduled scan is asked for, so the vulnerability screens fill.
+ *     It screens fail-closed - a publish it would screen while the database is unreachable is held - so it comes after
+ *     the first-party packages, and it is switched off again when no registry answered a read, since an offline
+ *     deployment would otherwise hold every publish after the demo.</li>
  * </ul>
  */
 public final class StarterDemo implements DemoContributor {
@@ -100,8 +100,9 @@ public final class StarterDemo implements DemoContributor {
                     + proxied.registry());
         }
         if (Labels.catalogued(OSV) && !PROXIED.isEmpty()) {
-            settings.put(OSV, "on, once something was read through the proxies, so the advisory database is asked "
-                    + "about every version held");
+            settings.put(OSV, "on, before the proxies are read, so a version with a critical advisory is held for "
+                    + "review as it arrives and the advisory database is asked about every version held - and off "
+                    + "again if no registry answers");
             reaches.add("the OSV vulnerability database (the endpoint the osv-endpoint setting names, "
                     + "api.osv.dev by default)");
         }
@@ -140,22 +141,25 @@ public final class StarterDemo implements DemoContributor {
         } else {
             demo.skipped("The first-party npm package", "No npm format is installed in this deployment.");
         }
-        int read = 0;
+        boolean screening = Labels.catalogued(OSV) && !PROXIED.isEmpty() && demo.settings(Map.of(OSV, "true"));
+        int answered = 0;
         for (Proxied proxied : PROXIED) {
             for (String path : proxied.paths()) {
-                read += demo.fetch(proxied.repository(), proxied.type().servedPath(path)) == Demo.Outcome.DONE ? 1 : 0;
+                Demo.Outcome read = demo.fetch(proxied.repository(), proxied.type().servedPath(path));
+                answered += read == Demo.Outcome.DONE || read == Demo.Outcome.HELD ? 1 : 0;
             }
         }
         demo.request(Requests.WALK, "the demo filled its repositories, and a walk over them is what the walks "
                 + "screen reports", WALK_AFTER);
-        if (!Labels.catalogued(OSV) || PROXIED.isEmpty()) {
+        if (!screening) {
             return;
         }
-        if (read == 0) {
-            demo.skipped("Switch on " + Labels.of(OSV), "Left off: nothing was read from the public registries, "
-                    + "and the advisory database is reached the same way. The feed screens fail-closed, so switched "
-                    + "on while it cannot be reached it would hold every publish.");
-        } else if (demo.settings(Map.of(OSV, "true"))) {
+        if (answered == 0) {
+            demo.settings(Map.of(OSV, "false"));
+            demo.skipped("Switch on " + Labels.of(OSV), "Switched off again: nothing was read from the public "
+                    + "registries, and the advisory database is reached the same way. The feed screens fail-closed, "
+                    + "so left on while it cannot be reached it would hold every publish.");
+        } else {
             demo.request(SCAN, "the demo read versions with known vulnerabilities through its proxies", SCAN_AFTER);
         }
     }
