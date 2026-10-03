@@ -40,6 +40,11 @@ class StoredArtifactEvidenceTest {
     private record ScannedContent(ArtifactDescriptor artifact) implements GatePolicy {
 
         @Override
+        public String rule() {
+            return "Content scan";
+        }
+
+        @Override
         public List<ComplianceGate.Finding> assess(ComplianceGate.Subject subject,
                                                    List<AdvisorySource.Advisory> advisories) {
             return List.of();
@@ -78,9 +83,18 @@ class StoredArtifactEvidenceTest {
     @Test
     void the_advisory_is_shared_with_every_dimension() {
         List<List<AdvisorySource.Advisory>> seen = new ArrayList<>();
-        GatePolicy watching = (subject, advisories) -> {
-            seen.add(advisories);
-            return List.of();
+        GatePolicy watching = new GatePolicy() {
+            @Override
+            public List<ComplianceGate.Finding> assess(ComplianceGate.Subject subject,
+                                                       List<AdvisorySource.Advisory> advisories) {
+                seen.add(advisories);
+                return List.of();
+            }
+
+            @Override
+            public String rule() {
+                return "Watching";
+            }
         };
         new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT), AdvisorySource.none())
                 .policies(List.of(new ScannedContent(null), watching))
@@ -110,7 +124,18 @@ class StoredArtifactEvidenceTest {
 
     @Test
     void a_dimension_that_reads_only_the_subject_is_bound_to_itself() {
-        GatePolicy plain = (subject, advisories) -> List.of();
+        GatePolicy plain = new GatePolicy() {
+            @Override
+            public List<ComplianceGate.Finding> assess(ComplianceGate.Subject subject,
+                                                       List<AdvisorySource.Advisory> advisories) {
+                return List.of();
+            }
+
+            @Override
+            public String rule() {
+                return "Plain";
+            }
+        };
 
         assertThat(plain.bound(null, STORED)).isSameAs(plain);
     }

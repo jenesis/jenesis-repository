@@ -42,13 +42,14 @@ class QuarantineLogTest {
     void a_decision_is_durably_recorded_and_reads_back() throws IOException {
         QuarantineLog log = new QuarantineLog(store);
         log.record(T1, "/maven/org/gnu/tool/1.0/tool-1.0.pom", "org.gnu:tool:1.0", Verdict.REJECT,
-                List.of("Disallowed license GPL-3.0"));
+                List.of("Disallowed license GPL-3.0"), List.of("License", "Deny list"));
 
         assertThat(log.events()).singleElement().satisfies(event -> {
             assertThat(event.verdict()).isEqualTo(Verdict.REJECT);
             assertThat(event.coordinate()).isEqualTo("org.gnu:tool:1.0");
             assertThat(event.path()).isEqualTo("/maven/org/gnu/tool/1.0/tool-1.0.pom");
             assertThat(event.reasons()).containsExactly("Disallowed license GPL-3.0");
+            assertThat(event.rules()).as("the rules that decided it").containsExactly("License", "Deny list");
         });
         assertThat(log.latest("/maven/org/gnu/tool/1.0/tool-1.0.pom"))
                 .as("the latest-verdict index answers a single-path lookup")
@@ -59,8 +60,8 @@ class QuarantineLogTest {
     void a_re_record_of_the_same_decision_is_idempotent() throws IOException {
         QuarantineLog log = new QuarantineLog(store);
         String path = "/npm/stealer/-/stealer-9.9.9.tgz";
-        log.record(T1, path, "stealer:9.9.9", Verdict.QUARANTINE, List.of("Malicious package"));
-        log.record(T1, path, "stealer:9.9.9", Verdict.QUARANTINE, List.of("Malicious package"));
+        log.record(T1, path, "stealer:9.9.9", Verdict.QUARANTINE, List.of("Malicious package"), List.of());
+        log.record(T1, path, "stealer:9.9.9", Verdict.QUARANTINE, List.of("Malicious package"), List.of());
 
         assertThat(log.events()).as("the same decision recorded twice is one row, not two").hasSize(1);
     }
@@ -79,8 +80,8 @@ class QuarantineLogTest {
                 .isEqualTo(b.hashCode());
         assertThat(a).isNotEqualTo(b);
 
-        log.record(T1, a, "org.x:aa:1.0", Verdict.QUARANTINE, List.of("held a"));
-        log.record(T1, b, "org.x:bb:1.0", Verdict.QUARANTINE, List.of("held b"));
+        log.record(T1, a, "org.x:aa:1.0", Verdict.QUARANTINE, List.of("held a"), List.of());
+        log.record(T1, b, "org.x:bb:1.0", Verdict.QUARANTINE, List.of("held b"), List.of());
 
         assertThat(log.events()).as("both same-millisecond decisions survive as their own audit row")
                 .extracting(QuarantineLog.Event::coordinate)
@@ -92,7 +93,7 @@ class QuarantineLogTest {
     @Test
     void the_log_survives_a_store_reload() throws IOException {
         new QuarantineLog(store).record(T1, "/maven/a/b/1.0/b-1.0.pom", "a:b:1.0", Verdict.REJECT,
-                List.of("some reason"));
+                List.of("some reason"), List.of());
 
         // A fresh store handle over the same root - the ledger is store-backed, so the row is still there.
         QuarantineLog reloaded = new QuarantineLog(resolve());
@@ -104,9 +105,9 @@ class QuarantineLogTest {
     void the_latest_index_keeps_the_newest_verdict_and_does_not_regress() throws IOException {
         QuarantineLog log = new QuarantineLog(store);
         String path = "/maven/org/x/lib/1.0/lib-1.0.pom";
-        log.record(T2, path, "org.x:lib:1.0", Verdict.QUARANTINE, List.of("held"));
+        log.record(T2, path, "org.x:lib:1.0", Verdict.QUARANTINE, List.of("held"), List.of());
         // An out-of-order (older) record must not regress the indexed latest verdict.
-        log.record(T1, path, "org.x:lib:1.0", Verdict.REJECT, List.of("older"));
+        log.record(T1, path, "org.x:lib:1.0", Verdict.REJECT, List.of("older"), List.of());
 
         assertThat(log.latest(path)).get().satisfies(event -> {
             assertThat(event.when()).isEqualTo(T2);
@@ -126,7 +127,7 @@ class QuarantineLogTest {
         publication.link("/quarantine" + bare,
                 publication.storeBlob(new ByteArrayInputStream("bare".getBytes(StandardCharsets.UTF_8))));
         QuarantineLog log = new QuarantineLog(store);
-        log.record(T1, logged, "org.held:lib:1.0", Verdict.QUARANTINE, List.of("held for review"));
+        log.record(T1, logged, "org.held:lib:1.0", Verdict.QUARANTINE, List.of("held for review"), List.of());
 
         List<QuarantineLog.Held> queue = log.reviewQueue();
         assertThat(queue).extracting(QuarantineLog.Held::path).containsExactlyInAnyOrder(logged, bare);
@@ -169,8 +170,8 @@ class QuarantineLogTest {
         QuarantineLog log = new QuarantineLog(store);
         String old = "/maven/org/old/lib/1.0/lib-1.0.pom";
         String recent = "/maven/org/new/lib/1.0/lib-1.0.pom";
-        log.record(T1, old, "org.old:lib:1.0", Verdict.REJECT, List.of("old"));
-        log.record(T2, recent, "org.new:lib:1.0", Verdict.REJECT, List.of("recent"));
+        log.record(T1, old, "org.old:lib:1.0", Verdict.REJECT, List.of("old"), List.of());
+        log.record(T2, recent, "org.new:lib:1.0", Verdict.REJECT, List.of("recent"), List.of());
 
         // Prune everything older than a day before T2: the T1 row ages out, the T2 row stays.
         int removed = log.prune(T2, Duration.ofHours(1), 0);
@@ -188,7 +189,7 @@ class QuarantineLogTest {
         QuarantineLog log = new QuarantineLog(new ListRefusingStore(store));
         for (int index = 0; index < 25; index++) {
             log.record(T1.plusSeconds(index), "/maven/org/lib" + index + "/1.0/lib-1.0.pom",
-                    "org.lib" + index + ":1.0", Verdict.QUARANTINE, List.of("r" + index));
+                    "org.lib" + index + ":1.0", Verdict.QUARANTINE, List.of("r" + index), List.of());
         }
 
         // The object names sort newest-first by construction, so the bounded read is one forward page through

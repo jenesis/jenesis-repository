@@ -82,7 +82,7 @@ class HoldLifecycleTest {
         // log's wording is never read, and a CVSS reason's CVE cannot leak into the KEV override where a later CISA
         // listing would find it already cleared.
         new QuarantineLog(store).record(Instant.parse("2026-07-01T00:00:00Z"), PATH, COORD + ":" + VERSION,
-                Verdict.QUARANTINE, List.of("Known-exploited (CISA KEV): CVE-2021-44228", "CVE-2020-1234 (HIGH)"));
+                Verdict.QUARANTINE, List.of("Known-exploited (CISA KEV): CVE-2021-44228", "CVE-2020-1234 (HIGH)"), List.of());
         assertThat(KevHold.held(store, ECOSYSTEM, COORD, VERSION)).as("no holds/kev record exists").isEmpty();
 
         new KevHoldReleaseObserver().onReleased(store, PATH);

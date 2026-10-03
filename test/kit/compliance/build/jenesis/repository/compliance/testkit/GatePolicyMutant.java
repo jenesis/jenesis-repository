@@ -1,6 +1,7 @@
 package build.jenesis.repository.compliance.testkit;
 
 import module java.base;
+import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.GatePolicy;
 import build.jenesis.repository.compliance.GatePolicyProvider;
@@ -58,7 +59,18 @@ public enum GatePolicyMutant {
         @Override
         public GatePolicy substitute(GatePolicy resolved) {
             Objects.requireNonNull(resolved, "resolved");
-            return (_, _) -> List.<ComplianceGate.Finding>of();
+            return new GatePolicy() {
+                @Override
+                public List<ComplianceGate.Finding> assess(ComplianceGate.Subject subject,
+                                                           List<AdvisorySource.Advisory> advisories) {
+                    return List.of();
+                }
+
+                @Override
+                public String rule() {
+                    return resolved.rule();
+                }
+            };
         }
     };
 

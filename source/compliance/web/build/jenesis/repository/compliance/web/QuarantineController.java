@@ -73,7 +73,7 @@ public class QuarantineController {
         List<ReviewQueue.Row> refusals = new ArrayList<>();
         for (QuarantineLog.Event refusal : log.refusals(REFUSAL_LIMIT)) {
             refusals.add(served(tenant, repo, new ReviewQueue.Row(refusal.when().toString(), refusal.path(),
-                    refusal.coordinate(), refusal.verdict().name(), refusal.reasons(), List.of())));
+                    refusal.coordinate(), refusal.verdict().name(), refusal.reasons(), refusal.rules(), List.of())));
         }
         return new QuarantineView(events, refusals, page.next());
     }
@@ -82,7 +82,7 @@ public class QuarantineController {
      *  a release or a discard of it takes. */
     private ReviewQueue.Row served(String tenant, String repo, ReviewQueue.Row row) throws IOException {
         return new ReviewQueue.Row(row.when(), repositories.servedPath(tenant, repo, row.path()), row.coordinate(),
-                row.verdict(), row.reasons(), row.holds());
+                row.verdict(), row.reasons(), row.rules(), row.holds());
     }
 
     /** The largest review-queue page served; a caller past it follows {@code next}. */

@@ -34,6 +34,9 @@ final class SignaturePolicy implements GatePolicy {
     /** The hold kind a retroactive sweep records under, so a publish-time hold leaves the record a sweep would. */
     static final String KIND = "signature";
 
+    /** What this dimension holds for, at the gate and in the retroactive sweep alike. */
+    static final String RULE = "Signature";
+
     static final String INVALID = "signature-invalid";
     static final String UNTRUSTED = "signature-untrusted";
     static final String CHANGED = "signature-signer-changed";
@@ -92,6 +95,11 @@ final class SignaturePolicy implements GatePolicy {
     /** This policy on the proxy leg: the proxy dial's missing-signature verdict, every other verdict the same. */
     SignaturePolicy onProxy() {
         return new SignaturePolicy(invalid, untrusted, changed, missingOnProxy, missingOnProxy, floor, belowFloor);
+    }
+
+    @Override
+    public String rule() {
+        return RULE;
     }
 
     @Override

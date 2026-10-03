@@ -21,6 +21,11 @@ final class PolicyGatePolicy implements GatePolicy {
     }
 
     @Override
+    public String rule() {
+        return "Policy rule";
+    }
+
+    @Override
     public List<ComplianceGate.Finding> assess(ComplianceGate.Subject subject,
                                                List<AdvisorySource.Advisory> advisories) {
         Map<String, Object> variables = PolicyInput.variables(subject, advisories);

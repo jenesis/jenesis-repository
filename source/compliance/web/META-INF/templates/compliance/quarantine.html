@@ -20,8 +20,7 @@
                 <thead>
                 <tr>
                     <th scope="col">Version</th>
-                    <th scope="col">Verdict</th>
-                    <th scope="col">Held by</th>
+                    <th scope="col">Held for</th>
                     <th scope="col" th:if="${isEditor}"><span class="app-sr-only">Actions</span></th>
                 </tr>
                 </thead>
@@ -34,35 +33,31 @@
                         <a th:if="${q.placed()}" th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${q.ecosystem},coordinate=${q.bareCoordinate})}" th:text="${q.coordinate}">group:artifact:version</a>
                         <span th:unless="${q.placed()}" th:text="${q.coordinate}">group:artifact:version</span>
                     </td>
-                    <td><span th:each="verdict : ${q.verdicts}" class="app-badge app-badge--warn"
-                              th:text="${@format.verdict(verdict)}">Hold for review</span></td>
-                    <!--/* The retroactive hold kinds standing on this coordinate, read from the durable
-                           holds/ records rather than from the installed providers. A kind whose module has been
-                           uninstalled still holds, and is drawn here exactly as an orphaned finding source is - the
-                           same dashed tile and the same words - so an operator releasing it knows no installed module
-                           can re-evaluate that hold. A hold the gate placed when the artifact arrived writes no record,
-                           and says it is the gate's. */-->
+                    <!--/* What the version is held for, in an operator's words - the rules that decided each of its holds.
+                           A hold kind no installed module answers to is drawn beside them as an orphaned finding source
+                           is, so an operator releasing it knows nothing can hold it again for that kind. A hold recorded
+                           before rules were, names its kinds instead. */-->
                     <td>
-                        <th:block th:each="mark : ${q.holds}">
+                        <th:block th:each="rule : ${q.rules}"><span class="app-badge app-badge--warn"
+                                th:text="${rule}">Deny list</span> </th:block>
+                        <th:block th:each="mark : ${q.rules.isEmpty()} ? ${q.holds} : ${q.orphaned()}">
                             <span th:class="${mark.installed()} ? 'format-icon' : 'format-icon format-icon--orphaned'"
                                   th:title="${mark.title()}" role="img" th:attr="aria-label=${mark.title()}"
                                   th:utext="${mark.svg()}"></span><small th:text="${mark.name()}">kev</small><small
                                     th:unless="${mark.installed()}">&mdash; not installed</small><br>
                         </th:block>
-                        <small th:if="${q.holds.isEmpty()}"
-                               title="Held by the screen the artifact met when it was published or fetched">the gate, on
-                            arrival</small>
+                        <small th:if="${q.rules.isEmpty() and q.holds.isEmpty()}">not recorded</small>
                     </td>
                     <td th:if="${isEditor}" class="app-list__actions">
                         <!--/* Release admits what the gate held and loses nothing, so it is the caution and asks,
-                             naming the verdict and the reasons it overrides; discard drops the bytes for good, so it
+                             naming the rules and the reasons it overrides; discard drops the bytes for good, so it
                              is the danger, last, and asks for the name. Each acts on every file of the version. */-->
                         <div class="app-actions">
                             <form method="post" th:action="@{'/ui/repositories/' + ${repo} + '/quarantine/release'}"
                                   th:with="reasons=${#strings.listJoin(q.reasons, '; ')}">
                                 <input type="hidden" name="coordinate" th:value="${q.coordinate}">
                                 <input type="hidden" name="path" th:each="path : ${q.paths()}" th:value="${path}">
-                                <button th:replace="~{base :: cautionButton('Release', |Serve ${q.coordinate} despite its ${#strings.listJoin(q.verdicts, ', ')} verdict? ${reasons}|)}">Release</button>
+                                <button th:replace="~{base :: cautionButton('Release', |Serve ${q.coordinate}, held for ${#strings.listJoin(q.rules, ', ')}? ${reasons}|)}">Release</button>
                             </form>
                             <form method="post" class="app-actions__danger"
                                   th:action="@{'/ui/repositories/' + ${repo} + '/quarantine/discard'}">
@@ -74,7 +69,7 @@
                     </td>
                 </tr>
                 <tr class="app-list__detail">
-                    <td th:colspan="${isEditor} ? 4 : 3">
+                    <td th:colspan="${isEditor} ? 3 : 2">
                         <ul th:unless="${q.reasons.isEmpty()}" class="app-reasons" aria-label="Reasons">
                             <li th:each="reason : ${q.reasons}"><small th:text="${reason}">reason</small></li>
                         </ul>

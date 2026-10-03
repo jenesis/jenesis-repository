@@ -568,6 +568,24 @@ public final class ComplianceScreen implements PublishInterceptor {
         return reasons;
     }
 
+    /** The rules a held or refused upload names beside its reasons: the gate's, and why a screen could not complete. */
+    private static List<String> rulesOf(ComplianceGate.Assessment assessment, String malformed, String feedFailed) {
+        List<String> rules = new ArrayList<>(assessment == null ? List.of() : assessment.rules());
+        if (malformed != null) {
+            rules.add(UNREADABLE_RULE);
+        }
+        if (feedFailed != null) {
+            rules.add(FEED_UNAVAILABLE_RULE);
+        }
+        return List.copyOf(rules);
+    }
+
+    /** The rule an upload no inspector could parse is held for. */
+    static final String UNREADABLE_RULE = "Unreadable artifact";
+
+    /** The rule an upload is held for while an advisory feed it must be screened against cannot answer. */
+    static final String FEED_UNAVAILABLE_RULE = "Advisory feed unavailable";
+
     /**
      * The gate this repository actually assesses through: the deployment's gate with its two per-repository overlays
      * applied. Extracted rather than inlined because a publish is not the only caller - the late-declaration
@@ -680,7 +698,8 @@ public final class ComplianceScreen implements PublishInterceptor {
                 // with, so what is at stake is only that its row stays distinguishable.
                 String reviewPath = PublishHolds.reviewPath(artifact, inspected);
                 new QuarantineLog(store).record(Clocks.now(), reviewPath, PublishHolds.coordinate(artifact, inspected),
-                        disposition == Disposition.QUARANTINE ? Verdict.QUARANTINE : Verdict.REJECT, reasons);
+                        disposition == Disposition.QUARANTINE ? Verdict.QUARANTINE : Verdict.REJECT, reasons,
+                        rulesOf(assessment, malformed, feedFailed));
                 if (disposition == Disposition.QUARANTINE) {
                     recorder.recordGateFindings(store, artifact, assessment);
                     PublishHolds.recordHeld(store, reviewPath, artifact, inspected, assessment);

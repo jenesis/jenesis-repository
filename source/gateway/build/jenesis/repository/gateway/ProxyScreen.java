@@ -275,7 +275,8 @@ public final class ProxyScreen {
         if (!versioned && screening.verdict() == Verdict.QUARANTINE) {
             List<String> reasons = new ArrayList<>(screening.reasons());
             reasons.add(UNVERSIONED_REASON);
-            screening = new Screening(Verdict.REJECT, screening.coordinate(), reasons, screening.complete());
+            screening = new Screening(Verdict.REJECT, screening.coordinate(), reasons, screening.rules(),
+                    screening.complete());
         }
         if (screening.verdict() == Verdict.QUARANTINE) {
             quarantine(path, new ByteArrayInputStream(body), upstream);
@@ -367,7 +368,9 @@ public final class ProxyScreen {
                 Verdict verdict = scanned.verdict().compareTo(beside.verdict()) > 0
                         ? scanned.verdict()
                         : beside.verdict();
-                return new Screening(verdict, beside.coordinate(), reasons, true);
+                List<String> rules = new ArrayList<>(beside.rules());
+                scanned.rules().stream().filter(rule -> !rules.contains(rule)).forEach(rules::add);
+                return new Screening(verdict, beside.coordinate(), reasons, rules, true);
             } else {
                 // A bound stopped some inspector's read and nothing licensable came back. The fallback subject is
                 // APPENDED rather than substituted, so a content finding made over the truncated head is still
@@ -383,9 +386,11 @@ public final class ProxyScreen {
         for (ComplianceGate.Finding finding : assessment.findings()) {
             reasons.add(finding.detail());
         }
+        List<String> rules = new ArrayList<>(assessment.rules());
         if (verdict == Verdict.ALLOW && immature(lastModified)) {
             verdict = Verdict.QUARANTINE;
             reasons.add("Immature: upstream published within the " + holdDays + "-day hold");
+            rules.add(IMMATURE_RULE);
         }
         if (!inspection.complete()) {
             // The screen reached a decision over less than the whole artifact. It is recorded on the outcome either
@@ -402,6 +407,7 @@ public final class ProxyScreen {
                     // nothing was found wrong, only unread, so this is a decision waiting on a human rather than a
                     // verdict against the artifact, and a reviewer can release it.
                     verdict = Verdict.QUARANTINE;
+                    rules.add(INCOMPLETE_RULE);
                     LOGGER.warn("Withholding " + path + " on an INCOMPLETE screen: an inspector's read stopped at a "
                             + "bound before the whole artifact was screened, and withhold-incomplete-screens is on");
                 } else {
@@ -412,29 +418,40 @@ public final class ProxyScreen {
                 }
             }
         }
-        return new Screening(verdict, coordinate(subjects), reasons, inspection.complete());
+        return new Screening(verdict, coordinate(subjects), reasons, rules, inspection.complete());
     }
 
     /** Record a non-{@code ALLOW} verdict in the durable {@link QuarantineLog}; a clean artifact records nothing.
      *  Shared with the hardened proxy leg, which records both a policy withholding and a structural refusal here. */
     void log(String path, Screening screening) throws IOException {
         if (screening.verdict() != Verdict.ALLOW) {
-            new QuarantineLog(store).record(
-                    Instant.now(), path, screening.coordinate(), screening.verdict(), screening.reasons());
+            new QuarantineLog(store).record(Instant.now(), path, screening.coordinate(), screening.verdict(),
+                    screening.reasons(), screening.rules());
         }
     }
 
-    /** A screening outcome: the verdict, the coordinate the log names, the reasons behind a withholding, and whether
-     *  the decision was reached over the WHOLE artifact or over as much of it as a bound allowed. Reused by the
-     *  hardened proxy leg to carry its own decision and its named structural refusals. */
-    record Screening(Verdict verdict, String coordinate, List<String> reasons, boolean complete) {
+    /** A screening outcome: the verdict, the coordinate the log names, the reasons behind a withholding and the rules
+     *  that decided it, and whether the decision was reached over the WHOLE artifact or over as much of it as a bound
+     *  allowed. Reused by the hardened proxy leg to carry its own decision and its named structural refusals. */
+    record Screening(Verdict verdict, String coordinate, List<String> reasons, List<String> rules, boolean complete) {
+
+        Screening {
+            reasons = List.copyOf(reasons);
+            rules = List.copyOf(rules);
+        }
 
         /** A screening reached over the whole artifact - a structural refusal or a drift alarm, which are decisions
          *  about the fetch rather than about how far an inspector read. */
-        Screening(Verdict verdict, String coordinate, List<String> reasons) {
-            this(verdict, coordinate, reasons, true);
+        Screening(Verdict verdict, String coordinate, List<String> reasons, List<String> rules) {
+            this(verdict, coordinate, reasons, rules, true);
         }
     }
+
+    /** The rule a release younger than the immaturity hold is held for. */
+    static final String IMMATURE_RULE = "Immature release";
+
+    /** The rule an artifact no inspector could read whole is held for, under withhold-incomplete-screens. */
+    static final String INCOMPLETE_RULE = "Incomplete screen";
 
     private boolean immature(Instant lastModified) {
         return holdDays > 0 && lastModified != null
@@ -463,11 +480,13 @@ public final class ProxyScreen {
         for (ComplianceGate.Finding finding : assessment.findings()) {
             reasons.add(finding.detail());
         }
+        List<String> rules = new ArrayList<>(assessment.rules());
         if (verdict == Verdict.ALLOW && immature(lastModified)) {
             verdict = Verdict.QUARANTINE;
             reasons.add("Immature: upstream published within the " + holdDays + "-day hold");
+            rules.add(IMMATURE_RULE);
         }
-        return new Screening(verdict, coordinate(List.of(pathDerivedSubject(path))), reasons);
+        return new Screening(verdict, coordinate(List.of(pathDerivedSubject(path))), reasons, rules);
     }
 
     /** The stand-in subject for an artifact screened from its path alone rather than from parsed content on the proxy

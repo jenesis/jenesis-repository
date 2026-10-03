@@ -5,6 +5,7 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.Freshness;
+import build.jenesis.repository.compliance.GatePolicy;
 import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.compliance.VulnerabilityPolicy;
@@ -166,8 +167,17 @@ class GateHostContractTest {
         // ComplianceGate.assess with no containment at all, and that is the design: containing a dimension would file
         // "I could not evaluate this" as "this passed my check". The host promise is that the uncontained throw is
         // caught by the screen ONE level up and turned into a hold, not into an admit.
-        ComplianceGate gate = gate(AdvisorySource.none()).policies(List.of((subject, advisories) -> {
-            throw new IllegalStateException("planted: this dimension cannot reach its policy data");
+        ComplianceGate gate = gate(AdvisorySource.none()).policies(List.of(new GatePolicy() {
+            @Override
+            public List<ComplianceGate.Finding> assess(ComplianceGate.Subject subject,
+                                                       List<AdvisorySource.Advisory> advisories) {
+                throw new IllegalStateException("planted: this dimension cannot reach its policy data");
+            }
+
+            @Override
+            public String rule() {
+                return "Unreachable";
+            }
         }));
         String path = "/gatetest/clean/lib-1.0.jar";
 
@@ -222,7 +232,18 @@ class GateHostContractTest {
         // Without this, every leg above is satisfiable by a host that holds everything. The same inspector, the same
         // merge shape and a dimension that answers cleanly must still produce a served artifact.
         ComplianceGate gate = gate(AdvisorySource.combined(AdvisorySource.none(), AdvisorySource.none()))
-                .policies(List.of((subject, advisories) -> List.of()));
+                .policies(List.of(new GatePolicy() {
+                    @Override
+                    public List<ComplianceGate.Finding> assess(ComplianceGate.Subject subject,
+                                                               List<AdvisorySource.Advisory> advisories) {
+                        return List.of();
+                    }
+
+                    @Override
+                    public String rule() {
+                        return "Clean";
+                    }
+                }));
         String path = "/gatetest/clean/lib-1.0.jar";
 
         Publication.Published published = publish(gate, path, "clean bytes");

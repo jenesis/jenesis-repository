@@ -72,7 +72,7 @@ class ReviewDashboardTest {
         for (String path : paths) {
             String hash = publication.storeBlob(new ByteArrayInputStream(path.getBytes(StandardCharsets.UTF_8)));
             publication.link("/quarantine" + path, hash);
-            log.record(Instant.now(), path, coordinate, Verdict.QUARANTINE, List.of("held"));
+            log.record(Instant.now(), path, coordinate, Verdict.QUARANTINE, List.of("held"), List.of());
         }
     }
 }

@@ -27,8 +27,8 @@ class QuarantineLogAuditIntegrityTest {
         assertThat("/Aa".hashCode()).isEqualTo("/BB".hashCode());
         ArtifactStore store = new MemStore();
         QuarantineLog log = new QuarantineLog(store);
-        log.record(WHEN, "/Aa", "eco:Aa", Verdict.REJECT, List.of("blocked"));
-        log.record(WHEN, "/BB", "eco:BB", Verdict.QUARANTINE, List.of("held"));
+        log.record(WHEN, "/Aa", "eco:Aa", Verdict.REJECT, List.of("blocked"), List.of());
+        log.record(WHEN, "/BB", "eco:BB", Verdict.QUARANTINE, List.of("held"), List.of());
 
         assertThat(log.events()).extracting(QuarantineLog.Event::path)
                 .as("both audit rows survive - neither collided over the other")
@@ -39,8 +39,8 @@ class QuarantineLogAuditIntegrityTest {
     void discarding_one_collision_path_leaves_the_other_intact() throws IOException {
         ArtifactStore store = new MemStore();
         QuarantineLog log = new QuarantineLog(store);
-        log.record(WHEN, "/Aa", "eco:Aa", Verdict.REJECT, List.of("blocked"));
-        log.record(WHEN, "/BB", "eco:BB", Verdict.QUARANTINE, List.of("held"));
+        log.record(WHEN, "/Aa", "eco:Aa", Verdict.REJECT, List.of("blocked"), List.of());
+        log.record(WHEN, "/BB", "eco:BB", Verdict.QUARANTINE, List.of("held"), List.of());
 
         log.discarded("/Aa");
 

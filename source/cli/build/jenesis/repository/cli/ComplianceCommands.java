@@ -395,7 +395,11 @@ final class ComplianceCommands {
                 }
                 for (Map.Entry<String, List<ReviewClient.QuarantineEvent>> version : versions.entrySet()) {
                     ReviewClient.QuarantineEvent first = version.getValue().getFirst();
-                    System.out.printf("%s  %-9s %s%n", first.when(), first.verdict(), version.getKey());
+                    Set<String> rules = new LinkedHashSet<>();
+                    version.getValue().stream().filter(event -> event.rules() != null)
+                            .forEach(event -> rules.addAll(event.rules()));
+                    System.out.printf("%s  %s%s%n", first.when(), version.getKey(),
+                            rules.isEmpty() ? "" : "  held for " + String.join(", ", rules));
                     for (ReviewClient.QuarantineEvent event : version.getValue()) {
                         System.out.println("    " + event.path());
                         if (event.reasons() != null) {

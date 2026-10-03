@@ -86,6 +86,12 @@ public final class HardenedScreen {
      *  */
     static final String PROFILE = "hardened/full-body";
 
+    /** The rule an upstream that changed a release's bytes under its immutable coordinate is refused for. */
+    static final String DRIFT_RULE = "Upstream changed a release";
+
+    /** The rule a fetch the hardened proxy could not take apart safely is refused for. */
+    static final String REFUSAL_RULE = "Hardened proxy refusal";
+
     /** The reason-line prefix every hardened structural refusal (and the drift alarm) records into the durable
      *  {@link build.jenesis.repository.gate.QuarantineLog}. It names the leg so a review surface can tell a hardened
      *  refusal apart from an ordinary publish/proxy gate hold without re-deriving the reason text - the read side
@@ -728,7 +734,8 @@ public final class HardenedScreen {
         String reason = REFUSAL_REASON_PREFIX + Refusal.DRIFT + "): " + Refusal.DRIFT.detail()
                 + " - previously screened and pinned " + baseline.digest() + ", upstream now serves sha256:" + digest;
         LOGGER.warn("DRIFT ALARM: upstream tampering under immutable coordinate " + path + " - " + reason);
-        screen.log(path, new ProxyScreen.Screening(Verdict.REJECT, ProxyScreen.fileName(path), List.of(reason)));
+        screen.log(path, new ProxyScreen.Screening(Verdict.REJECT, ProxyScreen.fileName(path), List.of(reason),
+                List.of(DRIFT_RULE)));
         return Optional.empty();
     }
 
@@ -788,7 +795,8 @@ public final class HardenedScreen {
         String reason = REFUSAL_REASON_PREFIX + refusal + "): " + refusal.detail()
                 + (cause == null || cause.getMessage() == null ? "" : " - " + cause.getMessage());
         LOGGER.warn("REFUSED hardened proxy artifact " + path + ": " + reason, cause);
-        screen.log(path, new ProxyScreen.Screening(Verdict.REJECT, ProxyScreen.fileName(path), List.of(reason)));
+        screen.log(path, new ProxyScreen.Screening(Verdict.REJECT, ProxyScreen.fileName(path), List.of(reason),
+                List.of(REFUSAL_RULE)));
         return Optional.empty();
     }
 }

@@ -33,10 +33,11 @@ public final class ReviewQueue {
     }
 
     /** One held artifact: when and at what path it was held, the coordinate and verdict the gate recorded, its
-     *  reasons, and the hold kinds standing on the coordinate. A hold whose audit row is missing is reported as a
-     *  {@link Verdict#QUARANTINE} whose one reason says so - the pointer is the truth, the row was the explanation. */
+     *  reasons and the rules that decided it, and the hold kinds standing on the coordinate. A hold whose audit row is
+     *  missing is reported as a {@link Verdict#QUARANTINE} whose one reason says so - the pointer is the truth, the
+     *  row was the explanation. */
     public record Row(String when, String path, String coordinate, String verdict, List<String> reasons,
-                      List<HeldKind> holds) {
+                      List<String> rules, List<HeldKind> holds) {
     }
 
     /** A retroactive hold kind standing on a row's coordinate, and whether an installed provider answers to it.
@@ -87,10 +88,10 @@ public final class ReviewQueue {
             if (held.event().isPresent()) {
                 QuarantineLog.Event event = held.event().get();
                 rows.add(new Row(event.when().toString(), held.path(), event.coordinate(), event.verdict().name(),
-                        event.reasons(), holds));
+                        event.reasons(), event.rules(), holds));
             } else {
                 rows.add(new Row("", held.path(), held.path(), Verdict.QUARANTINE.name(),
-                        List.of("audit row missing"), holds));
+                        List.of("audit row missing"), List.of(), holds));
             }
         }
         return new Page(List.copyOf(rows), next);

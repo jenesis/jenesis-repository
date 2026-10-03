@@ -55,8 +55,15 @@ public final class QuarantineLog {
         this.store = store;
     }
 
-    /** One gate decision that withheld an artifact: when, the request path and coordinate, the verdict, and why. */
-    public record Event(Instant when, String path, String coordinate, Verdict verdict, List<String> reasons) {
+    /** One gate decision that withheld an artifact: when, the request path and coordinate, the verdict, why, and the
+     *  rules that decided it in an operator's words - the deny list, a vulnerability, a licence. */
+    public record Event(Instant when, String path, String coordinate, Verdict verdict, List<String> reasons,
+                        List<String> rules) {
+
+        public Event {
+            reasons = List.copyOf(reasons);
+            rules = List.copyOf(rules);
+        }
     }
 
     /** One artifact held for review: the live hold path, and its recorded gate decision, empty when the row was lost
@@ -109,9 +116,9 @@ public final class QuarantineLog {
         return paths;
     }
 
-    public void record(Instant when, String path, String coordinate, Verdict verdict, List<String> reasons)
-            throws IOException {
-        String line = serialize(when, path, coordinate, verdict, reasons);
+    public void record(Instant when, String path, String coordinate, Verdict verdict, List<String> reasons,
+                       List<String> rules) throws IOException {
+        String line = serialize(when, path, coordinate, verdict, reasons, rules);
         store.write(eventKey(RecentIndex.orderKey(when.toEpochMilli()) + "-" + digest(path)),
                 new ByteArrayInputStream(line.getBytes(StandardCharsets.UTF_8)));
         indexLatest(when, path, line);
@@ -287,17 +294,22 @@ public final class QuarantineLog {
     }
 
     private static String serialize(Instant when, String path, String coordinate, Verdict verdict,
-                                    List<String> reasons) {
-        return String.join("\t", when.toString(), path, coordinate, verdict.name(), String.join(" | ", reasons));
+                                    List<String> reasons, List<String> rules) {
+        return String.join("\t", when.toString(), path, coordinate, verdict.name(), String.join(" | ", reasons),
+                String.join(" | ", rules));
     }
 
     private static Optional<Event> parse(String line) {
-        String[] parts = line.split("\t", 5);
-        if (parts.length != 5) {
+        String[] parts = line.split("\t", 6);
+        if (parts.length < 5) {
             return Optional.empty();
         }
-        List<String> reasons = parts[4].isEmpty() ? List.of() : List.of(REASON_SEPARATOR.split(parts[4]));
-        return Optional.of(new Event(Instant.parse(parts[0]), parts[1], parts[2], Verdict.valueOf(parts[3]), reasons));
+        return Optional.of(new Event(Instant.parse(parts[0]), parts[1], parts[2], Verdict.valueOf(parts[3]),
+                listed(parts[4]), parts.length == 6 ? listed(parts[5]) : List.of()));
+    }
+
+    private static List<String> listed(String field) {
+        return field.isEmpty() ? List.of() : List.of(REASON_SEPARATOR.split(field));
     }
 
     /** The hex SHA-256 of a request path, so two paths withheld in the same millisecond never share an event object.

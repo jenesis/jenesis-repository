@@ -4,6 +4,7 @@ import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.cleanup.Release;
 import build.jenesis.repository.compliance.AdvisorySource;
+import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.KnownExploitedSource;
 import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.gate.KevHold;
@@ -112,9 +113,9 @@ public final class KevEnforceTask implements MaintenanceTask {
                 // Converge a partially held release rather than skipping it, so a crash after the first pointer, or a
                 // path added later, is held on the next pass.
                 RetroactiveHolds.converge(store, publication, inventory, log, context.now(), eco, coordinate, version,
-                        paths, List.of("KEV retroactive: " + String.join(", ",
-                                kevCves.stream().filter(cve -> !overridden.contains(cve)).toList())),
-                        release.coordinate() + ":" + version);
+                        paths, new RetroactiveHolds.Grounds(ComplianceGate.KNOWN_EXPLOITED_RULE,
+                                release.coordinate() + ":" + version, List.of("KEV retroactive: " + String.join(", ",
+                                        kevCves.stream().filter(cve -> !overridden.contains(cve)).toList()))));
                 held[0]++;
                 return;   // already held (idempotent)
             }
@@ -123,8 +124,9 @@ public final class KevEnforceTask implements MaintenanceTask {
             }
             List<String> enforcing = kevCves.stream().filter(cve -> !overridden.contains(cve)).toList();
             if (RetroactiveHolds.hold(store, publication, inventory, log, context.now(), eco, coordinate, version,
-                    paths, List.of("KEV retroactive: " + String.join(", ", enforcing)),
-                    release.coordinate() + ":" + version,
+                    paths, new RetroactiveHolds.Grounds(ComplianceGate.KNOWN_EXPLOITED_RULE,
+                            release.coordinate() + ":" + version,
+                            List.of("KEV retroactive: " + String.join(", ", enforcing))),
                     () -> KevHold.hold(store, eco, coordinate, version, kevCves))) {
                 held[0]++;
             } else if (inventory.servesFromBlobs(eco)) {

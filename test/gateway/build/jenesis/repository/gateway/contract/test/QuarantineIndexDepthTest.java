@@ -59,7 +59,7 @@ class QuarantineIndexDepthTest {
         ArtifactStore store = store();
         QuarantineLog log = new QuarantineLog(store);
 
-        log.record(WHEN, DEEP_PATH, "libexample:1.0-1", Verdict.QUARANTINE, List.of("kev"));
+        log.record(WHEN, DEEP_PATH, "libexample:1.0-1", Verdict.QUARANTINE, List.of("kev"), List.of());
 
         Optional<QuarantineLog.Event> latest = log.latest(DEEP_PATH);
         assertThat(latest).as("the derived index row must exist for a deep path, not only for a shallow one")
@@ -71,7 +71,7 @@ class QuarantineIndexDepthTest {
         assertThat(latest.get().reasons()).containsExactly("kev");
 
         // A newer decision still wins on the same path, so the digest key did not turn the index into an append.
-        log.record(WHEN.plusSeconds(60), DEEP_PATH, "libexample:1.0-1", Verdict.REJECT, List.of("blocked"));
+        log.record(WHEN.plusSeconds(60), DEEP_PATH, "libexample:1.0-1", Verdict.REJECT, List.of("blocked"), List.of());
         assertThat(log.latest(DEEP_PATH)).get().extracting(QuarantineLog.Event::verdict).isEqualTo(Verdict.REJECT);
     }
 
@@ -80,8 +80,8 @@ class QuarantineIndexDepthTest {
         ArtifactStore store = store();
         QuarantineLog log = new QuarantineLog(store);
         log.record(WHEN, "/maven/org/example/lib/1.0/lib-1.0.jar", "org.example:lib", Verdict.QUARANTINE,
-                List.of("licence"));
-        log.record(WHEN, DEEP_PATH, "libexample:1.0-1", Verdict.QUARANTINE, List.of("kev"));
+                List.of("licence"), List.of());
+        log.record(WHEN, DEEP_PATH, "libexample:1.0-1", Verdict.QUARANTINE, List.of("kev"), List.of());
 
         List<String> names = store.list("audit/quarantine-index");
         assertThat(names).as("one row per held path").hasSize(2);
@@ -94,7 +94,7 @@ class QuarantineIndexDepthTest {
     void a_discard_removes_the_deep_paths_row_too() throws IOException {
         ArtifactStore store = store();
         QuarantineLog log = new QuarantineLog(store);
-        log.record(WHEN, DEEP_PATH, "libexample:1.0-1", Verdict.QUARANTINE, List.of("kev"));
+        log.record(WHEN, DEEP_PATH, "libexample:1.0-1", Verdict.QUARANTINE, List.of("kev"), List.of());
 
         log.discarded(DEEP_PATH);
 

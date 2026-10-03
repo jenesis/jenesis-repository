@@ -37,7 +37,7 @@ class ReviewQueueTest {
         publication.link("/quarantine" + path,
                 publication.storeBlob(new ByteArrayInputStream(path.getBytes(StandardCharsets.UTF_8))));
         if (coordinate != null) {
-            new QuarantineLog(store).record(WHEN, path, coordinate, Verdict.QUARANTINE, List.of("held for review"));
+            new QuarantineLog(store).record(WHEN, path, coordinate, Verdict.QUARANTINE, List.of("held for review"), List.of());
         }
     }
 

@@ -64,6 +64,11 @@ class HeldEvidenceRescreenTest {
         }
 
         @Override
+        public String rule() {
+            return "Content scan";
+        }
+
+        @Override
         public List<ComplianceGate.Finding> assess(ComplianceGate.Subject subject,
                                                    List<AdvisorySource.Advisory> advisories) {
             return recorded().isPresent() ? List.of()

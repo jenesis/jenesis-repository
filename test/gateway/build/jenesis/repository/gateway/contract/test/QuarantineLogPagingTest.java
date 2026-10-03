@@ -34,7 +34,7 @@ class QuarantineLogPagingTest {
         QuarantineLog log = new QuarantineLog(store);
         for (int event = 0; event < 200; event++) {
             log.record(BASE.plusSeconds(event), "/maven/org/pkg" + event + "/1.0/a.jar",
-                    "org:pkg" + event, Verdict.REJECT, List.of("blocked"));
+                    "org:pkg" + event, Verdict.REJECT, List.of("blocked"), List.of());
         }
 
         CountingStore counting = new CountingStore(store);
@@ -53,9 +53,9 @@ class QuarantineLogPagingTest {
         ArtifactStore store = store();
         QuarantineLog log = new QuarantineLog(store);
         String path = "/maven/org/pkg/1.0/a.jar";
-        log.record(BASE, path, "org:pkg", Verdict.QUARANTINE, List.of("first"));
-        log.record(BASE.plusSeconds(60), path, "org:pkg", Verdict.REJECT, List.of("later"));
-        log.record(BASE.minusSeconds(60), path, "org:pkg", Verdict.QUARANTINE, List.of("stale"));  // out of order
+        log.record(BASE, path, "org:pkg", Verdict.QUARANTINE, List.of("first"), List.of());
+        log.record(BASE.plusSeconds(60), path, "org:pkg", Verdict.REJECT, List.of("later"), List.of());
+        log.record(BASE.minusSeconds(60), path, "org:pkg", Verdict.QUARANTINE, List.of("stale"), List.of());  // out of order
 
         CountingStore counting = new CountingStore(store);
         Optional<QuarantineLog.Event> latest = new QuarantineLog(counting).latest(path);

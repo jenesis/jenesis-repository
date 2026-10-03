@@ -59,7 +59,7 @@ final class PublishHolds {
             reasons.add(finding.detail());
         }
         new QuarantineLog(store).record(Clocks.now(), reviewPath(artifact, inspected),
-                coordinate(artifact, inspected), Verdict.ALLOW, reasons);
+                coordinate(artifact, inspected), Verdict.ALLOW, reasons, List.of());
     }
 
     /**
@@ -236,7 +236,7 @@ final class PublishHolds {
             reasons.add(finding.detail());
         }
         new QuarantineLog(store).record(Clocks.now(), path, coordinate(described.get(), inspected),
-                Verdict.QUARANTINE, reasons);
+                Verdict.QUARANTINE, reasons, assessment.rules());
         return false;
     }
 

@@ -65,11 +65,11 @@ class HardeningVerdictsTest {
     void recent_hardened_refusals_surface_and_an_ordinary_gate_hold_does_not() throws Exception {
         String refused = "/spy/oversize-2.0.spy";
         quarantine.record(Instant.parse("2026-07-21T09:00:00Z"), refused, refused, Verdict.REJECT,
-                List.of(HardenedScreen.REFUSAL_REASON_PREFIX + HardenedScreen.Refusal.OVERSIZE + "): too big"));
+                List.of(HardenedScreen.REFUSAL_REASON_PREFIX + HardenedScreen.Refusal.OVERSIZE + "): too big"), List.of());
         // An ordinary publish-path gate hold recorded in the same log must NOT be reported as a hardened refusal.
         String held = "/maven/org/acme/tool/1.0/tool-1.0.jar";
         quarantine.record(Instant.parse("2026-07-21T08:00:00Z"), held, held, Verdict.QUARANTINE,
-                List.of("held: a vulnerability policy match"));
+                List.of("held: a vulnerability policy match"), List.of());
 
         List<HardeningVerdicts.Refusal> refusals = new HardeningVerdicts(metadata, quarantine).refusals(10);
 

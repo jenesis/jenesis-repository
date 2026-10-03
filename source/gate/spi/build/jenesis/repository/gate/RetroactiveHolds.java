@@ -27,6 +27,22 @@ public final class RetroactiveHolds {
     private RetroactiveHolds() {
     }
 
+    /**
+     * What a pass holds a version for: the rules that hold it, in an operator's words, the coordinate the review log
+     * names, and every reason - the {@link QuarantineLog} row each held path gets.
+     */
+    public record Grounds(List<String> rules, String subject, List<String> reasons) {
+
+        public Grounds {
+            rules = List.copyOf(rules);
+            reasons = List.copyOf(reasons);
+        }
+
+        public Grounds(String rule, String subject, List<String> reasons) {
+            this(List.of(rule), subject, reasons);
+        }
+    }
+
     /** The kind's own record, written before any pointer - what the hold is a hold on, in the kind's vocabulary. */
     @FunctionalInterface
     public interface Record {
@@ -46,13 +62,13 @@ public final class RetroactiveHolds {
     }
 
     /**
-     * Places a fresh hold on a version, each row of the review log carrying every reason the pass holds it for.
+     * Places a fresh hold on a version, each row of the review log carrying the pass's grounds.
      * Answers whether anything was held: a version with no served pointer and no content hash holds and records
      * nothing.
      */
     public static boolean hold(ArtifactStore store, Publication publication, StoreRepositoryInventory inventory,
                                QuarantineLog log, Instant now, String ecosystem, String coordinate, String version,
-                               List<String> paths, List<String> reasons, String subject, Record record)
+                               List<String> paths, Grounds grounds, Record record)
             throws IOException {
         LinkedHashMap<String, String> holdable = new LinkedHashMap<>();
         for (String path : paths) {
@@ -68,10 +84,9 @@ public final class RetroactiveHolds {
                     entry.getKey(), null, false, null, -1L));   // the blobs-namespace read side
             // The path-to-coordinate record precedes the pointer, so the hold stays answerable without the format.
             HeldSubjects.hold(publication, store, entry.getKey(), entry.getValue(), ecosystem, coordinate, version);
-            log.record(now, entry.getKey(), subject, Verdict.QUARANTINE, reasons);
+            log.record(now, entry.getKey(), grounds.subject(), Verdict.QUARANTINE, grounds.reasons(), grounds.rules());
         }
-        withholdBlobs(store, publication, log, now, ecosystem, coordinate, version, paths, blobHashes, reasons,
-                subject);
+        withholdBlobs(store, publication, log, now, ecosystem, coordinate, version, paths, blobHashes, grounds);
         return true;
     }
 
@@ -81,7 +96,7 @@ public final class RetroactiveHolds {
      */
     public static void converge(ArtifactStore store, Publication publication, StoreRepositoryInventory inventory,
                                 QuarantineLog log, Instant now, String ecosystem, String coordinate, String version,
-                                List<String> paths, List<String> reasons, String subject) throws IOException {
+                                List<String> paths, Grounds grounds) throws IOException {
         for (String path : paths) {
             Optional<String> blob = publication.blob(path);
             if (blob.isEmpty()) {
@@ -93,10 +108,10 @@ public final class RetroactiveHolds {
                 continue;
             }
             HeldSubjects.hold(publication, store, path, blob.get(), ecosystem, coordinate, version);
-            log.record(now, path, subject, Verdict.QUARANTINE, reasons);
+            log.record(now, path, grounds.subject(), Verdict.QUARANTINE, grounds.reasons(), grounds.rules());
         }
         withholdBlobs(store, publication, log, now, ecosystem, coordinate, version, paths,
-                inventory.blobHashes(ecosystem, coordinate, version), reasons, subject);
+                inventory.blobHashes(ecosystem, coordinate, version), grounds);
     }
 
     /**
@@ -107,8 +122,7 @@ public final class RetroactiveHolds {
      */
     private static void withholdBlobs(ArtifactStore store, Publication publication, QuarantineLog log, Instant now,
                                       String ecosystem, String coordinate, String version, List<String> paths,
-                                      List<String> blobHashes, List<String> reasons, String subject)
-            throws IOException {
+                                      List<String> blobHashes, Grounds grounds) throws IOException {
         ArtifactDescriptor held = new ArtifactDescriptor(ecosystem, coordinate, version, null, null, false, null, -1L);
         for (String hash : blobHashes) {
             Withheld.mark(store, hash, held);
@@ -129,7 +143,7 @@ public final class RetroactiveHolds {
             }
             // Without a publish/ pointer, only the format's BlobLayout maps this path, so the record matters most here.
             HeldSubjects.hold(publication, store, path, target, ecosystem, coordinate, version);
-            log.record(now, path, subject, Verdict.QUARANTINE, reasons);
+            log.record(now, path, grounds.subject(), Verdict.QUARANTINE, grounds.reasons(), grounds.rules());
         }
     }
 }

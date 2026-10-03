@@ -288,11 +288,12 @@ public class CliDispatcherTest {
     }
 
     @Test
-    public void quarantine_lists_held_events_with_their_reasons() throws Exception {
+    public void quarantine_lists_held_events_with_what_they_are_held_for_and_their_reasons() throws Exception {
         quarantineBody = "{\"events\":[{\"when\":\"2026-01-01T00:00:00Z\",\"path\":\"/maven/x/y/1/y-1.jar\","
-                + "\"coordinate\":\"x:y\",\"verdict\":\"REJECT\",\"reasons\":[\"malware\"]}]}";
+                + "\"coordinate\":\"x:y\",\"verdict\":\"QUARANTINE\",\"reasons\":[\"malware\"],"
+                + "\"rules\":[\"Malicious package\"]}]}";
         String out = capture(() -> assertThat(Cli.run(new String[] {"quarantine", "releases"})).isZero());
-        assertThat(out).contains("/maven/x/y/1/y-1.jar").contains("REJECT").contains("malware");
+        assertThat(out).contains("/maven/x/y/1/y-1.jar").contains("held for Malicious package").contains("malware");
     }
 
     @Test

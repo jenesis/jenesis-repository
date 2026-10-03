@@ -135,10 +135,20 @@ class TruncatedFallbackTest {
     }
 
     /** Holds a package subject that declares no licence, and has nothing to say about a content-scan subject. */
-    private static final GatePolicy UNDECLARED_LICENCE = (subject, advisories) ->
-            subject.contentScan() || !subject.licenses().isEmpty()
+    private static final GatePolicy UNDECLARED_LICENCE = new GatePolicy() {
+        @Override
+        public List<ComplianceGate.Finding> assess(ComplianceGate.Subject subject,
+                                                   List<AdvisorySource.Advisory> advisories) {
+            return subject.contentScan() || !subject.licenses().isEmpty()
                     ? List.of()
                     : List.of(new ComplianceGate.Finding(Verdict.QUARANTINE, "No license declared"));
+        }
+
+        @Override
+        public String rule() {
+            return "License";
+        }
+    };
 
     /** A body comfortably past {@link #TINY_PREFIX}, so every inspector's read is truncated. */
     private static byte[] body() {

@@ -609,27 +609,53 @@ public final class ComplianceGate {
      * and - for a dimension whose retroactive sweep also holds - the {@link Hold hold kind} the finding warrants and
      * the subjects it names, so a publish-time hold leaves the same {@code holds/<kind>} record the sweep would.
      */
-    public record Finding(Verdict verdict, String detail, Reachability reachability, Hold hold) {
+    /**
+     * One dimension's say about a subject. {@code rule} is what the dimension holds or refuses for, in an operator's
+     * words - the deny list, a vulnerability, a licence - and the gate stamps it from the dimension that raised the
+     * finding, so a dimension never names it twice; {@code null} on a finding no gate has stamped.
+     */
+    public record Finding(Verdict verdict, String detail, Reachability reachability, Hold hold, String rule) {
 
         public Finding(Verdict verdict, String detail) {
-            this(verdict, detail, Reachability.UNKNOWN, null);
+            this(verdict, detail, Reachability.UNKNOWN, null, null);
         }
 
         public Finding(Verdict verdict, String detail, Reachability reachability) {
-            this(verdict, detail, reachability, null);
+            this(verdict, detail, reachability, null, null);
         }
 
         /** A finding that also names the retroactive hold kind it stands for, and what it holds on. */
         public Finding(Verdict verdict, String detail, Hold hold) {
-            this(verdict, detail, Reachability.UNKNOWN, hold);
+            this(verdict, detail, Reachability.UNKNOWN, hold, null);
+        }
+
+        public Finding(Verdict verdict, String detail, Reachability reachability, Hold hold) {
+            this(verdict, detail, reachability, hold, null);
         }
 
         /** This finding re-stamped with a subject's build-graph reachability, marking its detail when it is on it. */
         Finding markedWith(Reachability reachability) {
             return new Finding(verdict, reachability.onBuildGraph() ? detail + reachability.marker() : detail,
-                    reachability, hold);
+                    reachability, hold, rule);
+        }
+
+        /** This finding as raised by the dimension whose rule is {@code rule}. */
+        Finding ruledBy(String rule) {
+            return new Finding(verdict, detail, reachability, hold, rule);
         }
     }
+
+    /** The rule of the vulnerability dimension's findings. */
+    public static final String VULNERABILITY_RULE = "Vulnerability";
+
+    /** The rule of the malicious-package dimension's findings. */
+    public static final String MALICIOUS_RULE = "Malicious package";
+
+    /** The rule of the deny list's findings. */
+    public static final String DENY_LIST_RULE = "Deny list";
+
+    /** The rule a known-exploited catalogue holds for, at the gate and in the retroactive pass alike. */
+    public static final String KNOWN_EXPLOITED_RULE = "Known-exploited vulnerability";
 
     /**
      * The hold a finding stands for, in the vocabulary the retroactive sweeps keep their records in: the
@@ -662,6 +688,15 @@ public final class ComplianceGate {
 
         public boolean allowed() {
             return verdict == Verdict.ALLOW;
+        }
+
+        /** The rules of the findings that reached this verdict, each once, in the order they were raised. */
+        public List<String> rules() {
+            return findings.stream()
+                    .filter(finding -> finding.verdict() == verdict && finding.rule() != null)
+                    .map(Finding::rule)
+                    .distinct()
+                    .toList();
         }
     }
 
@@ -732,17 +767,17 @@ public final class ComplianceGate {
                 applicable.add(advisory);
             }
         }
-        findings.addAll(vulnerabilityPolicy.assess(applicable));
-        findings.addAll(maliciousPolicy.assess(applicable));
+        ruled(findings, vulnerabilityPolicy.assess(applicable), VULNERABILITY_RULE);
+        ruled(findings, maliciousPolicy.assess(applicable), MALICIOUS_RULE);
         if (packaged) {
-            findings.addAll(denyListPolicy.assess(subject));
+            ruled(findings, denyListPolicy.assess(subject), DENY_LIST_RULE);
         }
         // The discovered dimensions (license, attestation, known-exploited, secret-scan) run only for a claimed
         // subject; unclaimed content (assessUnclaimed) screens against the core coordinate/feed dimensions above and
         // deliberately skips these, so a raw upload with no declared license is not over-quarantined as unknown-license.
         if (discoveredPolicies) {
             for (GatePolicy policy : policies) {
-                findings.addAll(policy.assess(subject, applicable));
+                ruled(findings, policy.assess(subject, applicable), policy.rule());
             }
         }
         List<Finding> marked = new ArrayList<>(findings.size());
@@ -750,6 +785,13 @@ public final class ComplianceGate {
             marked.add(finding.markedWith(subject.reachability()));
         }
         return new Assessment(strongest(marked), List.copyOf(marked));
+    }
+
+    /** {@code raised} added to {@code findings}, each stamped with the rule of the dimension that raised it. */
+    private static void ruled(List<Finding> findings, List<Finding> raised, String rule) {
+        for (Finding finding : raised) {
+            findings.add(finding.ruledBy(rule));
+        }
     }
 
     /** Assess an artifact together with its transitive dependencies; the verdict is the strongest across them all.

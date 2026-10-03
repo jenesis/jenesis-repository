@@ -42,8 +42,10 @@ public final class ReviewClient extends ClientCalls {
     public record Discarded(List<String> discarded, List<String> absent) {
     }
 
-    /** One quarantine hold: when it was recorded, the path within the repository and coordinate, the gate verdict and the reasons. */
-    public record QuarantineEvent(String when, String path, String coordinate, String verdict, List<String> reasons) {
+    /** One quarantine hold: when it was recorded, the path within the repository and coordinate, the gate verdict, the
+     *  reasons, and the rules it is held for. */
+    public record QuarantineEvent(String when, String path, String coordinate, String verdict, List<String> reasons,
+                                  List<String> rules) {
     }
 
     private record QuarantineView(List<QuarantineEvent> events) {

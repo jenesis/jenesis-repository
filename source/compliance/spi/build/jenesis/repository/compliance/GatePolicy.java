@@ -27,6 +27,13 @@ public interface GatePolicy {
     List<ComplianceGate.Finding> assess(ComplianceGate.Subject subject, List<AdvisorySource.Advisory> advisories);
 
     /**
+     * What this dimension holds or refuses an artifact for, in an operator's words - "Licence", "Known-exploited
+     * vulnerability" - which the review queue shows beside every version it held. The gate stamps it on each finding
+     * this dimension raises. No default, since no one wording is right for every dimension.
+     */
+    String rule();
+
+    /**
      * The advisories this dimension holds about {@code subject} beyond what the feeds report - read by the gate before
      * any dimension assesses, and added to the feeds' answer. Empty by default.
      *

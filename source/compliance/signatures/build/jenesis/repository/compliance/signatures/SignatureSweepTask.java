@@ -115,7 +115,7 @@ public final class SignatureSweepTask implements MaintenanceTask {
                     kind.hold(store, eco, coordinate, version, tokens);   // unions: a further tightening adds its finding
                 }
                 RetroactiveHolds.converge(store, publication, inventory, log, context.now(), eco, coordinate, version,
-                        paths, List.of(reason), subject);
+                        paths, new RetroactiveHolds.Grounds(SignaturePolicy.RULE, subject, List.of(reason)));
                 held[0]++;
                 return;
             }
@@ -123,7 +123,8 @@ public final class SignatureSweepTask implements MaintenanceTask {
                 return;   // held by the publish-time gate or another kind - serving already retracted, leave it
             }
             if (RetroactiveHolds.hold(store, publication, inventory, log, context.now(), eco, coordinate, version,
-                    paths, List.of(reason), subject, () -> kind.hold(store, eco, coordinate, version, tokens))) {
+                    paths, new RetroactiveHolds.Grounds(SignaturePolicy.RULE, subject, List.of(reason)),
+                    () -> kind.hold(store, eco, coordinate, version, tokens))) {
                 held[0]++;
             } else if (inventory.servesFromBlobs(eco)) {
                 unenforceable[0]++;

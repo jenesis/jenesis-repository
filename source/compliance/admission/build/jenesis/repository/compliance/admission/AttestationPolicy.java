@@ -36,6 +36,11 @@ public final class AttestationPolicy implements GatePolicy {
     }
 
     @Override
+    public String rule() {
+        return "Provenance";
+    }
+
+    @Override
     public List<ComplianceGate.Finding> assess(ComplianceGate.Subject subject,
                                                List<AdvisorySource.Advisory> advisories) {
         ComplianceGate.Attestation attestation = subject.attestation();

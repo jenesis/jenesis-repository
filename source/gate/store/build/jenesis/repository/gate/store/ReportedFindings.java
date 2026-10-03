@@ -98,7 +98,11 @@ public final class ReportedFindings {
         String held = report.coordinate() + ":" + report.version();
         boolean withheld = RetroactiveHolds.anyHeld(store, paths)
                 || RetroactiveHolds.hold(store, publication, inventory, new QuarantineLog(store), now,
-                        report.ecosystem(), report.coordinate(), report.version(), paths, List.of(reason), held, () -> {
+                        report.ecosystem(), report.coordinate(), report.version(), paths,
+                        new RetroactiveHolds.Grounds(assessment.findings().stream()
+                                .filter(finding -> finding.verdict() != Verdict.ALLOW && finding.rule() != null)
+                                .map(ComplianceGate.Finding::rule).distinct().toList(), held, List.of(reason)),
+                        () -> {
                         });
         return Optional.of(new Outcome(findings.size(), assessment.verdict(), withheld, reasons));
     }
