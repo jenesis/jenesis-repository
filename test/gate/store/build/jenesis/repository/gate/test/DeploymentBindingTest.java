@@ -33,13 +33,15 @@ class DeploymentBindingTest {
 
     /** Holds the coordinate the test inspector derives from {@link #MALICIOUS_PATH}. The malicious dial is named
      *  rather than inherited: the scenario needs a hold, and the shipped default refuses instead. */
-    private static final ComplianceGate HOLDING = new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH),
+    private static final ComplianceGate HOLDING = new ComplianceGate(
+            new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT),
             AdvisorySource.of(Map.of("com.mal:stealer",
                     List.of(new AdvisorySource.Advisory("MAL-2026-0001", Severity.NONE, true)))))
             .malicious(new MaliciousPackagePolicy().action(Verdict.QUARANTINE));
 
     /** Knows of no advisory at all, so it admits the same coordinate. */
-    private static final ComplianceGate ADMITTING = new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH),
+    private static final ComplianceGate ADMITTING = new ComplianceGate(
+            new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT),
             AdvisorySource.none());
 
     @TempDir

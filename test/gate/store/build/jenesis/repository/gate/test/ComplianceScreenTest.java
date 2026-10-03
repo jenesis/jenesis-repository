@@ -318,7 +318,7 @@ class ComplianceScreenTest {
     /** The same, with the malicious dimension's verdict named - never left to a default, since a default this class
      *  inherits need not be the one a deployment runs. */
     private static ComplianceGate gate(AdvisorySource advisories, Verdict malicious) {
-        return new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), advisories)
+        return new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT), advisories)
                 .malicious(new MaliciousPackagePolicy().action(malicious));
     }
 

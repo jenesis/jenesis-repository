@@ -33,7 +33,8 @@ class VersionlessSubjectTest {
         }
     };
 
-    private static final ComplianceGate GATE = new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH),
+    private static final ComplianceGate GATE = new ComplianceGate(
+            new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT),
             REFUSES_EVERY_QUERY).denyList(new DenyListPolicy(List.of("com.evil:*")));
 
     @Test

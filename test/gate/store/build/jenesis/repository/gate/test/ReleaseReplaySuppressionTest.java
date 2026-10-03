@@ -58,7 +58,7 @@ class ReleaseReplaySuppressionTest {
         // The malicious dial is named rather than inherited: the shipped default is REJECT - the properties the
         // server binds, and the setting catalogue - and the control below needs a HELD upload to replay, which a
         // rejection never leaves behind.
-        ComplianceGate gate = new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), MALICIOUS)
+        ComplianceGate gate = new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT), MALICIOUS)
                 .malicious(new MaliciousPackagePolicy().action(Verdict.QUARANTINE));
         try (ComplianceScreen.Binding binding = ComplianceScreen.binding().gate(() -> gate).open()) {
             store = binding.bind(store);

@@ -29,11 +29,17 @@ public final class CoreSettingsContributor implements SettingsContributor {
                         Setting.Choice.VERDICTS, CoreDefaults.MALWARE_ACTION, true).essential()
                                 ,
                 new Setting("vulnerability-action", "Compliance", "Vulnerability action",
-                        "Verdict for an artifact whose advisories reach the threshold above. Refusing the publish "
-                                + "stores nothing; holding it for review stores the bytes and withholds them until a "
-                                + "reviewer releases or discards them.",
+                        "Verdict for an artifact whose advisories reach the threshold above. Holding it for review, "
+                                + "the default, stores the bytes and withholds them until a reviewer releases or "
+                                + "discards them, so there is something to look at; refusing it stores nothing.",
                         Setting.Choice.VERDICTS, CoreDefaults.VULNERABILITY_ACTION, true).essential()
                                 ,
+                new Setting("vulnerability-risk-threshold", "Compliance", "Vulnerability risk threshold",
+                        "The CVSS band from which a version's findings mark it as a risk, on its package's list of "
+                                + "versions and on its own page. A finding below it is still listed with the "
+                                + "repository's vulnerabilities but marks nothing. What is held is the vulnerability "
+                                + "threshold's to decide.",
+                        Setting.Kind.CHOICE, SEVERITIES, CoreDefaults.VULNERABILITY_RISK_THRESHOLD, true).standard(),
                 new Setting("deny-list", "Compliance", "Deny list",
                         "Comma-separated coordinates an operator forbids; always refused.",
                         Setting.Kind.STRING, "", true).standard(),

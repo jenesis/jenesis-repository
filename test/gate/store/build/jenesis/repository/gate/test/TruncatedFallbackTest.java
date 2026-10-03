@@ -152,7 +152,8 @@ class TruncatedFallbackTest {
         // dimension that bites on the coordinate the fallback derives and skips a content-scan subject - which is
         // the shape of a licence dimension holding an undeclared licence. It is stated here rather than discovered,
         // so the test is about its own subject instead of about whichever dimensions a module path carries.
-        ComplianceGate gate = new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), AdvisorySource.none())
+        ComplianceGate gate = new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT),
+                AdvisorySource.none())
                 .policies(List.of(UNDECLARED_LICENCE));
         Publication publication = new Publication(store, List.of(new ComplianceScreen(() -> gate)));
         Publication.Published outcome = publication.screen(ArtifactDescriptor.at("test", path),

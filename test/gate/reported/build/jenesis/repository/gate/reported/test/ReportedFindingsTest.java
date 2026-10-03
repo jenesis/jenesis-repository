@@ -34,7 +34,7 @@ class ReportedFindingsTest {
 
     /** The gate at the shipped threshold, refusing at publish; a later hold is a hold whatever the action. */
     private static final ComplianceGate GATE =
-            new ComplianceGate(new VulnerabilityPolicy(Severity.CRITICAL).action(Verdict.REJECT), AdvisorySource.none());
+            new ComplianceGate(new VulnerabilityPolicy(Severity.CRITICAL, Verdict.REJECT), AdvisorySource.none());
 
     @TempDir
     Path root;

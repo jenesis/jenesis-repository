@@ -109,7 +109,7 @@ class PolicyGateTest {
         AdvisorySource feed = AdvisorySource.of(Map.of("org.example:app", advisory(Severity.MEDIUM)));
         // The built-in vulnerability policy would allow a MEDIUM at a HIGH threshold; the code policy quarantines it.
         ComplianceGate gate = new ComplianceGate(new build.jenesis.repository.compliance.VulnerabilityPolicy(
-                Severity.HIGH), feed).policies(List.of(policy("quarantine #severityRank >= 2")));
+                Severity.HIGH, Verdict.REJECT), feed).policies(List.of(policy("quarantine #severityRank >= 2")));
 
         ComplianceGate.Assessment assessment = gate.assess(subject(ComplianceGate.Reachability.UNKNOWN));
         assertThat(assessment.verdict()).isEqualTo(Verdict.QUARANTINE);

@@ -36,8 +36,9 @@ class OsvVerdictTest {
 
     /** The gate as a deployment that switched the feed on and named no other dial builds it. */
     private static ComplianceGate shipped(String answer) {
-        return new ComplianceGate(new VulnerabilityPolicy(Severity.valueOf(CoreDefaults.VULNERABILITY_THRESHOLD))
-                .action(Verdict.valueOf(CoreDefaults.VULNERABILITY_ACTION)),
+        return new ComplianceGate(
+                new VulnerabilityPolicy(Severity.valueOf(CoreDefaults.VULNERABILITY_THRESHOLD),
+                        Verdict.valueOf(CoreDefaults.VULNERABILITY_ACTION)),
                 new OsvAdvisorySource(_ -> answer));
     }
 

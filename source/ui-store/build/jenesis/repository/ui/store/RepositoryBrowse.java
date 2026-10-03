@@ -2,6 +2,7 @@ package build.jenesis.repository.ui.store;
 
 import module java.base;
 
+import build.jenesis.repository.settings.CoreDefaults;
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.index.keys.PublishedIndexKeys;
 import build.jenesis.repository.cleanup.Release;
@@ -168,7 +169,8 @@ public class RepositoryBrowse extends TenantScope {
     }
 
     /**
-     * How many findings stand against one version and the worst severity among them; {@link #NONE} where no ledger is
+     * How many findings that mark a version as a risk stand against it - those at or above
+     * {@code vulnerability-risk-threshold} - and the worst severity among them; {@link #NONE} where no ledger is
      * installed or readable, which a row shows as nothing rather than clean.
      */
     public record FindingsState(boolean known, int count, String worst) {
@@ -176,7 +178,8 @@ public class RepositoryBrowse extends TenantScope {
         /** No ledger to ask. */
         public static final FindingsState NONE = new FindingsState(false, 0, "");
 
-        static FindingsState of(Optional<Findings> ledger, String ecosystem, String coordinate, String version) {
+        static FindingsState of(Optional<Findings> ledger, Severity risk, String ecosystem, String coordinate,
+                                String version) {
             if (ledger.isEmpty()) {
                 return NONE;
             }
@@ -184,7 +187,7 @@ public class RepositoryBrowse extends TenantScope {
                 int count = 0;
                 Severity worst = null;
                 for (Finding finding : ledger.get().of(ecosystem, coordinate, version)) {
-                    if (finding.active()) {
+                    if (finding.active() && finding.severity().compareTo(risk) >= 0) {
                         count++;
                         if (worst == null || finding.severity().compareTo(worst) > 0) {
                             worst = finding.severity();
@@ -195,6 +198,16 @@ public class RepositoryBrowse extends TenantScope {
             } catch (IOException | RuntimeException _) {
                 return NONE;
             }
+        }
+    }
+
+    /** The band from which a finding marks a version as a risk, as the deployment's settings name it. */
+    private Severity riskThreshold() throws IOException {
+        String band = settings().getProperty("vulnerability-risk-threshold", CoreDefaults.VULNERABILITY_RISK_THRESHOLD);
+        try {
+            return Severity.valueOf(band.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException _) {
+            return Severity.valueOf(CoreDefaults.VULNERABILITY_RISK_THRESHOLD);
         }
     }
 
@@ -331,6 +344,7 @@ public class RepositoryBrowse extends TenantScope {
         List<CoordinateVersion> versions = new ArrayList<>();
         CoordinateVersion newest = null;
         Optional<Findings> ledger = FindingsProvider.installed().map(provider -> provider.over(store));
+        Severity risk = riskThreshold();
         for (StoreRepositoryInventory.Holding holding : page.holdings()) {
             String when = holding.at() == null ? "" : holding.at().toString();
             boolean served = inventory.disclosable(ecosystem, coordinate, holding.version(),
@@ -339,7 +353,7 @@ public class RepositoryBrowse extends TenantScope {
             CoordinateVersion row = new CoordinateVersion(holding.version(), when, holding.pinned(), served,
                     inventory.paths(ecosystem, coordinate, holding.version()), browsable, holding.downloads(),
                     stamp(holding.downloadedAt()), holding.cached(), holding.upstream(),
-                    FindingsState.of(ledger, ecosystem, coordinate, holding.version()));
+                    FindingsState.of(ledger, risk, ecosystem, coordinate, holding.version()));
             versions.add(row);
             if (browsable && (newest == null || row.published().compareTo(newest.published()) > 0)) {
                 newest = row;
@@ -392,8 +406,8 @@ public class RepositoryBrowse extends TenantScope {
                 dependencies.stream().limit(DEPENDENCIES_SHOWN).toList(), dependencies.size(),
                 inventory.paths(ecosystem, coordinate, version),
                 !inventory.locate(ecosystem, coordinate, version).isEmpty(),
-                FindingsState.of(FindingsProvider.installed().map(provider -> provider.over(store)), ecosystem,
-                        coordinate, version)));
+                FindingsState.of(FindingsProvider.installed().map(provider -> provider.over(store)),
+                        riskThreshold(), ecosystem, coordinate, version)));
     }
 
     /** One version as its own page shows it - see {@link #version}. {@code about}, {@code signature} and

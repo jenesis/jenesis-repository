@@ -34,7 +34,8 @@ class VexSuppressionTest {
     private static final String LOG4J_PURL = "pkg:maven/org.apache.logging.log4j/log4j-core";
 
     private static Verdict verdict(AdvisorySource feed, Vex vex) {
-        return new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), feed).vex(vex).assess(LOG4J).verdict();
+        return new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT),
+                feed).vex(vex).assess(LOG4J).verdict();
     }
 
     private static Vex statement(VexStatus status, String justification, String product, String document,
@@ -46,7 +47,7 @@ class VexSuppressionTest {
     @Test
     void a_high_advisory_rejects_without_vex() {
         ComplianceGate.Assessment assessment =
-                new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), FEED).assess(LOG4J);
+                new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT), FEED).assess(LOG4J);
 
         assertThat(assessment.verdict()).isEqualTo(Verdict.REJECT);
         assertThat(assessment.findings()).anyMatch(finding -> finding.detail().contains("CVE-2021-44228"));
@@ -59,7 +60,7 @@ class VexSuppressionTest {
                 Instant.parse("2026-07-13T00:00:00Z"), "urn:acme:vex:1")));
 
         ComplianceGate.Assessment assessment =
-                new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), FEED).vex(vex).assess(LOG4J);
+                new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT), FEED).vex(vex).assess(LOG4J);
 
         assertThat(assessment.verdict()).isEqualTo(Verdict.ALLOW);
         assertThat(assessment.findings()).hasSize(1);
@@ -130,7 +131,8 @@ class VexSuppressionTest {
         Vex vex = provider.over("acme", null, key -> null);
 
         assertThat(vex).isSameAs(Vex.NONE);
-        assertThat(new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), FEED).vex(vex).assess(LOG4J).verdict())
+        assertThat(new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT),
+                FEED).vex(vex).assess(LOG4J).verdict())
                 .isEqualTo(Verdict.REJECT);
     }
 }

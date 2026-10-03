@@ -84,7 +84,8 @@ class HeldEvidenceRescreenTest {
         }
     }
 
-    private static final ComplianceGate GATE = new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH),
+    private static final ComplianceGate GATE = new ComplianceGate(
+            new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT),
             AdvisorySource.none()).policies(List.of(new ScanEvidence(null, null)));
 
     @Test

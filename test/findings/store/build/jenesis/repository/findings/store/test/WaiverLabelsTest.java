@@ -124,15 +124,16 @@ class WaiverLabelsTest {
 
         // The whole ledger-to-gate mechanism: without the overlay the critical advisory rejects; the
         // ledger-backed overlay (the mirror of VexStore.asVex()) downgrades it to an informational allow.
-        assertThat(new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), feed).assess(subject).verdict())
+        assertThat(new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT),
+                feed).assess(subject).verdict())
                 .isEqualTo(Verdict.REJECT);
-        assertThat(new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), feed)
+        assertThat(new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT), feed)
                 .waivers(WaiverLabels.overlay(ledger, GRANTED)).assess(subject).verdict())
                 .isEqualTo(Verdict.ALLOW);
 
         // A revoked waiver stops projecting into the overlay, so the gate rejects again - no side store to forget.
         WaiverLabels.revoke(ledger, ECO, COORD, VERSION, "osv", "CVE-2021-44228", GRANTED);
-        assertThat(new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), feed)
+        assertThat(new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT), feed)
                 .waivers(WaiverLabels.overlay(ledger, GRANTED)).assess(subject).verdict())
                 .isEqualTo(Verdict.REJECT);
     }
@@ -159,10 +160,10 @@ class WaiverLabelsTest {
 
         Waivers scoped = WaiverLabels.overlayFor(ledger, List.of(assessed), GRANTED);
         // The assessed coordinate's own waiver stands; the unrelated coordinate's waiver never leaks into the overlay.
-        assertThat(new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), feed).waivers(scoped)
+        assertThat(new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT), feed).waivers(scoped)
                 .assess(assessed).verdict()).as("the assessed coordinate's waiver suppresses its finding")
                 .isEqualTo(Verdict.ALLOW);
-        assertThat(new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), feed).waivers(scoped)
+        assertThat(new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT), feed).waivers(scoped)
                 .assess(elsewhere).verdict()).as("an unrelated coordinate's waiver is absent from a scoped overlay")
                 .isEqualTo(Verdict.REJECT);
 

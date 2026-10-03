@@ -84,11 +84,11 @@ class CoreGateVerdictDialTest {
     @Test
     void the_vulnerability_dimension_reaches_every_verdict_from_configuration() throws IOException {
         assertThat(verdictFor(gate(Map.of()), CVE))
-                .as("the packaged default refuses, and stays the secure floor")
-                .contains(Verdict.REJECT);
-        assertThat(verdictFor(gate(Map.of("vulnerability-action", "QUARANTINE")), CVE))
-                .as("an operator can hold a vulnerable artifact for review instead of refusing it")
+                .as("the packaged default holds a vulnerable artifact for review")
                 .contains(Verdict.QUARANTINE);
+        assertThat(verdictFor(gate(Map.of("vulnerability-action", "REJECT")), CVE))
+                .as("an operator can refuse it instead, storing nothing")
+                .contains(Verdict.REJECT);
         assertThat(verdictFor(gate(Map.of("vulnerability-action", "ALLOW")), CVE))
                 .as("and can evaluate-and-permit, the verdict the malicious-package dimension always offered")
                 .contains(Verdict.ALLOW);

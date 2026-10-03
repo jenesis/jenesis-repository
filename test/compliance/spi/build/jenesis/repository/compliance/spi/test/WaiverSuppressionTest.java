@@ -38,20 +38,22 @@ class WaiverSuppressionTest {
     }
 
     private static Verdict verdict(Waivers waivers) {
-        return new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), FEED).waivers(waivers).assess(LOG4J)
+        return new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT),
+                FEED).waivers(waivers).assess(LOG4J)
                 .verdict();
     }
 
     @Test
     void a_critical_advisory_rejects_without_a_waiver() {
-        assertThat(new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), FEED).assess(LOG4J).verdict())
+        assertThat(new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT),
+                FEED).assess(LOG4J).verdict())
                 .isEqualTo(Verdict.REJECT);
     }
 
     @Test
     void an_active_waiver_downgrades_the_advisory_and_records_it() {
         ComplianceGate.Assessment assessment =
-                new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), FEED)
+                new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT), FEED)
                         .waivers(Waivers.of(List.of(waiver("CVE-2021-44228", LOG4J.coordinate())))).assess(LOG4J);
 
         assertThat(assessment.verdict()).isEqualTo(Verdict.ALLOW);
@@ -74,7 +76,7 @@ class WaiverSuppressionTest {
 
         Waiver byCve = new Waiver("CVE-2021-44228", List.of(), "Maven", LOG4J.coordinate(), "2.14.1", GRANTED,
                 EXPIRES, null);
-        assertThat(new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), ghsaFeed)
+        assertThat(new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT), ghsaFeed)
                 .waivers(Waivers.of(List.of(byCve))).assess(LOG4J).verdict()).isEqualTo(Verdict.ALLOW);
     }
 

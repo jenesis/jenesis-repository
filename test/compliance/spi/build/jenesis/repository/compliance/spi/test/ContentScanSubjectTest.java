@@ -34,7 +34,9 @@ class ContentScanSubjectTest {
 
     @Test
     void an_advisory_is_reported_once_with_the_package_place_on_the_build_graph() {
-        ComplianceGate.Assessment assessment = new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), FEED)
+        ComplianceGate.Assessment assessment = new ComplianceGate(
+                new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT),
+                FEED)
                 .assess(List.of(PACKAGE, EVIDENCE));
 
         assertThat(assessment.verdict()).isEqualTo(Verdict.REJECT);
@@ -45,7 +47,8 @@ class ContentScanSubjectTest {
 
     @Test
     void a_deny_list_entry_is_reported_once() {
-        ComplianceGate.Assessment assessment = new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH),
+        ComplianceGate.Assessment assessment = new ComplianceGate(
+                new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT),
                 AdvisorySource.NONE).denyList(new DenyListPolicy(List.of("org.apache.logging.log4j:*")))
                 .assess(List.of(PACKAGE, EVIDENCE));
 

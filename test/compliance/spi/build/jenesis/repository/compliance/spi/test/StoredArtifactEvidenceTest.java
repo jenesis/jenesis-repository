@@ -57,7 +57,7 @@ class StoredArtifactEvidenceTest {
     }
 
     private static ComplianceGate gate() {
-        return new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), AdvisorySource.none())
+        return new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT), AdvisorySource.none())
                 .policies(List.of(new ScannedContent(null)));
     }
 
@@ -82,7 +82,7 @@ class StoredArtifactEvidenceTest {
             seen.add(advisories);
             return List.of();
         };
-        new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), AdvisorySource.none())
+        new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT), AdvisorySource.none())
                 .policies(List.of(new ScannedContent(null), watching))
                 .bound(null, STORED)
                 .assess(IMAGE);

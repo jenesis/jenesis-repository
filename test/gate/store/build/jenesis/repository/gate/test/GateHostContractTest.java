@@ -248,6 +248,6 @@ class GateHostContractTest {
     /** A gate with only the vulnerability dimension (and the default malicious policy) - no licence dimension and no
      *  network - so a verdict turns purely on what the hostile guest of the leg under test did. */
     private static ComplianceGate gate(AdvisorySource advisories) {
-        return new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH), advisories);
+        return new ComplianceGate(new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT), advisories);
     }
 }

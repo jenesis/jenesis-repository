@@ -428,7 +428,7 @@ public final class LiveConfig implements SettingsEditor.Resolution {
 
     private ComplianceGate gate(Severity threshold, Verdict vulnerable, Verdict malware, List<String> denied,
                                 Verdict denyAction, List<GatePolicy> policies) {
-        return new ComplianceGate(new VulnerabilityPolicy(threshold).action(vulnerable), advisories)
+        return new ComplianceGate(new VulnerabilityPolicy(threshold, vulnerable), advisories)
                 .malicious(new MaliciousPackagePolicy().action(malware))
                 .denyList(new DenyListPolicy(denied).action(denyAction))
                 .policies(policies);

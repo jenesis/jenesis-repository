@@ -16,12 +16,17 @@ public final class CoreDefaults {
      *  less than the vulnerability dimension does. */
     public static final String MALWARE_ACTION = "REJECT";
 
-    /** The secure floor for an artifact whose advisories reach the threshold below. */
-    public static final String VULNERABILITY_ACTION = "REJECT";
+    /** An artifact whose advisories reach the threshold below is held for review: it is kept and withheld, so a
+     *  reviewer can see what it is and decide, where a refusal would leave nothing to look at. */
+    public static final String VULNERABILITY_ACTION = "QUARANTINE";
 
     /** The severity band at which the vulnerability dimension bites: a fresh deployment with a feed active gates
      *  the most severe CVEs rather than admitting them silently. */
     public static final String VULNERABILITY_THRESHOLD = "CRITICAL";
+
+    /** The severity band from which a version's findings mark it as a risk: Low, so anything an advisory scores
+     *  marks the version, while the threshold above decides what is held. */
+    public static final String VULNERABILITY_RISK_THRESHOLD = "LOW";
 
     /** The secure floor for a coordinate an operator has named on the deny list. */
     public static final String DENY_LIST_ACTION = "REJECT";
