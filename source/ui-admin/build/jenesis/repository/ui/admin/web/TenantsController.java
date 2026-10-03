@@ -1,6 +1,7 @@
 package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
+import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.ui.SuperadminRole;
 import build.jenesis.repository.server.spi.AccessDenial;
 import build.jenesis.repository.ui.admin.security.Memberships;
@@ -38,13 +39,20 @@ public class TenantsController {
         this.current = current;
     }
 
+    /** The tenants, and for a super-admin following a deletion ({@code ?deleting=}), that deletion's state, which the
+     *  page polls while it runs. */
     @GetMapping("/ui/tenants")
-    public String list(Authentication authentication, Model model) throws IOException {
+    public String list(@RequestParam(name = "deleting", required = false) String deleting,
+                       Authentication authentication, Model model) throws IOException {
         boolean superadmin = SuperadminRole.held(authentication);
         List<String> all = superadmin ? tenants.all() : memberships.accessibleTo(authentication.getName(), false);
         model.addAttribute("tenants", all);
         model.addAttribute("selected", current.name());
         model.addAttribute("superadmin", superadmin);
+        if (superadmin && deleting != null && Scopes.valid(deleting)) {
+            model.addAttribute("deleting", deleting);
+            model.addAttribute("deletion", purge.deletion(deleting).orElse(null));
+        }
         return "tenants";
     }
 
@@ -76,13 +84,17 @@ public class TenantsController {
         return "redirect:/ui/tenants";
     }
 
+    /** Starts deleting a tenant and shows the deletion on the tenants page, which follows it to its end: a tenant
+     *  can hold millions of objects, more than one request may wait on. */
     @PostMapping("/ui/tenants/delete")
     public String delete(@RequestParam("name") String name, RedirectAttributes redirect) throws IOException {
-        purge.delete(name);
+        boolean started = purge.start(name);
         if (name.equals(current.name())) {
             current.clear();
         }
-        redirect.addFlashAttribute("message", "Deleted tenant '" + name + "'.");
+        redirect.addFlashAttribute("message", started ? "Deleting tenant '" + name + "'."
+                : "Tenant '" + name + "' is already being deleted.");
+        redirect.addAttribute("deleting", name);
         return "redirect:/ui/tenants";
     }
 }

@@ -306,7 +306,8 @@ public final class Commands {
                             act("tenants", "list the tenants"),
                             act("tenants create <name>", "create a tenant"),
                             act("tenants delete <name> [--yes]", "delete a tenant and everything it owns, after "
-                                    + "typing 'delete <name>' - or --yes, for a script")))),
+                                    + "typing 'delete <name>' - or --yes, for a script; the deletion runs in the "
+                                    + "background, and --refresh watches it finish")))),
 
             new Section("Operations", List.of(
                     noun("metrics", "every metric, health state and background-task status this deployment reports",

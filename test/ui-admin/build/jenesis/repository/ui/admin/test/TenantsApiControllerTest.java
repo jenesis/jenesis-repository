@@ -6,6 +6,8 @@ import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.cache.storage.testkit.CacheStorages;
 import build.jenesis.repository.server.PresentedKey;
 import build.jenesis.repository.server.spi.AccessDenial;
+import build.jenesis.repository.cleanup.StoredReport;
+import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.ArtifactStore;
@@ -59,7 +61,17 @@ class TenantsApiControllerTest {
 
         repositoryStore.scope("acme").scope("releases")
                 .write("raw/a.txt", new ByteArrayInputStream("a".getBytes(UTF_8)));
-        assertThat(controller.delete("acme", request).getStatusCode().value()).isEqualTo(200);
+        ResponseEntity<?> deleting = controller.delete("acme", request);
+        assertThat(deleting.getStatusCode().value()).as("the deletion is accepted, to run in the background")
+                .isEqualTo(202);
+        assertThat(((TenantsApiController.Deletion) deleting.getBody()).started()).isTrue();
+        // Settled as its run settles - stored, and its lease released - before the state is read.
+        StoredReport.awaitSettled(repositoryStore.scope(Scopes.SYSTEM), "tenant-deletion-acme",
+                        Duration.ofSeconds(30)).orElseThrow(() -> new AssertionError("the deletion did not finish"));
+        TenantsApiController.Deletion deleted = (TenantsApiController.Deletion) controller.deletion("acme", request)
+                .getBody();
+        assertThat(deleted.state()).as("the deletion's state, read back").isEqualTo("done");
+        assertThat(deleted.removed()).isPositive();
         assertThat(new TenantService(rootStorage).exists("acme")).isFalse();
         assertThat(repositoryStore.list("acme")).as("the purge took what the tenant held").isEmpty();
         assertThat(controller.delete("acme", request).getStatusCode().value()).as("nothing left to delete")

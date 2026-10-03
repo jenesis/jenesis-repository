@@ -596,6 +596,37 @@ final class AdminCommands {
         return Refresh.Poll.State.done(status.error() == null || status.error().isEmpty() ? 0 : 1);
     }
 
+    /** How fast a tenant's deletion moves: thousands of objects a second, so seconds for a small tenant and minutes
+     *  for a large one - the cadence a bare {@code --refresh} watches it at. */
+    private static final Duration TENANT_DELETION = Duration.ofSeconds(5);
+
+    /** Print one reading of a tenant's deletion, and say whether there is any point asking again. */
+    private static Refresh.Poll.State deletionState(SettingsClient.TenantDeletion deletion) {
+        String name = deletion.tenant();
+        return switch (deletion.state()) {
+            case "running" -> {
+                System.out.println((deletion.started() ? "Deleting tenant " + name
+                        : "Tenant " + name + " is being deleted") + ", started " + deletion.startedAt()
+                        + "; --refresh watches it finish.");
+                yield Refresh.Poll.State.running();
+            }
+            case "done" -> {
+                System.out.println("Deleted tenant " + name + " at " + deletion.finishedAt() + ", removing "
+                        + deletion.removed() + " stored object(s).");
+                yield Refresh.Poll.State.done(0);
+            }
+            case "failed" -> {
+                System.out.println("Deleting tenant " + name + " stopped: " + deletion.failure()
+                        + ". Deleting it again carries on from what is left.");
+                yield Refresh.Poll.State.done(1);
+            }
+            default -> {
+                System.out.println("Tenant " + name + " has not been deleted.");
+                yield Refresh.Poll.State.done(1);
+            }
+        };
+    }
+
     static int tenants(String[] args, Path home) throws Exception {
         RepositoryClient client = CliSupport.client(home);
         if (args.length == 1) {
@@ -618,8 +649,12 @@ final class AdminCommands {
                     System.out.println("Nothing was deleted.");
                     return 1;
                 }
-                client.settings().deleteTenant(name);
-                System.out.println("Deleted tenant " + name + ".");
+                // The first reading starts the deletion, so a watched deletion and a single answer are the same
+                // sequence of requests.
+                AtomicBoolean start = new AtomicBoolean(true);
+                Refresh.Poll poll = () -> deletionState(start.getAndSet(false)
+                        ? client.settings().deleteTenant(name) : client.settings().tenantDeletion(name));
+                return Refresh.on() ? Refresh.until(TENANT_DELETION, poll) : poll.once().code();
             }
             default -> throw new IllegalArgumentException("Unknown tenants action: " + args[1]);
         }

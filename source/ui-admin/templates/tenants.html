@@ -8,6 +8,20 @@
     <header th:replace="~{base :: pageHeader('Tenants')}"></header>
     <p><small>A tenant has its own repositories, projects, credentials and members, isolated from the others. Pick
         one to work in.</small></p>
+    <!--/* A deletion runs off the request path; the page shows where it stands and follows it while it runs. */-->
+    <th:block th:if="${deleting != null}">
+        <p th:if="${deletion == null}"><small>Tenant <code th:text="${deleting}">acme</code> has not been deleted.</small></p>
+        <th:block th:if="${deletion != null and deletion.running()}">
+            <p th:replace="~{base :: running(|Deleting tenant '${deleting}', started ${deletion.startedAt()}: its repositories, credentials, audit trail and members.|)}"></p>
+        </th:block>
+        <p th:if="${deletion != null and !deletion.running() and deletion.failure() != null}"><small>Deleting tenant
+            <code th:text="${deleting}">acme</code> stopped: <span th:text="${deletion.failure()}">reason</span>.
+            Deleting it again carries on from what is left.</small></p>
+        <p th:if="${deletion != null and !deletion.running() and deletion.failure() == null}"><small>Deleted tenant
+            <code th:text="${deleting}">acme</code>
+            <span><time th:replace="~{base :: time(${deletion.finishedAt()})}">time</time></span>, removing
+            <span th:text="${deletion.count()}">0</span> stored object(s).</small></p>
+    </th:block>
     <div class="app-panels app-panels--lead">
     <article>
         <h2>Tenants</h2>

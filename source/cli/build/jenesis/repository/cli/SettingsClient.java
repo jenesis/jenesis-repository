@@ -285,13 +285,28 @@ public final class SettingsClient extends ClientCalls {
         return true;
     }
 
-    /** Delete a tenant and everything it owns. */
-    public void deleteTenant(String name) throws IOException, InterruptedException {
+    /** Start deleting a tenant and everything it owns, answering where the deletion stands. */
+    public TenantDeletion deleteTenant(String name) throws IOException, InterruptedException {
         HttpResponse<String> response = send("DELETE", "/api/admin/tenants/" + name, null, null);
         if (response.statusCode() == 404) {
             throw new IOException(response.body());
         }
-        require(response, 200, "delete tenant " + name);
+        require(response, 202, "delete tenant " + name);
+        return JSON.readValue(response.body(), TenantDeletion.class);
+    }
+
+    /** Where a tenant's deletion stands. */
+    public TenantDeletion tenantDeletion(String name) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/admin/tenants/" + name + "/deletion", null, null);
+        require(response, 200, "read the deletion of tenant " + name);
+        return JSON.readValue(response.body(), TenantDeletion.class);
+    }
+
+    /** A tenant's deletion as the API reports it: whether the call started it, its state ({@code running},
+     *  {@code done}, {@code failed} or {@code none}), when it started and finished, the stored objects it removed and
+     *  why it failed. */
+    public record TenantDeletion(String tenant, boolean started, String state, String startedAt, String finishedAt,
+                                 int removed, String failure) {
     }
 
     /** The answer {@code GET /api/admin/tenants} gives. */
