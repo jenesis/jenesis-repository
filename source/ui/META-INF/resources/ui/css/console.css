@@ -706,6 +706,7 @@ main .app-filter-bar > button {
 .app-views {
     display: flex;
     flex-wrap: wrap;
+    justify-content: flex-start;
     gap: var(--app-space-4);
     margin: 0 0 var(--app-space-4);
     border-bottom: 1px solid var(--pico-muted-border-color);
@@ -1505,12 +1506,13 @@ main button.app-switch__reset {
 .module-switch {
     margin: .4rem 0 0;
 }
-/* A walk's switches: the switch first, and what it switches beside it, a line under another. */
+/* A walk's switches: the switch first, and what it switches beside it, a line under another, the switch centred on
+   the first. */
 .walk-switch {
     display: grid;
     grid-template-columns: auto 1fr;
     column-gap: var(--app-space-3);
-    align-items: baseline;
+    align-items: center;
 }
 .walk-switch > :not(.app-switch-field, input) {
     grid-column: 2;
