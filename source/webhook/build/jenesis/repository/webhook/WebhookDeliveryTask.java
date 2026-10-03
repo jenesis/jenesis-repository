@@ -156,33 +156,17 @@ public final class WebhookDeliveryTask implements MaintenanceTask {
                     deliveries(context, endpoint.key(), "failed");
                 }
             }
-            if (delivered.containsAll(relevantKeys)) {
-                // Every subscribing endpoint took it: dropped, but only if it is still the object this pass read, since
-                // a concurrent unpark writes a fresh copy an operator just asked for. The drop takes any parked twin
-                // with it.
-                outbox.removeDelivered(entry.id(), item.token());
-                continue;
-            }
             WebhookOutbox.Entry updated = entry.withDelivered(delivered);
             if (failure != null) {
                 updated = updated.withFailure(now, baseBackoffMillis, capBackoffMillis, maxAttempts, failure);
             }
-            if (updated.parked()) {
-                // Retries exhausted: moved to the parked backlog, visible and recoverable through /api/webhook/retry,
-                // and out of the active scan. park() compare-and-sets on the read token, so the transition is counted
-                // only when it landed.
-                if (outbox.park(updated, item.token()) && !entry.parked()) {
-                    deliveries(context, "-", "parked");         // count the park transition once, only if it landed
+            // A parked entry is recoverable through /api/webhook/retry.
+            switch (outbox.settle(item, updated, delivered.containsAll(relevantKeys))) {
+                case PARKED -> deliveries(context, "-", "parked");
+                case QUEUED, SUPERSEDED -> queued++;
+                case DELIVERED -> {
                 }
-                continue;
             }
-            if (!updated.equals(entry)) {
-                // Compare-and-set on the read token: a concurrent unpark resets the attempts and backoff, and writing
-                // this pass's stale progress over it would defer or re-park the delivery an operator asked for, a loss
-                // rather than a duplicate.
-                outbox.update(updated, item.token());
-            }
-            queued++;
         }
         depths(context, queued, outbox.parkedCount());
     }

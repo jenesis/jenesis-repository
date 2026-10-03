@@ -88,16 +88,13 @@ public final class WebhookOutbox extends build.jenesis.repository.outbox.Outbox<
                     attempts, nextAttemptMillis, parked, lastError, endpoints, parkedAtMillis);
         }
 
-        /** This entry after a failed pass: an attempt bumped, the backoff doubled from {@code baseMillis} up to
-         *  {@code capMillis}, and parked at the attempt cap. The park instant is stamped on the transition and then
-         *  carried, so rewrites never reset its retention window. */
+        /** This entry after a failed pass, as {@link build.jenesis.repository.outbox.Outbox.Failed#after} decides. */
         Entry withFailure(long nowMillis, long baseMillis, long capMillis, int maxAttempts, String error) {
-            int next = attempts + 1;
-            long backoff = Math.min(capMillis, baseMillis * (1L << Math.min(next - 1, 20)));
-            boolean parking = next >= maxAttempts;
-            long parkedAt = parking ? (parked && parkedAtMillis > 0 ? parkedAtMillis : nowMillis) : 0L;
+            build.jenesis.repository.outbox.Outbox.Failed failed = build.jenesis.repository.outbox.Outbox.Failed
+                    .after(attempts, parked, parkedAtMillis, nowMillis, baseMillis, capMillis, maxAttempts);
             return new Entry(id, type, ecosystem, coordinate, version, path, detailJson, occurredAt,
-                    next, nowMillis + backoff, parking, error, delivered, parkedAt);
+                    failed.attempts(), failed.nextAttemptMillis(), failed.parked(), error, delivered,
+                    failed.parkedAtMillis());
         }
 
         /** This entry unparked: attempts and backoff cleared, the delivered set kept, so a retry re-sends only where it

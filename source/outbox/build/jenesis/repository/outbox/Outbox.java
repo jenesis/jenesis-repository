@@ -350,6 +350,55 @@ public class Outbox<E extends Outbox.Entry<E>> {
         return true;
     }
 
+    /** What a drain's {@link #settle} did with an entry. */
+    public enum Settled {
+        /** Every target took it, and it is gone from the queue. */
+        DELIVERED,
+        /** It failed terminally and moved to the parked backlog. */
+        PARKED,
+        /** It stays queued for another pass, its progress recorded. */
+        QUEUED,
+        /** A rival replaced it mid-pass, so this pass's result was dropped; the rival stays queued and is picked up
+         *  whole next pass. */
+        SUPERSEDED
+    }
+
+    /**
+     * Commit one drained entry's outcome against the token it was read at: dropped when {@code complete} (every
+     * target took it), moved to the parked backlog when {@code updated} has parked, and otherwise its progress
+     * recorded - each compare-and-set, so stale progress never overwrites a rival a re-publish or an operator's unpark
+     * wrote meanwhile.
+     */
+    public Settled settle(Queued<E> item, E updated, boolean complete) throws IOException {
+        if (complete) {
+            return removeDelivered(item.entry().id(), item.token()) ? Settled.DELIVERED : Settled.SUPERSEDED;
+        }
+        if (updated.parked()) {
+            return park(updated, item.token()) ? Settled.PARKED : Settled.SUPERSEDED;
+        }
+        if (!updated.equals(item.entry()) && !update(updated, item.token())) {
+            return Settled.SUPERSEDED;
+        }
+        return Settled.QUEUED;
+    }
+
+    /**
+     * The delivery state after a failed attempt: one attempt more, the backoff doubled from {@code baseMillis} up to
+     * {@code capMillis}, and parked at the attempt cap. The park instant is stamped on the transition and then
+     * carried, so a rewrite never resets the backlog's retention window.
+     */
+    public record Failed(int attempts, long nextAttemptMillis, boolean parked, long parkedAtMillis) {
+
+        public static Failed after(int attempts, boolean parked, long parkedAtMillis, long nowMillis, long baseMillis,
+                                   long capMillis, int maxAttempts) {
+            int next = attempts + 1;
+            long backoff = Math.min(capMillis, baseMillis * (1L << Math.min(next - 1, 20)));
+            boolean parking = next >= maxAttempts;
+            long parkedAt = parking ? (parked && parkedAtMillis > 0 ? parkedAtMillis : nowMillis) : 0L;
+            return new Failed(next, nowMillis + backoff, parking, parkedAt);
+        }
+    }
+
     private void recordParked(E entry) throws IOException {
         byte[] body = codec.serialise(entry);
         Retries.update(store, parkedKey(entry.id()), current -> body);
