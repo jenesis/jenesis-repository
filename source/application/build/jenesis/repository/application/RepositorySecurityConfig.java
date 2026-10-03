@@ -6,6 +6,7 @@ import build.jenesis.repository.server.kernel.RequestBodyLimitFilter;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.server.spi.KeyUsageTracker;
 import build.jenesis.repository.server.RateLimitFilter;
+import build.jenesis.repository.server.RepositoryAuthorizationManager;
 import build.jenesis.repository.server.spi.RateLimiter;
 import build.jenesis.repository.server.SecurityChainCustomizer;
 import org.springframework.context.annotation.Bean;
@@ -39,8 +40,9 @@ public class RepositorySecurityConfig {
                                            PinnedSettings pinnedSettings) {
         // Each tenant's ceiling is read live through the settings chain, so a change applies within the filter's
         // ceiling cache; the boot property is the fallback.
-        return new RateLimitFilter(rateLimiter, RateLimitFilter.liveCeiling(
-                tenant -> pinnedSettings.effectiveProperty(settings, environment, tenant), properties.getRateLimit()));
+        return new RateLimitFilter(rateLimiter, RateLimitFilter.Ceilings.live(
+                tenant -> pinnedSettings.effectiveProperty(settings, environment, tenant), properties.getRateLimit()),
+                RepositoryAuthorizationManager.parseTrustedProxies(properties.getTrustedProxies()));
     }
 
     @Bean

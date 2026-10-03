@@ -2,6 +2,9 @@ package build.jenesis.repository.ratelimit;
 
 import module java.base;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+
 import build.jenesis.repository.observation.HealthCheck;
 import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilitySource;
@@ -17,13 +20,23 @@ import build.jenesis.repository.server.spi.RateLimiter;
  * <p>The limiter is per process, so in a replicated deployment the effective ceiling is the configured rate times the
  * node count - the trade for keeping a coordination service off the hot path.
  *
- * <p>It reports {@code jenrepo.ratelimit.buckets}, the keys it tracks, as a gauge - the memory-exhaustion vector the
- * shared {@code anonymous} bucket bounds - and a {@code jenrepo.ratelimit.limiter} health check. Buckets refill lazily
+ * <p>The buckets are bounded: one unused for a minute is forgotten, having refilled, and past {@link #MAX_BUCKETS} the
+ * least recent goes, so a flood of distinct keys - fabricated credentials, addresses - cannot exhaust memory. It
+ * reports {@code jenrepo.ratelimit.buckets}, the keys it holds, as a gauge, and a {@code jenrepo.ratelimit.limiter}
+ * health check. Buckets refill lazily
  * on the request path, so there is no task status.
  */
 public final class TokenBucketRateLimiter implements RateLimiter, ObservabilitySource {
 
-    private final ConcurrentHashMap<String, Bucket> buckets = new ConcurrentHashMap<>();
+    /** The most buckets held at once. A flood of distinct keys past it evicts the least recent, and an evicted key
+     *  starts again with a full bucket - which only ever admits more, never refuses a request it should not. */
+    static final int MAX_BUCKETS = 200_000;
+
+    /** How long an unused bucket is kept: at any ceiling of one a minute or more it has refilled by then, so a fresh
+     *  bucket answers exactly as it would. */
+    private static final Duration IDLE = Duration.ofMinutes(1);
+
+    private final Cache<String, Bucket> buckets;
     private final LongSupplier clock;
 
     public TokenBucketRateLimiter() {
@@ -32,6 +45,8 @@ public final class TokenBucketRateLimiter implements RateLimiter, ObservabilityS
 
     private TokenBucketRateLimiter(LongSupplier clock) {
         this.clock = clock;
+        this.buckets = Caffeine.newBuilder().maximumSize(MAX_BUCKETS).expireAfterAccess(IDLE)
+                .ticker(clock::getAsLong).build();
     }
 
     /**
@@ -48,15 +63,15 @@ public final class TokenBucketRateLimiter implements RateLimiter, ObservabilityS
         if (permitsPerMinute <= 0) {
             return true;
         }
-        return buckets.computeIfAbsent(key, ignored -> new Bucket()).tryAcquire(permitsPerMinute, clock.getAsLong());
+        return buckets.get(key, ignored -> new Bucket()).tryAcquire(permitsPerMinute, clock.getAsLong());
     }
 
     @Override
     public List<Metric> metrics() {
         return List.of(Metric.gauge("jenrepo.ratelimit.buckets",
-                "Rate-limit buckets currently tracked, one per active key - an unbounded climb is the "
-                        + "memory-exhaustion vector the shared anonymous bucket is there to bound.",
-                buckets.size(), ""));
+                "Rate-limit buckets currently held, one per tenant, credential and client address that made a "
+                        + "request within the last minute, bounded at " + MAX_BUCKETS + ".",
+                buckets.estimatedSize(), ""));
     }
 
     @Override

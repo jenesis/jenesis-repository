@@ -91,10 +91,10 @@ public class RepositoryProperties {
      *
      * <p><strong>It lives here, and it does not differ by composition.</strong> A composition flipping it in its own
      * properties would make the posture a deployment gets depend on which image it runs. A composition adds
-     * capability; it does not change what this core decided. So the floor is the decision, it is made once, and it is
-     * made here.
+     * capability; it does not change what this core decided. So the floor is the decision, and it is made once, in
+     * {@link CoreDefaults#RATE_LIMIT}, which the settings catalogue declares too.
      */
-    public static final long DEFAULT_RATE_LIMIT = 6000;
+    public static final long DEFAULT_RATE_LIMIT = Long.parseLong(CoreDefaults.RATE_LIMIT);
 
     private long rateLimit = DEFAULT_RATE_LIMIT;
 

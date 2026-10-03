@@ -1,9 +1,12 @@
 package build.jenesis.repository.server;
 import module java.base;
 
+import build.jenesis.repository.observation.Metric;
+import build.jenesis.repository.observation.ObservabilitySource;
 import build.jenesis.repository.server.spi.Authorization;
+import build.jenesis.repository.server.spi.ClientAddresses;
 import build.jenesis.repository.server.spi.RateLimiter;
-import build.jenesis.repository.store.Features;
+import build.jenesis.repository.settings.CoreDefaults;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -11,27 +14,42 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * Sheds excess load before the request reaches the repository: each request is metered against its tenant's rate
- * ceiling (the {@code rate-limit} setting as that tenant resolves it - its own value, else the deployment's), and
- * one that exhausts the tenant's {@link RateLimiter} bucket is answered {@code 429 Too Many Requests} with a {@code
- * Retry-After}. The tenant is read from the presented key ({@link PresentedKey}) when it is
- * {@link Authorization#wellFormed well-formed}, but that check is only a CRC32 typo guard, not a signature: this
- * pre-auth filter cannot afford the store lookup that would tell a genuine key from a fabricated one, so the tenant
- * here is effectively attacker-controlled. To keep a flood of distinct fabricated tenant names from minting an
- * unbounded number of per-tenant buckets (a memory-exhaustion vector - it would also grow the ceiling cache and the
- * per-tenant reject counters), the distinct-tenant cardinality is capped by {@link BoundedTenantBuckets}: at most
- * {@link #MAX_TRACKED_TENANTS} tenants get their own bucket and the rest, along with every keyless request, share one
- * {@code anonymous} bucket. A real deployment stays far below the cap, so a seen tenant keeps its own bucket; only an
- * adversarial excess spills to the shared one. The Actuator endpoints are never limited, so liveness and scrape
- * probes are unaffected. The effective ceiling is cached briefly per bucket so the limiter, not a store read, is on
- * the hot path. A ceiling of zero (nothing configured) is unlimited - the filter is then a no-op.
+ * Sheds excess load on the surfaces clients use - a repository ({@code /repository/}, {@code /v2/},
+ * {@code /staging/}) and the build cache ({@code /build/}) - before the request reaches them. The console, the
+ * management API and the actuator are never limited: an operator must be able to reach the deployment that is being
+ * flooded, and nothing there is a client's traffic.
  *
- * <p>The ceiling is read live, through the lookup the runtime settings resolve against for the tenant
- * ({@link #liveCeiling}), so an operator who lowers, raises or zeroes {@code rate-limit} - deployment-wide or for one
- * tenant - through the settings API sees it take effect within the cache's ten seconds of the lookup seeing it rather
- * than at the next boot. The boot property stays the fallback for a deployment that never set it at runtime.
+ * <p>A request is metered against three limits, each a {@link RateLimiter} bucket at a ceiling of requests a minute,
+ * and one that exhausts any of them is answered {@code 429 Too Many Requests} with a {@code Retry-After} and a sentence
+ * naming the limit and its setting:
+ * <ol>
+ * <li><b>The client address</b> ({@code rate-limit-address}, deployment-wide, on by default at a thousand a second):
+ *     what caps one runaway machine, keyed or not. The address is the one the deployment's {@code trusted-proxies}
+ *     resolve. A request arriving from a private address that is not listed - an ingress or a load balancer inside
+ *     the deployment's network, which is how a chart runs - is keyed by the last {@code X-Forwarded-For} hop instead,
+ *     the address that proxy saw: otherwise every client behind it would share one bucket and the limit would be a
+ *     ceiling on the whole deployment. A client inside that network can set its own header and so pick its bucket,
+ *     which loosens only this limit; the other two still hold it, and a source-IP allowlist never reads this
+ *     address.</li>
+ * <li><b>The credential</b> ({@code rate-limit-account}, per tenant, off by default): one key's requests, so one
+ *     tenant's runaway job cannot spend the tenant's whole ceiling.</li>
+ * <li><b>The tenant</b> ({@code rate-limit}, per tenant): every credential of a tenant together; every keyless
+ *     request shares one {@code anonymous} bucket at the deployment's value.</li>
+ * </ol>
+ *
+ * <p>The tenant and the credential are read from the presented key ({@link PresentedKey}) when it is
+ * {@link Authorization#wellFormed well-formed} - a CRC32 typo guard, not a signature, so both are attacker-controlled
+ * here: this pre-auth filter cannot afford the store lookup that would tell a genuine key from a fabricated one. A
+ * flood of fabricated tenant names is bounded by {@link BoundedTenantBuckets} (at most {@link #MAX_TRACKED_TENANTS}
+ * tenants get their own bucket and ceiling; the rest meter as {@code anonymous}, with no credential limit), and the
+ * limiter bounds the address and credential buckets it holds. A ceiling is cached briefly per tenant so the limiter,
+ * not a store read, is on the hot path, and is read live through the settings, so a change applies within its ten
+ * seconds. A ceiling of zero is no limit.
+ *
+ * <p>It reports how many requests each limit shed since the node started ({@code jenrepo.ratelimit.rejected} and one
+ * counter per limit) through {@link ObservabilitySource}, so the console's metrics, the API and the CLI show them.
  */
-public class RateLimitFilter extends OncePerRequestFilter {
+public class RateLimitFilter extends OncePerRequestFilter implements ObservabilitySource {
 
     private static final long CACHE_TTL_NANOS = 10_000_000_000L;
 
@@ -39,37 +57,63 @@ public class RateLimitFilter extends OncePerRequestFilter {
      *  real tenant count, so it bounds only an adversarial flood of fabricated tenant names, never a real deployment. */
     static final int MAX_TRACKED_TENANTS = 50_000;
 
-    private final RateLimiter limiter;
-    private final ToLongFunction<String> ceilingOf;
-    private final BoundedTenantBuckets buckets = new BoundedTenantBuckets(MAX_TRACKED_TENANTS);
-    private final ConcurrentHashMap<String, long[]> ceilings = new ConcurrentHashMap<>();
-    private final AtomicLong rejected = new AtomicLong();
-    private final ConcurrentHashMap<String, AtomicLong> rejectedByTenant = new ConcurrentHashMap<>();
+    /** The surfaces a client's traffic reaches, and so the only ones limited. */
+    private static final List<String> LIMITED = List.of("/repository/", "/v2/", "/staging/", "/build/");
 
-    /** One fixed ceiling for every tenant. */
-    public RateLimitFilter(RateLimiter limiter, long permitsPerMinute) {
-        this(limiter, _ -> permitsPerMinute);
-    }
+    /** What a request is metered against, in the order it is asked. */
+    public enum Limit {
 
-    /** {@code ceilingOf} answers a tenant's ceiling - {@code null} for a keyless request, or a tenant past the
-     *  tracked cap, which meter against the deployment's. */
-    public RateLimitFilter(RateLimiter limiter, ToLongFunction<String> ceilingOf) {
-        this.limiter = limiter;
-        this.ceilingOf = ceilingOf;
+        ADDRESS("this client address", "rate-limit-address"),
+        ACCOUNT("this credential", "rate-limit-account"),
+        TENANT("this tenant", "rate-limit");
+
+        private final String whose;
+        private final String setting;
+
+        Limit(String whose, String setting) {
+            this.whose = whose;
+            this.setting = setting;
+        }
+
+        /** The setting that sets this limit's ceiling. */
+        public String setting() {
+            return setting;
+        }
     }
 
     /**
-     * The ceiling as the runtime settings currently resolve it for a tenant: whatever {@code lookup} - given the
-     * tenant, {@code null} for the deployment's - answers for {@code jenrepo.rate-limit}, which is
-     * {@link Features#lookup()} on the shell and the store-backed chain (pin over the tenant's stored value over the
-     * deployment's over the environment) on a shell that has one - otherwise {@code fallback}, the boot property's
-     * value. A value that does not parse as a non-negative number is ignored in favour of the fallback rather than
-     * turning every request into an error: the settings API validates the setting on write, so this only guards a
-     * hand-edited store.
+     * The ceilings, in requests a minute, each read when its cache lapses: a tenant's ({@code null} for the
+     * deployment's, which keyless requests meter at), a tenant's per-credential one, and the deployment's
+     * per-address one.
      */
-    public static ToLongFunction<String> liveCeiling(Function<String, UnaryOperator<String>> lookup, long fallback) {
-        return tenant -> {
-            String configured = lookup.apply(tenant).apply("jenrepo.rate-limit");
+    public record Ceilings(ToLongFunction<String> tenant, ToLongFunction<String> account, LongSupplier address) {
+
+        public Ceilings {
+            Objects.requireNonNull(tenant, "tenant");
+            Objects.requireNonNull(account, "account");
+            Objects.requireNonNull(address, "address");
+        }
+
+        /**
+         * The ceilings as the runtime settings resolve them: whatever {@code lookup} - given the tenant, {@code null}
+         * for the deployment's - answers for {@code jenrepo.rate-limit}, {@code jenrepo.rate-limit-account} and
+         * {@code jenrepo.rate-limit-address}, which is {@code Features.lookup()} on a shell and the store-backed chain
+         * (pin over the tenant's stored value over the deployment's over the environment) on one that has it. A
+         * value that is unset, or does not parse as a non-negative number, gives way to the default - for the
+         * tenant's ceiling {@code tenantFallback}, the boot property - rather than turning every request into an
+         * error: the settings API validates on write, so this only guards a hand-edited store.
+         */
+        public static Ceilings live(Function<String, UnaryOperator<String>> lookup, long tenantFallback) {
+            return new Ceilings(
+                    tenant -> read(lookup.apply(tenant), "jenrepo.rate-limit", tenantFallback),
+                    tenant -> read(lookup.apply(tenant), "jenrepo.rate-limit-account",
+                            Long.parseLong(CoreDefaults.RATE_LIMIT_ACCOUNT)),
+                    () -> read(lookup.apply(null), "jenrepo.rate-limit-address",
+                            Long.parseLong(CoreDefaults.RATE_LIMIT_ADDRESS)));
+        }
+
+        private static long read(UnaryOperator<String> settings, String key, long fallback) {
+            String configured = settings.apply(key);
             if (configured == null || configured.isBlank()) {
                 return fallback;
             }
@@ -79,53 +123,143 @@ public class RateLimitFilter extends OncePerRequestFilter {
             } catch (NumberFormatException notANumber) {
                 return fallback;
             }
-        };
+        }
     }
 
-    /** The number of requests shed with {@code 429} since startup - a back-pressure signal a metrics layer can scrape. */
+    private final RateLimiter limiter;
+    private final Ceilings ceilingsOf;
+    private final List<String> trustedProxies;
+    private final BoundedTenantBuckets buckets = new BoundedTenantBuckets(MAX_TRACKED_TENANTS);
+    private final ConcurrentHashMap<String, long[]> ceilings = new ConcurrentHashMap<>();
+    private final Map<Limit, AtomicLong> rejected = new EnumMap<>(Limit.class);
+
+    /**
+     * @param limiter        the buckets.
+     * @param ceilings       each limit's ceiling.
+     * @param trustedProxies the reverse proxies whose {@code X-Forwarded-For} is believed, as the deployment lists
+     *                       them in {@code trusted-proxies}.
+     */
+    public RateLimitFilter(RateLimiter limiter, Ceilings ceilings, List<String> trustedProxies) {
+        this.limiter = limiter;
+        this.ceilingsOf = ceilings;
+        this.trustedProxies = List.copyOf(trustedProxies);
+        for (Limit limit : Limit.values()) {
+            rejected.put(limit, new AtomicLong());
+        }
+    }
+
+    /** Whether a request to {@code path} is a client's traffic, which is limited, rather than the console's, the
+     *  management API's or a probe's, which is not. */
+    public static boolean limited(String path) {
+        if (path.equals("/v2")) {
+            return true;
+        }
+        for (String root : LIMITED) {
+            if (path.startsWith(root)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The requests shed with {@code 429} since startup, by every limit. */
     public long rejected() {
-        return rejected.get();
+        return rejected.values().stream().mapToLong(AtomicLong::get).sum();
     }
 
-    /** Requests shed with {@code 429} since startup, broken down by the bucket they metered against ({@code anonymous}
-     *  for a keyless request, else the tenant), so a metrics layer can tag {@code jenrepo.ratelimit.rejected} by
-     *  tenant. A snapshot view; a tenant that has never been rate-limited is absent rather than zero. */
-    public Map<String, Long> rejectedByTenant() {
-        return rejectedByTenant.entrySet().stream()
-                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, e -> e.getValue().get()));
+    /** The requests {@code limit} shed with {@code 429} since startup. */
+    public long rejected(Limit limit) {
+        return rejected.get(limit).get();
+    }
+
+    @Override
+    public List<Metric> metrics() {
+        List<Metric> metrics = new ArrayList<>();
+        metrics.add(Metric.counter("jenrepo.ratelimit.rejected", "Requests to a repository or the build cache "
+                + "answered 429 Too Many Requests since this node started, by any rate limit.", rejected(), "requests"));
+        for (Limit limit : Limit.values()) {
+            metrics.add(Metric.counter("jenrepo.ratelimit.rejected." + limit.name().toLowerCase(Locale.ROOT),
+                    "Requests answered 429 because " + limit.whose + " was over its ceiling (" + limit.setting
+                            + ") since this node started.", rejected(limit), "requests"));
+        }
+        return metrics;
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        if (request.getRequestURI().startsWith("/actuator")) {
+        if (!limited(request.getRequestURI())) {
             chain.doFilter(request, response);
             return;
         }
-        String presented = PresentedKey.from(request);
+        String address = address(request);
+        long addressCeiling = ceiling("address", ceilingsOf.address()::getAsLong);
+        if (address != null && !limiter.allow("address:" + address, addressCeiling)) {
+            refuse(response, Limit.ADDRESS, addressCeiling);
+            return;
+        }
+        String presented = PresentedKey.fromAnyClient(request);
         String tenant = Authorization.wellFormed(presented) ? Authorization.tenantOf(presented) : null;
         String bucket = buckets.bucket(tenant);
-        // A tenant that overflowed the cap meters against the shared bucket on the default ceiling - never its own
-        // per-tenant ceiling, which would re-introduce an unbounded per-tenant cache entry.
-        String effectiveTenant = bucket.equals(BoundedTenantBuckets.ANONYMOUS) ? null : tenant;
-        if (!limiter.allow(bucket, ceiling(bucket, effectiveTenant))) {
-            rejected.incrementAndGet();
-            rejectedByTenant.computeIfAbsent(bucket, key -> new AtomicLong()).incrementAndGet();
-            response.setStatus(429);
-            response.setHeader("Retry-After", "60");
+        // A tenant past the cap meters in the shared bucket at the deployment's ceiling, with no credential limit of
+        // its own - a per-tenant ceiling for it would re-introduce an unbounded cache entry per fabricated name.
+        String admitted = bucket.equals(BoundedTenantBuckets.ANONYMOUS) ? null : tenant;
+        if (admitted != null) {
+            long accountCeiling = ceiling("account:" + admitted, () -> ceilingsOf.account().applyAsLong(admitted));
+            if (accountCeiling > 0 && !limiter.allow("account:" + Authorization.hash(presented), accountCeiling)) {
+                refuse(response, Limit.ACCOUNT, accountCeiling);
+                return;
+            }
+        }
+        long tenantCeiling = ceiling("tenant:" + bucket, () -> ceilingsOf.tenant().applyAsLong(admitted));
+        if (!limiter.allow(bucket, tenantCeiling)) {
+            refuse(response, Limit.TENANT, tenantCeiling);
             return;
         }
         chain.doFilter(request, response);
     }
 
-    private long ceiling(String bucket, String tenant) {
+    /** The address a request is limited by: see the class's first limit. */
+    private String address(HttpServletRequest request) {
+        String peer = request.getRemoteAddr();
+        String forwarded = request.getHeader("X-Forwarded-For");
+        String resolved = ClientAddresses.resolve(peer, forwarded, trustedProxies);
+        if (!Objects.equals(resolved, peer) || forwarded == null || forwarded.isBlank() || !internal(peer)) {
+            return resolved;
+        }
+        String[] hops = forwarded.split(",");
+        String nearest = hops[hops.length - 1].trim();
+        return nearest.isEmpty() ? peer : nearest;
+    }
+
+    /** Whether {@code address} is a loopback, link-local or private one - where a proxy in front of the node sits. */
+    private static boolean internal(String address) {
+        try {
+            InetAddress parsed = InetAddress.ofLiteral(address);
+            return parsed.isLoopbackAddress() || parsed.isSiteLocalAddress() || parsed.isLinkLocalAddress()
+                    || parsed instanceof Inet6Address && (parsed.getAddress()[0] & 0xFE) == 0xFC;
+        } catch (IllegalArgumentException | NullPointerException notAnAddress) {
+            return false;
+        }
+    }
+
+    private void refuse(HttpServletResponse response, Limit limit, long ceiling) throws IOException {
+        rejected.get(limit).incrementAndGet();
+        response.setStatus(429);
+        response.setHeader("Retry-After", "60");
+        response.setContentType("text/plain;charset=UTF-8");
+        response.getWriter().write("Too many requests from " + limit.whose + ": its limit is " + ceiling
+                + " a minute (the " + limit.setting + " setting). Retry after a minute.\n");
+    }
+
+    private long ceiling(String key, LongSupplier read) {
         long now = System.nanoTime();
-        long[] cached = ceilings.get(bucket);
+        long[] cached = ceilings.get(key);
         if (cached != null && cached[1] > now) {
             return cached[0];
         }
-        long ceiling = ceilingOf.applyAsLong(tenant);
-        ceilings.put(bucket, new long[]{ceiling, now + CACHE_TTL_NANOS});
+        long ceiling = read.getAsLong();
+        ceilings.put(key, new long[]{ceiling, now + CACHE_TTL_NANOS});
         return ceiling;
     }
 }

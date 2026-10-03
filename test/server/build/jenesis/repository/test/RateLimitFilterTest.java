@@ -3,9 +3,14 @@ package build.jenesis.repository.test;
 import module org.junit.jupiter.api;
 import module java.base;
 
+import build.jenesis.repository.ratelimit.RateLimitSettingsContributor;
+import build.jenesis.repository.ratelimit.TokenBucketRateLimiter;
 import build.jenesis.repository.server.RateLimitFilter;
+import build.jenesis.repository.server.RateLimitFilter.Ceilings;
+import build.jenesis.repository.server.RateLimitFilter.Limit;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.RateLimiter;
+import build.jenesis.repository.settings.Setting;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,98 +26,197 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Direct unit tests of {@link RateLimitFilter}, the load-shedding pre-auth filter, driven through its public
- * {@code doFilter} entry point with Mockito servlet-request/response mocks (the same inline-mock idiom
- * {@code RouteWritableTest} uses to drive the controller without booting the server) and a capturing
- * {@link RateLimiter} double that records the ceiling each request meters against. Two behaviours the end-to-end
- * rate-limit test cannot pin - the exact {@code Retry-After} header on a shed response, and the ceiling an
- * overflowed tenant meters against - are asserted here in isolation.
+ * {@link RateLimitFilter}, driven through its {@code doFilter} entry point with Mockito servlet mocks and either a
+ * {@link RateLimiter} double that records every bucket and ceiling a request meters against, or the real
+ * {@link TokenBucketRateLimiter} on a frozen clock.
  *
  * <ul>
- *   <li>A shed request carries {@code Retry-After: 60} alongside the {@code 429} - the back-off hint a client honours
- *       - and never reaches the chain (the load is shed before the repository sees it).</li>
- *   <li>A forged tenant that overflows the filter's 50,000-tenant ({@code MAX_TRACKED_TENANTS}) bucket cap meters
- *       against the shared {@code anonymous} bucket at the <em>deployment default</em> ceiling, never its own cached
- *       per-tenant override. An overflowed tenant that still consulted its own ceiling would re-introduce the
- *       unbounded ceiling-cache (a fabricated-tenant memory-exhaustion vector) and let an attacker pick its own
- *       ceiling by forging a high per-tenant limit - the very regression the {@code effectiveTenant} downgrade guards.
- *       A control on a fresh filter proves the override is otherwise honoured, so the downgrade - not a dead override -
- *       is what pulls the overflowed request back to the default.</li>
+ *   <li>Only a client's traffic is limited: the repositories and the build cache, never the console, the management
+ *       API or a probe.</li>
+ *   <li>A request meters against its address, its credential where a tenant sets a ceiling for one, and its tenant;
+ *       a shed request carries {@code Retry-After: 60} and a sentence naming the limit and its setting, never reaches
+ *       the chain, and is counted against that limit.</li>
+ *   <li>The address is the one the trusted proxies resolve, or behind an unlisted proxy on a private address the
+ *       last forwarded hop; a public peer's forwarded header is never believed.</li>
+ *   <li>A forged tenant past the bucket cap meters at the deployment's ceiling, with no credential limit.</li>
+ *   <li>With nothing set, an address may make 60,000 requests a minute and a credential has no ceiling of its own -
+ *       the catalogue declares both, and the filter applies them.</li>
  * </ul>
  */
 public class RateLimitFilterTest {
 
-    /** The deployment default ceiling wired into the filter; distinct from the per-tenant override so an assertion on
-     *  the metered ceiling tells the two apart. */
+    private static final String ARTIFACT = "/repository/default/maven/org/x/y/1/y-1.jar";
+
     private static final long DEFAULT_CEILING = 7L;
 
-    /** A per-tenant override, far above the default, provisioned for the forged tenant. An overflowed request must
-     *  never meter against it. */
     private static final long TENANT_OVERRIDE = 100_000L;
 
-    /** The filter's fixed distinct-tenant cap (package-private {@code RateLimitFilter.MAX_TRACKED_TENANTS}); filling it
-     *  exactly forces the next distinct tenant to overflow into the shared {@code anonymous} bucket. */
+    /** The filter's fixed distinct-tenant cap ({@code RateLimitFilter.MAX_TRACKED_TENANTS}). */
     private static final int CAP = 50_000;
 
-    /** Each tenant's ceiling as the settings would resolve it: the forged tenant carries a high value of its own. It
-     *  is honoured while the tenant holds its own bucket and must be ignored once the tenant overflows to the shared
-     *  anonymous bucket. */
-    private static final ToLongFunction<String> CEILINGS =
-            tenant -> "evil-corp".equals(tenant) ? TENANT_OVERRIDE : DEFAULT_CEILING;
-
-    /** A {@link RateLimiter} double that admits every request and records the bucket and ceiling of the most recent
-     *  call, so a test can assert exactly what a metered request was measured against. */
+    /** A {@link RateLimiter} double that admits every request and records each bucket and ceiling metered. */
     private static final class Capturing implements RateLimiter {
-        private volatile String bucket;
-        private volatile double ceiling = -1;
+        private final Map<String, Double> metered = new LinkedHashMap<>();
 
         @Override
-        public boolean allow(String key, double permitsPerMinute) {
-            this.bucket = key;
-            this.ceiling = permitsPerMinute;
+        public synchronized boolean allow(String key, double permitsPerMinute) {
+            metered.put(key, permitsPerMinute);
             return true;
+        }
+
+        synchronized Map<String, Double> metered() {
+            return new LinkedHashMap<>(metered);
+        }
+
+        synchronized void clear() {
+            metered.clear();
         }
     }
 
-    @Test
-    void a_shed_request_carries_a_retry_after_header_and_never_reaches_the_chain() throws Exception {
-        RateLimiter deny = (bucket, permitsPerMinute) -> false;
-        RateLimitFilter filter = new RateLimitFilter(deny, DEFAULT_CEILING);
-
+    /** One request's arrangement: its path, its TCP peer, any forwarded header and key. */
+    private static HttpServletRequest request(String path, String peer, String forwarded, String key) {
         HttpServletRequest request = mock(HttpServletRequest.class);
-        when(request.getRequestURI()).thenReturn("/repository/default/maven/org/x/y/1/y-1.jar");
+        when(request.getRequestURI()).thenReturn(path);
         when(request.getDispatcherType()).thenReturn(DispatcherType.REQUEST);
+        when(request.getRemoteAddr()).thenReturn(peer);
+        when(request.getHeader("X-Forwarded-For")).thenReturn(forwarded);
+        when(request.getHeader("Jenesis-Repository-Key")).thenReturn(key);
+        return request;
+    }
 
-        int[] status = {-1};
-        Map<String, String> headers = new HashMap<>();
-        HttpServletResponse response = mock(HttpServletResponse.class);
-        doAnswer(invocation -> status[0] = invocation.getArgument(0)).when(response).setStatus(anyInt());
-        doAnswer(invocation -> headers.put(invocation.getArgument(0), invocation.getArgument(1)))
-                .when(response).setHeader(anyString(), anyString());
-        FilterChain chain = mock(FilterChain.class);
+    /** What a response was answered with. */
+    private static final class Answer {
+        private int status = -1;
+        private final Map<String, String> headers = new HashMap<>();
+        private final StringWriter body = new StringWriter();
+        private final HttpServletResponse response = mock(HttpServletResponse.class);
 
-        filter.doFilter(request, response, chain);
+        Answer() throws IOException {
+            doAnswer(invocation -> status = invocation.getArgument(0)).when(response).setStatus(anyInt());
+            doAnswer(invocation -> headers.put(invocation.getArgument(0), invocation.getArgument(1)))
+                    .when(response).setHeader(anyString(), anyString());
+            when(response.getWriter()).thenReturn(new PrintWriter(body));
+        }
+    }
 
-        assertThat(status[0]).as("a rate-limited request is answered 429").isEqualTo(429);
-        assertThat(headers).as("the 429 carries the Retry-After back-off hint the client honours")
-                .containsEntry("Retry-After", "60");
-        verify(chain, never()).doFilter(request, response);
-        assertThat(filter.rejected()).as("the shed request is counted").isEqualTo(1);
-        assertThat(filter.rejectedByTenant())
-                .as("the keyless request meters against, and is tagged to, the shared anonymous bucket")
-                .containsEntry("anonymous", 1L);
+    private static Ceilings ceilings(ToLongFunction<String> tenant, ToLongFunction<String> account, long address) {
+        return new Ceilings(tenant, account, () -> address);
+    }
+
+    private static RateLimitFilter filter(RateLimiter limiter, Ceilings ceilings, String... trustedProxies) {
+        return new RateLimitFilter(limiter, ceilings, List.of(trustedProxies));
     }
 
     @Test
-    void an_overflowed_forged_tenant_meters_at_the_default_ceiling_not_its_own_override() throws Exception {
-        Capturing limiter = new Capturing();
-        RateLimitFilter filter = new RateLimitFilter(limiter, CEILINGS);
+    void only_a_clients_traffic_is_limited_never_the_console_the_management_api_or_a_probe() throws Exception {
+        RateLimitFilter filter = filter((_, _) -> false, ceilings(_ -> 1, _ -> 1, 1));
 
-        // Drive one request each from CAP distinct well-formed tenants, so the filter's bucket table fills exactly to
-        // its cap; the reused request mock answers the current tenant's key through a holder the loop advances.
+        for (String path : List.of("/ui/repositories", "/api/admin/caches", "/api/settings", "/actuator/health",
+                "/login", "/oauth2/authorization/github")) {
+            HttpServletRequest request = request(path, "203.0.113.9", null, null);
+            Answer answer = new Answer();
+            FilterChain chain = mock(FilterChain.class);
+            filter.doFilter(request, answer.response, chain);
+            verify(chain).doFilter(request, answer.response);
+            assertThat(answer.status).as("%s is never limited", path).isEqualTo(-1);
+        }
+        assertThat(RateLimitFilter.limited(ARTIFACT)).isTrue();
+        assertThat(RateLimitFilter.limited("/v2/default/app/manifests/1")).isTrue();
+        assertThat(RateLimitFilter.limited("/v2")).as("the registry's version probe").isTrue();
+        assertThat(RateLimitFilter.limited("/staging/default/releases/1/a.jar")).isTrue();
+        assertThat(RateLimitFilter.limited("/build/default/ab/cd")).as("the build cache").isTrue();
+        assertThat(filter.rejected()).isZero();
+    }
+
+    @Test
+    void a_shed_request_says_which_limit_it_hit_carries_retry_after_and_never_reaches_the_chain() throws Exception {
+        RateLimitFilter filter = filter((key, _) -> !key.startsWith("address:"), ceilings(_ -> 1, _ -> 0, 25));
+        HttpServletRequest request = request(ARTIFACT, "203.0.113.9", null, null);
+        Answer answer = new Answer();
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, answer.response, chain);
+
+        assertThat(answer.status).isEqualTo(429);
+        assertThat(answer.headers).containsEntry("Retry-After", "60");
+        assertThat(answer.body.toString()).contains("this client address", "25 a minute", "rate-limit-address");
+        verify(chain, never()).doFilter(request, answer.response);
+        assertThat(filter.rejected(Limit.ADDRESS)).isEqualTo(1);
+        assertThat(filter.rejected()).isEqualTo(1);
+        assertThat(filter.metrics()).anySatisfy(metric -> {
+            assertThat(metric.name()).isEqualTo("jenrepo.ratelimit.rejected.address");
+            assertThat(metric.value()).isEqualTo(1.0);
+        });
+    }
+
+    @Test
+    void a_keyed_request_meters_against_its_address_its_credential_and_its_tenant() throws Exception {
+        Capturing limiter = new Capturing();
+        String key = Authorization.mint("acme");
+        RateLimitFilter filter = filter(limiter, ceilings(_ -> 600, tenant -> "acme".equals(tenant) ? 60 : 0, 6000));
+
+        filter.doFilter(request(ARTIFACT, "203.0.113.9", null, key), new Answer().response, mock(FilterChain.class));
+
+        assertThat(limiter.metered()).containsExactly(
+                Map.entry("address:203.0.113.9", 6000.0),
+                Map.entry("account:" + Authorization.hash(key), 60.0),
+                Map.entry("acme", 600.0));
+    }
+
+    @Test
+    void a_credential_has_no_bucket_of_its_own_until_its_tenant_sets_a_ceiling_for_one() throws Exception {
+        Capturing limiter = new Capturing();
+        RateLimitFilter filter = filter(limiter, ceilings(_ -> 600, _ -> 0, 6000));
+
+        filter.doFilter(request(ARTIFACT, "203.0.113.9", null, Authorization.mint("acme")), new Answer().response,
+                mock(FilterChain.class));
+
+        assertThat(limiter.metered().keySet()).containsExactly("address:203.0.113.9", "acme");
+    }
+
+    @Test
+    void behind_an_unlisted_proxy_on_a_private_address_each_client_is_its_own_address() throws Exception {
+        Capturing limiter = new Capturing();
+        RateLimitFilter filter = filter(limiter, ceilings(_ -> 0, _ -> 0, 6000));
+
+        filter.doFilter(request(ARTIFACT, "10.0.3.7", "198.51.100.1, 203.0.113.9", null), new Answer().response,
+                mock(FilterChain.class));
+
+        assertThat(limiter.metered()).as("the ingress saw the client at the last hop, and that is who is limited")
+                .containsKey("address:203.0.113.9");
+    }
+
+    @Test
+    void a_public_peer_is_its_own_address_whatever_it_forwards() throws Exception {
+        Capturing limiter = new Capturing();
+        RateLimitFilter filter = filter(limiter, ceilings(_ -> 0, _ -> 0, 6000));
+
+        filter.doFilter(request(ARTIFACT, "203.0.113.9", "192.0.2.44", null), new Answer().response,
+                mock(FilterChain.class));
+
+        assertThat(limiter.metered()).as("a client cannot pick its bucket by forging a header")
+                .containsKey("address:203.0.113.9").doesNotContainKey("address:192.0.2.44");
+    }
+
+    @Test
+    void a_listed_proxy_is_believed_through_its_chain() throws Exception {
+        Capturing limiter = new Capturing();
+        RateLimitFilter filter = filter(limiter, ceilings(_ -> 0, _ -> 0, 6000), "198.51.100.0/24");
+
+        filter.doFilter(request(ARTIFACT, "198.51.100.7", "203.0.113.9, 198.51.100.8", null), new Answer().response,
+                mock(FilterChain.class));
+
+        assertThat(limiter.metered()).containsKey("address:203.0.113.9");
+    }
+
+    @Test
+    void an_overflowed_forged_tenant_meters_at_the_deployment_ceiling_with_no_credential_limit() throws Exception {
+        Capturing limiter = new Capturing();
+        RateLimitFilter filter = filter(limiter, ceilings(
+                tenant -> "evil-corp".equals(tenant) ? TENANT_OVERRIDE : DEFAULT_CEILING, _ -> 5, 0));
         String[] key = new String[1];
         HttpServletRequest request = mock(HttpServletRequest.class);
-        when(request.getRequestURI()).thenReturn("/repository/default/maven/org/x/y/1/y-1.jar");
+        when(request.getRequestURI()).thenReturn(ARTIFACT);
         when(request.getDispatcherType()).thenReturn(DispatcherType.REQUEST);
         when(request.getHeader("Jenesis-Repository-Key")).thenAnswer(invocation -> key[0]);
         HttpServletResponse response = mock(HttpServletResponse.class);
@@ -122,91 +226,85 @@ public class RateLimitFilterTest {
             key[0] = Authorization.mint("filler-" + tenant);
             filter.doFilter(request, response, chain);
             if (tenant % 1000 == 0) {
-                clearInvocations(request, response, chain);   // bound the mock's recorded-invocation memory over the fill
+                clearInvocations(request, response, chain);
+                limiter.clear();
             }
         }
-
-        // The forged tenant is the (CAP+1)-th distinct tenant: its bucket is full, so it overflows to anonymous. Even
-        // though it carries a high per-tenant override, the filter must meter it against the default ceiling.
+        limiter.clear();
         key[0] = Authorization.mint("evil-corp");
         filter.doFilter(request, response, chain);
 
-        assertThat(limiter.bucket)
-                .as("an overflowed tenant meters against the shared anonymous bucket, not a fresh per-tenant one")
-                .isEqualTo("anonymous");
-        assertThat(limiter.ceiling)
-                .as("and at the deployment default ceiling - never its own forged per-tenant override, which would "
-                        + "re-introduce the unbounded ceiling cache and let an attacker pick its own limit")
-                .isEqualTo((double) DEFAULT_CEILING);
+        assertThat(limiter.metered()).as("the shared bucket at the deployment's ceiling, and no credential bucket "
+                        + "an attacker could mint one of per fabricated key")
+                .containsExactly(Map.entry("anonymous", (double) DEFAULT_CEILING));
     }
 
     @Test
     void the_same_tenant_meters_at_its_own_override_while_it_holds_a_bucket() throws Exception {
-        // The control: on a fresh filter the forged tenant is admitted to its own bucket (well under the cap), so its
-        // per-tenant override IS honoured. This proves the override is live, so the overflow test's fall-back to the
-        // default is the anonymous-bucket downgrade at work - not a dead or unread override.
         Capturing limiter = new Capturing();
-        RateLimitFilter filter = new RateLimitFilter(limiter, CEILINGS);
+        RateLimitFilter filter = filter(limiter, ceilings(
+                tenant -> "evil-corp".equals(tenant) ? TENANT_OVERRIDE : DEFAULT_CEILING, _ -> 0, 0));
 
-        String[] key = {Authorization.mint("evil-corp")};
-        HttpServletRequest request = mock(HttpServletRequest.class);
-        when(request.getRequestURI()).thenReturn("/repository/default/maven/org/x/y/1/y-1.jar");
-        when(request.getDispatcherType()).thenReturn(DispatcherType.REQUEST);
-        when(request.getHeader("Jenesis-Repository-Key")).thenAnswer(invocation -> key[0]);
-        HttpServletResponse response = mock(HttpServletResponse.class);
-        FilterChain chain = mock(FilterChain.class);
+        filter.doFilter(request(ARTIFACT, null, null, Authorization.mint("evil-corp")), new Answer().response,
+                mock(FilterChain.class));
 
-        filter.doFilter(request, response, chain);
-
-        assertThat(limiter.bucket).as("an admitted tenant holds its own bucket").isEqualTo("evil-corp");
-        assertThat(limiter.ceiling).as("and meters against its own per-tenant override")
-                .isEqualTo((double) TENANT_OVERRIDE);
+        assertThat(limiter.metered()).containsEntry("evil-corp", (double) TENANT_OVERRIDE);
     }
 
     @Test
-    void the_default_ceiling_is_read_live_so_a_runtime_setting_is_honoured_without_a_reboot() throws Exception {
-        long[] configured = {DEFAULT_CEILING};
-        Capturing limiter = new Capturing();
-        RateLimitFilter filter = new RateLimitFilter(limiter, _ -> configured[0]);
-        HttpServletRequest request = mock(HttpServletRequest.class);
-        when(request.getRequestURI()).thenReturn("/repository/default/maven/org/x/y/1/y-1.jar");
-        when(request.getDispatcherType()).thenReturn(DispatcherType.REQUEST);
-        HttpServletResponse response = mock(HttpServletResponse.class);
-        FilterChain chain = mock(FilterChain.class);
+    void the_live_ceilings_resolve_the_settings_and_fall_back_to_their_defaults() {
+        Map<String, String> deployment = Map.of("jenrepo.rate-limit", "120", "jenrepo.rate-limit-address", "900");
+        Map<String, String> acme = Map.of("jenrepo.rate-limit", "30", "jenrepo.rate-limit-account", "10");
+        Ceilings live = Ceilings.live(tenant -> "acme".equals(tenant) ? acme::get : deployment::get, DEFAULT_CEILING);
 
-        configured[0] = 42;
-        filter.doFilter(request, response, chain);
+        assertThat(live.tenant().applyAsLong("acme")).as("a tenant's own value is its ceiling").isEqualTo(30);
+        assertThat(live.tenant().applyAsLong("globex")).as("else the deployment's").isEqualTo(120);
+        assertThat(live.account().applyAsLong("acme")).isEqualTo(10);
+        assertThat(live.address().getAsLong()).isEqualTo(900);
 
-        assertThat(limiter.ceiling)
-                .as("the ceiling is what the supplier answers when the bucket is first metered, not a boot-time copy")
-                .isEqualTo(42.0);
-    }
-
-    @Test
-    void the_live_ceiling_resolves_the_rate_limit_setting_and_falls_back_to_the_boot_value() {
-        assertThat(RateLimitFilter.liveCeiling(_ -> Map.of("jenrepo.rate-limit", "0")::get, DEFAULT_CEILING)
-                .applyAsLong(null))
-                .as("an operator who writes 0 disables the limiter").isEqualTo(0);
-        assertThat(RateLimitFilter.liveCeiling(_ -> Map.of("jenrepo.rate-limit", "120")::get, DEFAULT_CEILING)
-                .applyAsLong(null))
-                .isEqualTo(120);
-        assertThat(RateLimitFilter.liveCeiling(_ -> Map.<String, String>of()::get, DEFAULT_CEILING).applyAsLong(null))
-                .as("nothing written at runtime leaves the boot property in force").isEqualTo(DEFAULT_CEILING);
-        assertThat(RateLimitFilter.liveCeiling(_ -> Map.of("jenrepo.rate-limit", "plenty")::get, DEFAULT_CEILING)
-                .applyAsLong(null))
-                .as("a value that is not a number never turns every request into an error")
+        Ceilings unset = Ceilings.live(_ -> Map.<String, String>of()::get, DEFAULT_CEILING);
+        assertThat(unset.tenant().applyAsLong(null)).as("nothing written leaves the boot property in force")
                 .isEqualTo(DEFAULT_CEILING);
+        Ceilings garbled = Ceilings.live(_ -> Map.of("jenrepo.rate-limit", "plenty",
+                "jenrepo.rate-limit-address", "-4")::get, DEFAULT_CEILING);
+        assertThat(garbled.tenant().applyAsLong(null)).as("a value that is not a number never turns every request "
+                + "into an error").isEqualTo(DEFAULT_CEILING);
+        assertThat(garbled.address().getAsLong()).isEqualTo(60_000);
     }
 
     @Test
-    void the_live_ceiling_is_the_tenants_own_setting_over_the_deployments() {
-        Map<String, String> deployment = Map.of("jenrepo.rate-limit", "120");
-        Map<String, String> acme = Map.of("jenrepo.rate-limit", "30");
-        ToLongFunction<String> ceiling = RateLimitFilter.liveCeiling(
-                tenant -> "acme".equals(tenant) ? acme::get : deployment::get, DEFAULT_CEILING);
+    void with_nothing_set_an_address_makes_sixty_thousand_requests_a_minute_and_a_credential_has_no_ceiling()
+            throws Exception {
+        // What the catalogue declares - the settings screen and the reference render it.
+        Map<String, String> declared = new HashMap<>();
+        for (Setting setting : new RateLimitSettingsContributor().settings()) {
+            declared.put(setting.key(), setting.defaultValue());
+        }
+        assertThat(declared).containsEntry("rate-limit-address", "60000").containsEntry("rate-limit-account", "0");
 
-        assertThat(ceiling.applyAsLong("acme")).as("a tenant's own value is its ceiling").isEqualTo(30);
-        assertThat(ceiling.applyAsLong("globex")).as("a tenant with none meters at the deployment's").isEqualTo(120);
-        assertThat(ceiling.applyAsLong(null)).as("and so does a keyless request").isEqualTo(120);
+        // What the filter does with nothing set: one address is admitted for a minute's worth and refused after it,
+        // on a clock that does not move, while a second address is untouched.
+        RateLimitFilter filter = new RateLimitFilter(new TokenBucketRateLimiter().withClock(() -> 0L),
+                Ceilings.live(_ -> Map.<String, String>of()::get, 0), List.of());
+        HttpServletRequest request = request(ARTIFACT, "203.0.113.9", null, Authorization.mint("acme"));
+        HttpServletResponse response = mock(HttpServletResponse.class);
+        FilterChain chain = mock(FilterChain.class);
+        for (int sent = 0; sent < 60_000; sent++) {
+            filter.doFilter(request, response, chain);
+            if (sent % 1000 == 0) {
+                clearInvocations(request, response, chain);
+            }
+        }
+        assertThat(filter.rejected()).as("a minute's worth from one address is admitted").isZero();
+
+        Answer refused = new Answer();
+        filter.doFilter(request, refused.response, chain);
+        assertThat(refused.status).isEqualTo(429);
+        assertThat(filter.rejected(Limit.ADDRESS)).isEqualTo(1);
+        assertThat(filter.rejected(Limit.ACCOUNT)).as("no credential ceiling bit").isZero();
+
+        Answer other = new Answer();
+        filter.doFilter(request(ARTIFACT, "203.0.113.10", null, null), other.response, chain);
+        assertThat(other.status).as("another address has its own allowance").isEqualTo(-1);
     }
 }

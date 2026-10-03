@@ -30,6 +30,18 @@ public final class CoreDefaults {
      *  parses it. */
     public static final String PROXY_ENABLED = "true";
 
+    /** The requests a minute one tenant's credentials make together on a repository or the build cache, keyless
+     *  requests sharing one such ceiling: a runaway build stops at it. */
+    public static final String RATE_LIMIT = "6000";
+
+    /** The requests a minute one credential makes: no ceiling of its own unless a tenant names one, since the
+     *  tenant's ceiling already bounds every credential in it. */
+    public static final String RATE_LIMIT_ACCOUNT = "0";
+
+    /** The requests a minute one client address makes: a thousand a second, which no build machine sustains, so it
+     *  stops a runaway or abusive client and nothing that is working. */
+    public static final String RATE_LIMIT_ADDRESS = "60000";
+
     private CoreDefaults() {
     }
 }

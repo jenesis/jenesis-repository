@@ -104,7 +104,8 @@ public class RepositorySecurityAutoConfiguration {
         // The ceiling is read live, so the rate-limit setting an operator writes at runtime is honoured; a shell
         // without the stored settings has no tenant's value to read, so every tenant meters at the deployment's.
         return new RateLimitFilter(rateLimiter,
-                RateLimitFilter.liveCeiling(_ -> Features.lookup(), properties.getRateLimit()));
+                RateLimitFilter.Ceilings.live(_ -> Features.lookup(), properties.getRateLimit()),
+                RepositoryAuthorizationManager.parseTrustedProxies(properties.getTrustedProxies()));
     }
 
     /**

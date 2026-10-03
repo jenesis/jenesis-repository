@@ -265,7 +265,9 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
      *  is believed from. A malformed entry fails the start naming it rather than being dropped: a swallowed CIDR would
      *  leave the real proxy untrusted and every request appearing to come from it, silently disabling the source-IP
      *  allowlist. Empty is the secure default - no forwarded header is believed. */
-    private static List<String> parseTrustedProxies(String configured) {
+    /** The {@code trusted-proxies} list as configured - comma-separated addresses and CIDR ranges - each entry
+     *  checked, so a malformed one fails the boot naming it rather than trusting nobody in silence. */
+    public static List<String> parseTrustedProxies(String configured) {
         List<String> parsed = new ArrayList<>();
         for (String entry : configured.split(",")) {
             String cidr = entry.trim();

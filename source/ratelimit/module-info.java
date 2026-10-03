@@ -12,6 +12,7 @@ module build.jenesis.repository.ratelimit {
     requires build.jenesis.repository.settings;
     requires build.jenesis.repository.server.spi;
     requires build.jenesis.repository.observation;
+    requires com.github.benmanes.caffeine;
     exports build.jenesis.repository.ratelimit;
     provides build.jenesis.repository.server.spi.RateLimiterProvider
             with build.jenesis.repository.ratelimit.TokenBucketRateLimiterProvider;
