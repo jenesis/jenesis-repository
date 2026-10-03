@@ -103,7 +103,8 @@ public final class BatchIngestion {
      */
     public void explode(FormatExchange outer, String tenant, ArtifactStore store, ScreenedDispatch screened)
             throws IOException {
-        explode(outer, (path, body) -> dispatch(screened, tenant, path, body, store));
+        String repository = RepositoryRouting.target(outer.requestUri()).repository();
+        explode(outer, (path, body) -> dispatch(screened, tenant, repository, path, body, store));
     }
 
     /**
@@ -271,9 +272,9 @@ public final class BatchIngestion {
      *  is restreamed into its format's layout ({@code 2xx} &rarr; stored), a held one answers {@code 202} (quarantined)
      *  and a rejected one {@code 422} (rejected), all off the same {@link ScreenedDispatch} choreography a single
      *  deploy runs; a path no format claims is unclaimed. */
-    private static Outcome dispatch(ScreenedDispatch screened, String tenant, String path, InputStream body,
-                                    ArtifactStore store) throws IOException {
-        CapturingExchange exchange = new CapturingExchange(path, body);
+    private static Outcome dispatch(ScreenedDispatch screened, String tenant, String repository, String path,
+                                    InputStream body, ArtifactStore store) throws IOException {
+        CapturingExchange exchange = new CapturingExchange(tenant, repository, path, body);
         if (!screened.dispatch(tenant, exchange, store)) {
             return Outcome.UNCLAIMED;
         }

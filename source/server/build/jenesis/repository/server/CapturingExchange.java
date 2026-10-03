@@ -14,33 +14,39 @@ import build.jenesis.repository.format.FormatExchange;
  * answering the same way: the batch manifest and the console's verdict message are both reading a status that came
  * out of the same edge, through the same screen chain, with the same absent headers.
  *
+ * <p>It answers the request URI of the client request it stands in for - {@code /repository/<tenant>/<repository>}
+ * and the path - so what reads the repository a write addressed off the request reads the right one.
+ *
  * <p><b>It carries no request headers, deliberately.</b> A format publishes the body plainly, and a header that
  * would change how a write is interpreted - the batch explode header above all - cannot ride in and recurse.
  */
 public final class CapturingExchange implements FormatExchange {
 
     private final String method;
+    private final String requestUri;
     private final String path;
     private final InputStream body;
     private int status;
 
-    /** A {@code PUT} of {@code body} at {@code path}. */
-    public CapturingExchange(String path, InputStream body) {
-        this("PUT", path, body);
+    /** A {@code PUT} of {@code body} at {@code path} in {@code repository} of {@code tenant}. */
+    public CapturingExchange(String tenant, String repository, String path, InputStream body) {
+        this("PUT", tenant, repository, path, body);
     }
 
-    private CapturingExchange(String method, String path, InputStream body) {
+    private CapturingExchange(String method, String tenant, String repository, String path, InputStream body) {
         this.method = method;
+        this.requestUri = "/repository/" + tenant + "/" + repository + path;
         this.path = path;
         this.body = body;
     }
 
     /**
-     * A {@code GET} of {@code path} whose body is discarded as it is written: what a read in process learns is the
-     * status, and what the read leaves behind - a proxy's pull cached in the store - is the point of making it.
+     * A {@code GET} of {@code path} in {@code repository} of {@code tenant} whose body is discarded as it is written:
+     * what a read in process learns is the status, and what the read leaves behind - a proxy's pull cached in the
+     * store - is the point of making it.
      */
-    public static CapturingExchange read(String path) {
-        return new CapturingExchange("GET", path, InputStream.nullInputStream());
+    public static CapturingExchange read(String tenant, String repository, String path) {
+        return new CapturingExchange("GET", tenant, repository, path, InputStream.nullInputStream());
     }
 
     @Override
@@ -51,6 +57,11 @@ public final class CapturingExchange implements FormatExchange {
     @Override
     public String path() {
         return path;
+    }
+
+    @Override
+    public String requestUri() {
+        return requestUri;
     }
 
     @Override

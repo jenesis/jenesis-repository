@@ -384,7 +384,8 @@ public class RepositoryController {
         if (held.get().claiming().filter(format -> !held.get().type().publishes(format)).isPresent()) {
             return 405;
         }
-        CapturingExchange exchange = new CapturingExchange(held.get().path(), body);
+        CapturingExchange exchange = new CapturingExchange(route.tenant(), route.repository(), held.get().path(),
+                body);
         if (!screened(held.get().type()).dispatch(route.tenant(), exchange, route.store())) {
             return 404;
         }
@@ -419,7 +420,7 @@ public class RepositoryController {
         if (held.isEmpty()) {
             return 404;
         }
-        CapturingExchange exchange = CapturingExchange.read(held.get().path());
+        CapturingExchange exchange = CapturingExchange.read(route.tenant(), route.repository(), held.get().path());
         if (routed.routes(route.tenant(), route.repository())) {
             Optional<RepositoryFormat> claiming = held.get().claiming();
             if (claiming.isEmpty()) {

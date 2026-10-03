@@ -17,6 +17,7 @@ import build.jenesis.repository.server.kernel.SettingsEditor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Lease;
 import build.jenesis.repository.store.Requests;
+import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.ui.store.RepositoryLifecycle;
 import build.jenesis.repository.ui.store.SettingsAdmin;
 import io.micrometer.observation.ObservationRegistry;
@@ -431,6 +432,19 @@ public final class DemoRun {
             });
         }
 
+        /** Whether a read that answered nothing left {@code path} held for review in {@code repository}: the gate
+         *  kept what the proxy fetched, where a reviewer releases it. */
+        private boolean held(String repository, String path) {
+            try {
+                ArtifactStore space = root.scope(Scopes.require("tenant", recorder.tenant))
+                        .scope(Scopes.require("repository", repository));
+                return new ServableNames(space).located("/" + ServableNames.QUARANTINE + path).state()
+                        != ServableNames.State.UNPUBLISHED;
+            } catch (IOException | RuntimeException unreadable) {
+                return false;
+            }
+        }
+
         @Override
         public Outcome fetch(String repository, String path) throws IOException {
             String what = "Fetch " + path + " through " + repository;
@@ -441,9 +455,13 @@ public final class DemoRun {
                 return recorder.add(new Step(Kind.FETCH, what, Outcome.FAILED, "Not fetched: "
                         + failed.getMessage()));
             }
+            if (status == 404 && held(repository, path)) {
+                return recorder.add(new Step(Kind.FETCH, what, Outcome.HELD, "Held for review: the gate held it as "
+                        + "it was read through, and the repository's quarantine says why."));
+            }
             return recorder.add(switch (status) {
                 case 404 -> new Step(Kind.FETCH, what, Outcome.FAILED, "Not fetched: the registry did not answer "
-                        + "with it from this server, or the gate withheld it; the proxy stays without it.");
+                        + "with it from this server, or the gate refused it; the proxy stays without it.");
                 case Edge.UNSERVED -> new Step(Kind.FETCH, what, Outcome.FAILED, "Not fetched: no repository runs in "
                         + "this console's process.");
                 default -> status >= 200 && status < 300

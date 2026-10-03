@@ -218,6 +218,35 @@ class DemoRunTest {
     }
 
     @Test
+    void a_read_the_gate_held_for_review_is_reported_as_held_rather_than_as_not_fetched() throws IOException {
+        DemoRun.Edge real = DemoRun.Edge.over(() -> edge);
+        DemoRun.Edge holding = new DemoRun.Edge() {
+            @Override
+            public int publish(String tenant, String repository, String path, InputStream body) throws IOException {
+                return real.publish(tenant, repository, path, body);
+            }
+
+            @Override
+            public int fetch(String tenant, String repository, String path) throws IOException {
+                // What the pull-through leaves when the gate holds what it fetched: the copy under review, and a 404.
+                Publication publication = new Publication(repository(repository));
+                publication.link("/quarantine" + path, publication.storeBlob(new ByteArrayInputStream(new byte[]{1})));
+                return 404;
+            }
+        };
+        DemoRun run = new DemoRun(store, editor, audit, ObservationRegistry.NOOP, () -> List.of(new StarterDemo()),
+                holding);
+
+        DemoRun.State state = run.runNow(TENANT, OPERATOR).orElseThrow();
+
+        assertThat(state.steps()).filteredOn(step -> step.kind() == DemoRun.Kind.FETCH).isNotEmpty()
+                .allSatisfy(step -> {
+                    assertThat(step.outcome()).isEqualTo(Demo.Outcome.HELD);
+                    assertThat(step.detail()).startsWith("Held for review");
+                });
+    }
+
+    @Test
     void once_the_tenant_holds_a_repository_neither_the_offer_nor_a_second_run_is_made() throws IOException {
         DemoRun run = run(new StarterDemo());
         run.runNow(TENANT, OPERATOR);
