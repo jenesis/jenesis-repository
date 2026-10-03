@@ -38,55 +38,6 @@ public final class AiReachabilityLabels {
     /** The model cannot tell, which a low-confidence answer also records. */
     public static final String UNKNOWN = "unknown";
 
-    /** Whether {@code value} is one of the three opinion spellings (case-insensitively). */
-    public static boolean valid(String value) {
-        return LIKELY_REACHABLE.equalsIgnoreCase(value) || LIKELY_NOT_REACHABLE.equalsIgnoreCase(value)
-                || UNKNOWN.equalsIgnoreCase(value);
-    }
-
-    /** The AI opinion label on a finding, or empty when the classifier has not opined on it. */
-    public static Optional<String> verdictOf(Finding finding) {
-        for (Finding.Label label : finding.labels()) {
-            if (SOURCE.equals(label.source()) && NAME.equals(label.name()) && valid(label.value())) {
-                return Optional.of(label.value().toLowerCase(Locale.ROOT));
-            }
-        }
-        return Optional.empty();
-    }
-
-    /** The stronger of two opinions ({@code likely-reachable} over {@code unknown} over {@code likely-not-reachable}),
-     *  so an aggregate never under-reports; a {@code null} side yields the other. */
-    public static String strongest(String left, String right) {
-        if (left == null) {
-            return right;
-        }
-        if (right == null) {
-            return left;
-        }
-        return rank(left) >= rank(right) ? left : right;
-    }
-
-    /**
-     * The AI opinions of a coordinate's advisory findings, keyed as {@link ReachabilityLabels#verdicts} keys them,
-     * each holding the strongest opinion among its rows.
-     */
-    public static Map<String, String> verdicts(List<Finding> findings) {
-        Map<String, String> verdicts = new HashMap<>();
-        for (Finding finding : findings) {
-            Optional<String> verdict = verdictOf(finding);
-            if (verdict.isEmpty()) {
-                continue;
-            }
-            verdicts.merge(finding.id(), verdict.get(), AiReachabilityLabels::strongest);
-            for (String reference : finding.references()) {
-                if (reference.startsWith("CVE-")) {
-                    verdicts.merge(reference, verdict.get(), AiReachabilityLabels::strongest);
-                }
-            }
-        }
-        return verdicts;
-    }
-
     /**
      * The two engines' combined verdict. A decisive static verdict wins whatever the opinion says, so an opinion never
      * downgrades a deterministic {@code reachable}; where the static verdict is {@code unknown} or absent, the opinion
@@ -119,8 +70,7 @@ public final class AiReachabilityLabels {
         }
         String trimmed = filter.trim();
         if (trimmed.regionMatches(true, 0, "ai:", 0, 3)) {
-            String opinion = aiVerdict == null || aiVerdict.isEmpty() ? UNKNOWN : aiVerdict;
-            return opinion.equalsIgnoreCase(trimmed.substring(3));
+            return LABEL.matches(aiVerdict, trimmed.substring(3));
         }
         if (trimmed.regionMatches(true, 0, "agreed:", 0, 7)) {
             return agreed(staticVerdict, aiVerdict).equalsIgnoreCase(trimmed.substring(7));
@@ -128,11 +78,27 @@ public final class AiReachabilityLabels {
         return ReachabilityLabels.matches(staticVerdict, trimmed);
     }
 
-    private static int rank(String verdict) {
-        return switch (verdict.toLowerCase(Locale.ROOT)) {
-            case LIKELY_REACHABLE -> 2;
-            case UNKNOWN -> 1;
-            default -> 0;
-        };
+    /** The label, its three spellings in order. */
+    public static final OrderedLabel LABEL = new OrderedLabel(SOURCE, NAME, LIKELY_REACHABLE, UNKNOWN,
+            LIKELY_NOT_REACHABLE);
+
+    /** Whether {@code value} is one of the three spellings (case-insensitively). */
+    public static boolean valid(String value) {
+        return LABEL.valid(value);
+    }
+
+    /** The verdict a finding carries, or empty when it has none. */
+    public static Optional<String> verdictOf(Finding finding) {
+        return LABEL.verdictOf(finding);
+    }
+
+    /** The stronger of two verdicts ({@link OrderedLabel#strongest}). */
+    public static String strongest(String left, String right) {
+        return LABEL.strongest(left, right);
+    }
+
+    /** The verdicts of a coordinate's advisory findings ({@link OrderedLabel#verdicts}). */
+    public static Map<String, String> verdicts(List<Finding> findings) {
+        return LABEL.verdicts(findings);
     }
 }

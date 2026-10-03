@@ -38,72 +38,32 @@ public final class ApplicabilityLabels {
     /** The model cannot tell, which a low-confidence answer also records. */
     public static final String UNKNOWN = "unknown";
 
-    /** Whether {@code value} is one of the three opinion spellings (case-insensitively). */
+    /** The label, its three spellings in order. */
+    public static final OrderedLabel LABEL = new OrderedLabel(SOURCE, NAME, APPLIES, UNKNOWN, NOT_APPLICABLE);
+
+    /** Whether {@code value} is one of the three spellings (case-insensitively). */
     public static boolean valid(String value) {
-        return APPLIES.equalsIgnoreCase(value) || NOT_APPLICABLE.equalsIgnoreCase(value)
-                || UNKNOWN.equalsIgnoreCase(value);
+        return LABEL.valid(value);
     }
 
-    /** The applicability opinion label on a finding, or empty when the sweep has not judged it. */
+    /** The verdict a finding carries, or empty when it has none. */
     public static Optional<String> verdictOf(Finding finding) {
-        for (Finding.Label label : finding.labels()) {
-            if (SOURCE.equals(label.source()) && NAME.equals(label.name()) && valid(label.value())) {
-                return Optional.of(label.value().toLowerCase(Locale.ROOT));
-            }
-        }
-        return Optional.empty();
+        return LABEL.verdictOf(finding);
     }
 
-    /**
-     * The applicability opinions of a coordinate's advisory findings, keyed as {@link ReachabilityLabels#verdicts} keys
-     * them, each holding the {@linkplain #strongest most conservative} opinion among its rows.
-     */
-    public static Map<String, String> verdicts(List<Finding> findings) {
-        Map<String, String> verdicts = new HashMap<>();
-        for (Finding finding : findings) {
-            Optional<String> verdict = verdictOf(finding);
-            if (verdict.isEmpty()) {
-                continue;
-            }
-            verdicts.merge(finding.id(), verdict.get(), ApplicabilityLabels::strongest);
-            for (String reference : finding.references()) {
-                if (reference.startsWith("CVE-")) {
-                    verdicts.merge(reference, verdict.get(), ApplicabilityLabels::strongest);
-                }
-            }
-        }
-        return verdicts;
-    }
-
-    /** The more conservative of two opinions ({@code applies} over {@code unknown} over {@code not-applicable}); a
-     *  {@code null} side yields the other. */
+    /** The stronger of two verdicts ({@link OrderedLabel#strongest}). */
     public static String strongest(String left, String right) {
-        if (left == null) {
-            return right;
-        }
-        if (right == null) {
-            return left;
-        }
-        return rank(left) >= rank(right) ? left : right;
+        return LABEL.strongest(left, right);
     }
 
-    /**
-     * Whether a row whose badge is {@code verdict} (empty when never judged, which matches {@code unknown}) passes the
-     * view filter {@code filter}; blank matches everything.
-     */
+    /** The verdicts of a coordinate's advisory findings ({@link OrderedLabel#verdicts}). */
+    public static Map<String, String> verdicts(List<Finding> findings) {
+        return LABEL.verdicts(findings);
+    }
+
+    /** Whether a row whose badge is {@code verdict} passes the view filter {@code filter}
+     *  ({@link OrderedLabel#matches}). */
     public static boolean matches(String verdict, String filter) {
-        if (filter == null || filter.isBlank()) {
-            return true;
-        }
-        String opinion = verdict == null || verdict.isEmpty() ? UNKNOWN : verdict;
-        return opinion.equalsIgnoreCase(filter.trim());
-    }
-
-    private static int rank(String verdict) {
-        return switch (verdict.toLowerCase(Locale.ROOT)) {
-            case APPLIES -> 2;
-            case UNKNOWN -> 1;
-            default -> 0;
-        };
+        return LABEL.matches(verdict, filter);
     }
 }

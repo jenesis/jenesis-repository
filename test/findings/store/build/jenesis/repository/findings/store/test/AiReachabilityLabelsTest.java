@@ -4,6 +4,7 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.findings.AiReachabilityLabels;
+import build.jenesis.repository.findings.ApplicabilityLabels;
 import build.jenesis.repository.findings.Finding;
 import build.jenesis.repository.findings.ReachabilityLabels;
 
@@ -92,5 +93,16 @@ class AiReachabilityLabelsTest {
                 AiReachabilityLabels.SOURCE, AiReachabilityLabels.NAME, aiVerdict, 1.0, Instant.EPOCH));
         return new Finding(id, "test", Finding.Kind.VULNERABILITY, "", Severity.HIGH, 1.0, "", references, "",
                 Map.of(), Instant.EPOCH, Instant.EPOCH, null, labels);
+    }
+
+    /** Every three-valued label reads a view filter alike: the static reachability facet compared its filter untrimmed,
+     *  so {@code ?reachability=%20reachable} matched nothing there and worked on the AI and applicability facets. */
+    @Test
+    void every_label_reads_a_filter_with_surrounding_space_as_the_value_it_names() {
+        assertThat(ReachabilityLabels.matches(ReachabilityLabels.REACHABLE, " reachable ")).isTrue();
+        assertThat(ApplicabilityLabels.matches(ApplicabilityLabels.APPLIES, " applies ")).isTrue();
+        assertThat(AiReachabilityLabels.matches("", AiReachabilityLabels.LIKELY_REACHABLE, " ai:likely-reachable "))
+                .isTrue();
+        assertThat(ReachabilityLabels.matches("", " unknown ")).as("an unanalyzed row is undecided").isTrue();
     }
 }

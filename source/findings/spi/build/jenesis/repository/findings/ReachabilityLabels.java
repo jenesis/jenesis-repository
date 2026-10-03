@@ -29,74 +29,32 @@ public final class ReachabilityLabels {
     /** The static graph cannot decide - reflection, unresolvable dispatch or missing bytecode stand in the way. */
     public static final String UNKNOWN = "unknown";
 
-    /** Whether {@code value} is one of the three verdict spellings (case-insensitively). */
+    /** The label, its three spellings in order. */
+    public static final OrderedLabel LABEL = new OrderedLabel(SOURCE, NAME, REACHABLE, UNKNOWN, NOT_REACHABLE);
+
+    /** Whether {@code value} is one of the three spellings (case-insensitively). */
     public static boolean valid(String value) {
-        return REACHABLE.equalsIgnoreCase(value) || NOT_REACHABLE.equalsIgnoreCase(value)
-                || UNKNOWN.equalsIgnoreCase(value);
+        return LABEL.valid(value);
     }
 
-    /** The verdict label on a finding, or empty when the engine has not analyzed it. */
+    /** The verdict a finding carries, or empty when it has none. */
     public static Optional<String> verdictOf(Finding finding) {
-        for (Finding.Label label : finding.labels()) {
-            if (SOURCE.equals(label.source()) && NAME.equals(label.name()) && valid(label.value())) {
-                return Optional.of(label.value().toLowerCase(Locale.ROOT));
-            }
-        }
-        return Optional.empty();
+        return LABEL.verdictOf(finding);
     }
 
-    /** The stronger of two verdicts ({@code reachable} over {@code unknown} over {@code not-reachable}), for rows from
-     *  several feeds merged onto one advisory; a {@code null} side yields the other. */
+    /** The stronger of two verdicts ({@link OrderedLabel#strongest}). */
     public static String strongest(String left, String right) {
-        if (left == null) {
-            return right;
-        }
-        if (right == null) {
-            return left;
-        }
-        return rank(left) >= rank(right) ? left : right;
+        return LABEL.strongest(left, right);
     }
 
-    /**
-     * The verdicts of a coordinate's advisory findings, keyed by advisory id and every CVE alias (the identifiers the
-     * vulnerability view de-duplicates by), each holding the strongest verdict among its rows.
-     */
+    /** The verdicts of a coordinate's advisory findings ({@link OrderedLabel#verdicts}). */
     public static Map<String, String> verdicts(List<Finding> findings) {
-        Map<String, String> verdicts = new HashMap<>();
-        for (Finding finding : findings) {
-            Optional<String> verdict = verdictOf(finding);
-            if (verdict.isEmpty()) {
-                continue;
-            }
-            verdicts.merge(finding.id(), verdict.get(), ReachabilityLabels::strongest);
-            for (String reference : finding.references()) {
-                if (reference.startsWith("CVE-")) {
-                    verdicts.merge(reference, verdict.get(), ReachabilityLabels::strongest);
-                }
-            }
-        }
-        return verdicts;
+        return LABEL.verdicts(findings);
     }
 
-    /**
-     * Whether a row whose badge is {@code verdict} passes the view filter {@code filter}; blank matches everything. An
-     * un-analyzed row matches {@code unknown}, so a triage view never hides what the engine has not reached.
-     */
+    /** Whether a row whose badge is {@code verdict} passes the view filter {@code filter}
+     *  ({@link OrderedLabel#matches}). */
     public static boolean matches(String verdict, String filter) {
-        if (filter == null || filter.isBlank()) {
-            return true;
-        }
-        if (verdict == null || verdict.isEmpty()) {
-            return UNKNOWN.equalsIgnoreCase(filter);
-        }
-        return verdict.equalsIgnoreCase(filter);
-    }
-
-    private static int rank(String verdict) {
-        return switch (verdict.toLowerCase(Locale.ROOT)) {
-            case REACHABLE -> 2;
-            case UNKNOWN -> 1;
-            default -> 0;
-        };
+        return LABEL.matches(verdict, filter);
     }
 }
