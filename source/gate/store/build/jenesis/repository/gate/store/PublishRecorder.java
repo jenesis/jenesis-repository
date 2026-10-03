@@ -337,7 +337,10 @@ final class PublishRecorder {
      * health sweep already carries its health in the ledger the gate now reads, so admission of a LATER version of the
      * same coordinate scores off a populated ledger rather than the not-yet-swept fallback. Held to ACCEPT, where the
      * coordinate is recorded as published and the sweep will revisit it. A coordinate the source scores nothing is
-     * left unrecorded (unknown, not healthy). Best-effort like every derived write here - the artifact is already
+     * left unrecorded (unknown, not healthy), and one whose ledger already holds the health the probe answers is left
+     * as it is: rewriting it would cost every version's publish a write of the coordinate's one document, which
+     * concurrent publishes of one coordinate contend for, and the sweep refreshes it. The ledger's answer is the one
+     * the gate read for the same publish. Best-effort like every derived write here - the artifact is already
      * stored, so a failed probe or write must not fail an accepted publish - and a no-op when no health-ledger module
      * is installed or no live source is wired; the sweep then records the coordinate on its next pass. The commit does
      * NOT stamp {@link build.jenesis.repository.health.HealthLedger#scanned health stamp}: a single-coordinate
@@ -376,8 +379,11 @@ final class PublishRecorder {
             return;                                             // unscored: left unrecorded (unknown, not healthy)
         }
         try {
-            healthLedger.get().over(store).record(coordinate.ecosystem(), coordinate.coordinate(), health.get(),
-                    Clocks.now());
+            HealthLedger ledger = healthLedger.get().over(store);
+            if (ledger.health(coordinate.ecosystem(), coordinate.coordinate()).equals(health)) {
+                return;
+            }
+            ledger.record(coordinate.ecosystem(), coordinate.coordinate(), health.get(), Clocks.now());
         } catch (IOException | RuntimeException failure) {
             // best-effort: the artifact is stored and the sweep converges on this record; a lost write only defers
             LOGGER.warn("Could not persist publish-time maintainer-health for "
