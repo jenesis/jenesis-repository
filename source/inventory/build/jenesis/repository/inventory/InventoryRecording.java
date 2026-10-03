@@ -129,8 +129,9 @@ final class InventoryRecording {
                     .map(PublishedSection.Facts::at).orElse(null);
             Optional<List<LicenseInventory.Declared>> before = declaredIn(document);
             SequencedMap<String, SectionMutation> mutations = new LinkedHashMap<>();
-            mutations.put(PublishedSection.TAG,
-                    PublishedSection.record(recording.published, recording.prerelease, recording.published));
+            mutations.put(PublishedSection.TAG, PublishedSection.record(
+                    publishedAt(document, recording.originSha256, recording.published), recording.prerelease,
+                    recording.published));
             if (recording.originSha256 != null && !recording.originSha256.isBlank()) {
                 mutations.put(OriginSection.TAG, OriginSection.recordUpload(recording.originSha256, recording.published));
             }
@@ -213,20 +214,20 @@ final class InventoryRecording {
         // The publish facts land in the document's published section (its presence is membership of the published
         // set). Edge-triggered on the absent -> present transition, followed by the rollup fold-in on a first publish.
         // On a hand upload the local-upload origin row rides that SAME doc mutate.
-        Instant before = recordPublishedSection(ecosystem, coordinate, version, prerelease, published, originSha256);
-        if (before == null) {
+        Landed landed = recordPublishedSection(ecosystem, coordinate, version, prerelease, published, originSha256);
+        if (landed.first() != null) {
             NewestFirst.RELEASES.record(store, ecosystem, coordinate, version, published);
         } else {
-            moveRecent(ecosystem, coordinate, version, before, published);
+            moveRecent(ecosystem, coordinate, version, landed.before(), landed.at());
         }
     }
 
     /**
      * Keep the newest-first row on the instant the document now records: a re-publish - another file of the version,
-     * or the same one again - refreshes the {@code published} instant, and a row left under the earlier one would be
-     * a second row for one version once the reconcile backfills the new instant. The row is written under the new
-     * instant before the old one goes, so the version is never missing from the feed; a crash between the two leaves
-     * the extra row, which a reader shows once.
+     * or other bytes - refreshes the {@code published} instant ({@link #publishedAt}), and a row left under the
+     * earlier one would be a second row for one version once the reconcile backfills the new instant. The row is
+     * written under the new instant before the old one goes, so the version is never missing from the feed; a crash
+     * between the two leaves the extra row, which a reader shows once.
      */
     private void moveRecent(String ecosystem, String coordinate, String version, Instant before, Instant after)
             throws IOException {
@@ -240,17 +241,17 @@ final class InventoryRecording {
     /** Write the publish facts into the document's {@code published} section and, on a first publish (the section
      *  was not a published member before), fold the member into the rollup identity once the document write has
      *  committed - from the document as committed, so the member's license fingerprint is the section that document
-     *  carries and a later license transition re-folds from exactly it. Returns {@code null} on a first publish; a
-     *  re-publish of an existing member refreshes the instant/prerelease (preserving the pin) and returns the instant
-     *  the document recorded before it.
+     *  carries and a later license transition re-folds from exactly it. Answers the document it wrote on a first
+     *  publish; a re-publish of an existing member refreshes the instant/prerelease (preserving the pin) and answers
+     *  the instant the document recorded before it and the one it records now.
      *
      *  <p>The fold does not ride the document write's batch as one unread compare-and-set attempt: a batch is not a
      *  transaction, so under concurrent publishers the document would commit while the rollup conflicted and the
      *  member would be gone from the identity until the next reconcile. Folding after the commit, through the
      *  retrying compare-and-set, is one small extra write per first publish. */
-    private Instant recordPublishedSection(String ecosystem, String coordinate, String version, boolean prerelease,
-                                           Instant published, String originSha256) throws IOException {
-        // The document as the landing try wrote it on a first publish, else the instant it recorded before.
+    private Landed recordPublishedSection(String ecosystem, String coordinate, String version, boolean prerelease,
+                                          Instant published, String originSha256) throws IOException {
+        // The document as the landing try wrote it on a first publish, and the instants it recorded before and now.
         String key = MetadataKey.version(ecosystem, coordinate, version);
         Landed landed = DocumentTurns.take(store, key, () -> Retries.decide(store, key, current -> {
             MetadataDocument document = current.map(versioned -> MetadataDocument.read(versioned.content()))
@@ -259,17 +260,18 @@ final class InventoryRecording {
             Instant before = PublishedSection.facts(document.section(PublishedSection.TAG))
                     .map(PublishedSection.Facts::at).orElse(null);
             SequencedMap<String, build.jenesis.repository.metadata.SectionMutation> mutations = new LinkedHashMap<>();
-            mutations.put(PublishedSection.TAG, PublishedSection.record(published, prerelease, published));
+            Instant at = publishedAt(document, originSha256, published);
+            mutations.put(PublishedSection.TAG, PublishedSection.record(at, prerelease, published));
             if (originSha256 != null && !originSha256.isBlank()) {
                 // The hand-upload local-upload origin row rides the SAME doc mutate as the publish
                 // commit's published section - one CAS, no extra round-trip. Idempotent (one row per (source, sha256)).
                 mutations.put(OriginSection.TAG, OriginSection.recordUpload(originSha256, published));
             }
             MetadataDocument next = document.mutate(mutations);
-            return Retries.Verdict.write(next.serialize(), new Landed(firstPublish ? next : null, before));
+            return Retries.Verdict.write(next.serialize(), new Landed(firstPublish ? next : null, before, at));
         }));
         if (landed.first() == null) {
-            return landed.before() == null ? published : landed.before();
+            return landed;
         }
         MetadataDocument committed = landed.first();
         // The absent -> present transition folds the coordinate's member into the rollup identity so the
@@ -277,12 +279,28 @@ final class InventoryRecording {
         // committed, so this fold and a rebuild reading that document agree on the member.
         identity.foldIn(InventoryIdentity.member(ecosystem, coordinate, version,
                 LicenseSection.fingerprintOf(declaredIn(committed))), published);
-        return null;
+        return landed;
     }
 
-    /** What a publish's document write landed: the document on a first publish, else none, and the instant the
-     *  document recorded before. */
-    private record Landed(MetadataDocument first, Instant before) {
+    /**
+     * The instant a publish of the version records: its own, unless it uploads bytes the version already holds from an
+     * upload. Such a re-upload changes nothing a reader sees, so the version keeps the instant it had and its row in
+     * the newest-first feed stays where it is; another file of the version, or other bytes, move both.
+     */
+    private static Instant publishedAt(MetadataDocument document, String originSha256, Instant published) {
+        Optional<Instant> before = PublishedSection.facts(document.section(PublishedSection.TAG))
+                .map(PublishedSection.Facts::at);
+        if (before.isEmpty() || originSha256 == null || originSha256.isBlank()) {
+            return published;
+        }
+        boolean held = OriginSection.acquisitions(document.section(OriginSection.TAG)).stream()
+                .anyMatch(acquisition -> acquisition.localUpload() && originSha256.equals(acquisition.sha256()));
+        return held ? before.get() : published;
+    }
+
+    /** What a publish's document write landed: the document on a first publish, else none, and the instants the
+     *  document recorded before and records now. */
+    private record Landed(MetadataDocument first, Instant before, Instant at) {
     }
 
     /**
