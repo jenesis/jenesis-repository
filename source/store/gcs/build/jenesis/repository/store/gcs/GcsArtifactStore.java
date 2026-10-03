@@ -27,6 +27,7 @@ import java.util.TreeSet;
 import java.util.function.Consumer;
 
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.DelimitedPages;
 import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.OwnerOnly;
 import com.google.api.client.googleapis.json.GoogleJsonResponseException;
@@ -297,32 +298,13 @@ public final class GcsArtifactStore implements PrimitiveArtifactStore {
         return new ArrayList<>(names);
     }
 
-    /** Whether {@code name} must wait at stream position {@code relative}: a proper prefix of it whose next character
-     *  sorts below {@code '/'} could still arrive as a grouped prefix ({@code prefix + "/"} sorts at or past the
-     *  position), and that shorter name must page first. */
-    private static boolean held(String name, String relative) {
-        for (int index = 1; index < name.length(); index++) {
-            if (name.charAt(index) < '/' && relative.compareTo(name.substring(0, index) + "/") <= 0) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     @Override
     public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
         if (limit <= 0) {
             return;
         }
         String base = base(prefix);
-        // The stream arrives in raw key order, where a container appears as a grouped prefix at `name + "/"` - after
-        // any sibling extending the name past a character below '/' (object `app.txt` precedes prefix `app/`, yet child
-        // `app` must page first). So names are parked and the smallest released once no smaller one can still arrive
-        // (see held()). A released name at or below startAfter is dropped: the start offset is inclusive, and a
-        // prefix-child of the boundary re-arrives here although the previous call already paged it.
-        TreeMap<String, Listed> pending = new TreeMap<>();
-        int emitted = 0;
-        String last = null;
+        DelimitedPages pages = new DelimitedPages(startAfter, limit, consumer);
         try {
             String token = null;
             do {
@@ -343,40 +325,15 @@ public final class GcsArtifactStore implements PrimitiveArtifactStore {
                         ordered.add(relative);
                     }
                 }
-                Collections.sort(ordered);
-                for (String relative : ordered) {
-                    while (!pending.isEmpty() && !held(pending.firstKey(), relative)) {
-                        Map.Entry<String, Listed> entry = pending.pollFirstEntry();
-                        String name = entry.getKey();
-                        if (name.compareTo(startAfter) > 0) {
-                            consumer.accept(entry.getValue());
-                            last = name;
-                            if (++emitted == limit) {
-                                return;
-                            }
-                        }
-                    }
-                    String name = relative.endsWith("/") ? relative.substring(0, relative.length() - 1) : relative;
-                    if (!name.equals(last)) {
-                        // A leaf and a same-named container page as one child, keeping the leaf's metadata - what a GET
-                        // resolves to.
-                        pending.merge(name, listed(prefix, name, objects.get(relative)),
-                                (kept, arriving) -> kept.size().isPresent() ? kept : arriving);
-                    }
+                if (pages.page(ordered, (relative, name) -> listed(prefix, name, objects.get(relative)))) {
+                    return;
                 }
                 token = page.getNextPageToken();
             } while (token != null);
         } catch (IOException e) {
             throw new UncheckedIOException("Could not page " + prefix, e);
         }
-        for (Map.Entry<String, Listed> entry : pending.entrySet()) {
-            if (entry.getKey().compareTo(startAfter) > 0) {
-                consumer.accept(entry.getValue());
-                if (++emitted == limit) {
-                    return;
-                }
-            }
-        }
+        pages.finish();
     }
 
     @Override

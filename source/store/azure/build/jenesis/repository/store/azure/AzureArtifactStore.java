@@ -2,6 +2,7 @@ package build.jenesis.repository.store.azure;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.DelimitedPages;
 import build.jenesis.repository.store.PrimitiveArtifactStore;
 import com.azure.core.http.rest.PagedResponse;
 import com.azure.core.util.BinaryData;
@@ -250,21 +251,13 @@ public final class AzureArtifactStore implements PrimitiveArtifactStore {
             return;
         }
         String base = base(prefix);
-        // List Blobs takes a server-side start-at key (ListBlobsOptions.startFrom, distinct from the continuation
-        // marker), so a resume seeks to the boundary in one bounded page rather than re-listing from the base. As in
-        // the s3 backend, the SDK returns a page's blobs and prefixes as two lists, merged back into key order, where a
-        // container's prefix sits at `name + "/"` after a sibling extending the name past a character below '/' (blob
-        // `app.txt` precedes prefix `app/`, yet child `app` pages first): so names park and the smallest releases once
-        // no smaller one can arrive (held()). A released name at or below startAfter is dropped: startFrom is
-        // inclusive, and a prefix-child of the boundary was already paged by the previous call.
+        // List Blobs takes a server-side start-at key (startFrom, distinct from the continuation marker), so a resume
+        // seeks to the boundary in one bounded page rather than re-listing from the base.
         ListBlobsOptions options = new ListBlobsOptions().setPrefix(base).setMaxResultsPerPage(Math.min(ArtifactStore.oneMoreThan(limit), 5000));
         if (!startAfter.isEmpty()) {
             options.setStartFrom(base + startAfter);
         }
-        // Keyed by child name; a prefix entry is a container and carries no metadata.
-        TreeMap<String, Listed> pending = new TreeMap<>();
-        int emitted = 0;
-        String last = null;
+        DelimitedPages pages = new DelimitedPages(startAfter, limit, consumer);
         for (PagedResponse<BlobItem> page : container.listBlobsByHierarchy("/", options, null).iterableByPage()) {
             List<String> ordered = new ArrayList<>();
             Map<String, BlobItem> blobs = new HashMap<>();
@@ -280,36 +273,11 @@ public final class AzureArtifactStore implements PrimitiveArtifactStore {
                     ordered.add(relative);
                 }
             }
-            Collections.sort(ordered);
-            for (String relative : ordered) {
-                while (!pending.isEmpty() && !held(pending.firstKey(), relative)) {
-                    Map.Entry<String, Listed> entry = pending.pollFirstEntry();
-                    String name = entry.getKey();
-                    if (name.compareTo(startAfter) > 0) {
-                        consumer.accept(entry.getValue());
-                        last = name;
-                        if (++emitted == limit) {
-                            return;
-                        }
-                    }
-                }
-                String name = relative.endsWith("/") ? relative.substring(0, relative.length() - 1) : relative;
-                if (!name.equals(last)) {
-                    // A blob and a same-named container page as one child, keeping the blob's metadata - what a GET
-                    // resolves to.
-                    pending.merge(name, listed(prefix, name, blobs.get(relative)),
-                            (kept, arriving) -> kept.size().isPresent() ? kept : arriving);
-                }
+            if (pages.page(ordered, (relative, name) -> listed(prefix, name, blobs.get(relative)))) {
+                return;
             }
         }
-        for (Map.Entry<String, Listed> entry : pending.entrySet()) {
-            if (entry.getKey().compareTo(startAfter) > 0) {
-                consumer.accept(entry.getValue());
-                if (++emitted == limit) {
-                    return;
-                }
-            }
-        }
+        pages.finish();
     }
 
     /** A child as List Blobs saw it; {@code item} is null for a prefix entry - a container, with no size or age. A
@@ -324,17 +292,6 @@ public final class AzureArtifactStore implements PrimitiveArtifactStore {
         return Listed.of(key,
                 properties.getContentLength() == null ? 0L : properties.getContentLength(),
                 properties.getLastModified() == null ? Instant.EPOCH : properties.getLastModified().toInstant());
-    }
-
-    /** Whether {@code name} must wait at stream position {@code relative}: a proper prefix of it whose next character
-     *  sorts below {@code '/'} could still arrive as a hierarchy prefix, and that shorter name must page first. */
-    private static boolean held(String name, String relative) {
-        for (int index = 1; index < name.length(); index++) {
-            if (name.charAt(index) < '/' && relative.compareTo(name.substring(0, index) + "/") <= 0) {
-                return true;
-            }
-        }
-        return false;
     }
 
     @Override

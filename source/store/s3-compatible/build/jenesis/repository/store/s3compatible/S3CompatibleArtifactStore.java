@@ -2,6 +2,7 @@ package build.jenesis.repository.store.s3compatible;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.DelimitedPages;
 import build.jenesis.repository.store.PrimitiveArtifactStore;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.services.s3.model.CommonPrefix;
@@ -106,18 +107,6 @@ public abstract class S3CompatibleArtifactStore implements PrimitiveArtifactStor
         }
     }
 
-    /** Whether {@code name} may not be paged out yet at stream position {@code relative}: a proper prefix of it
-     *  whose next character sorts below {@code '/'} could still arrive as a grouped prefix (its container key
-     *  {@code prefix + "/"} sorts at or past the position), and that shorter child name must page first. */
-    private static boolean held(String name, String relative) {
-        for (int index = 1; index < name.length(); index++) {
-            if (name.charAt(index) < '/' && relative.compareTo(name.substring(0, index) + "/") <= 0) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     /** A child as the listing saw it. {@code object} is null for a grouped prefix - a container - which reports no
      *  size or age because it has none; both halves of a leaf's metadata ride along in the response already. */
     private static Listed listed(String prefix, String name, S3Object object) {
@@ -217,17 +206,7 @@ public abstract class S3CompatibleArtifactStore implements PrimitiveArtifactStor
             return;
         }
         String base = base(prefix);
-        // The stream arrives in raw key order, where a container shows up as a grouped prefix at `name + "/"` -
-        // after any sibling whose name extends this one past a character below '/' (the object `app.txt` precedes
-        // the grouped prefix `app/`, yet the child `app` must page before `app.txt`). So every name is parked and the
-        // smallest released only once no smaller-named child can still arrive - see held(). A released name at or
-        // below startAfter is dropped: the server-side start-after skips the boundary's own object but not a
-        // same-named container's grouped prefix, and a prefix-child of the boundary re-arrives yet was already paged.
-        // Each child carries what the listing said - a leaf its size and age, a container neither - with no request
-        // to fill them.
-        TreeMap<String, Listed> pending = new TreeMap<>();
-        int emitted = 0;
-        String last = null;
+        DelimitedPages pages = new DelimitedPages(startAfter, limit, consumer);
         for (ListObjectsV2Response page : s3.listObjectsV2Paginator(b -> {
             b.bucket(bucket).prefix(base).delimiter("/").maxKeys(Math.min(ArtifactStore.oneMoreThan(limit), 1000));
             if (!startAfter.isEmpty()) {
@@ -249,35 +228,10 @@ public abstract class S3CompatibleArtifactStore implements PrimitiveArtifactStor
                     ordered.add(relative);
                 }
             }
-            Collections.sort(ordered);
-            for (String relative : ordered) {
-                while (!pending.isEmpty() && !held(pending.firstKey(), relative)) {
-                    Map.Entry<String, Listed> entry = pending.pollFirstEntry();
-                    String name = entry.getKey();
-                    if (name.compareTo(startAfter) > 0) {
-                        consumer.accept(entry.getValue());
-                        last = name;
-                        if (++emitted == limit) {
-                            return;
-                        }
-                    }
-                }
-                String name = relative.endsWith("/") ? relative.substring(0, relative.length() - 1) : relative;
-                if (!name.equals(last)) {
-                    // A leaf and a same-named container page as one child; the leaf's metadata
-                    // is kept, because that is what a GET of this key resolves to.
-                    pending.merge(name, listed(prefix, name, objects.get(relative)),
-                            (kept, arriving) -> kept.size().isPresent() ? kept : arriving);
-                }
+            if (pages.page(ordered, (relative, name) -> listed(prefix, name, objects.get(relative)))) {
+                return;
             }
         }
-        for (Map.Entry<String, Listed> entry : pending.entrySet()) {
-            if (entry.getKey().compareTo(startAfter) > 0) {
-                consumer.accept(entry.getValue());
-                if (++emitted == limit) {
-                    return;
-                }
-            }
-        }
+        pages.finish();
     }
 }
