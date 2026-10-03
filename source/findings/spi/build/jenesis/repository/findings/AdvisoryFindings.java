@@ -38,4 +38,25 @@ public final class AdvisoryFindings {
                 finding.kind() == Finding.Kind.MALWARE, finding.attributes().get("fixed"), cves,
                 finding.description());
     }
+
+    /**
+     * Ask every feed about one version and record what each reports under that feed, answering whether any reported
+     * anything. Recording is best-effort upserts, so a label already on a row survives and a failed write leaves the
+     * version for the sweep's next pass.
+     */
+    public static boolean record(Findings ledger, SequencedMap<String, AdvisorySource> feeds, String ecosystem,
+                                 String coordinate, String version, String provenance, Instant now) {
+        boolean reported = false;
+        for (Map.Entry<String, AdvisorySource> feed : feeds.entrySet()) {
+            for (AdvisorySource.Advisory advisory : feed.getValue().advisories(ecosystem, coordinate, version)) {
+                reported = true;
+                try {
+                    ledger.record(ecosystem, coordinate, version, of(advisory, feed.getKey(), provenance, now));
+                } catch (IOException | RuntimeException _) {
+                    // best-effort: the sweep persists the version on its next pass
+                }
+            }
+        }
+        return reported;
+    }
 }

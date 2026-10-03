@@ -226,29 +226,11 @@ public interface AdvisorySource extends SignalSource {
 
             @Override
             public List<Advisory> advisories(String ecosystem, String coordinate, String version) {
-                List<Advisory> merged = new ArrayList<>();
-                Map<String, Integer> known = new HashMap<>();
+                List<Advisory> all = new ArrayList<>();
                 for (AdvisorySource feed : feeds) {
-                    for (Advisory advisory : feed.advisories(ecosystem, coordinate, version)) {
-                        Set<String> identifiers = new LinkedHashSet<>(advisory.cves());
-                        identifiers.add(advisory.id());
-                        Integer at = identifiers.stream()
-                                .map(known::get)
-                                .filter(Objects::nonNull)
-                                .findFirst()
-                                .orElse(null);
-                        if (at == null) {
-                            at = merged.size();
-                            merged.add(advisory);
-                        } else {
-                            merged.set(at, enriched(merged.get(at), advisory));
-                        }
-                        for (String identifier : identifiers) {
-                            known.putIfAbsent(identifier, at);
-                        }
-                    }
+                    all.addAll(feed.advisories(ecosystem, coordinate, version));
                 }
-                return merged;
+                return merged(all);
             }
 
             /** The conservative fold: authoritative only when every feed is, and as old as the oldest of them. */
@@ -257,6 +239,29 @@ public interface AdvisorySource extends SignalSource {
                 return Freshness.merged(feeds.stream().map(SignalSource::freshness).toList());
             }
         };
+    }
+
+    /** {@code advisories} with every report of one vulnerability - one id, or a shared CVE alias - folded into one
+     *  record in first-seen order, each field taking the richer value: the higher severity, a fixed version where the
+     *  first knew none, the fuller description, the union of aliases, the malicious flag if either sets it. */
+    static List<Advisory> merged(List<Advisory> advisories) {
+        List<Advisory> merged = new ArrayList<>();
+        Map<String, Integer> known = new HashMap<>();
+        for (Advisory advisory : advisories) {
+            Set<String> identifiers = new LinkedHashSet<>(advisory.cves());
+            identifiers.add(advisory.id());
+            Integer at = identifiers.stream().map(known::get).filter(Objects::nonNull).findFirst().orElse(null);
+            if (at == null) {
+                at = merged.size();
+                merged.add(advisory);
+            } else {
+                merged.set(at, enriched(merged.get(at), advisory));
+            }
+            for (String identifier : identifiers) {
+                known.putIfAbsent(identifier, at);
+            }
+        }
+        return merged;
     }
 
     // The field-wise merge of two reports of one vulnerability: the id stays the first feed's (stable however the

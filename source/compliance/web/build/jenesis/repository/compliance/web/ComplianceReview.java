@@ -521,7 +521,8 @@ public class ComplianceReview extends TenantScope {
         int[] flagged = {0};
         inventory(repository).coordinates(held -> {
             scanned[0]++;
-            if (!queryAndPersist(ledger.get(), feeds, held).isEmpty()) {
+            if (AdvisoryFindings.record(ledger.get(), feeds, held.ecosystem(), held.coordinate(), held.version(),
+                    "console-report", Instant.now())) {
                 flagged[0]++;
             }
         });
@@ -533,51 +534,6 @@ public class ComplianceReview extends TenantScope {
         rows.add(scanned[0] + " versions scanned");
         rows.add(flagged[0] + " with advisories");
         return StoredReport.Rows.of(rows);
-    }
-
-    /** Queries each enabled feed for one coordinate, persists every advisory under its feed (best-effort upserts, so
-     *  labels survive), and answers the de-duplicated union. */
-    private static List<AdvisorySource.Advisory> queryAndPersist(Findings ledger,
-                                                                 SequencedMap<String, AdvisorySource> feeds,
-                                                                 StoreRepositoryInventory.Coordinate held) {
-        List<AdvisorySource.Advisory> merged = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        Instant now = Instant.now();
-        for (Map.Entry<String, AdvisorySource> feed : feeds.entrySet()) {
-            for (AdvisorySource.Advisory advisory : feed.getValue().advisories(
-                    held.ecosystem(), held.coordinate(), held.version())) {
-                try {
-                    ledger.record(held.ecosystem(), held.coordinate(), held.version(),
-                            AdvisoryFindings.of(advisory, feed.getKey(), "console-report", now));
-                } catch (IOException | RuntimeException _) {
-                    // best-effort: the live answer stands; the sweep persists the coordinate on its next pass
-                }
-                Set<String> identifiers = new HashSet<>(advisory.cves());
-                identifiers.add(advisory.id());
-                if (identifiers.stream().noneMatch(seen::contains)) {
-                    merged.add(advisory);
-                    seen.addAll(identifiers);
-                }
-            }
-        }
-        return merged;
-    }
-
-    /** Stored findings rendered as advisories, de-duplicated by id and CVE alias for the panel only - the ledger
-     *  keeps every feed's attributed row. */
-    private static List<AdvisorySource.Advisory> deduplicated(List<Finding> stored) {
-        List<AdvisorySource.Advisory> merged = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        for (Finding finding : stored) {
-            AdvisorySource.Advisory advisory = AdvisoryFindings.advisory(finding);
-            Set<String> identifiers = new HashSet<>(advisory.cves());
-            identifiers.add(advisory.id());
-            if (identifiers.stream().noneMatch(seen::contains)) {
-                merged.add(advisory);
-                seen.addAll(identifiers);
-            }
-        }
-        return merged;
     }
 
     /** The findings screen: whether a persistence module is installed, a bounded window of rows, the filter's facets,
