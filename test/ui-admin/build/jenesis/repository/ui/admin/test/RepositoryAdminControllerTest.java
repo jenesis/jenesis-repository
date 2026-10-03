@@ -264,6 +264,8 @@ class RepositoryAdminControllerTest {
                 .containsEntry("formatUpstream", "https://repo1.maven.org/maven2");
         assertThat((Collection<?>) model.get("unplaceable")).isEmpty();
         assertThat(((SettingsAdmin.Routing) model.get("routing")).shape()).isNotNull();
+        assertThat((Collection<?>) model.get("recent")).as("a new repository has taken nothing in").isEmpty();
+        assertThat(model).containsEntry("recentMore", false);
 
         settings.setUpstream(TENANT, "maven", "https://mirror.example/maven2");
         ExtendedModelMap tenant = new ExtendedModelMap();
@@ -405,6 +407,12 @@ class RepositoryAdminControllerTest {
                 .as("newest first, the copy beside the release rather than an empty list of releases")
                 .extracting(holding -> holding.coordinate() + " " + holding.cached())
                 .containsExactly("org.yaml:snakeyaml true", "org.acme:lib false");
+
+        ExtendedModelMap overview = new ExtendedModelMap();
+        controller.detail("libs", overview);
+        assertThat((List<?>) overview.get("recent")).as("the overview opens on the same newest-first holdings")
+                .extracting(holding -> ((StoreRepositoryInventory.Holding) holding).coordinate())
+                .containsExactly("org.yaml:snakeyaml", "org.acme:lib");
 
         ExtendedModelMap page = new ExtendedModelMap();
         controller.coordinate("libs", "Maven", "org.yaml:snakeyaml", "", page);
