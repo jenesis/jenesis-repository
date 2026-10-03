@@ -20,27 +20,21 @@
 <header th:replace="~{fragments :: nav}"></header>
 <main id="main">
     <div th:replace="~{fragments :: messages}"></div>
-    <!--/* The browse's one navigation trail: this repository, the browse root, then one crumb per
-         path segment - the repository header's trail, extended by the folder the reader is in. */-->
-    <header class="app-page-header">
-        <hgroup class="app-page-header__heading">
-            <nav aria-label="Breadcrumb" th:unless="${searching}">
-                <ol class="app-breadcrumb">
-                    <li><a th:href="@{/ui/repositories/{repo}(repo=${repo})}" th:text="${repo}">name</a></li>
-                    <li th:unless="${crumbs.isEmpty()}">
-                        <a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},sort=${sort},dir=${dir})}">Browse</a>
-                    </li>
-                    <li th:each="c : ${crumbs}" th:unless="${c.current}">
-                        <a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},prefix=${c.prefix},sort=${sort},dir=${dir})}"
-                           th:text="${c.label}">segment</a>
-                    </li>
-                </ol>
-            </nav>
-            <!--/* The folder the reader is in ends the trail as the page's heading; the browse root is "Browse". */-->
-            <h1 class="app-page-header__title"
-                th:text="${searching or crumbs.isEmpty()} ? 'Browse' : ${crumbs[crumbs.size() - 1].label}">Browse</h1>
-        </hgroup>
-    </header>
+    <th:block th:replace="~{base :: repositoryHeader('Browse', 'of', null, null)}"></th:block>
+    <!--/* The folder the reader is in, under the heading: the repository's root, then one crumb per path segment, the
+         earlier ones linked and the current one the trail's end. */-->
+    <nav aria-label="Breadcrumb" th:unless="${searching or crumbs.isEmpty()}">
+        <ol class="app-breadcrumb">
+            <li><a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},sort=${sort},dir=${dir})}"
+                   th:text="${repo}">name</a></li>
+            <li th:each="c : ${crumbs}">
+                <a th:unless="${c.current}"
+                   th:href="@{/ui/repositories/{repo}/browse(repo=${repo},prefix=${c.prefix},sort=${sort},dir=${dir})}"
+                   th:text="${c.label}">segment</a>
+                <span th:if="${c.current}" aria-current="page" th:text="${c.label}">segment</span>
+            </li>
+        </ol>
+    </nav>
 
     <!--/* Two faces, one form. With the repository's full-text index off - the default - a query is the start of a
          coordinate's name, and the bar reads as that rather than as a search that finds little; with it on, the bar

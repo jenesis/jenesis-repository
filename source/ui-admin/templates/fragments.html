@@ -27,11 +27,13 @@
              '')}"></div>
 
 <!--/* findingsState: what the findings ledger holds against one version - none, or how many still stand drawn in the
-     colour of the worst, linking to them - and nothing where no ledger could be asked, rather than a clean bill. */-->
+     colour the severity badge gives the worst, linking to them - and nothing where no ledger could be asked, rather
+     than a clean bill. */-->
 <th:block th:fragment="findingsState(state, href)">
     <small th:if="${state.known() and state.count() == 0}">none</small>
     <a th:if="${state.count() > 0}" th:href="${href}"
-       th:title="|${state.count()} standing, the worst ${state.worst()}|"><span th:class="|app-badge ${state.badge()}|"
+       th:title="|${state.count()} standing, the worst ${state.worst()}|"><span
+            th:class="|app-badge app-severity--${#strings.toLowerCase(state.worst())}|"
             th:text="|${state.count()} · ${#strings.toLowerCase(state.worst())}|">2 · high</span></a>
 </th:block>
 

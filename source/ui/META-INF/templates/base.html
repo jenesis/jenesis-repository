@@ -211,13 +211,10 @@
     </header>
 </th:block>
 
-<!--/* The repository overview's header: the repository is the page, so it needs no trail. */-->
+<!--/* The repository overview's header, worded as every other page about the repository is, and followed by the
+     repository's identity, which is the overview's to say. */-->
 <th:block th:fragment="repositoryOverviewHeader">
-    <header class="app-page-header">
-        <hgroup class="app-page-header__heading">
-            <h1 class="app-page-header__title" th:text="${repositoryHeader?.name()}">releases</h1>
-        </hgroup>
-    </header>
+    <th:block th:replace="~{base :: repositoryHeader('Overview', 'of', null, null)}"></th:block>
     <p th:replace="~{base :: repositoryIdentity}"></p>
 </th:block>
 

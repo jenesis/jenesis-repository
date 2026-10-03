@@ -176,15 +176,6 @@ public class RepositoryBrowse extends TenantScope {
         /** No ledger to ask. */
         public static final FindingsState NONE = new FindingsState(false, 0, "");
 
-        /** The badge kind: danger from HIGH up and for an unscored severity, caution for MEDIUM, otherwise muted. */
-        public String badge() {
-            return switch (worst) {
-                case "CRITICAL", "HIGH", "UNKNOWN" -> "app-badge--danger";
-                case "MEDIUM" -> "app-badge--warn";
-                default -> "app-badge--muted";
-            };
-        }
-
         static FindingsState of(Optional<Findings> ledger, String ecosystem, String coordinate, String version) {
             if (ledger.isEmpty()) {
                 return NONE;
