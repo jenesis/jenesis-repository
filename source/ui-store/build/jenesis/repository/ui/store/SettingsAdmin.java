@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.definitions.RepositoryDefinition;
 import build.jenesis.repository.definitions.RoutingSettingsContributor;
+import build.jenesis.repository.ui.DurationWords;
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.ui.ScopedPosture;
 import build.jenesis.repository.ui.CurrentTenant;

@@ -3,7 +3,7 @@ package build.jenesis.repository.ui.admin.web;
 import module java.base;
 
 import build.jenesis.repository.settings.Setting;
-import build.jenesis.repository.ui.store.DurationWords;
+import build.jenesis.repository.ui.DurationWords;
 import org.springframework.stereotype.Component;
 
 /**

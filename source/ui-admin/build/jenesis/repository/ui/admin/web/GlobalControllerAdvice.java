@@ -12,6 +12,7 @@ import build.jenesis.repository.ui.NavEntry;
 import build.jenesis.repository.ui.NavEntry.Access;
 import build.jenesis.repository.ui.NavEntry.Group;
 import build.jenesis.repository.ui.ConsoleScreen;
+import build.jenesis.repository.ui.DurationWords;
 import build.jenesis.repository.ui.Instants;
 import build.jenesis.repository.ui.Navigation;
 import build.jenesis.repository.ui.RepositoryHeader;
@@ -82,6 +83,12 @@ public class GlobalControllerAdvice {
     @ModelAttribute("instants")
     public Instants instants() {
         return Instants.DISPLAY;
+    }
+
+    /** How every screen shows a duration - see {@link DurationWords}. */
+    @ModelAttribute("durations")
+    public DurationWords durations() {
+        return DurationWords.DISPLAY;
     }
 
     /** One line under the sign-in heading, saying what a visitor is signing in to. */

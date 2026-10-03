@@ -42,15 +42,14 @@
                           title="This module has no enable flag; it is active whenever it is installed.">always on</span>
                     <span class="app-badge app-badge--danger" th:if="${m.orphaned()}"
                           title="This module's declared key-spaces still hold data. Nothing is deleted automatically; purge it explicitly if the removal was intentional.">orphaned data</span>
-                    <!--/* A module's on/off gate is a setting, drawn as every switch is. A numeric gate (a ceiling)
-                         or an ungated module has no switch. */-->
-                    <th:block th:if="${m.installed}" th:with="g=${m.gate().orElse(null)}">
-                        <th:block th:if="${g != null}">
-                            <div th:replace="~{fragments :: settingSwitch(${g}, '/ui/settings/save', null,
-                                    |Apply this high-impact change to ${m.module}?|)}"></div>
-                        </th:block>
-                    </th:block>
                 </div>
+            </div>
+            <!--/* A module's on/off gate is a setting, drawn as every switch is, on a line of its own under the
+                 statuses so a pinned switch's note never pushes them about. A numeric gate (a ceiling) or an
+                 ungated module has no switch. */-->
+            <div class="module-switch" th:if="${m.installed and m.gate().isPresent()}">
+                <div th:replace="~{fragments :: settingSwitch(${m.gate().get()}, '/ui/settings/save', null,
+                        |Apply this high-impact change to ${m.module}?|)}"></div>
             </div>
             <p class="setting-doc" th:if="${m.installed and m.gated and !m.toggleable}"><small>Enabled by setting its
                 value below (a ceiling of 0 disables it).</small></p>

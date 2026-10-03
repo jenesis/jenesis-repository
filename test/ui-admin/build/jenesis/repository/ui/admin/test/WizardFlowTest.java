@@ -3,7 +3,7 @@ package build.jenesis.repository.ui.admin.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.ui.admin.web.WizardFlow;
-import build.jenesis.repository.ui.store.DurationWords;
+import build.jenesis.repository.ui.DurationWords;
 import build.jenesis.repository.ui.store.SettingsAdmin;
 
 import static org.assertj.core.api.Assertions.assertThat;

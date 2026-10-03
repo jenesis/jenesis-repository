@@ -1502,6 +1502,19 @@ main button.app-switch__reset {
     gap: .4rem;
     margin-left: auto;
 }
+.module-switch {
+    margin: .4rem 0 0;
+}
+/* A walk's switches: the switch first, and what it switches beside it, a line under another. */
+.walk-switch {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: var(--app-space-3);
+    align-items: baseline;
+}
+.walk-switch > :not(.app-switch-field, input) {
+    grid-column: 2;
+}
 .module-settings {
     margin: .4rem 0 0;
     font-size: .82rem;

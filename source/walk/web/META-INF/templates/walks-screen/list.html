@@ -20,35 +20,37 @@
     <article th:each="e : ${overview.entries}" class="setting-group">
         <h2 th:text="${e.name}">rebuild</h2>
         <p class="setting-values">
-            <span>next run: <strong th:text="${e.next.isPresent() ? e.next.get() : 'never (switched off)'}">when</strong></span>
-            <span th:if="${e.run.isPresent()}">last run on this node: finished
-                <span><time th:replace="~{base :: time(${e.run.get().finished})}">when</time></span>, took
-                <span th:text="${e.run.get().duration}">how long</span>,
+            <span>Next run: <strong th:if="${e.next.isPresent()}"><time th:replace="~{base :: time(${e.next.get()})}">when</time></strong><strong
+                    th:unless="${e.next.isPresent()}">never (switched off)</strong>.</span>
+            <span th:if="${e.run.isPresent()}">Last run on this node:
+                <strong th:text="${e.run.get().failed ? 'failed' : 'finished clean'}">finished clean</strong>
+                <span><time th:replace="~{base :: time(${e.run.get().finished})}">when</time></span>, after
+                <span th:text="${durations.measured(e.run.get().duration)}">how long</span>, in
                 <span th:text="${e.run.get().reads}">0</span> read and
-                <span th:text="${e.run.get().writes}">0</span> write operations,
-                <span th:text="${e.run.get().failed ? 'failed' : 'clean'}">clean</span></span>
-            <span th:unless="${e.run.isPresent()}">last run on this node: none yet</span>
-            <span th:if="${e.cost.isPresent()}">objects handed over last time:
+                <span th:text="${e.run.get().writes}">0</span> write operations.</span>
+            <span th:unless="${e.run.isPresent()}">Last run on this node: none yet.</span>
+            <span th:if="${e.cost.isPresent()}">Objects handed over last time:
                 <strong th:text="${e.cost.get().objects()}">0</strong>
                 (<span th:text="${e.cost.get().pointers}">0</span> pointers,
                 <span th:text="${e.cost.get().inventory}">0</span> inventory rows,
                 <span th:text="${e.cost.get().blobs}">0</span> blobs,
                 <span th:text="${e.cost.get().derived}">0</span> derived rows) over
-                <span th:text="${e.cost.get().repositories}">0</span> repositories</span>
+                <span th:text="${e.cost.get().repositories}">0</span> repositories.</span>
         </p>
         <form method="post" th:action="@{/ui/walks/save}" class="setting-edit setting-edit--wide">
             <input type="hidden" name="name" th:value="${e.name}">
             <label>Cron expression (UTC; six fields, seconds first)
                 <input type="text" name="cron" required th:value="${e.cron}" th:attr="aria-label=|Cron expression of ${e.name}|">
             </label>
-            <label>
-                <input type="checkbox" name="enabled" th:checked="${e.enabled}" th:attr="aria-label=|${e.name} switched on|"> Switched on
+            <label class="walk-switch">
+                <input type="checkbox" name="enabled" th:checked="${e.enabled}" th:attr="data-switch=|${e.name} switched on|"> Switched on
             </label>
             <fieldset>
                 <legend>Consumers that ride this walk</legend>
-                <label th:each="c : ${overview.consumers}">
+                <label th:each="c : ${overview.consumers}" class="walk-switch">
                     <input type="checkbox" name="consumers" th:value="${c.name}"
-                           th:checked="${e.consumers.contains('*') or e.consumers.contains(c.name)}">
+                           th:checked="${e.consumers.contains('*') or e.consumers.contains(c.name)}"
+                           th:attr="data-switch=|${c.name} rides ${e.name}|">
                     <strong th:text="${c.name}">name</strong>
                     <small th:text="${c.description}">what it repairs and what it costs</small>
                     <small th:if="${!c.settings.isEmpty()}">Governed by:
@@ -74,11 +76,12 @@
             <label>Cron expression (UTC; six fields, seconds first)
                 <input type="text" name="cron" required placeholder="0 0 1 * * *">
             </label>
-            <label><input type="checkbox" name="enabled" checked> Switched on</label>
+            <label class="walk-switch"><input type="checkbox" name="enabled" checked data-switch="The new walk switched on"> Switched on</label>
             <fieldset>
                 <legend>Consumers that ride this walk</legend>
-                <label th:each="c : ${overview.consumers}">
-                    <input type="checkbox" name="consumers" th:value="${c.name}">
+                <label th:each="c : ${overview.consumers}" class="walk-switch">
+                    <input type="checkbox" name="consumers" th:value="${c.name}"
+                           th:attr="data-switch=|${c.name} rides the new walk|">
                     <strong th:text="${c.name}">name</strong>
                     <small th:text="${c.description}">what it repairs and what it costs</small>
                 </label>

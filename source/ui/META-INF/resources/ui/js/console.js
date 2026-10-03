@@ -1161,7 +1161,8 @@
  * default, true or false (`select[data-switch="<default>"]`). The console shows it as the same switch the settings
  * screens use: muted while it is left at its default, at full strength once it is set either way, and one slot after
  * it - "(default)" while it is left, "Reset to default" once it is set - in one place and one size. The choice stays
- * the field the form sends; without a script it is chosen as is.
+ * the field the form sends; without a script it is chosen as is. A plain on/off with no default - a walk switched on,
+ * a consumer riding it - is a checkbox with `data-switch="<label>"`, drawn as the same switch.
  */
 (function () {
     'use strict';
@@ -1224,8 +1225,39 @@
         show();
     }
 
+    /** A plain on/off a form carries (`input[type=checkbox][data-switch]`), with no default to fall back to: the
+     *  same switch, the box staying the field the form sends. */
+    function wireBox(box) {
+        var field = element('span', 'app-switch-field');
+        var button = element('button', 'app-switch');
+        button.type = 'button';
+        button.setAttribute('role', 'switch');
+        button.setAttribute('aria-label', box.getAttribute('data-switch') || box.name);
+        var track = element('span', 'app-switch__track');
+        track.setAttribute('aria-hidden', 'true');
+        var state = element('span', 'app-switch__state');
+        button.appendChild(track);
+        button.appendChild(state);
+
+        function show() {
+            button.setAttribute('aria-checked', String(box.checked));
+            state.textContent = box.checked ? 'On' : 'Off';
+        }
+
+        button.addEventListener('click', function () {
+            box.checked = !box.checked;
+            show();
+        });
+        box.hidden = true;
+        box.parentNode.insertBefore(field, box);
+        field.appendChild(button);
+        field.appendChild(box);
+        show();
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         document.querySelectorAll('select[data-switch]').forEach(wire);
+        document.querySelectorAll('input[type=checkbox][data-switch]').forEach(wireBox);
     });
 })();
 
