@@ -4,6 +4,7 @@ import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
+import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.OwnerOnly;
 
 
@@ -327,6 +328,10 @@ public final class ProxyRelay {
      *     without a point check.</li>
      * </ul>
      *
+     * <p>Either way the body is bounded ({@value ProxyArtifactSettingsContributor#LIMIT_KEY}): one that runs past the
+     * bound is refused as a mismatch is, nothing cached or served, so an upstream answering with an endless body cannot
+     * fill the store.
+     *
      * @return {@code true} when the artifact was cached and the caller may serve it; {@code false} when the fill was
      *         refused and the local {@code 404} must stand
      */
@@ -335,6 +340,24 @@ public final class ProxyRelay {
         if (!declared.readable()) {
             return unverifiable(artifact, declared);
         }
+        long limit = artifactLimit();
+        InputStream bounded = limit > 0 ? new Bounded(body, limit) : body;
+        try {
+            return write(blobs, key, artifact, bounded, declared);
+        } catch (IOException | UncheckedIOException failed) {
+            for (Throwable cause = failed; cause != null; cause = cause.getCause()) {
+                if (cause instanceof Bounded.Exceeded) {
+                    LOGGER.warn("Refusing the proxied artifact {}: it ran past the {}-byte bound ({}). Nothing was "
+                            + "cached or served.", artifact, limit, ProxyArtifactSettingsContributor.LIMIT_KEY);
+                    return false;
+                }
+            }
+            throw failed;
+        }
+    }
+
+    private static boolean write(Blobs blobs, String key, URI artifact, InputStream body, Declared declared)
+            throws IOException {
         if (!declared.verifiable()) {
             LOGGER.debug("Nothing declares a digest for the proxied artifact {}: caching it unverified.", artifact);
             blobs.write(key, body);
@@ -347,6 +370,79 @@ public final class ProxyRelay {
             return false;
         }
         return true;
+    }
+
+    /** The bound on one proxied artifact, read now: {@link ProxyArtifactSettingsContributor#LIMIT_KEY}, else its
+     *  default; an unparseable or negative value is the default. */
+    static long artifactLimit() {
+        long fallback = Long.parseLong(ProxyArtifactSettingsContributor.LIMIT_TEXT);
+        String configured = Features.lookup().apply("jenrepo." + ProxyArtifactSettingsContributor.LIMIT_KEY);
+        if (configured == null || configured.isBlank()) {
+            return fallback;
+        }
+        try {
+            long limit = Long.parseLong(configured.trim());
+            return limit < 0 ? fallback : limit;
+        } catch (NumberFormatException notANumber) {
+            return fallback;
+        }
+    }
+
+    /** A body that refuses to be read past {@code limit} bytes. */
+    private static final class Bounded extends FilterInputStream {
+
+        /** The body ran past the bound. */
+        private static final class Exceeded extends IOException {
+
+            private Exceeded(long limit) {
+                super("the body ran past " + limit + " bytes");
+            }
+        }
+
+        private final long limit;
+        private long read;
+
+        private Bounded(InputStream in, long limit) {
+            super(in);
+            this.limit = limit;
+        }
+
+        @Override
+        public int read() throws IOException {
+            int one = in.read();
+            if (one >= 0) {
+                count(1);
+            }
+            return one;
+        }
+
+        @Override
+        public int read(byte[] buffer, int offset, int length) throws IOException {
+            int count = in.read(buffer, offset, length);
+            if (count > 0) {
+                count(count);
+            }
+            return count;
+        }
+
+        @Override
+        public long transferTo(OutputStream out) throws IOException {
+            byte[] buffer = new byte[16 * 1024];
+            long transferred = 0;
+            int count;
+            while ((count = read(buffer, 0, buffer.length)) >= 0) {
+                out.write(buffer, 0, count);
+                transferred += count;
+            }
+            return transferred;
+        }
+
+        private void count(long bytes) throws Exceeded {
+            read += bytes;
+            if (read > limit) {
+                throw new Exceeded(limit);
+            }
+        }
     }
 
     /**
