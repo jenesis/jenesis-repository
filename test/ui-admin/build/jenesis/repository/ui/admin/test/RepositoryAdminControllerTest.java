@@ -10,7 +10,12 @@ import build.jenesis.repository.inventory.DownloadTracker;
 import build.jenesis.repository.inventory.AboutSection;
 import build.jenesis.repository.inventory.DependencySection;
 import build.jenesis.repository.inventory.LicenseInventory;
+import build.jenesis.repository.inventory.InventoryReconcileConsumer;
+import build.jenesis.repository.inventory.PublishedSection;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
+import build.jenesis.repository.metadata.store.StoreMetadata;
+import build.jenesis.repository.walk.RebuildPass;
+import build.jenesis.repository.walk.WalkProvider;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
@@ -390,6 +395,32 @@ class RepositoryAdminControllerTest {
         assertThatThrownBy(() -> controller.version("libs", "Maven", "org.acme:lib", "9.9", new ExtendedModelMap()))
                 .as("a version the repository holds no document for")
                 .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+    }
+
+    @Test
+    void the_recent_holdings_show_a_version_once_when_the_feed_holds_a_row_for_an_instant_it_moved_on_from()
+            throws IOException {
+        // The state a deployment is left in when a version's published instant moved on after its feed row was
+        // written - a crash between writing the new row and forgetting the old, or a store from before the row moved
+        // with the instant - and a walk then backfilled a row under the new instant.
+        create("libs", "maven");
+        publish("libs", "/maven/org/acme/lib/1.0/lib-1.0.jar", "released jar");
+        StoreRepositoryInventory inventory = new StoreRepositoryInventory(repository("libs"));
+        inventory.record("Maven", "org.acme:lib", "1.0", Instant.parse("2026-01-01T00:00:00Z"));
+        Instant moved = Instant.parse("2026-01-01T00:00:05Z");
+        new StoreMetadata(repository("libs")).mutate("Maven", "org.acme:lib", "1.0", PublishedSection.TAG,
+                PublishedSection.record(moved, false, moved));
+        RebuildPass.run(WalkProvider.resolve(key -> null).orElseThrow(), repository("libs"),
+                new Publication(repository("libs")), new RebuildPass.Roots(StoreRepositoryInventory.pointerRoots(),
+                        List.of(StoreRepositoryInventory.publishedRoot()), List.of("blobs"),
+                        StoreRepositoryInventory.derivedRoots()), List.of(new InventoryReconcileConsumer()));
+        assertThat(inventory.recent(null, 10).releases()).as("the feed holds both rows").hasSize(2);
+
+        assertThat(new RepositoryAdmin(store, () -> TENANT, ObservationRegistry.NOOP).recentHoldings("libs", 10)
+                        .shown())
+                .as("and the overview shows the version once")
+                .extracting(holding -> holding.coordinate() + " " + holding.version())
+                .containsExactly("org.acme:lib 1.0");
     }
 
     @Test

@@ -78,6 +78,20 @@ class InventoryReconcileConsumerTest {
         before.forEach((key, body) -> assertThat(after.get(key)).as(key).isEqualTo(body));
     }
 
+    @Test
+    void a_version_published_again_keeps_one_row_in_the_newest_first_feed_through_a_pass() throws IOException {
+        link("twice", "1.0.0");
+        inventory().record(InventoryTestFormat.path("twice", "1.0.0"), NOW);
+        // Another file of the version, or the same one again: the document's published instant moves on.
+        inventory().record(InventoryTestFormat.path("twice", "1.0.0"), NOW.plusSeconds(5));
+
+        RebuildPass.run(WALK, store, new Publication(store), roots(), List.of(new InventoryReconcileConsumer()));
+
+        assertThat(inventory().recent(null, 10).releases())
+                .as("one row for the version, under the instant its document records, after the pass backfilled it")
+                .singleElement().satisfies(release -> assertThat(release.coordinate()).isEqualTo("twice"));
+    }
+
     private static RebuildPass.Roots roots() {
         return new RebuildPass.Roots(StoreRepositoryInventory.pointerRoots(),
                 List.of(StoreRepositoryInventory.publishedRoot()), List.of("blobs"),

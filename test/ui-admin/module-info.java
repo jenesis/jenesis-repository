@@ -28,6 +28,8 @@ open module build.jenesis.repository.ui.admin.test {
     requires build.jenesis.repository.upstream.store;
     requires build.jenesis.repository.metadata;
     requires build.jenesis.repository.metadata.store;
+    requires build.jenesis.repository.walk;
+    requires build.jenesis.repository.walk.store;
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.compliance.inventory;
     requires build.jenesis.repository.findings;

@@ -95,21 +95,26 @@ public class RepositoryAdmin extends TenantScope {
         merged.addAll(cached.shown());
         merged.sort(Comparator.comparing(StoreRepositoryInventory.Holding::at,
                 Comparator.nullsLast(Comparator.reverseOrder())));
+        Set<String> seen = new HashSet<>();
+        merged.removeIf(holding -> !seen.add(version(holding)));
         boolean more = releases.more() || cached.more() || merged.size() > limit;
         return new Held(List.copyOf(merged.subList(0, Math.min(limit, merged.size()))), more);
     }
 
-    /** One index's newest-first window of at most {@code limit} holdings still served, read a page at a time while
-     *  the window is not full. */
+    /** One index's newest-first window of at most {@code limit} versions still served, read a page at a time while
+     *  the window is not full; a version the index lists once per file it holds is shown once, at its newest. */
     private static Window window(StoreRepositoryInventory inventory, int limit, Pages pages) throws IOException {
         List<StoreRepositoryInventory.Holding> shown = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
         String after = null;
         boolean more = true;
         while (shown.size() < limit && more) {
             StoreRepositoryInventory.HoldingPage page = pages.page(after, limit - shown.size());
             for (StoreRepositoryInventory.Holding holding : page.holdings()) {
-                if (shown.size() < limit && inventory.disclosable(holding.ecosystem(), holding.coordinate(),
-                        holding.version(), ServableNames.Policy.HIDE_WITHHELD_AND_GONE)) {
+                if (shown.size() < limit && !seen.contains(version(holding))
+                        && inventory.disclosable(holding.ecosystem(), holding.coordinate(), holding.version(),
+                        ServableNames.Policy.HIDE_WITHHELD_AND_GONE)) {
+                    seen.add(version(holding));
                     shown.add(holding);
                 }
             }
@@ -117,6 +122,11 @@ public class RepositoryAdmin extends TenantScope {
             more = after != null;
         }
         return new Window(shown, more);
+    }
+
+    /** The version a holding is of, whichever of its files the index listed it for. */
+    private static String version(StoreRepositoryInventory.Holding holding) {
+        return holding.ecosystem() + "\u0000" + holding.coordinate() + "\u0000" + holding.version();
     }
 
     @FunctionalInterface
