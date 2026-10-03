@@ -246,4 +246,9 @@ final class DiscoveredKeys implements SignerTrust {
             return document.toString().getBytes(StandardCharsets.UTF_8);
         }
     }
+
+    @Override
+    public boolean anchored(String ecosystem) {
+        return false;
+    }
 }

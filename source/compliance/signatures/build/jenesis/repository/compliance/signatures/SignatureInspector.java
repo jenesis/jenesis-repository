@@ -88,10 +88,15 @@ public final class SignatureInspector implements QualityInspector, TrustAware {
     @Override
     public boolean claims(String path, Lookup siblings) {
         List<ArtifactSignatures> undescribed = new ArrayList<>();
+        Optional<ArtifactDescriptor> described;
+        try {
+            described = siblings.described(path);
+        } catch (IOException unreadable) {
+            return true;   // the path could not be placed: screened rather than waved through
+        }
         for (RepositoryFormat installed : RepositoryFormat.installed()) {
             if (installed instanceof ArtifactSignatures format
                     && (!format.expects(path).isEmpty() || format.covers(path).isPresent())) {
-                Optional<ArtifactDescriptor> described = describe(installed, path);
                 if (described.isPresent() && described.get().coordinate() != null) {
                     return true;
                 }
@@ -174,7 +179,7 @@ public final class SignatureInspector implements QualityInspector, TrustAware {
     private Inspected inspected(String path, ArtifactSignatures.Signed body, Lookup lookup, long size, boolean whole)
             throws IOException {
         List<ArtifactSignatures> claiming = new ArrayList<>();
-        ArtifactDescriptor described = null;
+        ArtifactDescriptor described = lookup.described(path).orElse(null);
         String ecosystem = "";
         for (RepositoryFormat installed : RepositoryFormat.installed()) {
             if (!(installed instanceof ArtifactSignatures format) || format.expects(path).isEmpty()) {
@@ -183,9 +188,6 @@ public final class SignatureInspector implements QualityInspector, TrustAware {
             claiming.add(format);
             if (ecosystem.isEmpty()) {
                 ecosystem = format.ecosystem();
-            }
-            if (described == null) {
-                described = describe(installed, path).orElse(null);
             }
         }
         if (claiming.isEmpty()) {
@@ -224,32 +226,6 @@ public final class SignatureInspector implements QualityInspector, TrustAware {
         return signature.outcome() == ComplianceGate.Signature.Outcome.UNREADABLE
                 && signature.location() != null
                 && (signature.location().endsWith(NOT_WHOLE) || signature.location().contains("inspection bound"));
-    }
-
-    /**
-     * The coordinate a format places a request path at, through either layout family: the {@code publish/} namespace or
-     * a blobs namespace of its own.
-     */
-    private static Optional<ArtifactDescriptor> describe(RepositoryFormat format, String path) {
-        if (format instanceof ArtifactLayout layout) {
-            return layout.describe(path);
-        }
-        if (format instanceof BlobLayout layout) {
-            return layout.describe(path);
-        }
-        // A format whose mapping lives in a separate layout (OCI) is asked through it, matched by ecosystem.
-        if (format instanceof EcosystemLayout claiming) {
-            for (RepositoryFormat installed : RepositoryFormat.installed()) {
-                if (installed != format && installed instanceof BlobLayout layout
-                        && layout.ecosystem().equals(claiming.ecosystem())) {
-                    Optional<ArtifactDescriptor> described = layout.describe(path);
-                    if (described.isPresent()) {
-                        return described;
-                    }
-                }
-            }
-        }
-        return Optional.empty();
     }
 
     /** The signature naming the trust source whose key identified its signer, when one did. */

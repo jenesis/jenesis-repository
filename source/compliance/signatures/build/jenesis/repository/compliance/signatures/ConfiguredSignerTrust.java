@@ -152,4 +152,9 @@ final class ConfiguredSignerTrust implements SignerTrust {
         String value = config.apply(key);
         return value == null ? "" : value;
     }
+
+    @Override
+    public String source() {
+        return "configured";
+    }
 }

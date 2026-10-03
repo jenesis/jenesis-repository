@@ -122,4 +122,14 @@ final class ContinuityTrust implements SignerTrust {
             return Optional.empty();   // a document this deployment cannot read establishes nothing
         }
     }
+
+    @Override
+    public boolean anchored(String ecosystem) {
+        return false;
+    }
+
+    @Override
+    public String source() {
+        return "continuity";
+    }
 }

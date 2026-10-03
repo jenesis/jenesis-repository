@@ -58,9 +58,7 @@ public interface SignerTrust {
      * material speaks for - a format's own provisioned keyring for its ecosystem, an operator's deployment-wide
      * keyring for any - and a source that holds nothing answers {@code false}, which is the default.
      */
-    default boolean anchored(String ecosystem) {
-        return false;
-    }
+    boolean anchored(String ecosystem);
 
     /**
      * This trust as its independent sources, each holding its own key material and answering {@link #trusts} only for
@@ -80,10 +78,10 @@ public interface SignerTrust {
      * keyring by its name, {@code discovered} for a key a discovery pass fetched and nobody has admitted. What the
      * trust decided and where the key came from stay distinguishable that way - a verified signature by a
      * discovered key is reported as exactly that, and an operator reading the finding knows which dial admits it.
+     * A {@link #composite} answers {@code composite}: its key came from one of its parts, which a caller asks by
+     * choosing among {@link #parts()}.
      */
-    default String source() {
-        return "configured";
-    }
+    String source();
 
     /**
      * What this coordinate's earlier versions established <em>for one signature scheme</em>, or empty for a
@@ -166,6 +164,16 @@ public interface SignerTrust {
         public void observed(String ecosystem, String coordinate, String version, SignerIdentity signer,
                              Instant when) {
         }
+
+        @Override
+        public boolean anchored(String ecosystem) {
+            return false;
+        }
+
+        @Override
+        public String source() {
+            return "none";
+        }
     };
 
     /**
@@ -222,6 +230,11 @@ public interface SignerTrust {
         @Override
         public List<SignerTrust> parts() {
             return sources;
+        }
+
+        @Override
+        public String source() {
+            return "composite";
         }
 
         @Override

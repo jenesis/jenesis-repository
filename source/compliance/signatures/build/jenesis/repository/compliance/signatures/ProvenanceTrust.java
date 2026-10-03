@@ -128,4 +128,9 @@ public final class ProvenanceTrust implements SignerTrust {
         }
         return Optional.of(rest.toLowerCase(Locale.ROOT));
     }
+
+    @Override
+    public boolean anchored(String ecosystem) {
+        return false;
+    }
 }

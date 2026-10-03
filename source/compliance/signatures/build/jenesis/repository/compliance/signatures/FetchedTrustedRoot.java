@@ -62,4 +62,9 @@ final class FetchedTrustedRoot implements SignerTrust {
     public String source() {
         return SOURCE;
     }
+
+    @Override
+    public boolean anchored(String ecosystem) {
+        return false;
+    }
 }
