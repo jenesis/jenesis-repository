@@ -126,6 +126,12 @@ public final class PullThroughCache {
                 serveLocal.serve().serve(format, exchange, store);
                 return null;
             }
+            if (proxy.mergesUpstream(exchange)) {
+                // Merged from what is held here and what the upstream serves, so a local copy is only part of the
+                // answer: the proxy leg is asked whatever is held, and answers from both.
+                fetch(exchange, store, format, proxy, upstream, observation);
+                return null;
+            }
             // serveThrough (the default): the local-first serve runs unchanged.
             Deferred deferred = new Deferred(exchange);
             format.handle(deferred, store);

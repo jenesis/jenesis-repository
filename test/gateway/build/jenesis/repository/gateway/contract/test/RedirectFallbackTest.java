@@ -402,6 +402,11 @@ public class RedirectFallbackTest {
                 handle(exchange, store);
                 return true;
             }
+
+            @Override
+            public boolean mergesUpstream(FormatExchange exchange) {
+                return false;
+            }
         }
 
         /** A {@link FormatExchange} that records the response (status, headers, body) so a test can assert a 307 and

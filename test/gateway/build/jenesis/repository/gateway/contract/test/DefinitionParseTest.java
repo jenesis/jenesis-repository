@@ -307,6 +307,11 @@ public class DefinitionParseTest {
             handle(exchange, store);
             return true;
         }
+
+        @Override
+        public boolean mergesUpstream(FormatExchange exchange) {
+            return false;
+        }
     }
 
     /** A {@link FormatExchange} that records the response so a test can assert it (as in RepositoryRouterTest). */

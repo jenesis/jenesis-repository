@@ -174,6 +174,12 @@ public interface ProxyLeg extends RepositoryFormat, ProxyFormat {
         return pullThrough(exchange, store, upstream, fetcher);
     }
 
+    /** A leg relays what its upstream serves and merges nothing with what is held here. */
+    @Override
+    default boolean mergesUpstream(FormatExchange exchange) {
+        return false;
+    }
+
     /**
      * Serve a local miss from {@code upstream} - what {@link ProxyFormat#proxy} documents, over a request path this
      * seam has already screened and already confirmed this format claims. A format therefore starts from its own

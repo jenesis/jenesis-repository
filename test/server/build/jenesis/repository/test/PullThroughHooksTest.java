@@ -327,6 +327,11 @@ public class PullThroughHooksTest {
             exchange.respond(200, body);
             return true;
         }
+
+        @Override
+        public boolean mergesUpstream(FormatExchange exchange) {
+            return false;
+        }
     }
 
     /** A spy {@link PullThroughHooks}: records every {@code verifyHit}/{@code screenFetch} call and the args it saw,

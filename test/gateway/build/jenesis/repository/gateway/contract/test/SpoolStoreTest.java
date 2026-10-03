@@ -248,6 +248,11 @@ class SpoolStoreTest {
             handle(exchange, store);
             return true;
         }
+
+        @Override
+        public boolean mergesUpstream(FormatExchange exchange) {
+            return false;
+        }
     }
 
     /** A {@link FormatExchange} that records the response status and buffers the body so a test can assert them. */

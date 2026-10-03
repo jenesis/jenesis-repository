@@ -59,4 +59,9 @@ public final class ContractIndexedFormat implements RepositoryFormat, ProxyForma
                     return new Coordinate(line.substring(0, space), URI.create(line.substring(space + 1)));
                 });
     }
+
+    @Override
+    public boolean mergesUpstream(FormatExchange exchange) {
+        return false;
+    }
 }

@@ -15,6 +15,7 @@ module build.jenesis.repository.format.maven {
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.walk;
     requires build.jenesis.repository.format.java;
+    requires build.jenesis.repository.format.jvm;
     requires java.xml;
     // The metadata leg logs which upstream target could not be asked beside the 502 it answers.
     requires org.slf4j;

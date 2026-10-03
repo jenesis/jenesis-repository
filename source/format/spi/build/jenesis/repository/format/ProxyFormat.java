@@ -145,6 +145,17 @@ public interface ProxyFormat {
     boolean proxy(FormatExchange exchange, ArtifactStore store, URI upstream, Fetcher fetcher) throws IOException;
 
     /**
+     * Whether the answer to this request is merged from what this repository holds and what its upstream serves, so
+     * the pull-through asks {@link #proxy} even where a local copy would answer: a local document there is only part
+     * of the answer. Maven's {@code maven-metadata.xml} under its computation option is the case - the versions
+     * published here and the upstream's, one list - and {@link #proxy} then answers from both, declining only when
+     * neither holds anything.
+     *
+     * <p>Abstract, since a format that merged and answered {@code false} would serve its local half as the whole.
+     */
+    boolean mergesUpstream(FormatExchange exchange);
+
+    /**
      * The canonical public upstream of this format - the Maven format's Maven Central, an npm format's
      * registry.npmjs.org - which an operator is offered as the upstream to name. It is never fetched from until one
      * does: nothing reaches a third party because a format was installed. The format knows it so nothing else needs a

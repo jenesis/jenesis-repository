@@ -258,6 +258,16 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         }
     }
 
+    /** A proxied {@code maven-metadata.xml} under the computation option merges the upstream's versions with the ones
+     *  published here, so a local document is only part of the answer; every other path is the upstream's alone. */
+    @Override
+    public boolean mergesUpstream(FormatExchange exchange) {
+        return MavenMetadata.isMetadataRequest(exchange.path()) && metadataCompute(exchange);
+    }
+
+    /** The document name a coordinate's metadata request ends in, before any checksum suffix. */
+    private static final String METADATA = "/maven-metadata.xml";
+
     /** Whether this deployment opts into computing {@code maven-metadata.xml} (default off), read off the exchange so
      *  this format needs no settings layer. */
     private static boolean metadataCompute(FormatExchange exchange) {
@@ -404,31 +414,44 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         String prefix = root.endsWith("/") ? root : root + "/";
         if (MavenMetadata.isMetadataRequest(path)) {
             // A mutable index: relayed as the upstream serves it, never stored, and remembered in the node's memory of
-            // upstream documents for its ttl, so a burst of builds costs the upstream one fetch.
-            URI document = URI.create(prefix + rest);
+            // upstream documents for its ttl, so a burst of builds costs the upstream one fetch. Under the computation
+            // option the answer is merged with the versions published here, so the upstream's document is what is
+            // fetched whichever was asked - the document or one of its checksums.
+            boolean merging = metadataCompute(exchange);
+            String asked = merging ? rest.substring(0, rest.lastIndexOf(METADATA) + METADATA.length()) : rest;
+            URI document = URI.create(prefix + asked);
             UpstreamMemory memory = UpstreamMemory.node();
-            Optional<byte[]> remembered = memory.get(store, document);
-            if (remembered.isPresent()) {
-                exchange.respond(200, remembered.get());
+            Optional<byte[]> body = memory.get(store, document);
+            if (body.isEmpty()) {
+                Optional<ProxyFormat.Fetched> index = fetcher.fetch(document, Map.of());
+                // Clause 2: maven-metadata.xml is an enumeration a range or LATEST/RELEASE resolves against, so a 404
+                // means "no versions"; only an upstream that answered 404/410 may reach the client as one, and
+                // anything else refuses visibly. Its checksums keep the plain decline, since nothing resolves against
+                // their absence.
+                if (asked.endsWith(METADATA)) {
+                    if (index.isEmpty()) {
+                        return unanswered(prefix + asked, exchange, "the upstream could not be reached");
+                    }
+                    if (index.get().status() != 200 && index.get().status() != 404 && index.get().status() != 410) {
+                        return unanswered(prefix + asked, exchange, "the upstream answered " + index.get().status());
+                    }
+                }
+                if (index.isPresent() && index.get().status() == 200) {
+                    memory.put(store, document, index.get().body());
+                    body = Optional.of(index.get().body());
+                } else if (!merging) {
+                    return false;
+                }
+            }
+            if (!merging) {
+                exchange.respond(200, body.get());
                 return true;
             }
-            Optional<ProxyFormat.Fetched> index = fetcher.fetch(document, Map.of());
-            // Clause 2: maven-metadata.xml is an enumeration a range or LATEST/RELEASE resolves against, so a 404 means
-            // "no versions"; only an upstream that answered 404/410 may reach the client as one, and anything else
-            // refuses visibly. Its checksums keep the plain decline, since nothing resolves against their absence.
-            if (rest.endsWith("/maven-metadata.xml")) {
-                if (index.isEmpty()) {
-                    return unanswered(prefix + rest, exchange, "the upstream could not be reached");
-                }
-                if (index.get().status() != 200 && index.get().status() != 404 && index.get().status() != 410) {
-                    return unanswered(prefix + rest, exchange, "the upstream answered " + index.get().status());
-                }
-            }
-            if (index.isEmpty() || index.get().status() != 200) {
+            Optional<byte[]> merged = new MavenMetadata(store).merged(path, body);
+            if (merged.isEmpty()) {
                 return false;
             }
-            memory.put(store, document, index.get().body());
-            exchange.respond(200, index.get().body());
+            exchange.respond(200, merged.get());
             return true;
         }
         Optional<ProxyFormat.Download> fetched = fetcher.download(URI.create(prefix + rest), Map.of());

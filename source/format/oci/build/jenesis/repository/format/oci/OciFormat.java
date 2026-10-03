@@ -987,6 +987,12 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
      * The client {@code Accept} is forwarded so the upstream returns the right manifest media type (and image
      * index for multi-arch, whose per-architecture manifests are then proxied by digest in turn).
      */
+    /** A registry's manifests and blobs are the upstream's; a tag list is relayed, never merged with what is held here. */
+    @Override
+    public boolean mergesUpstream(FormatExchange exchange) {
+        return false;
+    }
+
     @Override
     public boolean proxy(FormatExchange exchange, ArtifactStore store, URI upstream, ProxyFormat.Fetcher fetcher)
             throws IOException {

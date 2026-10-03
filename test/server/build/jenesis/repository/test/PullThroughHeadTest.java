@@ -164,6 +164,11 @@ public class PullThroughHeadTest {
             exchange.respond(200, body);
             return true;
         }
+
+        @Override
+        public boolean mergesUpstream(FormatExchange exchange) {
+            return false;
+        }
     }
 
     /** A spy {@link PullThroughHooks}: records every {@code verifyHit} path and returns a configurable hit decision

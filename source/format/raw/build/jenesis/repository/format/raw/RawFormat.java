@@ -111,6 +111,12 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
     }
 
+    /** A raw file is the upstream's or this repository's, never a merge of the two. */
+    @Override
+    public boolean mergesUpstream(FormatExchange exchange) {
+        return false;
+    }
+
     @Override
     public boolean proxy(FormatExchange exchange, ArtifactStore store, URI upstream, ProxyFormat.Fetcher fetcher)
             throws IOException {

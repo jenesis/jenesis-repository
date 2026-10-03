@@ -104,6 +104,11 @@ class PassThroughStreamingTest {
             handle(exchange, store);
             return true;
         }
+
+        @Override
+        public boolean mergesUpstream(FormatExchange exchange) {
+            return false;
+        }
     }
 
     /** A scratch store that streams a blob through in bounded chunks and discards it, then regenerates it on read, so

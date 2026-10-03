@@ -11,6 +11,7 @@ import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.walk.ScreenedNames;
 import build.jenesis.repository.walk.Traversal;
 import build.jenesis.repository.format.Checksums;
+import build.jenesis.repository.format.jvm.MavenMetadataSettingsContributor;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
@@ -33,8 +34,8 @@ public final class MavenMetadata {
     private static final XMLOutputFactory XML_OUTPUT = XMLOutputFactory.newInstance();
 
     /** The setting key (under {@code jenrepo.}) that opts a deployment into computing {@code maven-metadata.xml};
-     *  default off, read off the exchange. */
-    public static final String COMPUTE_SETTING = "maven-metadata-compute";
+     *  default off, read off the exchange. Defined where the settings catalogue describes it. */
+    public static final String COMPUTE_SETTING = MavenMetadataSettingsContributor.COMPUTE_SETTING;
 
     /** How many children of one coordinate a render may examine: far above any real release history (a few thousand
      *  versions) and far below what an attacker-shaped coordinate could force from one GET. Reaching it fails the
@@ -359,6 +360,44 @@ public final class MavenMetadata {
     private static String coordinatePath(String requestPath) {
         String body = requestPath.substring("/maven/".length());
         return body.substring(0, body.lastIndexOf("/maven-metadata.xml"));
+    }
+
+    /**
+     * The answer to a metadata request in a repository that proxies, under the computation option: one document listing
+     * the versions the upstream's {@code maven-metadata.xml} lists and the ones published here, in Maven version order,
+     * or one of its checksums. {@code upstream} is the upstream's document, empty when it answered that it has none.
+     * Empty when neither lists a version.
+     */
+    public Optional<byte[]> merged(String requestPath, Optional<byte[]> upstream) throws IOException {
+        if (!isMetadataRequest(requestPath)) {
+            return Optional.empty();
+        }
+        String coordinatePath = coordinatePath(requestPath);
+        int slash = coordinatePath.lastIndexOf('/');
+        if (slash < 0) {
+            return Optional.empty();
+        }
+        Set<String> versions = new LinkedHashSet<>(versions(coordinatePath));
+        if (upstream.isPresent()) {
+            // The raw block: listedVersions unescapes each version itself.
+            String document = new String(upstream.get(), StandardCharsets.UTF_8);
+            int open = document.indexOf("<versions>");
+            int close = open < 0 ? -1 : document.indexOf("</versions>", open);
+            if (close > open) {
+                versions.addAll(listedVersions(document.substring(open + "<versions>".length(), close)));
+            }
+        }
+        if (versions.isEmpty()) {
+            return Optional.empty();
+        }
+        List<String> ordered = new ArrayList<>(versions);
+        ordered.sort(MavenMetadata::compareVersions);
+        byte[] xml = metadata(coordinatePath.substring(0, slash).replace('/', '.'), coordinatePath.substring(slash + 1),
+                ordered);
+        Optional<String> algorithm = algorithm(requestPath);
+        return Optional.of(algorithm.isPresent()
+                ? Checksums.hex(algorithm.get(), xml).getBytes(StandardCharsets.UTF_8)
+                : xml);
     }
 
     /** The bytes for a metadata request derived from the coordinate's version folders, or its SHA-1 / MD5, or empty

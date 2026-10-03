@@ -5,6 +5,7 @@ import module java.base;
 
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.maven.MavenFormat;
+import build.jenesis.repository.format.maven.MavenMetadata;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
@@ -75,6 +76,48 @@ class MavenMetadataRelayTest {
             assertThat(format.proxy(get, store, UPSTREAM, answering(200))).as(suffix).isTrue();
             assertThat(new Publication(store).located(METADATA + suffix))
                     .as("%s changes with the document it covers, so it is never pinned in the store", suffix).isEmpty();
+        }
+    }
+
+    @Test
+    void under_the_computation_option_the_upstreams_versions_and_the_local_ones_are_one_document() throws IOException {
+        Publication publication = new Publication(store);
+        publication.link("/maven/org/example/lib/2.0/lib-2.0.jar", "abc20");
+        Map<String, String> computing = Map.of(MavenMetadata.COMPUTE_SETTING, "true");
+        FakeExchange get = FakeExchange.get(METADATA, computing);
+
+        assertThat(format.mergesUpstream(get)).as("a local document is only part of the answer").isTrue();
+        assertThat(format.mergesUpstream(FakeExchange.get("/maven/org/example/lib/1.0/lib-1.0.jar", computing)))
+                .as("an artifact is the upstream's or this repository's, never a merge").isFalse();
+        assertThat(format.mergesUpstream(new FakeExchange("GET", METADATA))).as("the option is off by default")
+                .isFalse();
+        assertThat(format.proxy(get, store, UPSTREAM, answering(200))).isTrue();
+
+        String xml = new String(get.responseBytes(), StandardCharsets.UTF_8);
+        assertThat(xml).contains("<version>1.0</version>", "<version>2.0</version>").contains("<latest>2.0</latest>");
+        FakeExchange checksum = FakeExchange.get(METADATA + ".sha1", computing);
+        assertThat(format.proxy(checksum, store, UPSTREAM, answering(200))).isTrue();
+        assertThat(new String(checksum.responseBytes(), StandardCharsets.UTF_8))
+                .as("the checksum is the merged document's").isEqualTo(sha1(get.responseBytes()));
+        assertThat(asked).as("the checksum is derived from the remembered document, not fetched")
+                .containsExactly(UPSTREAM + "org/example/lib/maven-metadata.xml");
+    }
+
+    @Test
+    void an_upstream_with_no_document_leaves_the_local_versions() throws IOException {
+        new Publication(store).link("/maven/org/example/lib/2.0/lib-2.0.jar", "abc20");
+        FakeExchange get = FakeExchange.get(METADATA, Map.of(MavenMetadata.COMPUTE_SETTING, "true"));
+
+        assertThat(format.proxy(get, store, UPSTREAM, answering(404))).isTrue();
+        assertThat(new String(get.responseBytes(), StandardCharsets.UTF_8)).contains("<version>2.0</version>")
+                .doesNotContain("<version>1.0</version>");
+    }
+
+    private static String sha1(byte[] bytes) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-1").digest(bytes));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
         }
     }
 
