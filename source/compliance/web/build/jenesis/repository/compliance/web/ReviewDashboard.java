@@ -33,6 +33,12 @@ public class ReviewDashboard extends TenantScope implements DashboardContributor
     /** How many held versions a repository is counted up to; past it the count reads as "at least". */
     static final int CAP = 10_000;
 
+    private static final DashboardPanel.Noun VERSIONS = new DashboardPanel.Noun("version", "versions");
+    private static final DashboardPanel.Noun WAITING =
+            new DashboardPanel.Noun("version waits for a decision", "versions wait for a decision");
+    private static final DashboardPanel.Noun VULNERABLE =
+            new DashboardPanel.Noun("version has a known vulnerability", "versions have known vulnerabilities");
+
     /** The review-queue page a count reads at a time. */
     private static final int PAGE = 1_000;
 
@@ -59,8 +65,8 @@ public class ReviewDashboard extends TenantScope implements DashboardContributor
                 .map(report -> "The last count failed: " + report.failure()).orElse("");
         if (finished.isEmpty()) {
             return List.of(new DashboardPanel("Held for review", "/ui/repositories", "", "",
-                    DashboardPanel.Tone.NEUTRAL, List.of(), counting ? "Counting…" : failed, Optional.empty(),
-                    counting));
+                    DashboardPanel.Tone.NEUTRAL, List.of(), Optional.empty(), counting ? "Counting…" : failed,
+                    Optional.empty(), counting));
         }
         List<Row> all = finished.get().rows().stream().map(Row::parse).toList();
         // The first row is the tenant's totals, the rest its repositories, most held first.
@@ -73,27 +79,28 @@ public class ReviewDashboard extends TenantScope implements DashboardContributor
         boolean heldCapped = totals.capped();
         List<DashboardPanel.Line> holding = rows.stream().filter(row -> row.held() > 0)
                 .sorted(Comparator.comparingInt(Row::held).reversed().thenComparing(Row::repository))
-                .map(row -> new DashboardPanel.Line(row.repository(), versions(row.held(), row.capped()),
+                .map(row -> new DashboardPanel.Line(row.repository(), VERSIONS.counted(row.held(), row.capped()),
                         "/ui/repositories/" + row.repository() + "/quarantine"))
                 .toList();
         int vulnerable = totals.vulnerable();
         List<DashboardPanel.Line> ranked = rows.stream().filter(row -> row.vulnerable() > 0)
                 .sorted(Comparator.comparingInt(Row::vulnerable).reversed().thenComparing(Row::repository))
-                .map(row -> new DashboardPanel.Line(row.repository(), versions(row.vulnerable(), false),
+                .map(row -> new DashboardPanel.Line(row.repository(), VERSIONS.counted(row.vulnerable(), false),
                         "/ui/repositories/" + row.repository() + "/vulnerabilities"))
                 .toList();
         List<DashboardPanel> panels = new ArrayList<>();
         // A panel opens where its first line leads - the repository holding most - since that is where the work is.
-        panels.add(new DashboardPanel("Held for review", first(holding), held == 0 ? "" : count(held, heldCapped),
-                held == 0 ? "Nothing waits for a decision"
-                        : held == 1 && !heldCapped ? "version waits for a decision" : "versions wait for a decision",
-                held > 0 ? DashboardPanel.Tone.ATTENTION : DashboardPanel.Tone.CLEAR, holding, note, asOf, counting));
+        panels.add(new DashboardPanel("Held for review", first(holding),
+                held == 0 ? "" : DashboardPanel.Noun.figure(held, heldCapped),
+                held == 0 ? "Nothing waits for a decision" : WAITING.of(held, heldCapped),
+                held > 0 ? DashboardPanel.Tone.ATTENTION : DashboardPanel.Tone.CLEAR, holding, Optional.empty(), note,
+                asOf, counting));
         if (totals.scanned()) {
-            panels.add(new DashboardPanel("Vulnerabilities", first(ranked), vulnerable == 0 ? "" : count(vulnerable,
-                    false), vulnerable == 0 ? "No version has a known vulnerability"
-                    : vulnerable == 1 ? "version has a known vulnerability" : "versions have known vulnerabilities",
-                    vulnerable > 0 ? DashboardPanel.Tone.ATTENTION : DashboardPanel.Tone.CLEAR, ranked, note, asOf,
-                    counting));
+            panels.add(new DashboardPanel("Vulnerabilities", first(ranked),
+                    vulnerable == 0 ? "" : DashboardPanel.Noun.figure(vulnerable, false),
+                    vulnerable == 0 ? "No version has a known vulnerability" : VULNERABLE.of(vulnerable, false),
+                    vulnerable > 0 ? DashboardPanel.Tone.ATTENTION : DashboardPanel.Tone.CLEAR, ranked,
+                    Optional.empty(), note, asOf, counting));
         }
         return panels;
     }
@@ -155,11 +162,4 @@ public class ReviewDashboard extends TenantScope implements DashboardContributor
         return lines.isEmpty() ? "/ui/repositories" : lines.getFirst().href();
     }
 
-    private static String count(int count, boolean capped) {
-        return String.format(Locale.ROOT, "%,d", count) + (capped ? "+" : "");
-    }
-
-    private static String versions(int count, boolean capped) {
-        return count(count, capped) + (count == 1 && !capped ? " version" : " versions");
-    }
 }

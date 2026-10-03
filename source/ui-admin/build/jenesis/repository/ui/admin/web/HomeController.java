@@ -103,7 +103,7 @@ public class HomeController {
                         failure);
                 panels.add(new DashboardPanel(contributor.getClass().getSimpleName(), "/ui/", "",
                         "could not be read", DashboardPanel.Tone.ATTENTION, List.of(),
-                        String.valueOf(failure.getMessage()), Optional.empty(), false));
+                        Optional.empty(), String.valueOf(failure.getMessage()), Optional.empty(), false));
             }
         }
         return panels;

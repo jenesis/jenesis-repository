@@ -16,10 +16,14 @@ import org.springframework.stereotype.Component;
  * The deployment's dashboard panels: the store its content is kept in with the space left, and - for a super-admin -
  * the unsafe settings the security posture names. Each opens its menu entry and is a point read, the reads the limits
  * screen and the header's posture badge already make. The repositories and the build cache have panels of their own
- * ({@link RepositoriesDashboard}, {@link BuildCacheDashboard}).
+ * ({@link CountedDashboards}).
  */
 @Component
 public class ConsoleDashboard implements DashboardContributor {
+
+    /** What the posture panel counts. */
+    private static final DashboardPanel.Noun UNSAFE =
+            new DashboardPanel.Noun("unsafe setting is in force", "unsafe settings are in force");
 
     private final TenantLimits limits;
     private final ArtifactStore store;
@@ -49,14 +53,14 @@ public class ConsoleDashboard implements DashboardContributor {
     @Override
     public List<DashboardPanel> panels(Viewer viewer) throws IOException {
         List<DashboardPanel> panels = new ArrayList<>();
-        panels.add(storage(viewer));
+        storage(viewer).ifPresent(panels::add);
         if (viewer.superadmin()) {
             int advisories = settings.posture(viewer.tenant(), environment::getProperty).posture().count();
-            panels.add(new DashboardPanel("Security posture", "/ui/posture",
-                    advisories == 0 ? "" : Integer.toString(advisories),
-                    advisories == 0 ? "No unsafe setting is in force"
-                            : advisories == 1 ? "unsafe setting is in force" : "unsafe settings are in force",
-                    advisories == 0 ? DashboardPanel.Tone.CLEAR : DashboardPanel.Tone.ATTENTION, List.of()));
+            panels.add(advisories == 0
+                    ? new DashboardPanel("Security posture", "/ui/posture", "", "No unsafe setting is in force",
+                            DashboardPanel.Tone.CLEAR, List.of())
+                    : DashboardPanel.counted("Security posture", "/ui/posture", advisories, false, UNSAFE,
+                            DashboardPanel.Tone.ATTENTION, List.of()));
         }
         return panels;
     }
@@ -66,7 +70,7 @@ public class ConsoleDashboard implements DashboardContributor {
      * deployment's, else the bytes stored against the quota where one meters them. Without either the store says
      * nothing about space, and the panel says so rather than showing a zero.
      */
-    private DashboardPanel storage(Viewer viewer) throws IOException {
+    private Optional<DashboardPanel> storage(Viewer viewer) throws IOException {
         TenantLimits.QuotaView quota = limits.quota();
         Optional<ArtifactStore.Capacity> capacity = viewer.superadmin() ? store.capacity() : Optional.empty();
         if (capacity.isPresent()) {
@@ -77,17 +81,17 @@ public class ConsoleDashboard implements DashboardContributor {
                     ? List.of(new DashboardPanel.Line("Quota used",
                             format.bytes(quota.usedBytes()) + " of " + format.bytes(quota.maxBytes()), "/ui/limits"))
                     : List.of();
-            return new DashboardPanel("Storage", "/ui/metrics", format.bytes(free),
+            return Optional.of(new DashboardPanel("Storage", "/ui/metrics", format.bytes(free),
                     "free " + where + ", " + freePercent + "% of " + format.bytes(total),
-                    freePercent < 10 ? DashboardPanel.Tone.ATTENTION : DashboardPanel.Tone.NEUTRAL, lines);
+                    freePercent < 10 ? DashboardPanel.Tone.ATTENTION : DashboardPanel.Tone.NEUTRAL, lines));
         }
         if (quota.maxBytes() > 0) {
-            return new DashboardPanel("Storage", "/ui/limits", format.bytes(quota.usedBytes()),
+            return Optional.of(new DashboardPanel("Storage", "/ui/limits", format.bytes(quota.usedBytes()),
                     "stored " + where + ", of a " + format.bytes(quota.maxBytes()) + " quota",
                     quota.usedBytes() >= quota.maxBytes() ? DashboardPanel.Tone.ATTENTION
-                            : DashboardPanel.Tone.NEUTRAL, List.of());
+                            : DashboardPanel.Tone.NEUTRAL, List.of()));
         }
         // The store says nothing about space and no quota meters it: nothing worth a panel.
-        return new DashboardPanel("Storage", "/ui/limits", "", "", DashboardPanel.Tone.NEUTRAL, List.of());
+        return Optional.empty();
     }
 }
