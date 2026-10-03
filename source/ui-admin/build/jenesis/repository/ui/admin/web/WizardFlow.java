@@ -400,7 +400,7 @@ public final class WizardFlow {
                 } else if (value.isBlank()) {
                     choices.add(new Choice(setting.label(), setting.defaultDisplay(), "default"));
                 } else {
-                    choices.add(new Choice(setting.label(), value, null));
+                    choices.add(new Choice(setting.label(), setting.chosenDisplay(value), null));
                 }
             }
         }

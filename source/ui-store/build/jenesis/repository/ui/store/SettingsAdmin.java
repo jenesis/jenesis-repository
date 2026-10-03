@@ -973,6 +973,12 @@ public class SettingsAdmin {
             return display(defaultValue);
         }
 
+        /** A value chosen for this setting, for display as {@link #effectiveDisplay()} reads one: a secret is masked,
+         *  a choice reads by its name, a duration in words. */
+        public String chosenDisplay(String chosen) {
+            return secret() && !chosen.isBlank() ? "••••••" : display(chosen);
+        }
+
         /** What a {@link #dropdown()} option reads as: the value as {@link #effectiveDisplay()} would show it, marked
          *  {@code (default)} after it where it is the default - "enabled (default)". */
         public String optionLabel(String option) {

@@ -3,6 +3,7 @@ package build.jenesis.repository.ui.admin.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.ui.admin.web.WizardFlow;
+import build.jenesis.repository.ui.store.DurationWords;
 import build.jenesis.repository.ui.store.SettingsAdmin;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -117,6 +118,22 @@ class WizardFlowTest {
                 new WizardFlow.Choice("keep-last", "5", null),
                 new WizardFlow.Choice("max-age", "none", "default"),
                 new WizardFlow.Choice("routing", "writable", "fixed by the deployment's operator"));
+    }
+
+    @Test
+    void the_review_shows_a_chosen_value_as_the_settings_screen_does_and_never_a_secret() {
+        WizardFlow.Definition secrets = new WizardFlow.Definition("Setup", "/ui/setup",
+                new WizardFlow.Exit("Skip", "/ui/setup/skip", true), "Apply", "Apply now",
+                List.of(WizardFlow.Step.settings("Access", List.of(view("token", "SECRET", "", false),
+                        view("enabled", "BOOLEAN", "false", false), view("max-age", "DURATION_OR_NONE", "", false)))),
+                List.of(), checks);
+        WizardFlow flow = WizardFlow.resume(secrets,
+                form("step", "1", "setting.token", "s3cr3t-value", "setting.enabled", "true", "setting.max-age", "P30D"));
+
+        assertThat(flow.reviewing()).isTrue();
+        assertThat(flow.choices()).extracting(WizardFlow.Choice::value)
+                .as("a typed secret is masked, a switch reads as one, a duration in words - never the raw value")
+                .containsExactly("••••••", "enabled", DurationWords.describe("P30D"));
     }
 
     @Test
