@@ -6,6 +6,7 @@ import build.jenesis.repository.blobs.OutboundTargets;
 import build.jenesis.repository.blobs.ProxyLeg;
 import build.jenesis.repository.settings.PrivateHostGuard;
 import build.jenesis.repository.store.ArtifactDescriptor;
+import build.jenesis.repository.store.Globs;
 
 /**
  * A repository's shape: whether it accepts uploads into its own store ({@code writable}) and an ordered list of
@@ -93,26 +94,7 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
         public boolean matches(ArtifactDescriptor descriptor) {
             return descriptor != null && descriptor.coordinate() != null
                     && ecosystem.equalsIgnoreCase(descriptor.ecosystem())
-                    && pattern().matcher(descriptor.coordinate()).matches();
-        }
-
-        /** Compile the glob to an anchored regex, literal except {@code *}. Not cached: the fallback set is tiny. */
-        private Pattern pattern() {
-            StringBuilder regex = new StringBuilder();
-            int start = 0;
-            for (int i = 0; i < glob.length(); i++) {
-                if (glob.charAt(i) == '*') {
-                    if (i > start) {
-                        regex.append(Pattern.quote(glob.substring(start, i)));
-                    }
-                    regex.append(".*");
-                    start = i + 1;
-                }
-            }
-            if (start < glob.length()) {
-                regex.append(Pattern.quote(glob.substring(start)));
-            }
-            return Pattern.compile("^" + regex + "$");
+                    && Globs.compile(glob).matcher(descriptor.coordinate()).matches();
         }
 
         /** Parse a {@code match=} argument ({@code <ecosystem>:<glob>}), refusing a malformed one at parse. */

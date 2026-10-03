@@ -13,6 +13,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 import build.jenesis.repository.net.http.ScreenedHttpClient;
+import build.jenesis.repository.store.Globs;
 
 /**
  * Exchanges a workload's OIDC id-token for a short-lived Jenesis credential, so a CI job authenticates with the token
@@ -96,13 +97,6 @@ public final class OidcExchange implements TokenExchange {
         if (subject == null) {
             return false;
         }
-        StringBuilder regex = new StringBuilder();
-        for (String literal : pattern.split("\\*", -1)) {
-            if (regex.length() > 0) {
-                regex.append(".*");
-            }
-            regex.append(Pattern.quote(literal));
-        }
-        return subject.matches(regex.toString());
+        return Globs.compile(pattern).matcher(subject).matches();
     }
 }
