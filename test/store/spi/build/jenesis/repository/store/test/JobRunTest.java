@@ -12,8 +12,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * A background job's record is believed only while a run holds it: one left saying running by a node that stopped
- * reads interrupted, a job a run holds cannot be taken by a second, and a run whose hold was taken over stops at its
- * next write instead of writing over the run that replaced it.
+ * reads interrupted, one that says the job ended reads running until its run lets go, a job a run holds cannot be
+ * taken by a second, and a run whose hold was taken over stops at its next write instead of writing over the run that
+ * replaced it.
  */
 class JobRunTest {
 
@@ -46,6 +47,22 @@ class JobRunTest {
         }
         assertThat(JobState.effective(store, "imports", "live", JobState.RUNNING))
                 .as("closed without writing an end, it reads interrupted").isEqualTo(JobState.INTERRUPTED);
+    }
+
+    @Test
+    void an_ended_record_reads_running_until_its_run_lets_go() throws IOException {
+        JobState.Run closing = JobState.Run.claim(store, "imports", "closing", RUNNING, null);
+        closing.write("completed".getBytes(StandardCharsets.UTF_8));
+
+        assertThat(JobState.effective(store, "imports", "closing", "completed"))
+                .as("its run has not let go, so a resume asked for now would meet the hold").isEqualTo(JobState.RUNNING);
+        closing.close();
+        assertThat(JobState.effective(store, "imports", "closing", "completed")).isEqualTo("completed");
+        try (JobState.Run _ = JobState.Run.claim(store, "imports", "closing", RUNNING,
+                store.readVersioned("imports/closing").orElseThrow().token())) {
+            assertThat(JobState.effective(store, "imports", "closing", JobState.RUNNING))
+                    .as("a resume asked for once the record reads ended takes the job").isEqualTo(JobState.RUNNING);
+        }
     }
 
     @Test

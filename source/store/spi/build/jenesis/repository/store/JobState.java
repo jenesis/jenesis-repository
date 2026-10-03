@@ -18,6 +18,10 @@ import module java.base;
  * while a run holds the lease: one whose node died reads {@link #INTERRUPTED} ({@link #effective}) and may be resumed
  * or reaped like a failed one, and a run that lost its lease - its node paused past the lease while a resume took the
  * job over - stops at its next write rather than writing over the run that replaced it.
+ *
+ * <p>The converse holds too: a record that says the job ended reads {@code running} for as long as a run still holds
+ * the lease. A run writes its last record and then gives its hold up, so a reader that took the ended record at its
+ * word would resume or reap a job whose run had not let go yet, and the claim would meet the closing run's hold.
  */
 public final class JobState {
 
@@ -38,16 +42,18 @@ public final class JobState {
     }
 
     /**
-     * The state a reader is told of the job whose record is {@code records/id} and says {@code stored}: the stored
-     * state, except that a {@code running} record no run holds reads {@link #INTERRUPTED}. One lease read, and only for
-     * a running record.
+     * The state a reader is told of the job whose record is {@code records/id} and says {@code stored}: what the lease
+     * decides, the record otherwise - {@code running} while a run holds the job whatever the record says, so an ended
+     * record whose run is still closing reads running; and a {@code running} record no run holds reads
+     * {@link #INTERRUPTED}. One lease read.
      */
     public static String effective(ArtifactStore store, String records, String id, String stored)
             throws IOException {
-        if (!RUNNING.equals(stored)) {
-            return stored;
+        boolean held = new Lease(store, LEASE).holder(name(records, id), Instant.now()).isPresent();
+        if (held) {
+            return RUNNING;
         }
-        return new Lease(store, LEASE).holder(name(records, id), Instant.now()).isPresent() ? RUNNING : INTERRUPTED;
+        return RUNNING.equals(stored) ? INTERRUPTED : stored;
     }
 
     private static String name(String records, String id) {

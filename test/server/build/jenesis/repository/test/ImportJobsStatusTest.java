@@ -10,13 +10,13 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * A status read of a background import must be a single store round trip: {@link ImportJobs#status} answers presence
+ * A status read of a background import is one lookup of its record: {@link ImportJobs#status} answers presence
  * and the small job-state bytes from one {@code readVersioned}, never an {@code exists()} probe followed by a
  * {@code read()} (two round trips - a real second network call on an object-store backend - on the endpoint a
- * migration client polls). The counting store here demonstrates, not merely asserts, that a present job costs one
- * lookup and no separate existence probe, and an absent job the same, so the poll cannot regress to the double-probe
- * the sweep removed. A running job costs one more point read, of the hold its run keeps on it, which is what tells a
- * running job from one whose node stopped.
+ * migration client polls). The counting store here demonstrates, not merely asserts, that a present job costs its
+ * record's lookup and no separate existence probe, and an absent job the same, so the poll cannot regress to the
+ * double-probe the sweep removed. Every present job costs one more point read, of the hold its run keeps on it, which
+ * is what tells a running job from one whose node stopped, and an ended record from a run still letting go.
  */
 class ImportJobsStatusTest {
 
@@ -29,7 +29,7 @@ class ImportJobsStatusTest {
     }
 
     @Test
-    void a_present_status_read_is_a_single_round_trip_with_no_existence_probe() throws IOException {
+    void a_present_status_read_is_its_record_and_its_hold_with_no_existence_probe() throws IOException {
         CountingStore store = store();
         ImportJobs jobs = new ImportJobs();
         byte[] state = "{\"state\":\"completed\",\"imported\":3}".getBytes(StandardCharsets.UTF_8);
@@ -40,7 +40,8 @@ class ImportJobsStatusTest {
 
         assertThat(status).as("the persisted job state is returned").isPresent();
         assertThat(new String(status.get(), StandardCharsets.UTF_8)).contains("\"imported\":3");
-        assertThat(store.reads()).as("one store read serves the status").isEqualTo(1);
+        // The hold is read whatever the record says: an ended record whose run has not let go reads running.
+        assertThat(store.reads()).as("the record and its hold, one point read each").isEqualTo(2);
         assertThat(store.existsProbes()).as("no separate existence probe precedes the read").isZero();
     }
 
