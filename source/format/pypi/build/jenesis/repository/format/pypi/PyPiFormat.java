@@ -538,21 +538,19 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
 
     /**
      * The legacy {@code twine upload} endpoint, through {@code Publication.commit}: the distribution streams into the
-     * store, the layout finishes reading the small fields that name it, and only then is the serving pointer linked and
-     * the per-project hosted marker stamped. <b>The commit point is the {@code pypi/<project>/files/<filename>} pointer
-     * link</b>; the hosted marker, which switches the project index on, is written after it, never ahead of the bytes
-     * it lists.
+     * store, the envelope is read to its end for the small fields that name it, and only then is the stored
+     * distribution screened and, when accepted, the serving pointer linked and the per-project hosted marker stamped.
+     * <b>The commit point is the {@code pypi/<project>/files/<filename>} pointer link</b>; the hosted marker, which
+     * switches the project index on, is written after it, never ahead of the bytes it lists.
      *
-     * <p>The {@code content} part is the one unbounded part, handed to the operation as the accepted body and streamed
-     * content-addressed, so the wheel is stored once and the hash the chain assesses is the {@code #sha256} the index
-     * publishes and pip downloads. The pointer is declared, never written by the layout, so a {@code name} field
-     * arriving after the file is still read before anything is declared.
+     * <p>The {@code content} part is the one unbounded part, streamed content-addressed into the store, so the wheel
+     * is stored once and the hash the chain assesses is the {@code #sha256} the index publishes and pip downloads.
      *
      * <p><b>This is the format's screening choke point</b> ({@link #screened()}): the operation carries the discovered
      * chain and observers. The descriptor is the distribution's served path
      * ({@code /pypi/simple/<project>/<filename>}), so a deny-list, a review handle and an inspector key on what the
-     * download serves; a client sending {@code name} after the file is screened under the coordinate-less endpoint
-     * descriptor, its content still assessed.
+     * download serves, in whatever order the client sent the fields: the commit is handed the stored distribution once
+     * the {@code name} that may follow the file has been read.
      */
     private void upload(FormatExchange exchange, Blobs blobs, ArtifactStore store) throws IOException {
         Optional<String> boundary = MultipartBody.boundary(exchange.requestHeader("Content-Type"));
@@ -569,14 +567,18 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
             exchange.respond(400);   // an envelope carrying no `content` file part uploads no distribution
             return;
         }
-        Publication.Commit commit = null;
+        // Stored before it is screened and the envelope read to its end, so the screen is handed the coordinate a
+        // name field following the file gives; the commit answers the stored blob by its hash without a second write.
+        Publication.Blob stored;
         try (InputStream part = distribution) {
+            stored = new Publication(store, List.of(), List.of()).stored(part);
+        }
+        form.readRemainder(body);
+        Publication.Commit commit = null;
+        try (InputStream part = new Publication.Stored(store, stored)) {
             commit = new Publication(store).commit(
                     uploaded(exchange, form.project, form.filename), part, REPUBLISH,
                     _ -> {
-                        // The body is stored; the naming fields may still be ahead, and nothing servable is written
-                        // until they are read.
-                        form.readRemainder(body);
                         String project = form.project;
                         String filename = form.filename;
                         if (project == null || Keys.unsafe(project) || Keys.unsafe(filename)) {
@@ -597,10 +599,9 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
                                 // The Simple pages are maintained on the upload.
                                 .andThrough((_, _, _) -> new PyPiListings(blobs).refresh(project, filename));
                     });
-            // Held: the layout is written here behind the withhold marker (see held), while the envelope cursor is
-            // live, since the naming fields may still be ahead.
+            // Held: the layout is written here behind the withhold marker (see held).
             switch (commit.disposition()) {
-                case QUARANTINE -> held(body, form, blobs, store, commit.hash());
+                case QUARANTINE -> held(form, blobs, store, commit.hash());
                 default -> {
                 }
             }
@@ -622,14 +623,11 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
     }
 
     /** Lay a held distribution out behind its withhold marker, so its review release is the marker clear a retroactive
-     *  hold's is; the shared commit lays out only on {@code ACCEPT}. The envelope is finished first, the {@code name}
-     *  field possibly following the file. Then {@link Withheld#mark}, and only after it the serving pointer and the
-     *  hosted marker, so the held wheel is never downloadable or listed: {@link #index}, {@link #projects} and
-     *  {@link #serveFile} screen on that marker. A body naming no project lays nothing out, and the hold stays
-     *  reviewable by its stored blob. */
-    private static void held(MultipartBody body, Form form, Blobs blobs, ArtifactStore store, String hash)
-            throws IOException {
-        form.readRemainder(body);
+     *  hold's is; the shared commit lays out only on {@code ACCEPT}. {@link Withheld#mark} first, and only after it the
+     *  serving pointer and the hosted marker, so the held wheel is never downloadable or listed: {@link #index},
+     *  {@link #projects} and {@link #serveFile} screen on that marker. A body naming no project lays nothing out, and
+     *  the hold stays reviewable by its stored blob. */
+    private static void held(Form form, Blobs blobs, ArtifactStore store, String hash) throws IOException {
         String project = form.project;
         String filename = form.filename;
         if (project == null || Keys.unsafe(project) || Keys.unsafe(filename)) {
@@ -671,8 +669,8 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
     }
 
     /** The descriptor the uploaded distribution is screened under: its served path with the coordinate
-     *  {@link #describe} parses. The coordinate-less endpoint descriptor when no project is named yet or a value would
-     *  forge a key; the content is screened either way. */
+     *  {@link #describe} parses. The coordinate-less endpoint descriptor when the form names no project or a value
+     *  would forge a key; the content is screened either way. */
     private ArtifactDescriptor uploaded(FormatExchange exchange, String project, String filename) {
         if (project == null || filename == null || Keys.unsafe(project) || Keys.unsafe(filename)) {
             return ArtifactDescriptor.at("PyPI", exchange.path());
@@ -683,7 +681,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
 
     /** The twine form fields naming the upload, accumulated over the one pass: the {@code content} part's filename and
      *  the PEP 503-normalized {@code name}. {@link #readToDistribution} walks up to the file part's headers, and
-     *  {@link #readRemainder} finishes the envelope inside the accepted layout. A method-local accumulator, never
+     *  {@link #readRemainder} finishes the envelope once the distribution is stored. A method-local accumulator, never
      *  shared. */
     private static final class Form {
 
@@ -707,7 +705,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         }
 
         /** Finish the envelope after the distribution part was stored, so a later {@code name} field is read before the
-         *  layout declares anything. The cursor releases the distribution part as it advances; the caller's close is a
+         *  distribution is screened. The cursor releases the distribution part as it advances; the caller's close is a
          *  no-op. */
         private void readRemainder(MultipartBody body) throws IOException {
             for (Optional<MultipartBody.Part> next = body.next(); next.isPresent(); next = body.next()) {
