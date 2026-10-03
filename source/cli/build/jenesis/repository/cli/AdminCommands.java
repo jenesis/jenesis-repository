@@ -344,29 +344,29 @@ final class AdminCommands {
             }
             return deployExplode(CliSupport.client(home), repo, path, source);
         }
-        int status = CliSupport.client(home).contents().deploy(repo, path, source);
-        return switch (status) {
-            case 201 -> {
-                System.out.println("Published " + path + ".");
-                yield 0;
+        ContentsClient.Deployed deployed = CliSupport.client(home).contents().deploy(repo, path, source);
+        String said = deployed.said();
+        // A hold is a success the publisher must still act on, so it says why on stdout; a refusal is a failure,
+        // reported as every failure is - on stderr, as JSON under --json, exit 1 - with the server's own sentence.
+        int status = deployed.status();
+        if (status == 202) {
+            System.out.println("Quarantined " + path + " for review.");
+            if (!said.isEmpty()) {
+                System.out.println(said);
             }
-            case 202 -> {
-                System.out.println("Quarantined " + path + " for review.");
-                yield 0;
-            }
-            case 422 -> {
-                System.out.println("Rejected " + path + " by the compliance gate.");
-                yield 1;
-            }
-            case 405 -> {
-                System.out.println("Repository '" + repo + "' does not accept writes.");
-                yield 1;
-            }
-            default -> {
-                System.out.println("Deploy failed (HTTP " + status + ").");
-                yield 1;
-            }
-        };
+            return 0;
+        }
+        // A format answers its publish as its client expects - 201 at the deploy edge, 200 for PyPI, Cargo and
+        // RubyGems - so any other success is a publish.
+        if (status >= 200 && status < 300) {
+            System.out.println("Published " + path + ".");
+            return 0;
+        }
+        throw new CliSupport.Refused(switch (status) {
+            case 422 -> said.isEmpty() ? "Rejected " + path + " by the compliance gate." : "Rejected " + path + ". " + said;
+            case 405 -> "Repository '" + repo + "' does not accept writes.";
+            default -> "Deploy of " + path + " failed (HTTP " + status + ")" + (said.isEmpty() ? "." : ": " + said);
+        });
     }
 
     /** A batch explode: the archive is walked server-side and each entry published through the compliance gate. Prints

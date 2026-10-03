@@ -94,18 +94,43 @@ public final class ContentsClient extends ClientCalls {
     public record Found(String mode, boolean indexed, List<String> results) {
     }
 
+    /** What a deploy was answered: the HTTP status the gate's verdict maps to (201 published, 202 quarantined, 422
+     *  rejected, 405 not writable) and what the server said with it - why a hold or a refusal happened - or empty. */
+    public record Deployed(int status, String said) {
+    }
+
     /** Deploy bytes to a repository at the given path within it (a Maven repository's {@code /maven/...}, an npm
-     *  one's {@code /<package>/...}) through the compliance gate, returning the HTTP status the gate's verdict maps to
-     *  (201 published, 202 quarantined, 422 rejected, 405 not writable). The client assumes no layout. */
-    public int deploy(String repo, String path, byte[] bytes) throws IOException, InterruptedException {
-        return send("PUT", repository(repo) + path,
-                HttpRequest.BodyPublishers.ofByteArray(bytes), "application/octet-stream").statusCode();
+     *  one's {@code /<package>/...}) through the compliance gate. The client assumes no layout. */
+    public Deployed deploy(String repo, String path, byte[] bytes) throws IOException, InterruptedException {
+        return deployed(send("PUT", repository(repo) + path,
+                HttpRequest.BodyPublishers.ofByteArray(bytes), "application/octet-stream"));
     }
 
     /** {@link #deploy(String, String, byte[])}, streaming a file from disk rather than buffering it. */
-    public int deploy(String repo, String path, Path file) throws IOException, InterruptedException {
-        return send("PUT", repository(repo) + path,
-                HttpRequest.BodyPublishers.ofFile(file), "application/octet-stream").statusCode();
+    public Deployed deploy(String repo, String path, Path file) throws IOException, InterruptedException {
+        return deployed(send("PUT", repository(repo) + path,
+                HttpRequest.BodyPublishers.ofFile(file), "application/octet-stream"));
+    }
+
+    /** The answer's status, and its sentence: the plain-text body a deploy edge sends, or the message of the error
+     *  document a format whose client reads one sends ({@code error}, or the first {@code errors} entry's
+     *  {@code detail} or {@code message}). */
+    private static Deployed deployed(HttpResponse<String> response) {
+        String body = response.body() == null ? "" : response.body().strip();
+        if (body.startsWith("{")) {
+            try {
+                JsonNode document = JSON.readTree(body);
+                JsonNode first = document.path("errors").path(0);
+                for (JsonNode said : List.of(document.path("error"), first.path("detail"), first.path("message"))) {
+                    if (said.isString()) {
+                        return new Deployed(response.statusCode(), said.asString().strip());
+                    }
+                }
+            } catch (RuntimeException unreadable) {
+                // Not an error document after all; what was sent is what is shown.
+            }
+        }
+        return new Deployed(response.statusCode(), body);
     }
 
     /** Deploy an archive with the batch-explode header set, so the server publishes each entry through the gate on

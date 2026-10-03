@@ -123,6 +123,13 @@ public class CliDispatcherTest {
     }
 
     @Test
+    public void a_format_that_answers_its_publish_200_is_a_publish() throws Exception {
+        // PyPI, Cargo and RubyGems answer an accepted publish 200, as their clients expect, not the deploy edge's 201.
+        deployStatus = 200;
+        assertThat(deploy()).isZero();
+    }
+
+    @Test
     public void a_read_only_repository_exits_non_zero() throws Exception {
         deployStatus = 405;
         assertThat(deploy()).isEqualTo(1);

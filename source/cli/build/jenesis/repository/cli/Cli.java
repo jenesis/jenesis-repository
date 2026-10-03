@@ -124,6 +124,8 @@ public final class Cli {
         } catch (RepositoryClient.NotInstalled missing) {
             return report(3, "'" + noun.name() + "' is not served by this deployment.",
                     missing.getMessage() + " Run 'capabilities' to see what it carries.");
+        } catch (CliSupport.Refused refused) {
+            return report(1, refused.getMessage(), null);
         }
     }
 

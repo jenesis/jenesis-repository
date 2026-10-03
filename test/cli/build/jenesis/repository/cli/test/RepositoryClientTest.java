@@ -249,6 +249,13 @@ public class RepositoryClientTest {
                 .willReturn(aResponse().withStatus(200).withBody(EXPLODE_MANIFEST)));
         server.stubFor(put(urlPathMatching(".*/maven/.*")).atPriority(5)
                 .willReturn(aResponse().withStatus(201)));
+        // A refusal and a hold as the deploy edge answers them, and a refusal in npm's error document.
+        server.stubFor(put(urlPathMatching(".*/refused/.*")).atPriority(3)
+                .willReturn(aResponse().withStatus(422).withBody(REFUSED)));
+        server.stubFor(put(urlPathMatching(".*/held/.*")).atPriority(3)
+                .willReturn(aResponse().withStatus(202).withBody(HELD)));
+        server.stubFor(put(urlPathMatching(".*/npm-refused/.*")).atPriority(3)
+                .willReturn(aResponse().withStatus(422).withBody("{\"error\":\"" + REFUSED + "\"}")));
         // Any other request answers 200 with no body, matching the hand-rolled default.
         server.stubFor(any(anyUrl()).atPriority(100).willReturn(aResponse().withStatus(200)));
 
@@ -365,7 +372,7 @@ public class RepositoryClientTest {
     @Test
     void deploy_sends_the_bytes_and_returns_the_verdict_status() throws IOException, InterruptedException {
         int status = client.contents().deploy("releases", "/maven/org/acme/lib/1.0/lib-1.0.jar",
-                "a library jar".getBytes(UTF_8));
+                "a library jar".getBytes(UTF_8)).status();
         assertThat(status).isEqualTo(201);
         assertThat(lastMethod).isEqualTo("PUT");
         assertThat(lastPath).isEqualTo("/repository/acme/releases/maven/org/acme/lib/1.0/lib-1.0.jar");
@@ -373,12 +380,31 @@ public class RepositoryClientTest {
         assertThat(lastBody).isEqualTo("a library jar");
     }
 
+    private static final String REFUSED = "Refused by the compliance gate: Denied license AGPL-3.0. Nothing was "
+            + "published; the refusal and its findings are listed on the repository's Refused screen.";
+
+    private static final String HELD = "Held for review: No license declared. It is stored but not served until a "
+            + "reviewer releases it on the repository's Quarantine screen.";
+
+    @Test
+    void a_held_or_refused_deploy_carries_what_the_server_said_in_whichever_shape_it_said_it()
+            throws IOException, InterruptedException {
+        assertThat(client.contents().deploy("releases", "/refused/a-1.0.jar", new byte[]{1}))
+                .isEqualTo(new ContentsClient.Deployed(422, REFUSED));
+        assertThat(client.contents().deploy("releases", "/held/a-1.0.jar", new byte[]{1}))
+                .isEqualTo(new ContentsClient.Deployed(202, HELD));
+        assertThat(client.contents().deploy("releases", "/npm-refused/a/-/a-1.0.tgz", new byte[]{1}))
+                .as("an error document's message, not the document").isEqualTo(new ContentsClient.Deployed(422, REFUSED));
+        assertThat(client.contents().deploy("releases", "/maven/org/acme/lib/1.0/lib-1.0.jar", new byte[]{1}))
+                .as("an answer with nothing to say says nothing").isEqualTo(new ContentsClient.Deployed(201, ""));
+    }
+
     @Test
     void deploy_streams_a_file_from_disk_byte_for_byte() throws IOException, InterruptedException {
         // The file-taking overload streams the artifact straight from disk (ofFile) rather than Files.readAllBytes-ing
         // it into heap - the stream-never-buffer upload path - and the server still receives the bytes verbatim.
         Path file = Files.writeString(work.resolve("lib-1.0.jar"), "a streamed library jar");
-        int status = client.contents().deploy("releases", "/maven/org/acme/lib/1.0/lib-1.0.jar", file);
+        int status = client.contents().deploy("releases", "/maven/org/acme/lib/1.0/lib-1.0.jar", file).status();
         assertThat(status).isEqualTo(201);
         assertThat(lastMethod).isEqualTo("PUT");
         assertThat(lastPath).isEqualTo("/repository/acme/releases/maven/org/acme/lib/1.0/lib-1.0.jar");

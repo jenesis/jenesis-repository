@@ -11,6 +11,16 @@ import module java.net.http;
  */
 final class CliSupport {
 
+    /** The server refused what a command asked, and the message says what it said: reported as every refusal is - on
+     *  stderr, as an error document under {@code --json} - with exit code 1, the code for "the server refused". */
+    static final class Refused extends RuntimeException {
+
+        Refused(String message) {
+            super(message);
+        }
+    }
+
+
     private CliSupport() {
     }
 
