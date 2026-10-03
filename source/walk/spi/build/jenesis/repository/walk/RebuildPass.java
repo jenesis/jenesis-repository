@@ -361,16 +361,7 @@ public final class RebuildPass {
      *  Applied to what {@link ServableNames#hash(byte[])} answers, never to the raw body: the raw body carries the
      *  dialect, and this judges the hash it named. */
     private static boolean hash(String value) {
-        if (value.length() != 64) {
-            return false;
-        }
-        for (int index = 0; index < value.length(); index++) {
-            char character = value.charAt(index);
-            if ((character < '0' || character > '9') && (character < 'a' || character > 'f')) {
-                return false;
-            }
-        }
-        return true;
+        return ServableNames.isSha256Hex(value);
     }
 
     /** The pass's visitor: turn each pointer leaf into one descriptor and fan it out to every consumer, firing

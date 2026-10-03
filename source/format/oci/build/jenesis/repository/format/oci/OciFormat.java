@@ -28,6 +28,7 @@ import build.jenesis.repository.format.OciTagIndex;
 import build.jenesis.repository.format.Checksums;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.cleanup.VersionRemoval;
+import build.jenesis.repository.store.ServableNames;
 
 /**
  * The OCI / Docker registry format (the {@code /v2/} Distribution API). An OCI blob is addressed by its
@@ -232,7 +233,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
 
     private void blob(String digest, ArtifactStore store, FormatExchange exchange) throws IOException {
         String hex = hex(digest);
-        if (!Checksums.isSha256Hex(hex)) {
+        if (!ServableNames.isSha256Hex(hex)) {
             // Anything but 64 lowercase hex chars names no blob, and could aim blobs/<hex> at another key space.
             exchange.respond(404);
             return;
@@ -325,7 +326,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
     private boolean mounted(String name, String mount, String from, ArtifactStore store, FormatExchange exchange)
             throws IOException {
         String hex = hex(mount);
-        if (!mount.startsWith("sha256:") || !Checksums.isSha256Hex(hex) || !isImageName(from)) {
+        if (!mount.startsWith("sha256:") || !ServableNames.isSha256Hex(hex) || !isImageName(from)) {
             return false;
         }
         Optional<ArtifactStore> source = exchange.readable("/v2/" + from + "/blobs/sha256:" + hex);
@@ -551,7 +552,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         String rest = key.substring("oci/".length());
         if (rest.startsWith(".types/")) {
             String hex = rest.substring(".types/".length());
-            return Checksums.isSha256Hex(hex) ? Optional.of(hex) : Optional.empty();
+            return ServableNames.isSha256Hex(hex) ? Optional.of(hex) : Optional.empty();
         }
         if (rest.startsWith(".uploads/") || rest.startsWith(".upload-sessions/")) {
             return Optional.empty();                            // staged chunks of a push that never became an image
@@ -564,7 +565,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         String hex = store.readVersioned(key)
                 .map(versioned -> hex(new String(versioned.content(), StandardCharsets.UTF_8).trim()))
                 .orElse(null);
-        return hex != null && Checksums.isSha256Hex(hex) ? Optional.of(hex) : Optional.empty();
+        return hex != null && ServableNames.isSha256Hex(hex) ? Optional.of(hex) : Optional.empty();
     }
 
     /** A manifest blob for the reference scan, bounded by {@link #MAX_MANIFEST}; {@code rootKey} is the visited key
@@ -610,7 +611,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             return null;
         }
         String hex = hex(digest);
-        return Checksums.isSha256Hex(hex) ? hex : null;
+        return ServableNames.isSha256Hex(hex) ? hex : null;
     }
 
     private void store(String digest, InputStream content, ArtifactStore store, String name, FormatExchange exchange)
@@ -699,7 +700,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             }
             hex = hex(new String(pointer.get().content(), StandardCharsets.UTF_8).trim());
         }
-        if (!Checksums.isSha256Hex(hex)) {
+        if (!ServableNames.isSha256Hex(hex)) {
             exchange.respond(404);
             return;
         }
@@ -749,7 +750,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             return;
         }
         boolean digest = reference.startsWith("sha256:");
-        if (digest ? !Checksums.isSha256Hex(hex(reference)) : !OciTags.isTag(reference)) {
+        if (digest ? !ServableNames.isSha256Hex(hex(reference)) : !OciTags.isTag(reference)) {
             error(exchange, digest ? 400 : 404, digest ? "DIGEST_INVALID" : "MANIFEST_UNKNOWN",
                     "not a manifest reference: " + reference);
             return;
@@ -770,7 +771,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         } else {
             hex = store.readVersioned("oci/" + name + "/tags/" + reference)
                     .map(pointer -> hex(new String(pointer.content(), StandardCharsets.UTF_8).trim()))
-                    .filter(Checksums::isSha256Hex)
+                    .filter(ServableNames::isSha256Hex)
                     .orElse(null);
             tags.add(reference);
         }
@@ -1525,7 +1526,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         for (JsonNode layer : layers) {
             JsonNode annotations = layer.path("annotations");
             String layerHex = hex(layer.path("digest").asString(""));
-            if (annotations.path(COSIGN_SIGNATURE).asString("").isEmpty() || !Checksums.isSha256Hex(layerHex)) {
+            if (annotations.path(COSIGN_SIGNATURE).asString("").isEmpty() || !ServableNames.isSha256Hex(layerHex)) {
                 index++;
                 continue;   // a layer that is not a signature - cosign's manifest carries nothing else, but a
             }               // hand-made one may
@@ -1581,7 +1582,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             String digest = JSON.readTree(new String(payload, StandardCharsets.UTF_8))
                     .path("critical").path("image").path("docker-manifest-digest").asString("");
             String hex = hex(digest);
-            return Checksums.isSha256Hex(hex) ? Optional.of(hex.toLowerCase(Locale.ROOT)) : Optional.empty();
+            return ServableNames.isSha256Hex(hex) ? Optional.of(hex.toLowerCase(Locale.ROOT)) : Optional.empty();
         } catch (RuntimeException notAPayload) {
             return Optional.empty();
         }
@@ -1599,7 +1600,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         String name = path.substring("/v2/".length(), manifests);
         String reference = path.substring(manifests + "/manifests/".length());
         boolean digest = reference.startsWith("sha256:");
-        if (!isImageName(name) || (digest ? !Checksums.isSha256Hex(hex(reference)) : !OciTags.isTag(reference))) {
+        if (!isImageName(name) || (digest ? !ServableNames.isSha256Hex(hex(reference)) : !OciTags.isTag(reference))) {
             return Optional.empty();
         }
         return Optional.of(new String[] {name, reference});
@@ -1607,7 +1608,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
 
     private static boolean isSignatureTag(String reference) {
         return reference.startsWith(SIGNATURE_TAG_PREFIX) && reference.endsWith(SIGNATURE_TAG_SUFFIX)
-                && Checksums.isSha256Hex(reference.substring(SIGNATURE_TAG_PREFIX.length(),
+                && ServableNames.isSha256Hex(reference.substring(SIGNATURE_TAG_PREFIX.length(),
                         reference.length() - SIGNATURE_TAG_SUFFIX.length()));
     }
 

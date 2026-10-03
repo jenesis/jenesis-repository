@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import build.jenesis.repository.store.ServableNames;
 
 /**
  * The published-index surface: {@code GET /api/index} returns the chain descriptor as JSON (revalidated, since the
@@ -88,15 +89,6 @@ public class IndexController {
 
     /** A chunk id is a 64-character lowercase SHA-256 hex string, so a path parameter can never escape the subtree. */
     private static boolean chunkId(String id) {
-        if (id.length() != 64) {
-            return false;
-        }
-        for (int index = 0; index < id.length(); index++) {
-            char c = id.charAt(index);
-            if ((c < '0' || c > '9') && (c < 'a' || c > 'f')) {
-                return false;
-            }
-        }
-        return true;
+        return ServableNames.isSha256Hex(id);
     }
 }

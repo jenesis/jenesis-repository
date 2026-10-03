@@ -332,7 +332,7 @@ public final class Blobs {
             return Optional.empty();
         }
         String hex = key.substring("blobs/".length());
-        return Checksums.isSha256Hex(hex) ? Optional.of(hex) : Optional.empty();
+        return ServableNames.isSha256Hex(hex) ? Optional.of(hex) : Optional.empty();
     }
 
     /** A servable artifact located for one download: the pointer resolved, the withheld marker probed and the blob

@@ -8,7 +8,6 @@ import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.GatePolicyProvider;
 import build.jenesis.repository.compliance.QualityInspector;
 import build.jenesis.repository.format.ProxyFormat;
-import build.jenesis.repository.format.Checksums;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.RepositoryContext;
@@ -355,7 +354,7 @@ public final class MigrationRescreenTask implements MaintenanceTask {
     private static Optional<String> publishHash(ArtifactStore store, String path) throws IOException {
         return store.readVersioned("publish" + path)
                 .map(versioned -> ServableNames.hash(versioned.content()))
-                .filter(Checksums::isSha256Hex);
+                .filter(ServableNames::isSha256Hex);
     }
 
     /** A re-openable {@link QualityInspector.Content} over a stored {@code blobs/<hash>} blob - the whole body

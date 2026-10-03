@@ -622,16 +622,7 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
      *  {@code sha256:<hex>}: it also judges marker names, {@code blobs/} names and raw hashes, all keys the collector
      *  writes in bare hex; the one qualified dialect is normalised at the pointer-body read instead. */
     private static boolean hash(String value) {
-        if (value.length() != 64) {
-            return false;
-        }
-        for (int index = 0; index < value.length(); index++) {
-            char character = value.charAt(index);
-            if ((character < '0' || character > '9') && (character < 'a' || character > 'f')) {
-                return false;
-            }
-        }
-        return true;
+        return ServableNames.isSha256Hex(value);
     }
 
     private interface NameAction {

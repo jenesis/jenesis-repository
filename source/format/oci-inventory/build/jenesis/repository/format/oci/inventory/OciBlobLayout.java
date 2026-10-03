@@ -11,7 +11,7 @@ import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.format.OciTags;
 import build.jenesis.repository.format.OciTagIndex;
-import build.jenesis.repository.format.Checksums;
+import build.jenesis.repository.store.ServableNames;
 
 /**
  * The OCI inventory layout: a capability-only {@link RepositoryFormat} and {@link BlobLayout} that teaches the
@@ -383,7 +383,7 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
         }
         int colon = digest.indexOf(':');
         String hex = colon < 0 ? digest : digest.substring(colon + 1);
-        return Checksums.isSha256Hex(hex) ? hex : null;
+        return ServableNames.isSha256Hex(hex) ? hex : null;
     }
 
     /** The image and tag a stored pointer names, from {@link #tagPointer}'s grammar, so the shared inventory back-fill

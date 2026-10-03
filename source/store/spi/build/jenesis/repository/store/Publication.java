@@ -809,16 +809,7 @@ public final class Publication {
     /** Whether a pointer's content is the lower-case SHA-256 hex a {@link #link} writes - the only shape carried
      *  into a removal descriptor's blob identity, so a corrupt pointer never masquerades as a hash. */
     private static boolean hash(String value) {
-        if (value.length() != 64) {
-            return false;
-        }
-        for (int index = 0; index < value.length(); index++) {
-            char character = value.charAt(index);
-            if ((character < '0' || character > '9') && (character < 'a' || character > 'f')) {
-                return false;
-            }
-        }
-        return true;
+        return ServableNames.isSha256Hex(value);
     }
 
     /** One notification, so every after-commit face reaches its observers through one containment. Declares

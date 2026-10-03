@@ -2,7 +2,6 @@ package build.jenesis.repository.blobs;
 
 import module java.base;
 import build.jenesis.repository.format.ArtifactLayout;
-import build.jenesis.repository.format.Checksums;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
@@ -147,7 +146,7 @@ public interface BlobLayout extends BlobRoots {
             Optional<ArtifactStore.Versioned> pointer = store.readVersioned(key);
             if (pointer.isPresent()) {
                 String named = ServableNames.hash(pointer.get().content());
-                if (Checksums.isSha256Hex(named)) {
+                if (ServableNames.isSha256Hex(named)) {
                     hashes.add(named);
                 }
             }

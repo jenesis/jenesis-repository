@@ -2,7 +2,6 @@ package build.jenesis.repository.format.oci;
 
 import module java.base;
 
-import build.jenesis.repository.format.Checksums;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.OciTags;
 import build.jenesis.repository.store.ArtifactStore;
@@ -15,6 +14,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
+import build.jenesis.repository.store.ServableNames;
 
 /**
  * The referrers of a manifest - every manifest pushed with a {@code subject} naming it - as the Distribution API's
@@ -143,7 +143,7 @@ final class OciReferrers {
                         if (token == JsonToken.START_OBJECT) {
                             JsonNode descriptor = parser.readValueAsTree();
                             String hex = OciFormat.hex(descriptor.path("digest").asString(""));
-                            if (Checksums.isSha256Hex(hex)) {
+                            if (ServableNames.isSha256Hex(hex)) {
                                 return Optional.of(Map.entry(hex, JSON.writeValueAsBytes(descriptor)));
                             }
                         } else {
@@ -193,11 +193,11 @@ final class OciReferrers {
             List<Layer> layers = new ArrayList<>();
             for (JsonNode layer : node.path("layers")) {
                 String hex = OciFormat.hex(layer.path("digest").asString(""));
-                if (Checksums.isSha256Hex(hex)) {
+                if (ServableNames.isSha256Hex(hex)) {
                     layers.add(new Layer(layer.path("mediaType").asString(""), hex));
                 }
             }
-            return new Manifest(Checksums.isSha256Hex(subject) ? Optional.of(subject) : Optional.empty(),
+            return new Manifest(ServableNames.isSha256Hex(subject) ? Optional.of(subject) : Optional.empty(),
                     artifactType.isEmpty() ? Optional.empty() : Optional.of(artifactType),
                     node.path("mediaType").asString(""), node.path("annotations"), List.copyOf(layers));
         }
@@ -247,7 +247,7 @@ final class OciReferrers {
         }
         String name = rest.substring(0, manifests);
         String subject = rest.substring(manifests + "/.manifests/".length());
-        return OciFormat.isImageName(name) && Checksums.isSha256Hex(subject)
+        return OciFormat.isImageName(name) && ServableNames.isSha256Hex(subject)
                 ? Optional.of(new String[] {name, subject}) : Optional.empty();
     }
 
@@ -316,7 +316,7 @@ final class OciReferrers {
     private SortedMap<String, byte[]> generate(String name, String subject) throws IOException {
         SortedMap<String, byte[]> entries = new TreeMap<>();
         BoundedChildren.draining().scan(store, markers(name, subject), hex -> {
-            if (Checksums.isSha256Hex(hex)) {
+            if (ServableNames.isSha256Hex(hex)) {
                 listed(name, subject, hex).ifPresent(descriptor -> entries.put(hex, descriptor));
             }
         });
@@ -325,7 +325,7 @@ final class OciReferrers {
             Optional<ArtifactStore.Versioned> pointer = store.readVersioned("oci/" + name + "/tags/" + fallback);
             String index = pointer.map(versioned -> OciFormat.hex(
                     new String(versioned.content(), StandardCharsets.UTF_8).trim())).orElse("");
-            if (Checksums.isSha256Hex(index)) {
+            if (ServableNames.isSha256Hex(index)) {
                 Optional<byte[]> body = bounded("blobs/" + index);
                 JsonNode node = body.flatMap(bytes -> {
                     try {
@@ -337,7 +337,7 @@ final class OciReferrers {
                 if (node != null) {
                     for (JsonNode entry : node.path("manifests")) {
                         String hex = OciFormat.hex(entry.path("digest").asString(""));
-                        if (Checksums.isSha256Hex(hex) && !entries.containsKey(hex)) {
+                        if (ServableNames.isSha256Hex(hex) && !entries.containsKey(hex)) {
                             listed(name, subject, hex).ifPresent(descriptor -> entries.put(hex, descriptor));
                         }
                     }
@@ -390,7 +390,7 @@ final class OciReferrers {
      */
     void serve(String name, String reference, FormatExchange exchange) throws IOException {
         String subject = OciFormat.hex(reference);
-        if (!reference.startsWith("sha256:") || !Checksums.isSha256Hex(subject)) {
+        if (!reference.startsWith("sha256:") || !ServableNames.isSha256Hex(subject)) {
             OciFormat.error(exchange, 400, "DIGEST_INVALID", "the referrers of a manifest are asked for by its digest");
             return;
         }
@@ -402,7 +402,7 @@ final class OciReferrers {
             limit = -1;
         }
         String last = exchange.queryParameter("last");
-        if (limit <= 0 || (last != null && !last.isEmpty() && !Checksums.isSha256Hex(last))) {
+        if (limit <= 0 || (last != null && !last.isEmpty() && !ServableNames.isSha256Hex(last))) {
             OciFormat.error(exchange, 400, "UNSUPPORTED", "n is a positive page size and last a referrer's hex");
             return;
         }

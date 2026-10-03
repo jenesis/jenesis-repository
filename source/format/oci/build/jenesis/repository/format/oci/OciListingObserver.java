@@ -3,11 +3,11 @@ package build.jenesis.repository.format.oci;
 import module java.base;
 import module org.slf4j;
 
-import build.jenesis.repository.format.Checksums;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ListingObserver;
 import build.jenesis.repository.store.StoredListing;
+import build.jenesis.repository.store.ServableNames;
 
 /**
  * Keeps the OCI {@linkplain OciListings stored tag lists and catalog} and the {@linkplain OciReferrers referrers
@@ -49,7 +49,7 @@ public final class OciListingObserver implements ListingObserver {
                 // hash a removed pointer named. A referrer among them leaves or rejoins its subject's index.
                 String hex = reference != null && reference.startsWith("sha256:") ? OciFormat.hex(reference)
                         : subject.hash();
-                if (hex != null && Checksums.isSha256Hex(hex)) {
+                if (hex != null && ServableNames.isSha256Hex(hex)) {
                     new OciReferrers(store).refresh(name, hex);
                 }
             }

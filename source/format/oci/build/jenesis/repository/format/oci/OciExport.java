@@ -1,7 +1,6 @@
 package build.jenesis.repository.format.oci;
 
 import module java.base;
-import build.jenesis.repository.format.Checksums;
 import build.jenesis.repository.format.ExportTarget;
 import build.jenesis.repository.format.OciTags;
 import build.jenesis.repository.format.PublishedExport;
@@ -10,6 +9,7 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Withheld;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import build.jenesis.repository.store.ServableNames;
 
 /**
  * One image version pushed through the Distribution API as {@code docker push} sends it: every blob the manifest
@@ -55,14 +55,14 @@ final class OciExport {
     /** The manifest a tag or a digest names, or empty when it names none. */
     private static Optional<String> manifest(ArtifactStore store, String name, String reference) throws IOException {
         if (reference.startsWith("sha256:")) {
-            return Optional.of(OciFormat.hex(reference)).filter(Checksums::isSha256Hex);
+            return Optional.of(OciFormat.hex(reference)).filter(ServableNames::isSha256Hex);
         }
         if (!OciTags.isTag(reference)) {
             return Optional.empty();
         }
         return store.readVersioned("oci/" + name + "/tags/" + reference)
                 .map(pointer -> OciFormat.hex(new String(pointer.content(), StandardCharsets.UTF_8).trim()))
-                .filter(Checksums::isSha256Hex);
+                .filter(ServableNames::isSha256Hex);
     }
 
     private static boolean exportable(ArtifactStore store, String hex) throws IOException {
@@ -81,7 +81,7 @@ final class OciExport {
         }
         for (JsonNode child : manifest.path("manifests")) {
             String childHex = OciFormat.hex(child.path("digest").asString(""));
-            if (!Checksums.isSha256Hex(childHex) || !added.add(childHex)) {
+            if (!ServableNames.isSha256Hex(childHex) || !added.add(childHex)) {
                 continue;
             }
             if (!exportable(store, childHex) || !references(store, name, childHex, files, added, depth + 1)) {
@@ -95,7 +95,7 @@ final class OciExport {
         manifest.path("fsLayers").forEach(layer -> blobs.add(layer.path("blobSum").asString("")));
         for (String digest : blobs) {
             String blob = OciFormat.hex(digest);
-            if (!Checksums.isSha256Hex(blob) || !added.add(blob)) {
+            if (!ServableNames.isSha256Hex(blob) || !added.add(blob)) {
                 continue;
             }
             if (Withheld.is(store, blob)) {

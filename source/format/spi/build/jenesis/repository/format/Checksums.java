@@ -40,27 +40,4 @@ public final class Checksums {
     public static String sha256(byte[] content) {
         return hex("SHA-256", content);
     }
-
-    /**
-     * Whether {@code value} is exactly what {@link #sha256} produces: sixty-four lower-case hex characters and nothing
-     * else.
-     *
-     * <p>This is the shape rule behind every content-addressed key - a {@code blobs/<hex>} object, an OCI
-     * {@code sha256:<hex>} reference, a pointer body naming a blob - and it is a refusal, not a parse: a value that is
-     * not this shape (a tag typo, a {@code ..}-laced reference, a format's small non-hash marker under the same root)
-     * must never be spliced into a store key, where it would resolve to a neighbouring key space rather than fail.
-     * The rule lives here, once, so that every module citing it makes a call rather than carrying a copy.
-     */
-    public static boolean isSha256Hex(String value) {
-        if (value == null || value.length() != 64) {
-            return false;
-        }
-        for (int index = 0; index < 64; index++) {
-            char character = value.charAt(index);
-            if ((character < '0' || character > '9') && (character < 'a' || character > 'f')) {
-                return false;
-            }
-        }
-        return true;
-    }
 }
