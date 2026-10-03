@@ -85,13 +85,14 @@ public class RepositoryProperties {
     /**
      * Requests per minute per tenant a deployment serves before refusing, and the value every edition ships with.
      *
-     * <p>{@code 6000} is a hundred a second per tenant - the secure floor: a fresh deployment caps a runaway or
-     * abusive client instead of serving unlimited requests, while staying well clear of legitimate parallel CI. An
-     * operator raises it, lowers it, or sets {@code 0} to restore unlimited.
+     * <p>{@code 0}, no ceiling: a tenant's ceiling shares one bucket among every credential of the tenant, so a value
+     * low enough to stop a runaway client also stops parallel CI, and what stops a runaway client is the per-address
+     * ceiling ({@link CoreDefaults#RATE_LIMIT_ADDRESS}), on by default. A multi-tenant operator sets a tenant's
+     * ceiling to share capacity fairly.
      *
      * <p><strong>It lives here, and it does not differ by composition.</strong> A composition flipping it in its own
      * properties would make the posture a deployment gets depend on which image it runs. A composition adds
-     * capability; it does not change what this core decided. So the floor is the decision, and it is made once, in
+     * capability; it does not change what this core decided. So the default is the decision, and it is made once, in
      * {@link CoreDefaults#RATE_LIMIT}, which the settings catalogue declares too.
      */
     public static final long DEFAULT_RATE_LIMIT = Long.parseLong(CoreDefaults.RATE_LIMIT);

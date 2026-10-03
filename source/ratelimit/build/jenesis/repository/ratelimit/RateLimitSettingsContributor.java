@@ -28,8 +28,10 @@ public final class RateLimitSettingsContributor implements SettingsContributor {
                 new Setting(KEY, "Limits", "Rate limit",
                         "How many requests a minute a tenant's credentials make together to its repositories and "
                                 + "build cache before further ones are answered 429 Too Many Requests; keyless "
-                                + "requests share one such ceiling at the deployment's value. Zero sets no ceiling. "
-                                + "The console and the management API are never limited.",
+                                + "requests share one such ceiling at the deployment's value. Zero, the default, sets "
+                                + "no ceiling: the per-address limit stops a runaway client, and a tenant's ceiling "
+                                + "is how a multi-tenant operator shares capacity. The console and the management API "
+                                + "are never limited.",
                         Setting.Kind.LONG, CoreDefaults.RATE_LIMIT, true, Setting.Scope.TENANT).gate().standard(),
                 new Setting(ACCOUNT, "Limits", "Rate limit per credential",
                         "How many requests a minute one credential makes to the repositories and build cache before "

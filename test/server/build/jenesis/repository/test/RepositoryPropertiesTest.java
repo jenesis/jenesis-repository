@@ -3,6 +3,7 @@ package build.jenesis.repository.test;
 import module org.junit.jupiter.api;
 
 import build.jenesis.repository.server.RepositoryProperties;
+import build.jenesis.repository.settings.CoreDefaults;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -28,26 +29,21 @@ class RepositoryPropertiesTest {
     }
 
     /**
-     * The request-rate floor is this core's decision, and it is asserted here because this is where it is made.
-     *
-     * <p>It is made once. An edition adds capability; it does not change what this core decides, so a posture that
-     * depended on which image a deployment ran - unlimited here on the reasoning that a ceiling is an operator's
-     * decision, capped elsewhere on the reasoning that a fresh deployment should stop a runaway client - is what one
-     * definition prevents.
-     *
-     * <p>Which leaves one way for the split to come back: this core drifting to {@code 0} while the edition keeps
-     * referencing a constant that has changed under it. The downstream census would still pass, because it checks
-     * that the edition does not re-flip the value rather than what the value is. This is the half that says the
-     * floor is still a floor.
+     * The request-rate floor is this core's decision, and it is asserted here because this is where it is made: a
+     * fresh deployment caps a client by its address, and leaves a tenant's ceiling to an operator who shares capacity
+     * between tenants. Made once, so a posture cannot depend on which image a deployment runs - an edition adds
+     * capability, it does not change what this core decides. The downstream census checks only that the edition does
+     * not re-flip the value; this is the half that says what the value is.
      */
     @Test
-    void a_fresh_deployment_carries_the_request_rate_floor() {
+    void a_fresh_deployment_caps_a_client_by_its_address_and_leaves_a_tenant_unbounded() {
         assertThat(RepositoryProperties.DEFAULT_RATE_LIMIT)
-                .as("0 would be unlimited - the floor is what caps a runaway or abusive client on a fresh deploy")
-                .isEqualTo(6000L);
-        assertThat(new RepositoryProperties().getRateLimit())
-                .as("and the property carries it, so a deployment that configures nothing is not unlimited")
-                .isEqualTo(RepositoryProperties.DEFAULT_RATE_LIMIT);
+                .as("a tenant's ceiling is shared by all its credentials, so a floor there stops parallel CI")
+                .isZero();
+        assertThat(new RepositoryProperties().getRateLimit()).isEqualTo(RepositoryProperties.DEFAULT_RATE_LIMIT);
+        assertThat(Long.parseLong(CoreDefaults.RATE_LIMIT_ADDRESS))
+                .as("the floor is the address's - a runaway or abusive client is capped on a fresh deploy")
+                .isEqualTo(60_000L);
     }
 
     @Test
