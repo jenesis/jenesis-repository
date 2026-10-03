@@ -269,9 +269,9 @@ public class RepositoryBrowse extends TenantScope {
         return browseTree(repository, prefix, "name", false);
     }
 
-    /** One lazy level of the browse tree under a {@link #safePrefix traversal-guarded} prefix, ordered by {@code sort}
-     *  ({@code name}, {@code type} or {@code size}). A folder's size is its roll-up, written by the retention sweep;
-     *  a leaf's its blob's recorded size. */
+    /** One lazy level of the browse tree under a {@link ServableNames#safePrefix traversal-guarded} prefix, ordered
+     *  by {@code sort} ({@code name}, {@code type} or {@code size}). A folder's size is its roll-up, written by the
+     *  retention sweep; a leaf's its blob's recorded size. */
     public List<BrowseEntry> browseTree(String repository, String prefix, String sort, boolean descending)
             throws IOException {
         return browseLevel(repository, prefix, sort, descending).entries();
@@ -284,7 +284,7 @@ public class RepositoryBrowse extends TenantScope {
 
     public BrowseLevel browseLevel(String repository, String prefix, String sort, boolean descending)
             throws IOException {
-        BrowsePage page = page(scope(repository), safePrefix(prefix), null, MAX_CHILDREN);
+        BrowsePage page = page(scope(repository), ServableNames.safePrefix(prefix), null, MAX_CHILDREN);
         List<BrowseEntry> entries = new ArrayList<>(page.entries());
         entries.sort(browseOrder(sort, descending));
         return new BrowseLevel(entries, page.next() != null);
@@ -296,9 +296,10 @@ public class RepositoryBrowse extends TenantScope {
     }
 
     /**
-     * One window of the children under the {@link #safePrefix traversal-guarded} prefix {@code safe}, strictly after
-     * {@code after}, behind the folder screen and {@code /api/browse/children} alike. The servable-name listing hides the
-     * quarantine subtree and any leaf a GET would 404, so a browse discloses exactly what a GET would.
+     * One window of the children under the {@link ServableNames#safePrefix traversal-guarded} prefix {@code safe},
+     * strictly after {@code after}, behind the folder screen and {@code /api/browse/children} alike. The servable-name
+     * listing hides the quarantine subtree and any leaf a GET would 404, so a browse discloses exactly what a GET
+     * would.
      */
     public static BrowsePage page(ArtifactStore store, String safe, String after, int limit) throws IOException {
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
@@ -356,7 +357,7 @@ public class RepositoryBrowse extends TenantScope {
         versions.sort(Comparator.comparing(CoordinateVersion::published).reversed()
                 .thenComparing(CoordinateVersion::version));
         String version = newest == null ? ""
-                : safePrefix(inventory.locateHeld(ecosystem, coordinate, newest.version()));
+                : ServableNames.safePrefix(inventory.locateHeld(ecosystem, coordinate, newest.version()));
         String location = version.lastIndexOf('/') <= 0 ? "" : version.substring(0, version.lastIndexOf('/'));
         return new CoordinateDetail(ecosystem, coordinate, location, versions, page.next());
     }
@@ -427,17 +428,17 @@ public class RepositoryBrowse extends TenantScope {
 
         /** The browse folder the files lie in, or empty where the format keeps no folder tree. */
         public String browseFolder() {
-            return browsable ? safePrefix(folder()) : "";
+            return browsable ? ServableNames.safePrefix(folder()) : "";
         }
     }
 
     /**
-     * The detail of one artifact path at a {@link #safePrefix traversal-guarded} {@code path}, from small objects only:
-     * the pointer, the blob's recorded size, the coordinate, the version document and the latest gate verdict. A raw
-     * file resolves to its checksum and size alone.
+     * The detail of one artifact path at a {@link ServableNames#safePrefix traversal-guarded} {@code path}, from small
+     * objects only: the pointer, the blob's recorded size, the coordinate, the version document and the latest gate
+     * verdict. A raw file resolves to its checksum and size alone.
      */
     public ArtifactDetail artifact(String repository, String path) throws IOException {
-        String safe = safePrefix(path);
+        String safe = ServableNames.safePrefix(path);
         ArtifactStore store = scope(repository);
         Publication publication = new Publication(store);
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
@@ -494,11 +495,11 @@ public class RepositoryBrowse extends TenantScope {
     }
 
     /**
-     * The origin rows of an artifact path at a {@link #safePrefix traversal-guarded} {@code path}
+     * The origin rows of an artifact path at a {@link ServableNames#safePrefix traversal-guarded} {@code path}
      * ({@link #originOf}).
      */
     public List<OriginRow> origin(String repository, String path) throws IOException {
-        return originOf(scope(repository), safePrefix(path));
+        return originOf(scope(repository), ServableNames.safePrefix(path));
     }
 
     /**
@@ -600,30 +601,6 @@ public class RepositoryBrowse extends TenantScope {
         }
     }
 
-    /**
-     * Drops every unsafe segment - empty, {@code .}, {@code ..}, or carrying a backslash - so a browse prefix stays in
-     * the {@code publish/} tree: the store normalises {@code publish/../blobs} to {@code blobs}, so this guard is what
-     * confines the browse. Answers a leading-slash path, or {@code ""} for the root.
-     */
-    public static String safePrefix(String prefix) {
-        if (prefix == null || prefix.isEmpty()) {
-            return "";
-        }
-        StringBuilder safe = new StringBuilder();
-        for (String segment : prefix.split("/")) {
-            if (segment.isEmpty() || segment.equals(".") || segment.equals("..") || segment.indexOf('\\') >= 0) {
-                continue;
-            }
-            if (safe.length() == 0 && segment.equals(QUARANTINE)) {
-                // A leading "quarantine" would open the held-artifact review subtree; a deeper one is an ordinary
-                // segment.
-                continue;
-            }
-            safe.append('/').append(segment);
-        }
-        return safe.toString();
-    }
-
     /** The browse order: by {@code name} (default), {@code type} (artifact then folder) or {@code size} (the raw count,
      *  unknown lowest), with the name as tiebreak. */
     private static Comparator<BrowseEntry> browseOrder(String sort, boolean descending) {
@@ -685,10 +662,10 @@ public class RepositoryBrowse extends TenantScope {
             if (hit.pathAddressed()) {
                 int slash = hit.path().lastIndexOf('/');
                 results.add(new SearchResult(hit.display(), "", "", "",
-                        safePrefix(slash <= 0 ? "" : hit.path().substring(0, slash))));
+                        ServableNames.safePrefix(slash <= 0 ? "" : hit.path().substring(0, slash))));
             } else {
                 results.add(new SearchResult(hit.display(), hit.coordinate(), hit.version(), hit.ecosystem(),
-                        safePrefix(inventory.locate(hit.ecosystem(), hit.coordinate(), hit.version()))));
+                        ServableNames.safePrefix(inventory.locate(hit.ecosystem(), hit.coordinate(), hit.version()))));
             }
         }
         return new SearchPage(answer.mode(), answer.indexed(), results, answer.nextCursor());

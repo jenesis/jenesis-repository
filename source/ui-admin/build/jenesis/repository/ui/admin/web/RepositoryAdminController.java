@@ -34,6 +34,7 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import org.springframework.web.util.UriComponentsBuilder;
 import build.jenesis.repository.ui.ConsoleScreen;
+import build.jenesis.repository.store.ServableNames;
 
 /**
  * The repository-admin panels of the console: list the tenant's repositories, and per repository browse releases,
@@ -380,7 +381,7 @@ public class RepositoryAdminController {
                          @RequestParam(name = "sort", defaultValue = "name") String sort,
                          @RequestParam(name = "dir", defaultValue = "asc") String dir,
                          Model model) throws IOException {
-        String safe = RepositoryBrowse.safePrefix(prefix);
+        String safe = ServableNames.safePrefix(prefix);
         boolean searching = !query.isBlank();
         model.addAttribute("repo", repo);
         model.addAttribute("prefix", safe);
@@ -433,8 +434,8 @@ public class RepositoryAdminController {
                                  @RequestParam(name = "dir", defaultValue = "asc") String dir,
                                  Model model) throws IOException {
         boolean descending = "desc".equals(dir);
-        String safe = RepositoryBrowse.safePrefix(prefix);
-        String safeBase = RepositoryBrowse.safePrefix(base);
+        String safe = ServableNames.safePrefix(prefix);
+        String safeBase = ServableNames.safePrefix(base);
         model.addAttribute("repo", repo);
         RepositoryBrowse.BrowseLevel level = browse.browseLevel(repo, safe, sort, descending);
         model.addAttribute("entries", rows(repo, level.entries(), safeBase, sort, descending ? "desc" : "asc",

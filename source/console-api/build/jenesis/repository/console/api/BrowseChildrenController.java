@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
+import build.jenesis.repository.store.ServableNames;
 
 /**
  * The folder probe over the API: one window of the immediate children under a path in a tenant's repository, each
@@ -64,8 +65,8 @@ public class BrowseChildrenController {
             return null;
         }
         RepositoryRequests.rejectTraversal(prefix);
-        String safe = RepositoryBrowse.safePrefix(
-                repositories.formatPath(tenant, repo, RepositoryBrowse.safePrefix(prefix)));
+        String safe = ServableNames.safePrefix(
+                repositories.formatPath(tenant, repo, ServableNames.safePrefix(prefix)));
         int window = limit == null ? DEFAULT_LIMIT : Math.clamp(limit, 1, MAX_LIMIT);
         RepositoryBrowse.BrowsePage page;
         try {

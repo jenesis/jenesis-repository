@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
+import build.jenesis.repository.store.ServableNames;
 
 /**
  * The <em>origin</em> audit-export API: the {@code origin} acquisition rows of a published or fallback-fetched path in
@@ -46,8 +47,8 @@ public class OriginController {
             return null;
         }
         // Confined to the tenant's repository and traversal-guarded as the console panel is
-        // (RepositoryBrowse.safePrefix); the client's path is mapped to the format's stored layout.
+        // (ServableNames.safePrefix); the client's path is mapped to the format's stored layout.
         return RepositoryBrowse.originOf(repositories.store(tenant, repo),
-                RepositoryBrowse.safePrefix(repositories.formatPath(tenant, repo, RepositoryBrowse.safePrefix(path))));
+                ServableNames.safePrefix(repositories.formatPath(tenant, repo, ServableNames.safePrefix(path))));
     }
 }

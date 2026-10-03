@@ -60,7 +60,7 @@ public class BrowseController {
         // paged through the servable-name screen so a held or torn leaf a GET would 404 never appears. The client's
         // path is mapped onto the format's stored tree before the review subtree is screened out, and back on the
         // answer.
-        String safe = safePrefix(repositories.formatPath(tenant, repo, safePrefix(prefix)));
+        String safe = ServableNames.safePrefix(repositories.formatPath(tenant, repo, ServableNames.safePrefix(prefix)));
         // Ask for exactly the render cap; truncation is the primitive's own outcome (it proved stored children remain
         // past the window), not the screened list's length, which a withheld leaf could leave under the cap while a
         // tail remains.
@@ -130,27 +130,6 @@ public class BrowseController {
             response.setHeader(REFRESH_HEADER, LicenseReport.start(store) ? "started" : "running");
         }
         return LicensesView.of(LicenseReport.read(store));
-    }
-
-    /** Normalise a browse prefix into the leading-slash form {@code children} expects, dropping empty, {@code .},
-     *  {@code ..} and backslash-bearing segments and a leading {@link ServableNames#QUARANTINE quarantine} segment -
-     *  the review subtree a GET never serves (a deeper {@code quarantine} is a legitimate path segment). As the
-     *  console's {@code RepositoryBrowse.safePrefix}. */
-    private static String safePrefix(String prefix) {
-        if (prefix == null || prefix.isEmpty()) {
-            return "";
-        }
-        StringBuilder safe = new StringBuilder();
-        for (String segment : prefix.split("/")) {
-            if (segment.isEmpty() || segment.equals(".") || segment.equals("..") || segment.indexOf('\\') >= 0) {
-                continue;
-            }
-            if (safe.length() == 0 && ServableNames.reviewSubtree(segment)) {
-                continue;
-            }
-            safe.append('/').append(segment);
-        }
-        return safe.toString();
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

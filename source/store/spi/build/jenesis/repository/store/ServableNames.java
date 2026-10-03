@@ -571,6 +571,29 @@ public final class ServableNames {
     }
 
     /**
+     * A browse prefix confined to the served tree: every unsafe segment - empty, {@code .}, {@code ..}, or carrying a
+     * backslash - is dropped, since the store normalises {@code publish/../blobs} to {@code blobs}, and so is a
+     * leading {@linkplain #reviewSubtree review subtree} segment, which a browse never opens (a deeper
+     * {@code quarantine} is an ordinary segment). Answers a leading-slash path, or {@code ""} for the root.
+     */
+    public static String safePrefix(String prefix) {
+        if (prefix == null || prefix.isEmpty()) {
+            return "";
+        }
+        StringBuilder safe = new StringBuilder();
+        for (String segment : prefix.split("/")) {
+            if (segment.isEmpty() || segment.equals(".") || segment.equals("..") || segment.indexOf('\\') >= 0) {
+                continue;
+            }
+            if (safe.isEmpty() && reviewSubtree(segment)) {
+                continue;
+            }
+            safe.append('/').append(segment);
+        }
+        return safe.toString();
+    }
+
+    /**
      * Whether {@code value} is exactly what a SHA-256 digest renders as: sixty-four lower-case hex characters and
      * nothing else.
      *
