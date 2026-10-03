@@ -4,6 +4,7 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.Publication;
@@ -138,7 +139,7 @@ class PublicationQuarantineAliasTest {
     /** A store presenting one {@code publish/quarantine/v2/app/manifests/1.0} leaf whose {@code readVersioned} throws the
      *  configured RuntimeException or IOException, exercising the scan's contain-vs-propagate split; every other method
      *  is inert. */
-    private static final class WalkStore implements ArtifactStore {
+    private static final class WalkStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return this;   // a standalone fake IS its own subspace

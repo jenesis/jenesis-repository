@@ -13,6 +13,7 @@ import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.Withheld;
 import build.jenesis.repository.format.OciTagIndex;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
+import build.jenesis.repository.format.DetachedExchange;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -355,7 +356,7 @@ class OciDeleteTest {
     }
 
     /** An exchange that records what a format audits; a query rides the path after {@code ?}. */
-    private static final class Exchange implements build.jenesis.repository.format.FormatExchange {
+    private static final class Exchange implements build.jenesis.repository.format.DetachedExchange {
 
         private final String method;
         private final String path;

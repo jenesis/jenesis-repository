@@ -8,6 +8,7 @@ import build.jenesis.repository.format.oci.OciFormat;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.walk.store.StoreArtifactWalk;
@@ -220,7 +221,7 @@ class OciBlobReferencesTest {
 
     /** A store whose blob reads fail the way a backend outage fails: {@code exists} still answers, the read does not.
      *  Everything else is the real store, so the only difference from the passing case is the failure itself. */
-    private record FailingReads(ArtifactStore delegate) implements ArtifactStore {
+    private record FailingReads(ArtifactStore delegate) implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

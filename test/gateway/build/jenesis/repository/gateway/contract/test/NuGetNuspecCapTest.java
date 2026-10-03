@@ -3,6 +3,7 @@ package build.jenesis.repository.gateway.contract.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.blobs.Blobs;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.nuget.NuGetFormat;
 import build.jenesis.repository.store.ArchiveInflation;
@@ -162,7 +163,7 @@ class NuGetNuspecCapTest {
     }
 
     /** A {@link FormatExchange} that streams a request body and captures the response status and body. */
-    private static final class Exchange implements FormatExchange {
+    private static final class Exchange implements DetachedExchange {
 
         private final String method;
         private final String path;

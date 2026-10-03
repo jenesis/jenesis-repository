@@ -5,6 +5,7 @@ import module org.junit.jupiter.api;
 
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.Publication;
@@ -64,7 +65,7 @@ class GcMarkRoundTripsTest {
     }
 
     /** An {@link ArtifactStore} that forwards everything and counts the calls a mark pass is allowed to make. */
-    private static final class Counting implements ArtifactStore {
+    private static final class Counting implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

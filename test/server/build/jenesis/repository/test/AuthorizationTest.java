@@ -10,6 +10,7 @@ import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.ClientAddresses;
 import build.jenesis.repository.server.spi.CredentialLifetimes;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -518,7 +519,7 @@ class AuthorizationTest {
     /** A store decorator whose compare-and-set write to the credential's metadata always reports a conflict (and never
      *  writes), so every {@link Authorization#recordUsed} attempt loses - exercising the exhausted-retry forfeit. Every
      *  other call, and every write to any other key, delegates unchanged. */
-    private static final class ConflictingStore implements ArtifactStore {
+    private static final class ConflictingStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace
@@ -603,7 +604,7 @@ class AuthorizationTest {
      *  committing a competing use increment and an operator's IP-allowlist first (so this flush's token is now stale)
      *  and then reports the conflict, exercising {@link Authorization#recordUsed}'s compare-and-set retry; every other
      *  call, and every later write, delegates unchanged. */
-    private static final class RacingStore implements ArtifactStore {
+    private static final class RacingStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

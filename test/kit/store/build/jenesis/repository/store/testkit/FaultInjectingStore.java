@@ -2,6 +2,7 @@ package build.jenesis.repository.store.testkit;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.StoreBindings;
 
 /**
@@ -25,7 +26,7 @@ import build.jenesis.repository.store.StoreBindings;
  * re-attempted rather than silently dropping the write. Thread-safe: the matrices run concurrent writers against one
  * instance. This is a test double, never a production backend.
  */
-public final class FaultInjectingStore implements ArtifactStore {
+public final class FaultInjectingStore implements PrimitiveArtifactStore {
 
     /** The store operations a fault can be armed against. {@code WRITE_BLOB} carries no key, so it matches only a
      *  fault armed with {@link #anyKey}. */
@@ -432,7 +433,7 @@ public final class FaultInjectingStore implements ArtifactStore {
 
     /** A scoped view that routes every call back through the parent's fault decision, so an armed fault fires on the
      *  scoped keys the sweeps use ({@code publish/...}, {@code meta/...}) exactly as it would unscoped. */
-    final class Scoped implements ArtifactStore {
+    final class Scoped implements PrimitiveArtifactStore {
 
         private final ArtifactStore scoped;
 

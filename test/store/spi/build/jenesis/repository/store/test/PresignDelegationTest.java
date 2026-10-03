@@ -4,6 +4,7 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.QuotaArtifactStore;
 import build.jenesis.repository.store.ReadOnlyArtifactStore;
@@ -65,7 +66,7 @@ class PresignDelegationTest {
      * a key prefix exactly as the real backends do, sharing the recording list so a scoped view records against the
      * same instance; every other method is unused by these tests.
      */
-    private static final class RecordingPresignStore implements ArtifactStore {
+    private static final class RecordingPresignStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return this;   // a standalone fake IS its own subspace

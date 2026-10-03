@@ -3,6 +3,7 @@ package build.jenesis.repository.walk.test;
 import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 
 /**
  * A minimal in-memory {@link ArtifactStore} for driving the traversal primitives over a synthetic key tree of any
@@ -14,7 +15,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * <p>Deliberately not a contract-complete store double: it proves traversal shape, never persistence, durability or
  * concurrency. Suites that need those drive a real {@code FilesystemArtifactStore}.
  */
-final class MemoryStore implements ArtifactStore {
+final class MemoryStore implements PrimitiveArtifactStore {
     @Override
     public Object identity() {
         return this;   // a standalone fake IS its own subspace

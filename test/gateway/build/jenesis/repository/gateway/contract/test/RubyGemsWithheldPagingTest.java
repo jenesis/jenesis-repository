@@ -7,6 +7,7 @@ import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.Withheld;
@@ -142,7 +143,7 @@ public class RubyGemsWithheldPagingTest {
      * probes the withheld namespace a page at a time rather than materialising it whole. Every other operation
      * delegates untouched. Ported from {@code WithheldStampPagingTest}.
      */
-    private static final class ForbidWithheldListStore implements ArtifactStore {
+    private static final class ForbidWithheldListStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

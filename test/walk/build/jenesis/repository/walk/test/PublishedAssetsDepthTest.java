@@ -6,6 +6,7 @@ import module java.base;
 import build.jenesis.repository.walk.PublishedAssets;
 import build.jenesis.repository.walk.TraversalException;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -36,7 +37,7 @@ class PublishedAssetsDepthTest {
     /** A store whose {@code publish/} subtree is a single chain {@code publish/a/a/.../a} exactly {@value DEPTH} levels
      *  deep: each node has one child {@code a} until the leaf, which has none. Nothing else is stored, so the leaf's
      *  pointer resolves to nothing and no entry is emitted - the walk's descent is what the deep chain stresses. */
-    private static final class DeepChainStore implements ArtifactStore {
+    private static final class DeepChainStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return this;   // a standalone fake IS its own subspace

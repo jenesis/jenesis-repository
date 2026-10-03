@@ -111,6 +111,13 @@ public final class ServletFormatExchange implements FormatExchange {
         return path;
     }
 
+    /** The path the client sent: a pull-through that keeps an answer under another path wraps this exchange and
+     *  answers its own. */
+    @Override
+    public String requestedPath() {
+        return path;
+    }
+
     @Override
     public String requestUri() {
         return request.getRequestURI();

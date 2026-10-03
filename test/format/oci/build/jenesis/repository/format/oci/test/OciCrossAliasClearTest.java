@@ -4,6 +4,7 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Withheld;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -206,7 +207,7 @@ class OciCrossAliasClearTest {
      *  (which links a byte-identical sibling's {@code /quarantine} pointer) and then performs the delete - modelling a
      *  concurrent enforce sweep that lands its hold between the guard read and the clear. Every other operation is a
      *  straight pass-through to the real store, so the post-clear re-verify reads fresh truth through this same view. */
-    private static final class InjectingStore implements ArtifactStore {
+    private static final class InjectingStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

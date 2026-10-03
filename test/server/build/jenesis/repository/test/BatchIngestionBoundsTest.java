@@ -2,6 +2,7 @@ package build.jenesis.repository.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.server.BatchIngestion;
 import build.jenesis.repository.store.ArtifactStore;
@@ -103,7 +104,7 @@ class BatchIngestionBoundsTest {
     }
 
     /** An explode request at {@code /raw/} carrying {@code archive}, recording what it was answered. */
-    private static final class Exchange implements FormatExchange {
+    private static final class Exchange implements DetachedExchange {
 
         private final byte[] archive;
         private final ByteArrayOutputStream answered = new ByteArrayOutputStream();

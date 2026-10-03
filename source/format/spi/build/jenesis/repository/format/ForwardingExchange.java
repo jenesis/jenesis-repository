@@ -5,10 +5,10 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
- * A {@link FormatExchange} that wraps another and forwards every method to it, the defaulted ones included, so a
- * decorator overrides only what it changes. A decorator written against the interface inherits a default wherever it
- * forgets to forward: a range answered from byte 0, a format's audit line that records nothing, an index whose
- * conditional revalidation is lost, a caller's rights read as none. Here the defaults are the wrapped exchange's.
+ * A {@link FormatExchange} that wraps another and forwards every method to it, so a decorator overrides only what it
+ * changes. What an exchange no edge wraps answers ({@link DetachedExchange}) would be wrong here - a range answered
+ * from byte 0, a format's audit line that records nothing, an index whose conditional revalidation is lost, a caller's
+ * rights read as none - so a decorator takes the wrapped exchange's answers instead.
  *
  * <p>A decorator that holds the response back rather than streaming it to the wrapped exchange overrides
  * {@link #from} to answer {@code 0}, since the wrapped exchange slices a range from what it is finally handed, and

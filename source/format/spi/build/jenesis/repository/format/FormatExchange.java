@@ -24,18 +24,14 @@ public interface FormatExchange {
      * hands the leg an exchange whose {@link #path()} is the kept one; this is then still what the client sent, so the
      * leg fetches upstream what was asked for.
      */
-    default String requestedPath() {
-        return path();
-    }
+    String requestedPath();
 
     /**
      * The full external request path, including any repository prefix the dispatcher stripped from {@link #path()}.
      * A format builds absolute self-referential URLs (an npm tarball, say) from this so they keep the {@code /<repo>/}
      * segment under multi-tenant routing; on the single-repository headless server it is the same as {@link #path()}.
      */
-    default String requestUri() {
-        return path();
-    }
+    String requestUri();
 
     /**
      * The request path a client reaches a format-facing path at - what a format writes into a document that points
@@ -60,22 +56,17 @@ public interface FormatExchange {
      * service index, a sparse-index config) tells the client to come back the way it came, and a credential the
      * client attaches to that URL never travels in cleartext from a deployment that serves TLS. A deployment behind a
      * TLS-terminating proxy sees {@code http} here unless the container is told to honour the proxy's forwarded
-     * headers; the formats consult {@code X-Forwarded-Proto} first for that case. The {@code default} is
-     * {@code http}, for the exchanges that have no connection at all (a headless embed, an internal push, a test
-     * double).
+     * headers; the formats consult {@code X-Forwarded-Proto} first for that case. An exchange with no connection
+     * at all answers {@code http} ({@link DetachedExchange}).
      */
-    default String scheme() {
-        return "http";
-    }
+    String scheme();
 
     /**
      * The address the request came from - the TCP peer, which is the reverse proxy in a proxied deployment - or
      * {@code null} for an exchange that has no connection. A format that trusts a forwarded header only when the
      * peer is one of the deployment's trusted proxies asks this; the header itself is not evidence of anything.
      */
-    default String remoteAddress() {
-        return null;
-    }
+    String remoteAddress();
 
     String queryParameter(String name);
 
@@ -85,14 +76,11 @@ public interface FormatExchange {
      * A named server-configuration value the format reads to honour a runtime toggle, or {@code null} when unset -
      * the seam through which a format consults a deployment setting without binding to any settings layer. The key is
      * the bare setting name (e.g. {@code maven-metadata-compute}); the dispatcher that built the exchange resolves it
-     * from the deployment's effective configuration. The {@code default} returns {@code null}, so a format sees the
-     * shipped default on any exchange that carries no configuration (a headless embed, an internal push exchange, a
-     * test double); the servlet dispatcher overrides it to answer from the Spring environment, into which an
-     * operator's stored setting is layered.
+     * from the deployment's effective configuration. An exchange that carries no configuration answers {@code null}
+     * ({@link DetachedExchange}), so a format sees the shipped default; the servlet dispatcher answers from the Spring
+     * environment, into which an operator's stored setting is layered.
      */
-    default String setting(String key) {
-        return null;
-    }
+    String setting(String key);
 
     InputStream requestStream() throws IOException;
 
@@ -107,9 +95,7 @@ public interface FormatExchange {
      * response to throw the prefix away. A serve that asks writes its content from this offset; one that never asks
      * writes it from the start. Exchanges that slice no range answer {@code 0}.
      */
-    default long from(long contentLength) {
-        return 0L;
-    }
+    long from(long contentLength);
 
     default void respond(int status, byte[] content) throws IOException {
         try (OutputStream out = respond(status, content.length == 0 ? -1 : content.length)) {
@@ -140,8 +126,7 @@ public interface FormatExchange {
      * that dispatched the request knows who is acting and which tenant it acts in; a format knows only what it
      * changed. An exchange no edge wraps records nothing.
      */
-    default void audit(String action, String target) {
-    }
+    void audit(String action, String target);
 
     /**
      * The store of another repository of this request's tenant, for a read this request makes there on the caller's
@@ -153,9 +138,7 @@ public interface FormatExchange {
      * format, and on an exchange no edge wraps - one answer for all of them, so asking discloses nothing about what
      * the caller may not read.
      */
-    default Optional<build.jenesis.repository.store.ArtifactStore> readable(String path) {
-        return Optional.empty();
-    }
+    Optional<build.jenesis.repository.store.ArtifactStore> readable(String path);
 
     /**
      * Whether the caller may read content this repository holds for review - the bytes a hold withholds from every
@@ -165,9 +148,7 @@ public interface FormatExchange {
      * <p>{@code false} on an exchange no edge wraps and for every caller whose credential does not carry the right, so
      * a format that asks discloses nothing it would not otherwise serve.
      */
-    default boolean readsHeld() {
-        return false;
-    }
+    boolean readsHeld();
 
     /**
      * Whether the caller may administer the repository this request addresses - the right an operator holds on it,
@@ -176,7 +157,5 @@ public interface FormatExchange {
      *
      * <p>{@code false} on an exchange no edge wraps and for every caller whose credential does not carry the right.
      */
-    default boolean administers() {
-        return false;
-    }
+    boolean administers();
 }

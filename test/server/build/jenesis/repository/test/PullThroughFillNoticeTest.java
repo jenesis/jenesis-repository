@@ -3,6 +3,7 @@ package build.jenesis.repository.test;
 import module org.junit.jupiter.api;
 import module java.base;
 
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.maven.MavenFormat;
@@ -100,7 +101,7 @@ public class PullThroughFillNoticeTest {
     }
 
     /** A minimal {@code GET} exchange capturing the status a serve wrote. */
-    private static final class FakeExchange implements FormatExchange {
+    private static final class FakeExchange implements DetachedExchange {
 
         private final String path;
         private int status = -1;

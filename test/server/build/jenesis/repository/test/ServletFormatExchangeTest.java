@@ -3,6 +3,7 @@ package build.jenesis.repository.test;
 import module org.junit.jupiter.api;
 import module java.base;
 
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.server.ServletFormatExchange;
 import jakarta.servlet.http.HttpServletRequest;
@@ -32,7 +33,7 @@ class ServletFormatExchangeTest {
 
     @Test
     void an_exchange_with_no_connection_defaults_to_http() {
-        FormatExchange headless = new FormatExchange() {
+        FormatExchange headless = new DetachedExchange() {
             @Override
             public String method() {
                 return "GET";

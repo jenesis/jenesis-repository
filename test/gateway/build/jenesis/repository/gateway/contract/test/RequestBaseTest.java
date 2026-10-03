@@ -4,6 +4,7 @@ import module java.base;
 import module org.junit.jupiter.api;
 
 import build.jenesis.repository.blobs.RequestBase;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -61,7 +62,7 @@ class RequestBaseTest {
 
     private static FormatExchange exchange(String scheme, String peer, Map<String, String> headers,
                                            Map<String, String> settings) {
-        return new FormatExchange() {
+        return new DetachedExchange() {
             @Override
             public String method() {
                 return "GET";

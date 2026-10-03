@@ -5,6 +5,7 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.gate.QuarantineLog;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 
@@ -206,7 +207,7 @@ class QuarantineLogTest {
 
     /** A store that refuses {@code list} under the quarantine trail while delegating everything else - so a read or
      *  sweep that still materialises the whole namespace fails by name rather than merely being slow. */
-    private record ListRefusingStore(ArtifactStore delegate) implements ArtifactStore {
+    private record ListRefusingStore(ArtifactStore delegate) implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

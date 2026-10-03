@@ -7,6 +7,7 @@ import build.jenesis.repository.server.kernel.AuthFetcher;
 import build.jenesis.repository.settings.SecretCipher;
 import build.jenesis.repository.upstream.store.StoreUpstreamCredentials;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -148,7 +149,7 @@ public class ProxyUpstreamAuthTest {
     /** A store decorator whose first {@code writeVersioned} simulates another node committing a competing credential
      *  first (so this write's token is now stale) and then reports the conflict, exercising the credential document's
      *  compare-and-set retry; every later call delegates unchanged. */
-    private static final class RacingStore implements ArtifactStore {
+    private static final class RacingStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

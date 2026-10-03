@@ -2,6 +2,7 @@ package build.jenesis.repository.format.contract.ecosystem.test;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 
 /**
  * A pass-through {@link ArtifactStore} that records every key and prefix its caller touches.
@@ -23,7 +24,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * rather than hoped for: concurrent publishes held there until every one has stored its bytes have all passed
  * whatever a format checks before storing, and none of them has linked yet.
  */
-final class WatchingStore implements ArtifactStore {
+final class WatchingStore implements PrimitiveArtifactStore {
     @Override
     public Object identity() {
         return delegate.identity();   // a decorator answers its delegate's subspace

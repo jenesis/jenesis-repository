@@ -6,6 +6,7 @@ import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.inventory.SubtreeSizePublicationObserver;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 
@@ -177,7 +178,7 @@ class SubtreeSizePublicationObserverTest {
     /** Forwards to a real store but tallies every {@link ArtifactStore#list} call, so a test can prove the publish hot
      *  path folds sizes through O(depth) point reads and compare-and-set writes without ever listing (walking) the
      *  tree - the whole-tree walk this observer exists to retire off the hot path. */
-    private record ListCountingStore(ArtifactStore delegate, int[] count) implements ArtifactStore {
+    private record ListCountingStore(ArtifactStore delegate, int[] count) implements PrimitiveArtifactStore {
 
         ListCountingStore(ArtifactStore delegate) {
             this(delegate, new int[1]);

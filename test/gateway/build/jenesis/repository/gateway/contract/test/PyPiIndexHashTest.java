@@ -3,9 +3,11 @@ package build.jenesis.repository.gateway.contract.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.blobs.Blobs;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -64,7 +66,7 @@ class PyPiIndexHashTest {
 
     /** An in-memory {@link ArtifactStore} that counts the blob-body reads ({@code read} / {@code open} on a {@code
      *  blobs/} key) made through it, so a serve can assert it touched no artifact body. */
-    private static final class CountingReadStore implements ArtifactStore {
+    private static final class CountingReadStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return this;   // a standalone fake IS its own subspace
@@ -173,7 +175,7 @@ class PyPiIndexHashTest {
 }
 
     /** A {@link FormatExchange} for a {@code GET} that captures the response status and body. */
-    private static final class CapturingIndex implements FormatExchange {
+    private static final class CapturingIndex implements DetachedExchange {
 
         private final String path;
         private int status = -1;

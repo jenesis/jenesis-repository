@@ -7,6 +7,7 @@ import build.jenesis.repository.events.RepositoryEvent;
 import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.staging.Staging;
@@ -325,7 +326,7 @@ public final class StoreStaging implements Staging {
 
     /** A minimal in-process {@code PUT} exchange that streams a staged blob into a format's {@code handle}, so
      *  promotion re-publishes exactly as a deploy does. The response is discarded. */
-    private static final class StagedPublish implements FormatExchange {
+    private static final class StagedPublish implements DetachedExchange {
 
         private final String path;
         private final InputStream body;

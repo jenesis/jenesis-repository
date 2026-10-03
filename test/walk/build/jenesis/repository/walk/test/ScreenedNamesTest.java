@@ -4,6 +4,7 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.ServableNames;
@@ -385,7 +386,7 @@ class ScreenedNamesTest {
      *  injectable failures: {@link #hostile} makes a name a backend cannot resolve throw the way a real filesystem
      *  store throws on an unmappable path, and {@link #failing} makes every pointer read fail as a store outage
      *  would. */
-    private static final class ScreenStore implements ArtifactStore {
+    private static final class ScreenStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return this;   // a standalone fake IS its own subspace

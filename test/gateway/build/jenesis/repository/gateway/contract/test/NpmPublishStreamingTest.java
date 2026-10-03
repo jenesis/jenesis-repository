@@ -2,9 +2,11 @@ package build.jenesis.repository.gateway.contract.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ServableNames;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -143,7 +145,7 @@ class NpmPublishStreamingTest {
      * while measuring the one unbounded (tarball) blob's total and largest chunk, so the test demonstrates the heap
      * stayed bounded.
      */
-    private static final class NpmStreamStore implements ArtifactStore {
+    private static final class NpmStreamStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return this;   // a standalone fake IS its own subspace
@@ -283,7 +285,7 @@ class NpmPublishStreamingTest {
 }
 
     /** A {@link FormatExchange} for a {@code PUT} publish, streaming the body and capturing the response status. */
-    private static final class PublishExchange implements FormatExchange {
+    private static final class PublishExchange implements DetachedExchange {
 
         private final InputStream body;
         private final String path;

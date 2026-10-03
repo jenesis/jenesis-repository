@@ -7,6 +7,7 @@ import build.jenesis.repository.search.SearchMode;
 import build.jenesis.repository.search.SearchQuery;
 import build.jenesis.repository.search.SearchQueryProvider;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.ui.store.RepositoryBrowse;
@@ -81,7 +82,7 @@ public class RepositorySearchDirectLookupTest {
      *  delegate. A direct hit lookup reads only point keys and bounded pages, so it passes; a full-walk search would
      *  throw here. Reads and writes delegate untouched; {@link #scope} propagates the guard. A test double, never a
      *  backend. */
-    private static final class ListRefusingStore implements ArtifactStore {
+    private static final class ListRefusingStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

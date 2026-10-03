@@ -5,6 +5,7 @@ import module java.base;
 
 import build.jenesis.repository.format.oci.OciFormat;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -72,7 +73,7 @@ class OciHardeningTest {
 
     /** A store decorator that fails the very first {@code writeVersioned} once - the concurrent conflict the tag-link
      *  retry absorbs - then delegates untouched. */
-    private static final class ConflictOnceStore implements ArtifactStore {
+    private static final class ConflictOnceStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

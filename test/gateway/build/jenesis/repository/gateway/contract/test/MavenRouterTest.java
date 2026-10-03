@@ -2,6 +2,7 @@ package build.jenesis.repository.gateway.contract.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.maven.MavenFormat;
@@ -80,7 +81,7 @@ public class MavenRouterTest {
         return new String(exchange.body == null ? new byte[0] : exchange.body.toByteArray(), StandardCharsets.UTF_8);
     }
 
-    private static final class MavenExchange implements FormatExchange {
+    private static final class MavenExchange implements DetachedExchange {
 
         private final String method;
         private final String path;

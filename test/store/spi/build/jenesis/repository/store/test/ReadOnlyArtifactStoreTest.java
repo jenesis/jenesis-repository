@@ -4,6 +4,7 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.ReadOnlyArtifactStore;
 import build.jenesis.repository.store.ReadOnlyException;
@@ -90,7 +91,7 @@ class ReadOnlyArtifactStoreTest {
     /** A backend that answers {@code page()} natively and flags any whole-namespace {@code list()} - so a wrapper that
      *  inherited the SPI default {@code page()} (which lists then sorts) is caught reintroducing the materialisation.
      *  Every other operation is unused by the test. */
-    private static final class PagingProbe implements ArtifactStore {
+    private static final class PagingProbe implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return this;   // a standalone fake IS its own subspace

@@ -5,6 +5,7 @@ import module java.base;
 
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.ReadOnlyArtifactStore;
 import build.jenesis.repository.ui.ConsoleAdministrators;
@@ -96,7 +97,7 @@ class KnownPrincipalsTest {
 
     /** Counts writes reaching the backend, so "a returning sign-in writes nothing" is a measurement rather than a
      *  reading of the code. Everything else passes straight through to a real store. */
-    private static final class Counting implements ArtifactStore {
+    private static final class Counting implements PrimitiveArtifactStore {
 
         private final ArtifactStore delegate;
 

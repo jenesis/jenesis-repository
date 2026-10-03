@@ -8,6 +8,7 @@ import build.jenesis.repository.compliance.GatePolicy;
 import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.compliance.VulnerabilityPolicy;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.gate.QuarantineLog;
@@ -194,7 +195,7 @@ class HeldEvidenceRescreenTest {
     }
 
     /** A request a registry client sends, answered into memory. */
-    private static final class Exchange implements FormatExchange {
+    private static final class Exchange implements DetachedExchange {
 
         private final String method;
         private final String path;

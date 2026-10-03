@@ -2,12 +2,14 @@ package build.jenesis.repository.gateway.contract.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.gateway.RepositoryRouter;
 import build.jenesis.repository.definitions.RepositoryDefinition;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.Publication;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -107,7 +109,7 @@ class PassThroughStreamingTest {
     /** A scratch store that streams a blob through in bounded chunks and discards it, then regenerates it on read, so
      *  the pass-through's write-then-serve round trip runs end to end without a 2 GB heap buffer or a 2 GB temp file.
      *  It records the total it saw and the largest single chunk; the small pointer objects stay in memory. */
-    private static final class CountingPassStore implements ArtifactStore {
+    private static final class CountingPassStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return this;   // a standalone fake IS its own subspace
@@ -240,7 +242,7 @@ class PassThroughStreamingTest {
 
     /** A {@link FormatExchange} that records the status and counts the response bytes, discarding them, so it can be
      *  fed a body far larger than memory. */
-    private static final class CountingExchange implements FormatExchange {
+    private static final class CountingExchange implements DetachedExchange {
 
         private final String path;
         private int status = -1;

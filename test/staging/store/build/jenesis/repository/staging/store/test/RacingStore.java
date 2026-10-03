@@ -2,6 +2,7 @@ package build.jenesis.repository.staging.store.test;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 
 /**
  * A reusable delegating {@link ArtifactStore} that injects a rival concurrent writer's mutations <em>between</em> a
@@ -32,7 +33,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * re-trigger an interceptor and recurse) plus the matched key. Only {@code delete}, {@code write} and
  * {@code writeVersioned} are interceptable; every other method delegates untouched. A test double, never a backend.
  */
-public final class RacingStore implements ArtifactStore {
+public final class RacingStore implements PrimitiveArtifactStore {
     @Override
     public Object identity() {
         return delegate.identity();   // a decorator answers its delegate's subspace

@@ -12,6 +12,7 @@ import build.jenesis.repository.search.lucene.SearchPublicationObserver;
 import build.jenesis.repository.search.lucene.SearchRebuildConsumer;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.DirtyIndexFeed;
 import build.jenesis.repository.store.Publication;
@@ -400,7 +401,7 @@ class SearchIncrementalTest {
 
     /** A read-recording {@link ArtifactStore} decorator: every key read (list, versioned read, open, read) is recorded
      *  so a test can prove the incremental sweep touched only the changed coordinate's keys - never the whole set. */
-    private static final class CountingStore implements ArtifactStore {
+    private static final class CountingStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

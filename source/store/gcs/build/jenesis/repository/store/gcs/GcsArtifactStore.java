@@ -27,6 +27,7 @@ import java.util.TreeSet;
 import java.util.function.Consumer;
 
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.OwnerOnly;
 import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import com.google.api.client.http.AbstractInputStreamContent;
@@ -49,7 +50,7 @@ import com.google.api.services.storage.model.StorageObject;
  * through GCS itself. A conditional write is idempotent, so the client's backoff re-sends it on a 408, 429 or 5xx, and
  * an unconditional one re-sends the same spooled bytes.
  */
-public final class GcsArtifactStore implements ArtifactStore {
+public final class GcsArtifactStore implements PrimitiveArtifactStore {
 
     /** The header naming the object's generation on every media response - the version token, read with the bytes in
      *  one round trip. */

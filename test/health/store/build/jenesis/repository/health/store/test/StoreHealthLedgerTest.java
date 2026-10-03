@@ -8,6 +8,7 @@ import build.jenesis.repository.health.HealthLedger;
 import build.jenesis.repository.health.HealthLedgerProvider;
 import build.jenesis.repository.health.store.StoreHealthLedger;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -106,7 +107,7 @@ class StoreHealthLedgerTest {
     /** A store that refuses {@code list} under the health ledger's own key spaces while paging exactly as the
      *  delegate does - so a streaming leg that still materialises a level fails by name rather than merely costing
      *  memory. The same fixture shape {@code LevelBoundedStore} uses for the inventory sweeps. */
-    private record ListRefusingStore(ArtifactStore delegate) implements ArtifactStore {
+    private record ListRefusingStore(ArtifactStore delegate) implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

@@ -2,6 +2,7 @@ package build.jenesis.repository.gateway.contract.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -250,7 +251,7 @@ class SpoolStoreTest {
     }
 
     /** A {@link FormatExchange} that records the response status and buffers the body so a test can assert them. */
-    private static final class RecordingExchange implements FormatExchange {
+    private static final class RecordingExchange implements DetachedExchange {
 
         private final String path;
         private int status = -1;

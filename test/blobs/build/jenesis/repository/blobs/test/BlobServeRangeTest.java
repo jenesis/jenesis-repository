@@ -3,6 +3,7 @@ package build.jenesis.repository.blobs.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.blobs.Blobs;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
@@ -43,7 +44,7 @@ class BlobServeRangeTest {
     }
 
     /** An exchange that asks for the content from {@code offset} on and keeps what it is sent. */
-    private static final class Tail implements FormatExchange {
+    private static final class Tail implements DetachedExchange {
 
         private final long offset;
         private final ByteArrayOutputStream body = new ByteArrayOutputStream();

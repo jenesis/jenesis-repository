@@ -4,6 +4,7 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.QuotaArtifactStore;
 import build.jenesis.repository.ui.store.SettingsAdmin;
@@ -69,7 +70,7 @@ class ConsoleQuotaSettingTest {
      * carried, kept rather than rewritten - {@code ArtifactStore} is wide, and a hand-rolled subset compiles only
      * by accident of which methods happen to have defaults.
      */
-    private record RefusingStore(ArtifactStore delegate) implements ArtifactStore {
+    private record RefusingStore(ArtifactStore delegate) implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

@@ -2,6 +2,7 @@ package build.jenesis.repository.inventory.test;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 
 /**
  * An {@link ArtifactStore} decorator that <b>refuses to materialise a wide level</b>: {@link #list} throws once a
@@ -19,7 +20,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * bounded tree walk ({@code PagedTreeWalk}, which consumes the store exclusively through {@code page}) is not. A test
  * that seeds a container past {@link #MAX_LEVEL} therefore fails <em>before</em> the migration and passes after it.
  */
-final class LevelBoundedStore implements ArtifactStore {
+final class LevelBoundedStore implements PrimitiveArtifactStore {
     @Override
     public Object identity() {
         return delegate.identity();   // a decorator answers its delegate's subspace

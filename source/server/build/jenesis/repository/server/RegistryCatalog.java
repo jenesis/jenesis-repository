@@ -2,6 +2,7 @@ package build.jenesis.repository.server;
 
 import module java.base;
 
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.scope.Scopes;
@@ -158,7 +159,7 @@ final class RegistryCatalog {
     }
 
     /** A {@code GET /v2/_catalog} with no request behind it, capturing the window and whether a next page exists. */
-    private static final class Listing implements FormatExchange {
+    private static final class Listing implements DetachedExchange {
 
         private final int limit;
         private final String after;

@@ -11,6 +11,7 @@ import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.staging.StagingProvider;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.QuotaArtifactStore;
 
@@ -78,7 +79,7 @@ class RepositoryQuotaRecomputeTest {
      *  so the recount provably streams each repository's blobs through the ordered {@link ArtifactStore#page}
      *  primitive at every scoping depth, while the recorded page limits pin that every page stays bounded. The
      *  scope-free {@code list} of the repository names themselves (a small, human-sized set) stays permitted. */
-    private record PagingStore(ArtifactStore delegate, List<Integer> pages, List<String> sized) implements ArtifactStore {
+    private record PagingStore(ArtifactStore delegate, List<Integer> pages, List<String> sized) implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

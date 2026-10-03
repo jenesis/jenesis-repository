@@ -2,6 +2,7 @@ package build.jenesis.repository.server;
 
 import module java.base;
 
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 
 /**
@@ -20,7 +21,7 @@ import build.jenesis.repository.format.FormatExchange;
  * <p><b>It carries no request headers, deliberately.</b> A format publishes the body plainly, and a header that
  * would change how a write is interpreted - the batch explode header above all - cannot ride in and recurse.
  */
-public final class CapturingExchange implements FormatExchange {
+public final class CapturingExchange implements DetachedExchange {
 
     private final String method;
     private final String requestUri;

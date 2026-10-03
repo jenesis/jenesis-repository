@@ -4,6 +4,7 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -99,7 +100,7 @@ public class HuggingFaceResolveRevisionProbeTest {
      * the largest limit seen), so the test proves the single-file download's existence check pages one child rather
      * than listing the whole revision. Every other operation delegates untouched.
      */
-    private static final class ProbeStore implements ArtifactStore {
+    private static final class ProbeStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

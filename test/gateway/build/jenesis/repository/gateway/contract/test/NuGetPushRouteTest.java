@@ -2,6 +2,7 @@ package build.jenesis.repository.gateway.contract.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactStore;
@@ -140,7 +141,7 @@ class NuGetPushRouteTest {
         return body.toByteArray();
     }
 
-    private static final class PushExchange implements FormatExchange {
+    private static final class PushExchange implements DetachedExchange {
 
         private final String path;
         private final byte[] body;
@@ -189,7 +190,7 @@ class NuGetPushRouteTest {
         }
     }
 
-    private static final class ReadExchange implements FormatExchange {
+    private static final class ReadExchange implements DetachedExchange {
 
         private final String path;
         private final ByteArrayOutputStream body = new ByteArrayOutputStream();

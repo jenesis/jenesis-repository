@@ -8,6 +8,7 @@ import build.jenesis.repository.observation.HealthCheck;
 import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilityReport;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.QuotaArtifactStore;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -116,7 +117,7 @@ class QuotaArtifactStoreObservabilityTest {
     }
 
     /** A store that fails the versioned read the quota counter is kept on, to drive the counter-unreadable branch. */
-    private record ThrowingMeter(ArtifactStore delegate) implements ArtifactStore {
+    private record ThrowingMeter(ArtifactStore delegate) implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

@@ -3,6 +3,7 @@ package build.jenesis.repository.test;
 import module org.junit.jupiter.api;
 import module java.base;
 
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -75,7 +76,7 @@ public class ScreenedDispatchTest {
     }
 
     /** A minimal {@link FormatExchange}: a request of a method/path/body, capturing the status the edge or format set. */
-    private static class FakeExchange implements FormatExchange {
+    private static class FakeExchange implements DetachedExchange {
 
         private final String method;
         private final String path;

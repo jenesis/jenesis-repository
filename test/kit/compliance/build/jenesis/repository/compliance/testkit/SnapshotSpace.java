@@ -3,6 +3,7 @@ package build.jenesis.repository.compliance.testkit;
 import module java.base;
 import build.jenesis.repository.compliance.SignalContext;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 
 /**
  * The deployment root a contract check binds as the signal snapshot space: an in-memory {@link ArtifactStore}, held
@@ -23,7 +24,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * <em>not</em> a contract-complete backend and makes no attempt to be: it is a map with the traversal screens the
  * real backends apply, enough for the snapshot pointer, the snapshot bodies and the prune sweep that ride it.
  */
-public final class SnapshotSpace implements ArtifactStore {
+public final class SnapshotSpace implements PrimitiveArtifactStore {
     @Override
     public Object identity() {
         return this;   // a standalone fake IS its own subspace

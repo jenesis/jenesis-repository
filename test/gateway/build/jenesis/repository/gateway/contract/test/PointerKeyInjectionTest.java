@@ -3,9 +3,11 @@ package build.jenesis.repository.gateway.contract.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.blobs.Blobs;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -115,7 +117,7 @@ class PointerKeyInjectionTest {
     }
 
     /** A minimal in-memory content-addressed store: blobs keyed by hash, pointers written through compare-and-set. */
-    private static final class InMemoryStore implements ArtifactStore {
+    private static final class InMemoryStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return this;   // a standalone fake IS its own subspace
@@ -235,7 +237,7 @@ class PointerKeyInjectionTest {
 }
 
     /** A {@link FormatExchange} that supplies a fixed request body and captures the response status and bytes. */
-    private static final class BodyExchange implements FormatExchange {
+    private static final class BodyExchange implements DetachedExchange {
 
         private final String method;
         private final String path;

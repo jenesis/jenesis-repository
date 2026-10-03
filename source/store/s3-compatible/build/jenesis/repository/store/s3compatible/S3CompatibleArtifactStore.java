@@ -2,6 +2,7 @@ package build.jenesis.repository.store.s3compatible;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.services.s3.model.CommonPrefix;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
@@ -15,7 +16,7 @@ import software.amazon.awssdk.services.s3.S3Client;
  * scanning and paging are ordinary S3 API calls. What differs between services - the version token and how a
  * conditional write is expressed - stays with the subclass.
  */
-public abstract class S3CompatibleArtifactStore implements ArtifactStore {
+public abstract class S3CompatibleArtifactStore implements PrimitiveArtifactStore {
 
     protected final S3Client s3;
     protected final String bucket;

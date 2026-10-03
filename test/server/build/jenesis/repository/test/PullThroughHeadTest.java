@@ -3,6 +3,7 @@ package build.jenesis.repository.test;
 import module org.junit.jupiter.api;
 import module java.base;
 
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -180,7 +181,7 @@ public class PullThroughHeadTest {
     }
 
     /** A minimal {@link FormatExchange} capturing the method, status, response headers and body a serve wrote. */
-    private static final class FakeExchange implements FormatExchange {
+    private static final class FakeExchange implements DetachedExchange {
 
         private final String method;
         private final String path;

@@ -7,6 +7,7 @@ import build.jenesis.repository.staging.store.StoreStaging;
 import build.jenesis.repository.store.Lease;
 import build.jenesis.repository.staging.StagingState;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.staging.store.StagingWithholdInterceptor;
@@ -452,7 +453,7 @@ class StoreStagingTest {
     /** A store decorator that, once {@link #arm armed}, fails the very next {@code writeVersioned} to a
      *  {@code staging-state/} marker key once - the concurrent CAS conflict the seal's retry must absorb - then
      *  delegates untouched. */
-    private static final class ConflictOnceOnStateStore implements ArtifactStore {
+    private static final class ConflictOnceOnStateStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace
@@ -546,7 +547,7 @@ class StoreStagingTest {
     /** A store decorator that throws when the release pointer for one chosen release path is linked - the mid-set
      *  re-publish failure promotion's rollback must absorb (the failing artifact never releases; any sibling already
      *  released in the same pass is rolled back) - and delegates everything else untouched. */
-    private static final class FailLinkingPath implements ArtifactStore {
+    private static final class FailLinkingPath implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

@@ -7,6 +7,7 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.oci.OciFormat;
 import build.jenesis.repository.format.oci.OciListingObserver;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.Withheld;
@@ -907,7 +908,7 @@ class OciFormatTest {
 
     /** A store decorator that counts how many times the chunk directory ({@code oci/.uploads/<id>}) is listed, so a
      *  test can prove a chunked upload's per-PATCH cost never re-scans the staged chunks. Everything else delegates. */
-    private static final class CountingUploadsList implements ArtifactStore {
+    private static final class CountingUploadsList implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

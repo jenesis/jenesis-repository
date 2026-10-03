@@ -2,6 +2,7 @@ package build.jenesis.repository.format.testkit;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 
 /**
  * The store decorator that turns two streaming claims from assertions into proofs.
@@ -24,7 +25,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * double; a tripped tripwire throws {@link AssertionError} naming what happened, so it reads as a test failure rather
  * than as a store outage the format might legitimately handle.
  */
-public final class WitnessStore implements ArtifactStore {
+public final class WitnessStore implements PrimitiveArtifactStore {
     @Override
     public Object identity() {
         return delegate.identity();   // a decorator answers its delegate's subspace

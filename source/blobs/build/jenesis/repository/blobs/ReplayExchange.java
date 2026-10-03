@@ -1,6 +1,7 @@
 package build.jenesis.repository.blobs;
 
 import module java.base;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 
 /**
@@ -15,7 +16,7 @@ import build.jenesis.repository.format.FormatExchange;
  * <p>The method defaults to {@code PUT} (the raw-push shape every pool/flat-container/dist format uses); a format whose
  * publish endpoint is a {@code POST} (the RubyGems gem push) builds one with {@link #post}.
  */
-public final class ReplayExchange implements FormatExchange {
+public final class ReplayExchange implements DetachedExchange {
 
     private final String method;
     private final String path;

@@ -6,6 +6,7 @@ import module java.base;
 import build.jenesis.repository.server.RepositoryAuthorizationManager;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
@@ -38,7 +39,7 @@ public class RepositoryAuthorizationManagerFailClosedTest {
 
     /** A store whose {@code readVersioned} always fails with an {@link IOException}, standing in for a store outage or
      *  a transient read error on the authorization lookup; every other operation is unreachable in this path. */
-    private static final class UnreadableStore implements ArtifactStore {
+    private static final class UnreadableStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return this;   // a standalone fake IS its own subspace

@@ -2,9 +2,11 @@ package build.jenesis.repository.gateway.contract.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ServableNames;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -113,7 +115,7 @@ class PyPiPublishStreamingTest {
      * it reads (never buffering the whole body), and keeps the small pointer objects in memory. The accounting records
      * the artifact's total and largest chunk so the test demonstrates the heap stayed bounded.
      */
-    private static final class PyPiStreamStore implements ArtifactStore {
+    private static final class PyPiStreamStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return this;   // a standalone fake IS its own subspace
@@ -240,7 +242,7 @@ class PyPiPublishStreamingTest {
 }
 
     /** A {@link FormatExchange} for a {@code POST /pypi/} twine upload, streaming the body and capturing the status. */
-    private static final class UploadExchange implements FormatExchange {
+    private static final class UploadExchange implements DetachedExchange {
 
         private final InputStream body;
         private final String contentType;

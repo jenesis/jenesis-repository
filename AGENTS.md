@@ -49,6 +49,28 @@ Four things are to be got right when adding an SPI, a provider or a role sub-int
 
 **Adding an SPI, a provider, or a role sub-interface therefore means stating those four things in the same change.** Nothing checks it, so a surface with no Contract block is a review finding.
 
+### A default that can be wrong is not a default
+
+**An interface method whose default is wrong for some implementor is abstract.** A default is chosen once and then
+silently inherited by every implementor that does not think about it, and the implementor least likely to think about
+it is the one it hurts: a decorator that inherits a fallback replaces its delegate's native answer with it - a ranged
+read from byte 0, a page that lists its whole container, a metadata probe that downloads the body, an audit line that
+records nothing, a caller's rights read as none. That mistake was made, and fixed one method at a time, more than once.
+
+So the base interface keeps such a method abstract, and each **kind** of implementor that should share an answer opts
+into it explicitly:
+
+- **a sub-interface carrying the defaults** for implementors that legitimately derive them - `PrimitiveArtifactStore`
+  for a store that implements the primitives and derives the rest, `DetachedExchange` for an exchange no edge wraps;
+- **an abstract base class** where the shared answer needs state - `ForwardingArtifactStore` and `ForwardingExchange`
+  for a decorator, which forward every method to the wrapped instance, each held by a census that calls every
+  interface method through it and fails on one it answers itself.
+
+A default stays on the base interface only when it is right for **every** implementor - a convenience composed purely
+from the interface's own abstract methods (`FormatExchange.answer`, `respond(int)`), which a decorator gets right by
+forwarding the methods it is built from. A forgotten implementation is then a compile error in the implementor, never
+a fallback discovered in production.
+
 ### Contract kits
 
 Where an SPI's clauses are observable but not generifiable, they are asserted by **one parameterized suite over every implementation**, driven by a per-implementation **fixture** and guarded by a `ContractCensus` completeness ratchet — never by a per-implementation hand-written suite, which is how implementations drift apart. The store is the reference shape:

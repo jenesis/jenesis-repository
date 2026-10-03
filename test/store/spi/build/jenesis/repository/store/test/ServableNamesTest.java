@@ -4,6 +4,7 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.ServableNames;
@@ -591,7 +592,7 @@ class ServableNamesTest {
 
     /** An in-memory {@link ArtifactStore} over a flat key map: pointers carry their hash as content, blobs and
      *  {@code withheld/} markers are presence-only, and {@link #list} derives immediate children from the key set. */
-    private static class MapStore implements ArtifactStore {
+    private static class MapStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return this;   // a standalone fake IS its own subspace

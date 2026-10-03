@@ -106,9 +106,10 @@ import module java.base;
  *     backend - and a non-positive limit emits nothing. It bounds what the backend <em>buffers</em> only where the
  *     backend pages natively, which is the obligation on an implementation and the reason every shipped backend
  *     overrides {@link #page}: the filesystem scans a directory in bounded strides and the three object stores use
- *     their own start-after pagination, so paging a millions-entry namespace costs O(limit) memory there. The SPI's
- *     own {@code default} is a correctness fallback, not that guarantee - it delegates to {@link #pageByListing},
- *     which sorts a whole {@link #list} and filters, so an implementation that inherits it is bounded in what it emits
+ *     their own start-after pagination, so paging a millions-entry namespace costs O(limit) memory there.
+ *     {@link PrimitiveArtifactStore}'s derivation is a correctness fallback, not that guarantee - it delegates to
+ *     {@link #pageByListing}, which sorts a whole {@link #list} and filters, so a store that derives it is bounded in
+ *     what it emits
  *     while still materialising the container's entire child set to do it. That fallback is therefore itself bounded,
  *     and its bound <em>throws</em>: past {@link #MAX_INHERITED_CHILDREN} children it raises an
  *     {@link IllegalStateException} naming the inheriting class and the prefix rather than allocating without limit or
@@ -168,16 +169,12 @@ public interface ArtifactStore {
      * once per process finds the values of the deployment whose store it was handed, rather than of whichever
      * deployment wired a process-wide holder last.
      *
-     * <p>A backend answers {@link StoreBindings#NONE}, which is this default; a store is bound by
-     * {@link StoreBindings#over}. <b>A decorator answers its delegate's</b>, as it does for {@link #identity()}, and
-     * every scope of a bound store answers the bindings of the store it was scoped from. The default is safe to
-     * inherit only because the one consumer that must find a binding refuses to proceed without it while a
-     * deployment is bound in the process - so a decorator that forgets to forward this fails a publish loudly
-     * instead of disarming the screen, and the store SPI's own tests hold every decorator in it to the forwarding.
+     * <p>A backend answers {@link StoreBindings#NONE}, as {@link PrimitiveArtifactStore} derives it; a store is bound
+     * by {@link StoreBindings#over}. <b>A decorator answers its delegate's</b>, as it does for {@link #identity()},
+     * which {@link ForwardingArtifactStore} does, and every scope of a bound store answers the bindings of the store it
+     * was scoped from.
      */
-    default StoreBindings bindings() {
-        return StoreBindings.NONE;
-    }
+    StoreBindings bindings();
 
     /**
      * Validate {@code segment} as a single traversal-free scope name and return it - defence in depth for
@@ -389,20 +386,10 @@ public interface ArtifactStore {
      * resuming the tail of a large artifact costs the tail. Absence throws as {@link #open(String)} does. An offset at
      * or past the end is the caller's to rule out; a serve asks only for a range it has found satisfiable.
      *
-     * <p>The default opens the whole content and skips the offset, which is correct for any store and is what a
-     * decorator gets if it forgets to forward this - so every decorator forwards it, and the store contract kit holds
-     * every backend to the bytes it yields.
+     * <p>{@link PrimitiveArtifactStore} opens the whole content and skips the offset, which is correct for any store
+     * and reads what a range exists to skip; the store contract kit holds every backend to the bytes it yields.
      */
-    default InputStream open(String key, long offset) throws IOException {
-        InputStream in = open(key);
-        try {
-            in.skipNBytes(offset);
-            return in;
-        } catch (IOException | RuntimeException e) {
-            in.close();
-            throw e;
-        }
-    }
+    InputStream open(String key, long offset) throws IOException;
 
     /**
      * A short-lived URL a client can fetch this key from directly (a presigned object-store GET), or empty when
@@ -413,9 +400,7 @@ public interface ArtifactStore {
      * caller falls back to {@link #read}. A URL is a bearer capability for its lifetime, so {@code ttl} should be
      * short and the caller must have already authorized the read before minting one.
      */
-    default Optional<URI> presign(String key, Duration ttl) {
-        return Optional.empty();
-    }
+    Optional<URI> presign(String key, Duration ttl);
 
     /** Atomically store the blob from {@code in}, so a reader never observes a partial write. */
     void write(String key, InputStream in) throws IOException;
@@ -437,13 +422,11 @@ public interface ArtifactStore {
      * What a listing would report for the one object at {@code key} - its size and the backend's own modification
      * time, see {@link Listed} - by a point request (a stat, a HEAD), or empty when nothing is stored there. The
      * one-object form of the metadata {@link #scan} carries: a caller that knows the key and wants the object's own
-     * time pays one request rather than a listing of its container. The default answers presence alone, from
-     * {@link #exists}, with neither size nor time - enough for a double; a backend overrides it with the metadata
-     * request it already makes for {@link #size}, and a decorator forwards it.
+     * time pays one request rather than a listing of its container. {@link PrimitiveArtifactStore} answers presence
+     * alone, from {@link #exists}, with neither size nor time - enough for a double; a backend answers with the
+     * metadata request it already makes for {@link #size}, and a decorator forwards it.
      */
-    default Optional<Listed> listed(String key) throws IOException {
-        return exists(key) ? Optional.of(Listed.of(key)) : Optional.empty();
-    }
+    Optional<Listed> listed(String key) throws IOException;
 
     /** Delete the blob, tidying any now-empty container it leaves behind. */
     void delete(String key) throws IOException;
@@ -460,9 +443,7 @@ public interface ArtifactStore {
      * unlimited". A backend that HAS a volume and cannot measure it throws, because that is a failure and must not be
      * mistaken for the absence.
      */
-    default Optional<Capacity> capacity() throws IOException {
-        return Optional.empty();
-    }
+    Optional<Capacity> capacity() throws IOException;
 
     /**
      * Mark a key as recently used, where the backend has an access time to set; a no-op where it has not.
@@ -472,8 +453,7 @@ public interface ArtifactStore {
      * {@link Listed#modified} is the write time, and a policy reading it gets least-recently-written and should know
      * that is what it got.
      */
-    default void touch(String key) throws IOException {
-    }
+    void touch(String key) throws IOException;
 
     /**
      * Whether nothing at all is stored under {@code prefix} - <b>one child answers it</b>, and the probe stops
@@ -488,11 +468,7 @@ public interface ArtifactStore {
      * spotting {@code list(..).isEmpty()} is a rule; a method that reads better and cannot be unbounded is a
      * mechanism.
      */
-    default boolean isEmpty(String prefix) throws IOException {
-        boolean[] any = {false};
-        page(prefix, "", 1, _ -> any[0] = true);
-        return !any[0];
-    }
+    boolean isEmpty(String prefix) throws IOException;
 
     /**
      * The immediate child names under a key prefix (for the console browse and metadata maintenance). A prefix names
@@ -540,14 +516,11 @@ public interface ArtifactStore {
      * <p><strong>This is the names-only view of {@link #pageListed}, and only that.</strong> A backend implements
      * {@code pageListed} - the filesystem scans a directory in bounded strides, the three object stores use their own
      * start-after pagination - and this form derives from it losslessly, the child's name being the last segment of
-     * its key - the shape a default exists for, rather than an identical override and {@code name} helper in every
-     * backend. The contract kit's {@code NATIVE_PAGING} property proves a backend pages natively, and a backend that
-     * overrides neither inherits {@code pageListed}'s bounded listing fallback, which refuses past
+     * its key, which {@link PrimitiveArtifactStore} derives. The contract kit's {@code NATIVE_PAGING} property proves
+     * a backend pages natively, and a store that derives both takes the bounded listing fallback, which refuses past
      * {@link #MAX_INHERITED_CHILDREN} children rather than pretending to page.
      */
-    default void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-        pageListed(prefix, startAfter, limit, listed -> consumer.accept(name(listed.key())));
-    }
+    void page(String prefix, String startAfter, int limit, Consumer<String> consumer);
 
     /** The last segment of {@code key}: the child's own name, as {@link #page} reports it and
      *  {@link Listed#key} does not. */
@@ -571,7 +544,8 @@ public interface ArtifactStore {
      * hierarchical listing needs (a container's grouped prefix sorting after a sibling whose name extends it) are
      * subtle enough that two copies would drift, and the names-only form is the one that can be derived losslessly.
      *
-     * <p><strong>The inherited body is a small-container fallback and says so out loud.</strong> It is
+     * <p><strong>{@link PrimitiveArtifactStore}'s derivation is a small-container fallback and says so out
+     * loud.</strong> It is
      * {@link #pageByListing} - {@link #list}-and-sort, which emits the right children in the right order but
      * materialises the container's whole child set to do it, the opposite of what paging is for - so it refuses
      * rather than pretending: past {@link #MAX_INHERITED_CHILDREN} children it throws an {@link IllegalStateException}
@@ -581,17 +555,7 @@ public interface ArtifactStore {
      * test double, an in-process spool) may call {@link #pageByListing} by name from its {@code page}: the cost is then
      * a decision at the call site rather than an accident of inheritance.
      */
-    default void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
-        // The container name normalised as every backend normalises it, so a trailing-slash prefix keys its children
-        // exactly as the bare one does (never kit/listing//alpha).
-        String container = container(prefix);
-        pageByListing(this, prefix, startAfter, limit, name -> consumer.accept(Listed.of(child(container, name))));
-    }
-
-    /** A child's key under {@code prefix} - the root's children are keyed by their bare names. */
-    private static String child(String prefix, String name) {
-        return prefix == null || prefix.isEmpty() ? name : prefix + "/" + name;
-    }
+    void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer);
 
     /**
      * The most children {@link #pageByListing} will materialise before it refuses. It is deliberately far above any
@@ -627,8 +591,8 @@ public interface ArtifactStore {
         if (children.size() > MAX_INHERITED_CHILDREN) {
             throw new IllegalStateException(store.getClass().getName() + " pages '" + prefix + "' by materialising its "
                     + children.size() + " children, past the " + MAX_INHERITED_CHILDREN + "-child bound on the "
-                    + "inherited ArtifactStore.pageListed fallback. Override pageListed(...) with the backend's own start-after "
-                    + "pagination; a paging primitive that first buffers the whole container is not one.");
+                    + "PrimitiveArtifactStore.pageListed fallback. Override pageListed(...) with the backend's own "
+                    + "start-after pagination; a paging primitive that first buffers the whole container is not one.");
         }
         Collections.sort(children);
         int emitted = 0;
@@ -828,19 +792,16 @@ public interface ArtifactStore {
      * request where {@code readVersioned} costs a full download, so a caller that asks "has this changed?" through
      * {@code readVersioned} pays for the bytes it then throws away.
      *
-     * <p>The inherited body is exactly that mistake, made explicit and correct: it reads the object and keeps the
-     * token. It is the right answer only for a backend that has no cheaper probe and holds its objects in memory
-     * anyway, and the wrong one for everything else - <b>including a store that merely wraps another</b>, where the
-     * default silently converts a delegate's metadata request back into a download. All four shipped backends
-     * override it and so do the wrapping stores; a new implementation of either kind must.
+     * <p>{@link PrimitiveArtifactStore}'s derivation is exactly that mistake, made explicit and correct: it reads the
+     * object and keeps the token. It is the right answer only for a store that has no cheaper probe and holds its
+     * objects in memory anyway, and the wrong one for everything else - <b>including a store that merely wraps
+     * another</b>, where it would convert a delegate's metadata request back into a download.
      *
      * <p>The store kit checks that this token is the one {@link #readVersioned} pairs with the body and that a write
      * moves it on. It cannot check that no body was transferred - that is invisible from the SPI - so the claim above
      * is a review question.
      */
-    default Optional<Object> version(String key) throws IOException {
-        return readVersioned(key).map(Versioned::token);
-    }
+    Optional<Object> version(String key) throws IOException;
 
     /**
      * Write a small object only if the stored version still matches {@code expected} ({@code null} requires
@@ -875,19 +836,14 @@ public interface ArtifactStore {
      * an {@code If-Match} on the ETag, a generation match, or the read-compare-then-rename the filesystem does -
      * so this adds a body shape and no new semantics. The store contract holds both forms to the same two rules.
      *
-     * <p>The inherited body buffers, which is correct for a <em>backend</em> without a streaming upload: it is
-     * exactly the call it replaces, so such a backend is no worse for not overriding this.
+     * <p>{@link PrimitiveArtifactStore}'s derivation buffers, which is correct for a store without a streaming
+     * upload: it is exactly the call it replaces.
      *
-     * <p><b>It is not correct for a decorator.</b> A store that wraps another one and inherits this body silently
-     * converts a streaming backend into a buffering one - the whole document into heap, on the delegate's behalf,
-     * defeating the override the backend does have, so a large listing dies of it under a bounded heap. So a
-     * decorator overrides this and delegates; if it genuinely holds content
-     * by design, it overrides it anyway and says so, because otherwise nothing distinguishes the deliberate case
-     * from the accident.
+     * <p><b>It is not correct for a decorator.</b> A store that wraps another one and buffered here would convert a
+     * streaming backend into a buffering one - the whole document into heap, on the delegate's behalf - so a large
+     * listing dies of it under a bounded heap. A decorator delegates, as {@link ForwardingArtifactStore} does.
      */
-    default boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException {
-        return writeVersioned(key, content.readAllBytes(), expected);
-    }
+    boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException;
 
     /**
      * A {@link OutputStream} that wants only a window of a blob: a {@link #read} target a backend recognizes to

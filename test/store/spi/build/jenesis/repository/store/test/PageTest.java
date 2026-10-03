@@ -4,6 +4,7 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -27,7 +28,7 @@ class PageTest {
 
     /** The filesystem store behind the interface's default {@code page}, so the fallback is what runs. */
     private static ArtifactStore fallback(ArtifactStore delegate) {
-        return new ArtifactStore() {
+        return new PrimitiveArtifactStore() {
             @Override
             public Object identity() {
                 return delegate.identity();   // a decorator answers its delegate's subspace
@@ -160,7 +161,7 @@ class PageTest {
     /** A store whose {@code list} answers {@code size} synthetic children and inherits every other member, including
      *  the interface's {@code page} fallback - the shape of a backend that never overrode it. */
     private static ArtifactStore listingOnly(int size) {
-        return new ArtifactStore() {
+        return new PrimitiveArtifactStore() {
             @Override
             public Object identity() {
                 return this;   // a standalone fake IS its own subspace

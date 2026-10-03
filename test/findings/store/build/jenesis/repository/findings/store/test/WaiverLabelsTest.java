@@ -14,6 +14,7 @@ import build.jenesis.repository.findings.Findings;
 import build.jenesis.repository.findings.WaiverLabels;
 import build.jenesis.repository.findings.store.StoreFindings;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -179,7 +180,7 @@ class WaiverLabelsTest {
 
     /** A store that counts the {@code list} (walk) calls made through it, delegating everything else, so a test can
      *  prove a read path is a point lookup rather than a listing walk. */
-    private static final class CountingStore implements ArtifactStore {
+    private static final class CountingStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

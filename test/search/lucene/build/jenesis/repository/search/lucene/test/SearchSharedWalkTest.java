@@ -11,6 +11,7 @@ import build.jenesis.repository.search.SearchQuery;
 import build.jenesis.repository.search.lucene.LuceneSearchQueryProvider;
 import build.jenesis.repository.search.lucene.SearchIndexTask;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.walk.ArtifactWalk;
@@ -314,7 +315,7 @@ class SearchSharedWalkTest {
     }
 
     /** Delegates everything to the backend; subclasses observe or fail single calls. */
-    private static abstract class ForwardingStore implements ArtifactStore {
+    private static abstract class ForwardingStore implements PrimitiveArtifactStore {
 
         @Override
         public Object identity() {

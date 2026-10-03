@@ -2,6 +2,7 @@ package build.jenesis.repository.store.azure;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import com.azure.core.http.rest.PagedResponse;
 import com.azure.core.util.BinaryData;
 import com.azure.core.util.Context;
@@ -32,7 +33,7 @@ import build.jenesis.repository.store.OwnerOnly;
  * {@code 409 BlobAlreadyExists} {@code If-None-Match: *} raises, becomes {@code false}, so the caller re-reads and
  * retries. Concurrent writers across nodes resolve through Azure itself.
  */
-public final class AzureArtifactStore implements ArtifactStore {
+public final class AzureArtifactStore implements PrimitiveArtifactStore {
 
     private final BlobContainerClient container;
     private final String keyPrefix;

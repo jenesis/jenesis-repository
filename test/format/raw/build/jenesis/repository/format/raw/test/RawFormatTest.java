@@ -5,6 +5,7 @@ import module java.base;
 
 import build.jenesis.repository.format.raw.RawFormat;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -147,7 +148,7 @@ class RawFormatTest {
     /** A store decorator that counts {@code list(prefix)} calls and delegates {@code page(...)} to the real backend's
      *  efficient seek (never the default {@code page} that re-lists), so a test can prove the raw listing never
      *  full-lists a directory - neither the child enumeration nor the folder probe. */
-    private static final class CountingList implements ArtifactStore {
+    private static final class CountingList implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

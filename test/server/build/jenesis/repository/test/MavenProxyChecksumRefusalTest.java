@@ -3,6 +3,7 @@ package build.jenesis.repository.test;
 import module org.junit.jupiter.api;
 import module java.base;
 
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.maven.MavenFormat;
@@ -158,7 +159,7 @@ class MavenProxyChecksumRefusalTest {
 
     /** A minimal {@link FormatExchange} that captures the served status and body - all the proxy needs to serve the
      *  matching-checksum control; the mismatch case returns before it responds. */
-    private static final class CaptureExchange implements FormatExchange {
+    private static final class CaptureExchange implements DetachedExchange {
 
         private final String path;
         private final ByteArrayOutputStream body = new ByteArrayOutputStream();

@@ -1,9 +1,11 @@
 package build.jenesis.repository.gateway.testkit;
 
 import module java.base;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 
 /**
  * The shared in-process driver the format regression cells use: a {@link ServiceLoader}-discovered format is handed a
@@ -37,7 +39,7 @@ public final class FormatDrive {
 
     /** A {@link FormatExchange} that supplies a fixed request (method, path, headers, body) and captures the response
      *  status, headers and body bytes. */
-    public static final class Call implements FormatExchange {
+    public static final class Call implements DetachedExchange {
 
         private final String method;
         private final String path;
@@ -149,7 +151,7 @@ public final class FormatDrive {
     /** A minimal in-memory content-addressed store: blobs keyed by hash, raw objects and pointers by key, pointers
      *  written through compare-and-set. Mirrors the doubles in {@code PointerRetryTest}/{@code PointerKeyInjectionTest},
      *  shared here so several cells reuse it. */
-    public static class MemStore implements ArtifactStore {
+    public static class MemStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return this;   // a standalone fake IS its own subspace

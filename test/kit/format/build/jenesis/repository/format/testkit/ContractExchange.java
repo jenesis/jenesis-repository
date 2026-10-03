@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.testkit;
 
 import module java.base;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 
 /**
@@ -21,7 +22,7 @@ import build.jenesis.repository.format.FormatExchange;
  * the stored state (identical bytes twice over unchanged state, different bytes once the state changes) - the two
  * properties a content-derived validator rests on and that a format can get wrong.
  */
-public final class ContractExchange implements FormatExchange {
+public final class ContractExchange implements DetachedExchange {
 
     private final String method;
     private final String path;

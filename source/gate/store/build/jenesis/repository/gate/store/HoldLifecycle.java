@@ -5,6 +5,7 @@ import module org.slf4j;
 import build.jenesis.repository.events.EventSink;
 import build.jenesis.repository.format.OciTagIndex;
 import build.jenesis.repository.events.RepositoryEvent;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
@@ -543,7 +544,7 @@ public final class HoldLifecycle {
      *  release cares that the version materialises, not what the publish would have answered. Carries no explode header
      *  (a replay never re-batches) and no query parameters (a hosted publish reads none). Mirrors the deploy
      *  controller's own PublishExchange and the batch ingestion's CapturingExchange. */
-    private static final class ReplayExchange implements FormatExchange, Closeable {
+    private static final class ReplayExchange implements DetachedExchange, Closeable {
 
         private final ArtifactStore store;
         private final String path;

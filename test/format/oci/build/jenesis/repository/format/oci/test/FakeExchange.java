@@ -2,6 +2,7 @@ package build.jenesis.repository.format.oci.test;
 
 import module java.base;
 
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.store.ArtifactStore;
 
@@ -12,7 +13,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * through {@link #respond(int, long)}, and a {@link ByteArrayOutputStream} close is a no-op, so both streamed and
  * buffered responses are captured with no extra work.
  */
-final class FakeExchange implements FormatExchange {
+final class FakeExchange implements DetachedExchange {
 
     private final String method;
     private final String path;

@@ -4,6 +4,7 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.Condemned;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
@@ -246,7 +247,7 @@ class PublicationTest {
     }
 
     /** A store whose next {@code n} versioned writes report a benign compare-and-set conflict, then behave. */
-    private static final class ConflictingStore implements ArtifactStore {
+    private static final class ConflictingStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

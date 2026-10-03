@@ -4,6 +4,7 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.DirtyIndexFeed;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
@@ -315,7 +316,7 @@ class DirtyIndexFeedTest {
 
     /** Forwards to a real store but reports every versioned write as a compare-and-set conflict, so a test can drive
      *  the marker write's exhausted-attempts path (the loud failure a persistently contended mark takes). */
-    private record AlwaysConflictingStore(ArtifactStore delegate) implements ArtifactStore {
+    private record AlwaysConflictingStore(ArtifactStore delegate) implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace
@@ -389,7 +390,7 @@ class DirtyIndexFeedTest {
      * set. Every mutating and streaming method delegates untouched; only {@link #list}, {@link #page} and
      * {@link #readVersioned} are tallied.
      */
-    private static final class CountingStore implements ArtifactStore {
+    private static final class CountingStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

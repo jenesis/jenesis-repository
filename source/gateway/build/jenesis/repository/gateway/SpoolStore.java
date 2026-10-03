@@ -5,6 +5,7 @@ import build.jenesis.repository.observation.HealthCheck;
 import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.observation.ObservabilitySource;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.OwnerOnly;
 import build.jenesis.repository.store.StoreBindings;
 
@@ -335,7 +336,7 @@ public final class SpoolStore implements ObservabilitySource {
      * writes an untrusted body into and reads it back from. Every scoped view shares the one lease, so closing the root
      * the router acquired reclaims the whole request's spool.
      */
-    private static final class Spool implements ArtifactStore, AutoCloseable {
+    private static final class Spool implements PrimitiveArtifactStore, AutoCloseable {
 
         private final SpoolLease lease;
         private final String prefix;

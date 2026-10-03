@@ -2,9 +2,11 @@ package build.jenesis.repository.gateway.contract.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ServableNames;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -126,7 +128,7 @@ class NuGetPublishStreamingTest {
      * parse its {@code .nuspec} - plus the small subsequent blobs (the dependency sidecar) whole. The accounting records
      * the artifact's total and largest chunk so the test demonstrates the heap stayed bounded.
      */
-    private static final class NuGetStreamStore implements ArtifactStore {
+    private static final class NuGetStreamStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return this;   // a standalone fake IS its own subspace
@@ -270,7 +272,7 @@ class NuGetPublishStreamingTest {
 }
 
     /** A {@link FormatExchange} for a {@code PUT} multipart push, streaming the body and capturing the response status. */
-    private static final class PushExchange implements FormatExchange {
+    private static final class PushExchange implements DetachedExchange {
 
         private final InputStream body;
         private final String contentType;

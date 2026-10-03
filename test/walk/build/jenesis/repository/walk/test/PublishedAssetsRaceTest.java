@@ -5,6 +5,7 @@ import module java.base;
 
 import build.jenesis.repository.walk.PublishedAssets;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
@@ -49,7 +50,7 @@ class PublishedAssetsRaceTest {
      *  screen) and reported gone on every read after (the concurrent unpublish landing in the screen-to-emit window).
      *  The blob it named still exists, so the failure mode under test is purely the pointer racing away, not a torn
      *  {@code blobs/<hash>}. */
-    private static final class RacingStore implements ArtifactStore {
+    private static final class RacingStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return this;   // a standalone fake IS its own subspace

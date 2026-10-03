@@ -6,6 +6,7 @@ import module java.base;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.gc.store.MarkSweepGarbageCollector;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
@@ -62,7 +63,7 @@ class GcConcurrentRepublishTest {
     /** A store that, the first time the sweep reads the given marker key, deletes it after answering - simulating a
      *  concurrent {@link Publication#link} that re-referenced the blob and cleared its condemned marker in the window
      *  between the sweep's judgement read and its delete. Every other operation delegates to the real store. */
-    private static final class MarkerClearingStore implements ArtifactStore {
+    private static final class MarkerClearingStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

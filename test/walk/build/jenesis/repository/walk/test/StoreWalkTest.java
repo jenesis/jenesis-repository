@@ -4,6 +4,7 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Features;
 import build.jenesis.repository.walk.WalkPass;
@@ -225,7 +226,7 @@ class StoreWalkTest {
      *  deep chain no filesystem could hold, a wide fan-out) is walked without touching disk. Objects live in a sorted
      *  map keyed by full object key; immediate-child enumeration is derived from that map, and the small-object
      *  compare-and-set is a version-token check - exactly what the walk needs to persist its manifest and segments. */
-    private static final class MemoryStore implements ArtifactStore {
+    private static final class MemoryStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return this;   // a standalone fake IS its own subspace

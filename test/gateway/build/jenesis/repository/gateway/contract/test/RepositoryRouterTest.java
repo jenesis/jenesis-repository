@@ -3,6 +3,7 @@ package build.jenesis.repository.gateway.contract.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.store.Publication;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -349,7 +350,7 @@ public class RepositoryRouterTest {
     }
 
     /** A {@link FormatExchange} that records the response so a test can assert it. */
-    private static final class TestExchange implements FormatExchange {
+    private static final class TestExchange implements DetachedExchange {
 
         private final String method;
         private final String path;

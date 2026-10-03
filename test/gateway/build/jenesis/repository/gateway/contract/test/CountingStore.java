@@ -2,6 +2,7 @@ package build.jenesis.repository.gateway.contract.test;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 
 /**
  * A store decorator that counts the {@code list}, {@code page} and {@code readVersioned} calls made through it, so a
@@ -9,7 +10,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * assert an inventory lookup touches only the store operations it should - a coordinate's own version folder, not the
  * whole tree. Every call delegates unchanged; only the tally is added. A test double, never a production backend.
  */
-final class CountingStore implements ArtifactStore {
+final class CountingStore implements PrimitiveArtifactStore {
     @Override
     public Object identity() {
         return delegate.identity();   // a decorator answers its delegate's subspace

@@ -2,6 +2,7 @@ package build.jenesis.repository.server.kernel.contract.test;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 
 /**
  * A reusable delegating {@link ArtifactStore} that injects a rival concurrent writer's mutations <em>between</em> a
@@ -39,7 +40,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * interceptable - the write verbs a race turns on; every other method delegates untouched. A test double, never a
  * production backend.
  */
-public final class RacingStore implements ArtifactStore {
+public final class RacingStore implements PrimitiveArtifactStore {
     @Override
     public Object identity() {
         return delegate.identity();   // a decorator answers its delegate's subspace

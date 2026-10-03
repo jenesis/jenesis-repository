@@ -15,6 +15,7 @@ import build.jenesis.repository.metadata.State;
 import build.jenesis.repository.metadata.store.MetadataMetrics;
 import build.jenesis.repository.metadata.store.StoreMetadata;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -286,7 +287,7 @@ class StoreMetadataTest {
 }
 
     /** Delegates every {@link ArtifactStore} method to a backing store, so a wrapper overrides only what it tests. */
-    private abstract static class DelegatingStore implements ArtifactStore {
+    private abstract static class DelegatingStore implements PrimitiveArtifactStore {
 
         private final ArtifactStore delegate;
 

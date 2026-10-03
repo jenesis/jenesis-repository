@@ -5,6 +5,7 @@ import module java.base;
 
 import build.jenesis.repository.server.ImportJobs;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -72,7 +73,7 @@ class ImportJobsStatusTest {
 
     /** Wraps a real filesystem store, counting the {@code readVersioned} and {@code exists} calls so the round-trip
      *  shape of a status read is demonstrable rather than assumed. */
-    private static final class CountingStore implements ArtifactStore {
+    private static final class CountingStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

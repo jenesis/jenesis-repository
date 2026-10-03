@@ -5,6 +5,7 @@ import module java.base;
 
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.usage.BatchingKeyUsageTracker;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -59,7 +60,7 @@ class BatchingKeyUsageFlushTest {
 
     /** A store that forwards to a real backend but can be made to fail every conditional write (return {@code false},
      *  as a lost compare-and-set does), so {@link Authorization#recordUsed} exhausts its retries and forfeits. */
-    private static final class ConflictingWrites implements ArtifactStore {
+    private static final class ConflictingWrites implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

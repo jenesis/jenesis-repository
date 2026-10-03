@@ -5,6 +5,7 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.settings.SettingsDocuments;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -91,7 +92,7 @@ class SettingsStorageTest {
     }
 
     /** A store that fails the first compare-and-set to each key (as if another node won the race) and then heals. */
-    private static final class Conflicting implements ArtifactStore {
+    private static final class Conflicting implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return delegate.identity();   // a decorator answers its delegate's subspace

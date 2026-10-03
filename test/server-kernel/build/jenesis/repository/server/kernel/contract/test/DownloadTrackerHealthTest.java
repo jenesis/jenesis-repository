@@ -7,6 +7,7 @@ import build.jenesis.repository.inventory.DownloadTracker;
 import build.jenesis.repository.inventory.DownloadTrackerProvider;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -42,7 +43,7 @@ public class DownloadTrackerHealthTest {
 
     /** A store whose every compare-and-set write throws - the persistent write failure the tracker must make visible;
      *  reads are empty and the rest is unused by {@code recordDownload}. */
-    private static final class WriteFailingStore implements ArtifactStore {
+    private static final class WriteFailingStore implements PrimitiveArtifactStore {
         @Override
         public Object identity() {
             return this;   // a standalone fake IS its own subspace

@@ -3,6 +3,7 @@ package build.jenesis.repository.gateway.contract.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.format.ArtifactLayout;
+import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -240,7 +241,7 @@ public class DnsSourceTest {
 
     /** A {@link FormatExchange} that records the response status and headers so a test can assert a 307 and its
      *  {@code Location} (the RedirectFallbackTest exchange, trimmed to what a dns-leg test asserts). */
-    private static final class RecordingExchange implements FormatExchange {
+    private static final class RecordingExchange implements DetachedExchange {
 
         private final String method;
         private final String path;

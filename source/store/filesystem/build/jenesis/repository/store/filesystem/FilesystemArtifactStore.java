@@ -3,6 +3,7 @@ package build.jenesis.repository.store.filesystem;
 import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.PrimitiveArtifactStore;
 import build.jenesis.repository.store.OwnerOnly;
 
 /**
@@ -17,7 +18,7 @@ import build.jenesis.repository.store.OwnerOnly;
  * lock; no listing, page or scan reports the lock files. The lock is advisory, as file locks are: a mount that does not
  * honour them (an NFS export without its lock daemon) must not be shared.
  */
-public final class FilesystemArtifactStore implements ArtifactStore {
+public final class FilesystemArtifactStore implements PrimitiveArtifactStore {
 
     /** Striped monitors for {@link #writeVersioned}, which is a check-then-move. Static, so every scoped view over the
      *  same tree serializes on the same stripes; two keys sharing a stripe only serialize a small-object write. The
