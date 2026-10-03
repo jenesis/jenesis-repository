@@ -104,22 +104,7 @@ final class TerraformListings {
      *  {@code version} and kept verbatim, so replacing one entry never re-serialises the rest and an unmodelled field
      *  passes through. */
     private static StoredListing.Codec versions(String header, String footer) {
-        return new StoredListing.Codec() {
-
-            @Override
-            public SortedMap<String, byte[]> split(byte[] document) {
-                SortedMap<String, byte[]> entries = new TreeMap<>();
-                JsonNode root = MAPPER.readTree(document);
-                JsonNode versions = root.has("versions") ? root.path("versions")
-                        : root.path("modules").path(0).path("versions");
-                for (JsonNode element : versions) {
-                    String version = element.path("version").asString("");
-                    if (!version.isEmpty()) {
-                        entries.put(version, MAPPER.writeValueAsBytes(element));
-                    }
-                }
-                return entries;
-            }
+        return new StoredListing.Codec.Streaming() {
 
             /** The versions one element at a time through a streaming parser, from the {@code versions} array either
              *  shape carries. */

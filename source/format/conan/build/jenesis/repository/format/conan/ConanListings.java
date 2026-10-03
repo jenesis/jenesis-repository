@@ -59,21 +59,7 @@ final class ConanListings {
     };
 
     /** {@code {"files":{"<name>":{},...}}}, entries by file name. */
-    static final StoredListing.Codec FILE_ENTRIES = new StoredListing.Codec() {
-        @Override
-        public SortedMap<String, byte[]> split(byte[] document) {
-            SortedMap<String, byte[]> entries = new TreeMap<>();
-            try (Reader reader = read(new ByteArrayInputStream(document), document.length)) {
-                for (Optional<Map.Entry<String, byte[]>> entry = reader.next();
-                     entry.isPresent(); entry = reader.next()) {
-                    entries.put(entry.get().getKey(), entry.get().getValue());
-                }
-            } catch (IOException unreadable) {
-                throw new UncheckedIOException(unreadable);
-            }
-            return entries;
-        }
-
+    static final StoredListing.Codec FILE_ENTRIES = new StoredListing.Codec.Streaming() {
         @Override
         public byte[] join(SortedMap<String, byte[]> entries) {
             LinkedHashMap<String, String> files = new LinkedHashMap<>();

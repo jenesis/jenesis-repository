@@ -50,21 +50,7 @@ final class OciListings {
     }
 
     static StoredListing.Codec names(String member) {
-        return new StoredListing.Codec() {
-            @Override
-            public SortedMap<String, byte[]> split(byte[] document) {
-                SortedMap<String, byte[]> entries = new TreeMap<>();
-                try (Reader reader = read(new ByteArrayInputStream(document), document.length)) {
-                    for (Optional<Map.Entry<String, byte[]>> entry = reader.next();
-                         entry.isPresent(); entry = reader.next()) {
-                        entries.put(entry.get().getKey(), entry.get().getValue());
-                    }
-                } catch (IOException unreadable) {
-                    throw new UncheckedIOException(unreadable);
-                }
-                return entries;
-            }
-
+        return new StoredListing.Codec.Streaming() {
             @Override
             public byte[] join(SortedMap<String, byte[]> entries) {
                 StringBuilder json = new StringBuilder("{").append(quoted(member)).append(":[");

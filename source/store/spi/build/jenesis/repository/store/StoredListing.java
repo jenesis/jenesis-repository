@@ -175,6 +175,31 @@ public final class StoredListing {
         }
 
         /**
+         * A codec that decodes its document one entry at a time natively. Its whole-document {@link #split} is that
+         * reader drained, so the merge and the streaming read decode a document by one parse and cannot disagree about
+         * its entries.
+         */
+        interface Streaming extends Codec {
+
+            @Override
+            Reader read(InputStream in, long length) throws IOException;
+
+            @Override
+            default SortedMap<String, byte[]> split(byte[] document) {
+                SortedMap<String, byte[]> entries = new TreeMap<>();
+                try (Reader reader = read(new ByteArrayInputStream(document), document.length)) {
+                    for (Optional<Map.Entry<String, byte[]>> entry = reader.next(); entry.isPresent();
+                         entry = reader.next()) {
+                        entries.put(entry.get().getKey(), entry.get().getValue());
+                    }
+                } catch (IOException unreadable) {
+                    throw new UncheckedIOException(unreadable);
+                }
+                return entries;
+            }
+        }
+
+        /**
          * A codec for a document that is its fragments joined by {@code delimiter} - a Debian {@code Packages} file's
          * stanzas ({@code "\n\n"}), a list's lines ({@code "\n"}) - with {@code idOf} naming each fragment. An empty
          * document has no entries; a trailing delimiter is tolerated on split and written on join, so a file that is

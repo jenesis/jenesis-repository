@@ -43,12 +43,7 @@ final class ComposerListings {
 
     /** The p2 document of one coordinate: {@code {"packages":{"<vendor>/<package>":[...]}}}, entries by version. */
     static StoredListing.Codec codec(String coordinate) {
-        return new StoredListing.Codec() {
-            @Override
-            public SortedMap<String, byte[]> split(byte[] document) {
-                return collected(this, document);
-            }
-
+        return new StoredListing.Codec.Streaming() {
             @Override
             public byte[] join(SortedMap<String, byte[]> entries) {
                 StringBuilder array = new StringBuilder("[");
@@ -150,32 +145,13 @@ final class ComposerListings {
         };
     }
 
-    /** A codec's whole-document form, driven by its streaming one, so the two cannot disagree on the grammar. */
-    private static SortedMap<String, byte[]> collected(StoredListing.Codec codec, byte[] document) {
-        SortedMap<String, byte[]> entries = new TreeMap<>();
-        try (StoredListing.Codec.Reader reader = codec.read(new ByteArrayInputStream(document), document.length)) {
-            for (Optional<Map.Entry<String, byte[]>> entry = reader.next();
-                 entry.isPresent(); entry = reader.next()) {
-                entries.put(entry.get().getKey(), entry.get().getValue());
-            }
-        } catch (IOException unreadable) {
-            throw new UncheckedIOException(unreadable);
-        }
-        return entries;
-    }
-
     /** One JSON string, quoted and escaped by the mapper rather than by wrapping quotes around it. */
     private static String quoted(String value) {
         return ComposerFormat.MAPPER.writeValueAsString(value);
     }
 
     /** The list document: {@code {"packageNames":[...]}}, entries by coordinate, each its quoted name. */
-    static final StoredListing.Codec NAMES = new StoredListing.Codec() {
-        @Override
-        public SortedMap<String, byte[]> split(byte[] document) {
-            return collected(this, document);
-        }
-
+    static final StoredListing.Codec NAMES = new StoredListing.Codec.Streaming() {
         @Override
         public byte[] join(SortedMap<String, byte[]> entries) {
             StringBuilder array = new StringBuilder("{\"packageNames\":[");

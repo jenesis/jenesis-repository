@@ -55,17 +55,7 @@ final class NuGetListings {
     });
 
     private static StoredListing.Codec array(String member, Function<String, String> idOf) {
-        return new StoredListing.Codec() {
-            @Override
-            public SortedMap<String, byte[]> split(byte[] document) {
-                SortedMap<String, byte[]> entries = new TreeMap<>();
-                for (JsonNode element : NuGetFormat.JSON.readTree(document).path(member)) {
-                    String text = NuGetFormat.JSON.writeValueAsString(element);
-                    entries.put(idOf.apply(text), text.getBytes(StandardCharsets.UTF_8));
-                }
-                return entries;
-            }
-
+        return new StoredListing.Codec.Streaming() {
             @Override
             public byte[] join(SortedMap<String, byte[]> entries) {
                 return ("{" + NuGetFormat.JSON.writeValueAsString(member) + ":" + array(entries.values()) + "}")
@@ -154,19 +144,7 @@ final class NuGetListings {
      *  {@code lower}/{@code upper} and the counts computed on join. */
     static StoredListing.Codec registrationCodec(String id) {
         String self = BASE + "/v3/registrations/" + id + "/index.json";
-        return new StoredListing.Codec() {
-            @Override
-            public SortedMap<String, byte[]> split(byte[] document) {
-                SortedMap<String, byte[]> entries = new TreeMap<>();
-                for (JsonNode page : NuGetFormat.JSON.readTree(document).path("items")) {
-                    for (JsonNode leaf : page.path("items")) {
-                        entries.put(leaf.path("catalogEntry").path("version").asString(""),
-                                NuGetFormat.JSON.writeValueAsBytes(leaf));
-                    }
-                }
-                return entries;
-            }
-
+        return new StoredListing.Codec.Streaming() {
             /** The leaves one at a time through a streaming parser, since the index is read on every publish of the
              *  package. The join still collects, for the reason below. */
             @Override

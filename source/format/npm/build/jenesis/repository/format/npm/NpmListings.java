@@ -42,20 +42,7 @@ final class NpmListings {
     /** The packument codec of one package: {@code {"name":..,"versions":{..},"dist-tags":{..}}}. With
      *  {@code computeLatest}, the dist-tags are the highest listed version, computed on join. */
     static StoredListing.Codec codec(String name, boolean computeLatest) {
-        return new StoredListing.Codec() {
-            @Override
-            public SortedMap<String, byte[]> split(byte[] document) {
-                SortedMap<String, byte[]> entries = new TreeMap<>();
-                JsonNode root = NpmFormat.MAPPER.readTree(document);
-                root.path("versions").properties().forEach(version ->
-                        entries.put(VERSION + version.getKey(), NpmFormat.MAPPER.writeValueAsBytes(version.getValue())));
-                if (!computeLatest) {
-                    root.path("dist-tags").properties().forEach(tag ->
-                            entries.put(TAG + tag.getKey(), NpmFormat.MAPPER.writeValueAsBytes(tag.getValue())));
-                }
-                return entries;
-            }
-
+        return new StoredListing.Codec.Streaming() {
             /** The versions, and stored tags, one member at a time through a streaming parser, since the packument is
              *  read on every publish into the package. */
             @Override

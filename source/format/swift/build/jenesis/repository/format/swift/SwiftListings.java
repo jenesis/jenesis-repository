@@ -30,15 +30,7 @@ final class SwiftListings {
 
     private static final String FOOTER = "}";
 
-    static final StoredListing.Codec RELEASES = StoredListing.framed(HEADER, FOOTER, new StoredListing.Codec() {
-
-        @Override
-        public SortedMap<String, byte[]> split(byte[] document) {
-            SortedMap<String, byte[]> entries = new TreeMap<>();
-            MAPPER.readTree(document).properties().forEach(member ->
-                    entries.put(member.getKey(), MAPPER.writeValueAsBytes(member.getValue())));
-            return entries;
-        }
+    static final StoredListing.Codec RELEASES = StoredListing.framed(HEADER, FOOTER, new StoredListing.Codec.Streaming() {
 
         /** The releases one member at a time through a streaming parser, so a publish never holds every release in
          *  heap. */

@@ -23,29 +23,7 @@ final class RpmListings {
     private static final String NS_RPM = "http://linux.duke.edu/metadata/rpm";
 
     /** A {@code primary.xml}: the wrapper around {@code <package>} stanzas, each keyed by its {@code location} href. */
-    static final StoredListing.Codec PRIMARY = new StoredListing.Codec() {
-        @Override
-        public SortedMap<String, byte[]> split(byte[] document) {
-            SortedMap<String, byte[]> entries = new TreeMap<>();
-            String text = new String(document, StandardCharsets.UTF_8);
-            int from = 0;
-            while (true) {
-                int start = text.indexOf("<package", from);
-                if (start < 0) {
-                    break;
-                }
-                int end = text.indexOf("</package>", start);
-                if (end < 0) {
-                    break;
-                }
-                end += "</package>".length();
-                String stanza = text.substring(start, end);
-                entries.put(locationOf(stanza), stanza.getBytes(StandardCharsets.UTF_8));
-                from = end;
-            }
-            return entries;
-        }
-
+    static final StoredListing.Codec PRIMARY = new StoredListing.Codec.Streaming() {
         @Override
         public byte[] join(SortedMap<String, byte[]> entries) {
             StringBuilder body = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");

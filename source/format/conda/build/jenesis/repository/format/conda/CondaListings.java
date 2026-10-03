@@ -44,19 +44,7 @@ final class CondaListings {
 
     /** The repodata codec of one subdir: the two package sections split into entries and joined back around it. */
     static StoredListing.Codec codec(String subdir) {
-        return new StoredListing.Codec() {
-            @Override
-            public SortedMap<String, byte[]> split(byte[] document) {
-                SortedMap<String, byte[]> entries = new TreeMap<>();
-                JsonNode root = CondaFormat.MAPPER.readTree(document);
-                for (String section : List.of("packages", "packages.conda")) {
-                    root.path(section).properties()
-                            .forEach(member -> entries.put(member.getKey(),
-                                    CondaFormat.MAPPER.writeValueAsBytes(member.getValue())));
-                }
-                return entries;
-            }
-
+        return new StoredListing.Codec.Streaming() {
             @Override
             public byte[] join(SortedMap<String, byte[]> entries) {
                 LinkedHashMap<String, byte[]> packages = new LinkedHashMap<>();
