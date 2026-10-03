@@ -882,9 +882,14 @@ main .app-filter-bar > button {
     gap: var(--app-space-4);
     align-items: start;
 }
+/* Every panel is padded alike, so a tinted one's content sits where a plain one's does. */
 .app-dashboard__panel {
     margin: 0;
+    padding: var(--app-space-4);
     border-top: 3px solid var(--pico-muted-border-color);
+}
+.app-dashboard__panel > :last-child {
+    margin-bottom: 0;
 }
 /* A panel asking for attention takes the warning colours the posture badge uses; an all-clear one a green edge. */
 .app-dashboard__panel--attention {
