@@ -10,7 +10,9 @@ import build.jenesis.repository.importer.ImportSource;
  * nginx autoindex, a static bucket, another jenesis - without a vendor API. Three strategies stack:
  * <ul>
  *   <li>a directory listing is walked depth-first in deterministic order, every artifact reported as {@code maven} at
- *       its layout path; {@code maven-metadata.xml} and checksums are not imported (the target derives them). A root
+ *       its layout path, with the checksums published beside it, since the target serves an artifact's checksums
+ *       as uploaded and derives none; {@code maven-metadata.xml} and its checksums are not imported, since the target
+ *       regenerates them. A root
  *       that answers a landing page is followed one hop to the index it advertises, and an index row linking its file
  *       under another root is walked as that file;</li>
  *   <li>without a listing, the published repository index ({@code .index/nexus-maven-repository-index.gz}) is streamed
@@ -187,12 +189,11 @@ public final class MavenSource implements ImportSource {
         return path.length() < cursor.length();
     }
 
-    /** Content worth importing: neither the {@code maven-metadata.xml} the target regenerates nor a checksum the store
-     *  derives. */
+    /** Content worth importing: everything but the {@code maven-metadata.xml} the target regenerates and the checksums
+     *  of it. An artifact's checksums come with it: the target serves them as uploaded, so one left behind answers a
+     *  client's checksum request with a 404. */
     private static boolean imported(String name) {
-        return !name.startsWith("maven-metadata.xml")
-                && !name.endsWith(".sha1") && !name.endsWith(".md5")
-                && !name.endsWith(".sha256") && !name.endsWith(".sha512");
+        return !name.startsWith("maven-metadata.xml");
     }
 
     /**

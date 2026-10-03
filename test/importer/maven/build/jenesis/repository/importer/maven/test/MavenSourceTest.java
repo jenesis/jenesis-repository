@@ -11,11 +11,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The vendor-neutral Maven source walked against canned pages: the directory-listing walk descends the tree
- * depth-first in sorted order over plain autoindex HTML, reporting every artifact with format {@code maven} and
- * skipping metadata, checksum sidecars, dot directories and navigation chrome; it checkpoints each completed
- * subtree and a resumed walk neither re-emits nor re-lists what the cursor covers; a listing-less source falls back
- * to the legacy repository index refreshed per coordinate through {@code maven-metadata.xml}; and a source with
- * neither fails with an actionable message.
+ * depth-first in sorted order over plain autoindex HTML, reporting every artifact and its checksums with format
+ * {@code maven} and skipping metadata and its checksums, dot directories and navigation chrome; it checkpoints each
+ * completed subtree and a resumed walk neither re-emits nor re-lists what the cursor covers; a listing-less source
+ * falls back to the legacy repository index refreshed per coordinate through {@code maven-metadata.xml}; and a source
+ * with neither fails with an actionable message.
  */
 class MavenSourceTest {
 
@@ -65,7 +65,7 @@ class MavenSourceTest {
     }
 
     @Test
-    void a_directory_listing_is_walked_depth_first_skipping_sidecars_and_chrome() throws IOException {
+    void a_directory_listing_is_walked_depth_first_with_checksums_skipping_metadata_and_chrome() throws IOException {
         FakeFetcher fetcher = new FakeFetcher(tree());
         List<String> formats = new ArrayList<>(), paths = new ArrayList<>(), cursors = new ArrayList<>();
         List<byte[]> jar = new ArrayList<>();
@@ -79,10 +79,14 @@ class MavenSourceTest {
             }
         }, cursors::add);
 
+        // An artifact's checksums come with it, since the target serves them as uploaded and derives none; the
+        // metadata's do not, since the target regenerates the document they describe.
         assertThat(paths).containsExactly(
                 "com/acme/lib/1.0/lib-1.0.jar",
+                "com/acme/lib/1.0/lib-1.0.jar.md5",
                 "com/acme/lib/1.0/lib-1.0.pom",
                 "top.jar",
+                "top.jar.sha1",
                 "zeta/x y.jar",
                 "zeta/z.jar");
         assertThat(formats).allMatch("maven"::equals);
@@ -104,7 +108,7 @@ class MavenSourceTest {
         List<String> paths = new ArrayList<>(), cursors = new ArrayList<>();
         source(fetcher).from("tree:com/").forEach((format, path, content) -> paths.add(path), cursors::add);
 
-        assertThat(paths).containsExactly("top.jar", "zeta/x y.jar", "zeta/z.jar");
+        assertThat(paths).containsExactly("top.jar", "top.jar.sha1", "zeta/x y.jar", "zeta/z.jar");
         assertThat(cursors).containsExactly("tree:zeta/", null);
         assertThat(fetcher.urls).doesNotContain(ROOT + "com/", ROOT + "com/acme/lib/1.0/");
     }
@@ -116,7 +120,7 @@ class MavenSourceTest {
         source(fetcher).from("tree:com/acme/lib/1.0/").forEach((format, path, content) -> paths.add(path), cursor -> { });
 
         // 1.0 is complete but its ancestors are not: the walk descends com/ again without re-listing 1.0.
-        assertThat(paths).containsExactly("top.jar", "zeta/x y.jar", "zeta/z.jar");
+        assertThat(paths).containsExactly("top.jar", "top.jar.sha1", "zeta/x y.jar", "zeta/z.jar");
         assertThat(fetcher.urls).contains(ROOT + "com/acme/lib/").doesNotContain(ROOT + "com/acme/lib/1.0/");
     }
 
@@ -146,6 +150,7 @@ class MavenSourceTest {
                 + "<a href=\"" + repository + "org/example/lib/1.0/lib-1.0.pom\">lib-1.0.pom</a>"));
         responses.put(repository + "org/example/lib/1.0/lib-1.0.jar", ok("nexus-jar"));
         responses.put(repository + "org/example/lib/1.0/lib-1.0.pom", ok("nexus-pom"));
+        responses.put(repository + "org/example/lib/1.0/lib-1.0.jar.sha1", ok("0123456789abcdef0123456789abcdef01234567"));
         FakeFetcher fetcher = new FakeFetcher(responses);
 
         List<String> paths = new ArrayList<>(), cursors = new ArrayList<>();
@@ -158,7 +163,8 @@ class MavenSourceTest {
                     }
                 }, cursors::add);
 
-        assertThat(paths).containsExactly("org/example/lib/1.0/lib-1.0.jar", "org/example/lib/1.0/lib-1.0.pom");
+        assertThat(paths).containsExactly("org/example/lib/1.0/lib-1.0.jar", "org/example/lib/1.0/lib-1.0.jar.sha1",
+                "org/example/lib/1.0/lib-1.0.pom");
         assertThat(bodies.get("org/example/lib/1.0/lib-1.0.jar"))
                 .isEqualTo("nexus-jar".getBytes(StandardCharsets.UTF_8));
         assertThat(cursors).containsExactly(
