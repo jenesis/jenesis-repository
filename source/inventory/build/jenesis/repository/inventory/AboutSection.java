@@ -100,7 +100,7 @@ public final class AboutSection {
             List<String> keywords = new ArrayList<>(held.get().keywords());
             about.keywords().stream().filter(keyword -> !keywords.contains(keyword)).forEach(keywords::add);
             List<String> authors = new ArrayList<>(held.get().authors());
-            authors.addAll(about.authors());
+            about.authors().stream().filter(author -> !authors.contains(author)).forEach(authors::add);
             return section(new About(about.description() != null ? about.description() : held.get().description(),
                     keywords, authors), updated);
         };
