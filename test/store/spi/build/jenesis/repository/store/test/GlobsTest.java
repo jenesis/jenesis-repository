@@ -23,5 +23,8 @@ class GlobsTest {
         assertThat(Globs.compile("exact").matcher("exact").matches()).isTrue();
         assertThat(Globs.compile("exact").matcher("exactly").matches()).isFalse();
         assertThat(Globs.compile("*").matcher("").matches()).isTrue();
+        assertThat(Globs.compile("*").matcher("com.acme:lib").matches()).as("a lone star is every namespace").isTrue();
+        assertThat(Globs.compile("*.acme").matcher("com.acme").matches()).as("a leading star").isTrue();
+        assertThat(Globs.compile("com.*.lib").matcher("com.acme.lib").matches()).isTrue();
     }
 }

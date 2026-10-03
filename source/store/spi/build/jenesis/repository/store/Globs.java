@@ -14,15 +14,16 @@ public final class Globs {
 
     /** {@code glob} compiled to a pattern anchored at both ends. Not cached: a rule set is small. */
     public static Pattern compile(String glob) {
-        StringBuilder regex = new StringBuilder();
-        for (String literal : glob.split("\\*", -1)) {
-            if (!regex.isEmpty()) {
+        StringBuilder regex = new StringBuilder("^");
+        String[] literals = glob.split("\\*", -1);
+        for (int index = 0; index < literals.length; index++) {
+            if (index > 0) {
                 regex.append(".*");
             }
-            if (!literal.isEmpty()) {
-                regex.append(Pattern.quote(literal));
+            if (!literals[index].isEmpty()) {
+                regex.append(Pattern.quote(literals[index]));
             }
         }
-        return Pattern.compile("^" + regex + "$");
+        return Pattern.compile(regex.append('$').toString());
     }
 }
