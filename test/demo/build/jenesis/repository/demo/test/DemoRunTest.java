@@ -108,12 +108,13 @@ class DemoRunTest {
     @Test
     void an_empty_tenant_is_offered_the_demo_with_its_warning_and_its_phrase() throws IOException {
         Optional<SetupOffer.Offer> offer = new DemoOffer(run(new StarterDemo()))
-                .offer(new SetupOffer.Viewer(TENANT));
+                .offer(new SetupOffer.Viewer(Optional.of(TENANT)));
 
         assertThat(offer).as("a tenant holding no repository is offered the demo").isPresent();
         assertThat(offer.get().warning()).contains("switches features on").contains("reaches public registries")
                 .contains("known vulnerabilities");
-        assertThat(offer.get().action().phrase()).isEqualTo("I want to trial jenesis");
+        assertThat(offer.get().action().flatMap(SetupOffer.Action::confirmation))
+                .map(SetupOffer.Confirmation::phrase).contains("I want to trial jenesis");
         assertThat(String.join("\n", offer.get().consequences()))
                 .as("every repository, setting, registry and vulnerable artifact is named before anything is done")
                 .contains("demo-maven (hosted maven)", "demo-npm (hosted npm)",
@@ -121,6 +122,12 @@ class DemoRunTest {
                         "demo-npm-proxy (a npm proxy of https://registry.npmjs.org/)")
                 .contains("Deny list:", "Deny list action:", "OSV feed:")
                 .contains("log4j-core-2.14.1.jar", "lodash-4.17.11.tgz");
+    }
+
+    @Test
+    void no_demo_is_offered_while_no_tenant_is_selected() throws IOException {
+        assertThat(new DemoOffer(run(new StarterDemo())).offer(new SetupOffer.Viewer(Optional.empty())))
+                .as("the demo fills a tenant, so without one there is nothing to offer").isEmpty();
     }
 
     @Test
@@ -215,7 +222,7 @@ class DemoRunTest {
         DemoRun run = run(new StarterDemo());
         run.runNow(TENANT, OPERATOR);
 
-        assertThat(new DemoOffer(run).offer(new SetupOffer.Viewer(TENANT))).isEmpty();
+        assertThat(new DemoOffer(run).offer(new SetupOffer.Viewer(Optional.of(TENANT)))).isEmpty();
         DemoRun.Started again = run.start(TENANT, OPERATOR);
         assertThat(again.started()).isFalse();
         assertThat(again.reason()).contains("A repository exists here already");

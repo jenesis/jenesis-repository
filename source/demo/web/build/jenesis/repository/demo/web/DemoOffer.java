@@ -10,7 +10,7 @@ import build.jenesis.repository.ui.SetupOffer;
  * is, the plain warning that it switches features on, reaches public registries and loads code with known
  * vulnerabilities, every repository, setting, registry and vulnerable artifact the contributors' plans name, and the
  * button confirmed by typing {@value DemoRun#PHRASE}. While a run is under way it links to its progress instead; once
- * the tenant holds a repository it offers nothing.
+ * the tenant holds a repository, or while no tenant is selected, it offers nothing.
  *
  * <p>Two point reads and one bounded page of names: the run's document, its lease while it says it is running, and
  * the tenant's first names.
@@ -30,13 +30,17 @@ public final class DemoOffer implements SetupOffer {
 
     @Override
     public Optional<Offer> offer(Viewer viewer) throws IOException {
-        Optional<DemoRun.State> state = run.state(viewer.tenant());
+        if (viewer.tenant().isEmpty()) {
+            return Optional.empty();
+        }
+        String tenant = viewer.tenant().get();
+        Optional<DemoRun.State> state = run.state(tenant);
         if (state.isPresent() && state.get().running()) {
-            return Optional.of(new Offer("A demo is loading", List.of("The demo is being loaded into this tenant; "
-                    + "its page shows each step as it is taken."), "", List.of(), null,
+            return Optional.of(Offer.linking("A demo is loading", List.of("The demo is being loaded into this "
+                    + "tenant; its page shows each step as it is taken."),
                     new Link("See the demo's progress", DemoController.ROUTE)));
         }
-        if (run.holdsRepository(viewer.tenant())) {
+        if (run.holdsRepository(tenant)) {
             return Optional.empty();
         }
         List<DemoRun.Planned> plans = run.plans().stream().filter(planned -> !planned.plan().empty()).toList();
@@ -51,11 +55,11 @@ public final class DemoOffer implements SetupOffer {
                 "The demo switches features on for the whole deployment, reaches public registries from this server, "
                         + "and loads code with known vulnerabilities into this deployment. Load it only into a "
                         + "deployment you are trying out, never into one that serves builds.",
-                consequences(plans),
-                new Action(DemoController.ROUTE, "Load the demo", DemoRun.PHRASE, "Load the demo?",
-                        "It switches the listed features on for the whole deployment, reaches the listed public "
-                                + "registries, and loads code with known vulnerabilities."),
-                null));
+                consequences(plans), Optional.empty(), List.of(),
+                Optional.of(new Action(DemoController.ROUTE, "Load the demo", List.of(),
+                        Optional.of(new Confirmation(DemoRun.PHRASE, "Load the demo?", "It switches the listed "
+                                + "features on for the whole deployment, reaches the listed public registries, and "
+                                + "loads code with known vulnerabilities."))))));
     }
 
     /** Every repository, setting, registry and vulnerable artifact the plans name, a line each kind. */

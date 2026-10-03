@@ -96,6 +96,11 @@ public final class Settings {
         this.snapshot = load();
     }
 
+    /** Whether a SECRET value can be stored, which needs a master key to seal it. */
+    public boolean sealsSecrets() {
+        return cipher.configured();
+    }
+
     /** Whether a key holds a SECRET-kind value, from the once-resolved catalogue. */
     private boolean isSecret(String key) {
         return secretKeys.contains(key);

@@ -6,6 +6,8 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import org.springframework.security.oauth2.client.endpoint.OAuth2AccessTokenResponseClient;
 import org.springframework.security.oauth2.client.endpoint.OAuth2AuthorizationCodeGrantRequest;
 import org.springframework.security.oauth2.client.endpoint.RestClientAuthorizationCodeTokenResponseClient;
@@ -29,13 +31,15 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
  * sign-in page lists only the providers configured at the moment it renders, and says there is none when that is so.
  * Spring Boot's property auto-configuration, which rejects a blank client id, is avoided for the same reason. The login
  * is a {@link LoginContributor} mapping the user to authorities through {@link LoginAuthorities}, the seam that carries
- * a deployment's authority model, after redeeming any {@link AdministratorClaim} the first-run guide made.
+ * a deployment's authority model, after redeeming any {@link AdministratorClaim} the first-run guide made - through
+ * the {@link GithubOffer} this module makes on the guide's first page.
  *
  * <p>A console that wants the mechanism optional imports this through its module seam; one that always carries it
  * component-scans it.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties({GithubProperties.class, OidcProperties.class})
+@Import(GithubSetupController.class)
 public class OAuth2ClientConfig {
 
     @Bean
@@ -98,7 +102,21 @@ public class OAuth2ClientConfig {
                                                                      ObjectProvider<GithubCredentials> credentials) {
         // openid selects the id-token flow and the qualified oidc/<sub> principal and is required before UserInfo
         // answers; profile and email give the display name and member list.
-        return new LiveClientRegistrations(credentials.getIfAvailable(() -> new GithubCredentials() {
+        return new LiveClientRegistrations(github(github, credentials), ConsoleClientRegistrations.oidc(
+                oidc.getIssuerUri(), oidc.getClientId(), oidc.getClientSecret(), oidc.getName(),
+                List.of("openid", "profile", "email")));
+    }
+
+    /** Signing in with GitHub and becoming administrator, as the first-run guide offers it. */
+    @Bean
+    public GithubOffer githubOffer(GithubProperties github, ObjectProvider<GithubCredentials> credentials) {
+        return new GithubOffer(github(github, credentials),
+                () -> ServletUriComponentsBuilder.fromCurrentContextPath().toUriString());
+    }
+
+    /** The GitHub app as the console stores it, else as the boot configuration names it. */
+    private static GithubCredentials github(GithubProperties github, ObjectProvider<GithubCredentials> credentials) {
+        return credentials.getIfAvailable(() -> new GithubCredentials() {
             @Override
             public String clientId() {
                 return github.getClientId();
@@ -108,8 +126,7 @@ public class OAuth2ClientConfig {
             public String clientSecret() {
                 return github.getClientSecret();
             }
-        }), ConsoleClientRegistrations.oidc(oidc.getIssuerUri(), oidc.getClientId(), oidc.getClientSecret(),
-                oidc.getName(), List.of("openid", "profile", "email")));
+        });
     }
 
     /** The sign-in buttons for the login page, one per configured registration. */

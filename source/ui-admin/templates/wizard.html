@@ -8,8 +8,9 @@
     <header th:replace="~{base :: pageHeader(${wizard.title()})}"></header>
 
     <!--/* What installed modules offer on the first-run guide's first page, ahead of its steps (SetupOffer): what it is,
-         the warning, each thing it changes, and the action, confirmed by typing its phrase, or a link to where it is
-         under way. Each posts to its own module's route from a form of its own, so the wizard's run is untouched. */-->
+         the warning, each thing it changes, where it leads, the values to copy, and the action with the fields it asks,
+         confirmed by typing its phrase where it carries one. Each posts to its own module's route from a form of its
+         own, so the wizard's run is untouched. */-->
     <th:block th:if="${wizard.index() == 0 and offers != null}">
         <section class="app-setup-offer" th:each="offer, at : ${offers}"
                  th:attr="aria-labelledby=|setup-offer-${at.index}|">
@@ -21,12 +22,25 @@
             <ul th:unless="${offer.consequences().isEmpty()}">
                 <li th:each="consequence : ${offer.consequences()}" th:text="${consequence}">What it changes.</li>
             </ul>
-            <form th:if="${offer.action() != null}" method="post" th:action="@{${offer.action().route()}}">
-                <button th:replace="~{base :: phraseButton(${offer.action().label()}, ${offer.action().phrase()},
-                        ${offer.action().question()}, ${offer.action().warning()})}">Load</button>
+            <p th:if="${offer.link().isPresent()}" th:with="link=${offer.link().get()}">
+                <a th:href="@{${link.href()}}" th:text="${link.label()}"
+                   th:attr="target=${link.external()} ? '_blank' : null,rel=${link.external()} ? 'noopener' : null">See it</a></p>
+            <p th:each="value : ${offer.values()}"><span th:text="|${value.label()}:|">Callback</span>
+                <code class="app-copy" th:text="${value.text()}">value</code></p>
+            <form th:if="${offer.action().isPresent()}" th:with="action=${offer.action().get()}" method="post"
+                  th:action="@{${action.route()}}">
+                <div class="app-filter-bar" th:unless="${action.fields().isEmpty()}">
+                    <label th:each="field : ${action.fields()}"><span th:text="${field.label()}">Client id</span>
+                        <input th:name="${field.name()}" th:type="${field.secret()} ? 'password' : 'text'"
+                               autocomplete="off" required></label>
+                </div>
+                <th:block th:if="${action.confirmation().isPresent()}" th:with="confirm=${action.confirmation().get()}">
+                    <button th:replace="~{base :: phraseButton(${action.label()}, ${confirm.phrase()},
+                            ${confirm.question()}, ${confirm.warning()})}">Load</button>
+                </th:block>
+                <button th:unless="${action.confirmation().isPresent()}" type="submit"
+                        class="secondary outline app-secondary" th:text="${action.label()}">Sign in</button>
             </form>
-            <p th:if="${offer.link() != null}"><a th:href="@{${offer.link().href()}}"
-                    th:text="${offer.link().label()}">See it</a></p>
         </section>
     </th:block>
 
@@ -72,40 +86,6 @@
             <small class="app-field__error" th:if="${wizard.error(f.input()) != null}" role="alert"
                    th:text="${wizard.error(f.input())}">Refused.</small>
         </div>
-
-        <!--/* On the starter step, the quicker way to an administrator: register a GitHub OAuth app with the callback
-             shown, paste its two values, and sign in with it - the identity GitHub returns is made administrator. The
-             fields belong to their own form (#github-setup, after this one), since what they save is written at once
-             rather than with the run, and a secret never rides the wizard's page. */-->
-        <section class="app-github-setup" aria-labelledby="github-setup-title"
-                 th:if="${wizard.index() == 0 and github != null and github.installed()}">
-            <h3 id="github-setup-title">Or sign in with GitHub and become administrator</h3>
-            <th:block th:unless="${github.configured() or github.canStoreSecret()}">
-                <p><small>A GitHub app's client secret is stored encrypted with the settings master key, and this
-                    deployment has none. Provision it as the environment variable <code>JENREPO_SECRETS_KEY</code>
-                    (the Helm chart generates one) and restart; this value is freshly generated for it:</small></p>
-                <p><code class="app-copy" th:text="${github.suggestedKey()}">k1:...</code></p>
-            </th:block>
-            <th:block th:if="${!github.configured() and github.canStoreSecret()}">
-                <ol class="app-github-setup__steps">
-                    <li><a th:href="${github.newApp()}" target="_blank" rel="noopener">Register a new OAuth app on
-                        GitHub</a> with this authorization callback URL:
-                        <code class="app-copy" th:text="${github.callback()}">https://repo.example.com/login/oauth2/code/github</code></li>
-                    <li>Paste its client id and a client secret it generates:
-                        <div class="app-filter-bar">
-                            <label>Client id <input form="github-setup" name="clientId" autocomplete="off" required></label>
-                            <label>Client secret <input form="github-setup" name="clientSecret" type="password"
-                                                        autocomplete="off" required></label>
-                        </div></li>
-                </ol>
-            </th:block>
-            <p th:if="${github.configured()}"><small th:text="${github.pinned()} ? 'GitHub sign-in is configured by the environment.'
-                    : 'GitHub sign-in is configured.'">GitHub sign-in is configured.</small></p>
-            <button th:if="${github.configured() or github.canStoreSecret()}" type="submit" form="github-setup"
-                    class="secondary outline app-secondary"
-                    th:text="${github.configured()} ? 'Sign in with GitHub and make me administrator'
-                            : 'Save and sign in with GitHub and make me administrator'">Sign in with GitHub</button>
-        </section>
 
         <!--/* A settings step: each setting its level asks, left at its default to keep what it inherits. A setting this
              session may not set is shown with its value and who fixes it, and is not carried. A true/false setting is a
@@ -177,8 +157,6 @@
             </span>
         </div>
     </form>
-    <form id="github-setup" method="post" th:action="@{/ui/setup/github}"
-          th:if="${wizard.index() == 0 and github != null and github.installed()}"></form>
 </main>
 </body>
 </html>

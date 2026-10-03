@@ -155,6 +155,11 @@ public class SettingsAdmin {
         return values;
     }
 
+    /** Whether a secret setting can be saved, which needs the settings master key to seal it. */
+    public boolean sealsSecrets() {
+        return editor.settings().sealsSecrets();
+    }
+
     /** The deployment's settings grouped for the settings screen, from the rows {@code GET /api/settings} answers. */
     public List<Group> groups() throws IOException {
         return levelGroups(editor.rows(Setting.Scope.GLOBAL, null, null), true);

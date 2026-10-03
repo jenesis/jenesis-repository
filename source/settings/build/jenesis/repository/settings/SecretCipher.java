@@ -79,6 +79,14 @@ public final class SecretCipher {
         return new SecretCipher(keys);
     }
 
+    /** A master key specification of one freshly generated key, in the shape {@value #ENV} carries, for an operator to
+     *  provision where none is. */
+    public static String newKey() {
+        byte[] key = new byte[KEY_BYTES];
+        new SecureRandom().nextBytes(key);
+        return "k1:" + Base64.getEncoder().encodeToString(key);
+    }
+
     private static IllegalStateException malformed(String detail) {
         return new IllegalStateException("environment variable " + ENV + " is malformed: " + detail
                 + " (expected one or more comma-separated <key-id>:<base64-encoded-32-byte-key> entries)");

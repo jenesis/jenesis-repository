@@ -77,6 +77,15 @@ class SecretCipherTest {
     }
 
     @Test
+    void a_generated_key_is_one_the_deployment_reads_and_each_is_new() {
+        String generated = SecretCipher.newKey();
+        SecretCipher cipher = SecretCipher.of(generated);
+        assertThat(cipher.configured()).isTrue();
+        assertThat(cipher.decrypt(cipher.encrypt("x"))).isEqualTo("x");
+        assertThat(SecretCipher.newKey()).isNotEqualTo(generated);
+    }
+
+    @Test
     void decryption_fails_closed_when_the_key_bytes_are_wrong() {
         String envelope = SecretCipher.of("k1:" + key((byte) 5)).encrypt("x");
         SecretCipher wrongBytes = SecretCipher.of("k1:" + key((byte) 6));   // same id, different bytes -> tag mismatch
