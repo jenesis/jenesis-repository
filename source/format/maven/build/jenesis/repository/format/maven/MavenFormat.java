@@ -3,6 +3,7 @@ package build.jenesis.repository.format.maven;
 import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.format.LifecycleMark;
+import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.format.ArtifactLayout;
@@ -82,8 +83,8 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
      * The bundle is keyless, so one that verifies is VALID only where an operator's pin names its identity, and
      * otherwise UNTRUSTED.
      *
-     * <p>Both are sidecars: neither is signable, both are left out of listings and inherit the artifact's hold, which
-     * is why each suffix is in {@link #isChecksum}. One format answers for both, since the completion observer takes
+     * <p>Both are sidecars ({@link ServableNames#sidecar}): neither is signable, both are left out of listings and
+     * inherit the artifact's hold. One format answers for both, since the completion observer takes
      * the first format whose {@code covers} answers. {@code maven-metadata.xml} is excluded because no publisher signs
      * it, and the checksum and signature siblings because a sidecar carries no sidecar.
      */
@@ -97,7 +98,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
      *  since the {@code /module/} mirror points at the same blob and claiming both would judge one artifact twice. */
     private static boolean signable(String path) {
         return path.startsWith("/maven/")
-                && !isChecksum(path)
+                && !ServableNames.sidecar(path)
                 && !path.endsWith("/maven-metadata.xml")
                 && !path.endsWith("/");
     }
@@ -187,12 +188,13 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
 
     /** The neutral descriptor of a {@code /maven/...} path, or empty for generated metadata: a full coordinate maps to
      *  {@code group:artifact} and version, with the {@code -SNAPSHOT} prerelease rule here; a path that is not a full
-     *  coordinate carries the ecosystem only. */
+     *  coordinate, and a sidecar - a checksum or a signature, which is no file of the version - carries the ecosystem
+     *  only, so it records nothing against the version, raises no event and counts no download. */
     private static Optional<ArtifactDescriptor> descriptor(String path) {
         if (MavenMetadata.isMetadataRequest(path)) {
             return Optional.empty();
         }
-        String[] coordinate = JavaLayout.mavenCoordinate(path);
+        String[] coordinate = ServableNames.sidecar(path) ? null : JavaLayout.mavenCoordinate(path);
         if (coordinate == null) {
             return Optional.of(ArtifactDescriptor.at(ECOSYSTEM, path));
         }
@@ -440,7 +442,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                 }
                 return false;
             }
-            if (isChecksum(rest)) {
+            if (ServableNames.sidecar(rest)) {
                 layout(store, path, download.body());
             } else {
                 // Verified against the upstream's SHA-1, computed as the blob streams to storage. The bytes are stored
@@ -521,13 +523,6 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     }
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MavenFormat.class);
-
-    /** A Maven checksum or signature sibling: proxied as-is, not re-verified, and carrying no signature of its own. The
-     *  Sigstore bundle is one, since Central publishes no {@code .sha1} for it. */
-    private static boolean isChecksum(String rest) {
-        return rest.endsWith(".sha1") || rest.endsWith(".md5") || rest.endsWith(".sha256")
-                || rest.endsWith(".sha512") || rest.endsWith(".asc") || rest.endsWith(".sigstore.json");
-    }
 
     private static MessageDigest sha1() {
         try {

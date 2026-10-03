@@ -95,9 +95,7 @@ public final class MavenMetadata {
         String body = requestPath.substring("/maven/".length());
         int file = body.lastIndexOf('/');
         int version = file < 0 ? -1 : body.lastIndexOf('/', file - 1);
-        if (version > 0 && !isMetadataRequest(requestPath) && !body.endsWith(".sha1") && !body.endsWith(".md5")
-                && !body.endsWith(".sha256") && !body.endsWith(".sha512") && !body.endsWith(".asc")
-                && !body.endsWith(".sigstore.json")) {
+        if (version > 0 && !isMetadataRequest(requestPath) && !ServableNames.sidecar(body)) {
             listing.refresh(body.substring(0, version), body.substring(version + 1, file));
         }
     }

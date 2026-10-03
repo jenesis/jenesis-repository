@@ -9,6 +9,7 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
@@ -94,16 +95,11 @@ public final class IvyFormat implements RepositoryFormat, ArtifactLayout, Artifa
             ArtifactSignatures.detachedSidecar(ECOSYSTEM, ".sigstore.json", ArtifactSignatures.Scheme.SIGSTORE_BUNDLE,
                     IvyFormat::signable, ArtifactSignatures.Coverage.OPTIONAL));
 
-    /** The suffixes a signature never covers: a checksum is not an artifact, and each signature convention must exclude
-     *  the other's file or a bundle would read as an artifact wanting an {@code .asc}. */
-    private static final List<String> NOT_SIGNED =
-            List.of(".md5", ".sha1", ".sha256", ".sha512", ".sig", ".asc", ".sigstore.json");
-
     /** Whether a request path names an artifact a publisher's signature would cover. */
     private static boolean signable(String path) {
         return path.startsWith(PREFIX)
                 && !path.endsWith("/")
-                && NOT_SIGNED.stream().noneMatch(path::endsWith);
+                && !ServableNames.sidecar(path);
     }
 
     @Override
@@ -417,10 +413,8 @@ public final class IvyFormat implements RepositoryFormat, ArtifactLayout, Artifa
 
     /** Whether a file is a checksum or a signature beside one of the revision's files rather than one of them. */
     private static boolean sidecar(String file) {
-        return SIDECARS.stream().anyMatch(file::endsWith);
+        return ServableNames.sidecar(file);
     }
-
-    private static final List<String> SIDECARS = List.of(".md5", ".sha1", ".sha256", ".sha512", ".asc", ".sig");
 
     /** One servable path split into the coordinate it names. The revision owns a directory, so everything above the
      *  file name is the coordinate and revision - clause 7, the first property an accepted pattern must have. */

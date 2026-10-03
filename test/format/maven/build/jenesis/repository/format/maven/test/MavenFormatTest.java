@@ -118,6 +118,23 @@ class MavenFormatTest {
                 .as("generated metadata carries no coordinate to describe").isEmpty();
     }
 
+    /**
+     * A checksum or a signature beside a file is no file of the version: it is described with no coordinate, so its
+     * upload writes nothing to the version's document, moves no row of the release feed, raises no event and counts
+     * no download - where each of a signed deploy's two dozen sidecars used to do all four.
+     */
+    @Test
+    void a_sidecar_is_described_without_the_coordinate_of_the_file_it_describes() {
+        for (String suffix : List.of(".sha1", ".md5", ".sha256", ".sha512", ".asc", ".sigstore.json")) {
+            assertThat(format.describe("/maven/org/example/lib/1.0/lib-1.0.jar" + suffix))
+                    .as("lib-1.0.jar%s", suffix).hasValueSatisfying(descriptor -> {
+                        assertThat(descriptor.ecosystem()).isEqualTo("Maven");
+                        assertThat(descriptor.coordinate()).isNull();
+                        assertThat(descriptor.version()).isNull();
+                    });
+        }
+    }
+
     @Test
     void paths_returns_the_maven_directory_a_version_occupies() {
         assertThat(format.paths("org.example:lib", "1.0", store)).containsExactly("/maven/org/example/lib/1.0");

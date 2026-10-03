@@ -123,6 +123,21 @@ public final class ServableNames {
     private static final List<String> SIDECAR_SUFFIXES =
             List.of(".md5", ".sha1", ".sha256", ".sha512", ".asc", ".sig", ".sigstore.json", ".attestations.json");
 
+    /**
+     * The path a sidecar describes - a checksum or a signature, a document whose whole content is a statement about
+     * another path's bytes - or empty when {@code requestPath} is no sidecar. The one declaration of what a sidecar is:
+     * a sidecar is held with its subject, is no file of a version, records nothing against the version and counts no
+     * download, and every format and surface asks here rather than keeping a suffix list of its own.
+     */
+    public static Optional<String> sidecarOf(String requestPath) {
+        return Optional.ofNullable(subject(requestPath));
+    }
+
+    /** Whether {@code requestPath} is a sidecar ({@link #sidecarOf}). */
+    public static boolean sidecar(String requestPath) {
+        return subject(requestPath) != null;
+    }
+
     /** The path a sidecar describes, or {@code null} when this path is not one. Strips exactly one suffix and never
      *  recurses: {@code x.jar.sha1.md5} names {@code x.jar.sha1}, whose own hold is then read directly, so a chain of
      *  sidecars terminates in one step per read rather than walking. */
