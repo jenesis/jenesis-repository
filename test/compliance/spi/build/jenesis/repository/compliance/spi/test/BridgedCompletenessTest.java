@@ -5,7 +5,6 @@ import module java.base;
 
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.QualityInspector;
-import build.jenesis.repository.store.ArtifactDescriptor;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -67,7 +66,7 @@ class BridgedCompletenessTest {
     }
 
     private static QualityInspector.Lookup lookup(boolean truncated) {
-        return new QualityInspector.Lookup() {
+        return new QualityInspector.Lookup.Detached() {
             @Override
             public Optional<byte[]> fetch(String path) {
                 return Optional.empty();
@@ -76,16 +75,6 @@ class BridgedCompletenessTest {
             @Override
             public Optional<Bounded> fetchBounded(String path, int limit) {
                 return Optional.of(new Bounded(new byte[8], truncated));
-            }
-
-            @Override
-            public UnaryOperator<String> settings() {
-                return QualityInspector.Lookup.NONE.settings();
-            }
-
-            @Override
-            public Optional<ArtifactDescriptor> described(String path) throws IOException {
-                return QualityInspector.Lookup.NONE.described(path);
             }
         };
     }

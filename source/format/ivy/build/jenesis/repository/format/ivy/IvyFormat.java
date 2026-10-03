@@ -51,7 +51,7 @@ import build.jenesis.repository.format.PublishedExport;
  * <p>A pattern is deployment-wide rather than per repository, the rule at
  * {@link ArtifactLayout#paths(String, String, ArtifactStore)}, so this format needs no configuration document.
  */
-public final class IvyFormat implements RepositoryFormat, ArtifactLayout, ArtifactSignatures, RepositoryExporter,
+public final class IvyFormat implements RepositoryFormat, ArtifactLayout, ArtifactSignatures.Delegating, RepositoryExporter,
         ProxyLeg {
 
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(IvyFormat.class);
@@ -103,19 +103,8 @@ public final class IvyFormat implements RepositoryFormat, ArtifactLayout, Artifa
     }
 
     @Override
-    public List<ArtifactSignatures.Expectation> expects(String path) {
-        return SIGNATURES.expects(path);
-    }
-
-    @Override
-    public Optional<String> covers(String path) {
-        return SIGNATURES.covers(path);
-    }
-
-    @Override
-    public List<ArtifactSignatures.Evidence> evidence(String path, ArtifactSignatures.Material material)
-            throws IOException {
-        return SIGNATURES.evidence(path, material);
+    public ArtifactSignatures signatures() {
+        return SIGNATURES;
     }
 
     @Override

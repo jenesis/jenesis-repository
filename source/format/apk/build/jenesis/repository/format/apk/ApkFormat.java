@@ -431,6 +431,19 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, PathKe
                 : List.of();
     }
 
+    /** A package is published at the path it is served from, so the claim probe needs no declaration to reach it:
+     *  that is only for a format whose publish endpoint is not its serving path. */
+    @Override
+    public boolean embedsEvidence(String path) {
+        return false;
+    }
+
+    /** No signature material here has a request path of its own, so none covers another path. */
+    @Override
+    public Optional<String> covers(String path) {
+        return Optional.empty();
+    }
+
     @Override
     public List<ArtifactSignatures.Evidence> evidence(String path, ArtifactSignatures.Material material)
             throws IOException {

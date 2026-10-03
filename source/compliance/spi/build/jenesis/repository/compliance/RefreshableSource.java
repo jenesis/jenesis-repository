@@ -58,8 +58,9 @@ public interface RefreshableSource extends SignalSource {
      * version against this source read only what was published since their last full pass, and a catalogue that
      * changed is what sends them over everything again. Empty for a source with no durable snapshot, whose caller
      * has nothing to compare and asks for nothing.
+     *
+     * <p>Abstract, since a source that wraps a catalogue and inherited an empty answer would hide the catalogue's
+     * snapshot, and every refresh would read as a change.
      */
-    default Optional<String> snapshot() throws IOException {
-        return Optional.empty();
-    }
+    Optional<String> snapshot() throws IOException;
 }

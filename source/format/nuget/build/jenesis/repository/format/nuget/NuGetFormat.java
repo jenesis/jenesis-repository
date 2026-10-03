@@ -646,6 +646,12 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
                 : List.of();
     }
 
+    /** No signature material here has a request path of its own, so none covers another path. */
+    @Override
+    public Optional<String> covers(String path) {
+        return Optional.empty();
+    }
+
     /** The two paths a package's bytes are in hand at: the file it serves from, and the push endpoint. The push
      *  descriptor carries only {@value #PUSH_ROUTE}, the same for every package, so keyed on the served name alone the
      *  signature entry would go unread on every publish. */

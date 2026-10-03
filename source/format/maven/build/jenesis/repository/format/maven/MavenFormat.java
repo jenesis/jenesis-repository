@@ -28,7 +28,7 @@ import build.jenesis.repository.format.PublishedExport;
  * the discovered {@link ModuleView} ({@link ServiceLoader}), so a client resolving by module name reaches the same
  * blob.
  */
-public final class MavenFormat implements RepositoryFormat, ProxyFormat, ArtifactLayout, ArtifactSignatures,
+public final class MavenFormat implements RepositoryFormat, ProxyFormat, ArtifactLayout, ArtifactSignatures.Delegating,
         RepositoryImporter.Delegating, RepositoryExporter {
 
     private static final List<ModuleView> MODULE_VIEWS = ModuleView.installed();
@@ -109,19 +109,8 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     }
 
     @Override
-    public List<ArtifactSignatures.Expectation> expects(String path) {
-        return SIGNATURES.expects(path);
-    }
-
-    @Override
-    public Optional<String> covers(String path) {
-        return SIGNATURES.covers(path);
-    }
-
-    @Override
-    public List<ArtifactSignatures.Evidence> evidence(String path, ArtifactSignatures.Material material)
-            throws IOException {
-        return SIGNATURES.evidence(path, material);
+    public ArtifactSignatures signatures() {
+        return SIGNATURES;
     }
 
     @Override

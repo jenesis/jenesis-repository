@@ -3,6 +3,7 @@ package build.jenesis.repository.compliance;
 import module java.base;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.store.ArtifactDescriptor;
+import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Limits;
 
 /**
@@ -481,7 +482,20 @@ public interface QualityInspector {
 
         @Override
         public Optional<Lookup.Bounded> fetchBounded(String path, int limit) throws IOException {
-            Optional<Lookup.Bounded> bounded = delegate.fetchBounded(path, limit);
+            return watched(delegate.fetchBounded(path, limit));
+        }
+
+        @Override
+        public Optional<Lookup.Bounded> fetchStored(String path, int limit) throws IOException {
+            return watched(delegate.fetchStored(path, limit));
+        }
+
+        @Override
+        public Optional<Lookup.Bounded> fetchRecorded(String key, int limit) throws IOException {
+            return watched(delegate.fetchRecorded(key, limit));
+        }
+
+        private Optional<Lookup.Bounded> watched(Optional<Lookup.Bounded> bounded) {
             if (bounded.isPresent() && bounded.get().truncated()) {
                 truncated = true;
             }
@@ -653,7 +667,7 @@ public interface QualityInspector {
          *  sentinel for every path. It is a positive claim ("nothing is published anywhere this inspection can see"),
          *  not a bound being dodged: there is nothing to read, so there is nothing to cap. An inspector that reads no
          *  companion is screened through this rather than through a lookup that would have to invent a sibling. */
-        Lookup NONE = new Lookup() {
+        Lookup NONE = new Detached() {
 
             @Override
             public Optional<byte[]> fetch(String path) {
@@ -663,16 +677,6 @@ public interface QualityInspector {
             @Override
             public Optional<Bounded> fetchBounded(String path, int limit) {
                 return Optional.empty();
-            }
-
-            @Override
-            public UnaryOperator<String> settings() {
-                return ComplianceSettings.lookup(null);
-            }
-
-            @Override
-            public Optional<ArtifactDescriptor> described(String path) {
-                return BlobLayout.claimed(path, null);
             }
         };
 
@@ -685,7 +689,7 @@ public interface QualityInspector {
         /** {@link #NONE}, for an inspection whose deployment resolves its dials through {@code settings}. */
         static Lookup none(UnaryOperator<String> settings) {
             Objects.requireNonNull(settings, "settings");
-            return new Lookup() {
+            return new Detached() {
 
                 @Override
                 public Optional<byte[]> fetch(String path) {
@@ -701,12 +705,38 @@ public interface QualityInspector {
                 public UnaryOperator<String> settings() {
                     return settings;
                 }
-
-                @Override
-                public Optional<ArtifactDescriptor> described(String path) {
-                    return BlobLayout.claimed(path, null);
-                }
             };
+        }
+
+        /**
+         * A lookup with no repository store behind it - an inspection of bytes alone, a test's siblings held in a
+         * map - answering what such a lookup can: the boot environment's settings, the coordinate a format gives the
+         * path without a repository's configuration, the serving read for a stored one (it cannot tell the two
+         * apart, so it answers the stricter question) and nothing recorded. A lookup over a store, or one decorating
+         * another, implements {@link Lookup} itself, where every one of these is abstract: inheriting any of them
+         * would answer for a store it does not read.
+         */
+        interface Detached extends Lookup {
+
+            @Override
+            default UnaryOperator<String> settings() {
+                return ComplianceSettings.lookup(null);
+            }
+
+            @Override
+            default Optional<ArtifactDescriptor> described(String path) throws IOException {
+                return BlobLayout.claimed(path, null);
+            }
+
+            @Override
+            default Optional<Bounded> fetchStored(String path, int limit) throws IOException {
+                return fetchBounded(path, limit);
+            }
+
+            @Override
+            default Optional<Bounded> fetchRecorded(String key, int limit) throws IOException {
+                return Optional.empty();
+            }
         }
 
         /**
@@ -788,22 +818,26 @@ public interface QualityInspector {
          * <p>It is also two store reads cheaper per call, which on a probe every publish pays for a sidecar that is
          * usually absent is the difference between a fixed cost and a noticeable one.
          *
-         * <p>The default is {@link #fetchBounded}, so a lookup that cannot distinguish the two is simply answering
-         * the stricter question - never the looser one.
+         * <p>A lookup that cannot distinguish the two answers {@link #fetchBounded}, the stricter question - never the
+         * looser one - which is what {@link Detached} does.
          */
-        default Optional<Bounded> fetchStored(String path, int limit) throws IOException {
-            return fetchBounded(path, limit);
-        }
+        Optional<Bounded> fetchStored(String path, int limit) throws IOException;
 
         /**
          * Up to {@code limit} bytes of a document a format itself recorded under its own key space - what a proxy
          * leg learned from an index it relayed rather than kept: the digest a mirror's {@code Packages} declared for
          * a package, the suite's signed {@code InRelease}. Neither is published at any request path, so neither read
          * above can reach it; this one takes the key the format wrote it under and stays bounded by the caller's
-         * limit. Empty by default: a lookup with no store behind it has nothing recorded.
+         * limit. A lookup with no store behind it has nothing recorded, and answers empty.
          */
-        default Optional<Bounded> fetchRecorded(String key, int limit) throws IOException {
-            return Optional.empty();
+        Optional<Bounded> fetchRecorded(String key, int limit) throws IOException;
+
+        /** {@link #fetchRecorded} over {@code store}: one versioned point read of the record, bounded after the fact,
+         *  since a record is a few lines and an index copy is held to the signature bound by its writer. */
+        static Optional<Bounded> recorded(ArtifactStore store, String key, int limit) throws IOException {
+            return store.readVersioned(key).map(record -> record.content().length > limit
+                    ? new Bounded(Arrays.copyOf(record.content(), limit), true)
+                    : new Bounded(record.content(), false));
         }
 
         /** A bounded read of a sibling: its {@code content} - the whole sibling, or the leading {@code limit} bytes of

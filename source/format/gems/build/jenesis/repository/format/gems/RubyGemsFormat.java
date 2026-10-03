@@ -805,6 +805,12 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
                 : List.of();
     }
 
+    /** The signature rides beside the artifact, where it is already visible, not inside its bytes. */
+    @Override
+    public boolean embedsEvidence(String path) {
+        return false;
+    }
+
     /** The gem an attestations document covers: {@code /rubygems/api/v1/attestations/<stem>.json} covers
      *  {@code /rubygems/gems/<stem>.gem}, so a document landing after its gem re-derives the gem's verdict. */
     @Override

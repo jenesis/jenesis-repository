@@ -52,6 +52,11 @@ class FeedRefreshTest {
         public Freshness refresh() {
             return draw.get();
         }
+
+        @Override
+        public Optional<String> snapshot() {
+            return Optional.empty();
+        }
     }
 
     private static Freshness landed() {

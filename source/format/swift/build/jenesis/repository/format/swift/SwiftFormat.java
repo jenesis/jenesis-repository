@@ -51,7 +51,7 @@ import tools.jackson.databind.node.ObjectNode;
  * <p>A withheld release leaves the release list; a yanked one stays with the specification's {@code problem} object
  * (see {@link SwiftListings}).
  */
-public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, PathKeyedBlobLayout, ArtifactSignatures,
+public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, PathKeyedBlobLayout, ArtifactSignatures.Delegating,
         RepositoryExporter, RepositoryImporter.Delegating, ProxyLeg {
 
     /** The archive signature's sidecar suffix under the archive key and path: {@code <version>.zip.sig}. */
@@ -93,19 +93,8 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Path
     }
 
     @Override
-    public List<ArtifactSignatures.Expectation> expects(String path) {
-        return SIGNATURES.expects(path);
-    }
-
-    @Override
-    public Optional<String> covers(String path) {
-        return SIGNATURES.covers(path);
-    }
-
-    @Override
-    public List<ArtifactSignatures.Evidence> evidence(String path, ArtifactSignatures.Material material)
-            throws IOException {
-        return SIGNATURES.evidence(path, material);
+    public ArtifactSignatures signatures() {
+        return SIGNATURES;
     }
 
     /** A source archive's or its signature sidecar's serving key, when the pointer exists - for the compliance screen's

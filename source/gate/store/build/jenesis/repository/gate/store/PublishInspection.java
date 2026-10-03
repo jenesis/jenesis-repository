@@ -343,11 +343,7 @@ public final class PublishInspection {
 
             @Override
             public Optional<QualityInspector.Lookup.Bounded> fetchRecorded(String key, int limit) throws IOException {
-                // A format's own record, by the key it wrote it under: one versioned point read, bounded after the
-                // fact, since a record is a few lines and an index copy is held to the signature bound by its writer.
-                return content.store().readVersioned(key).map(recorded -> recorded.content().length > limit
-                        ? new QualityInspector.Lookup.Bounded(Arrays.copyOf(recorded.content(), limit), true)
-                        : new QualityInspector.Lookup.Bounded(recorded.content(), false));
+                return QualityInspector.Lookup.recorded(content.store(), key, limit);
             }
         };
     }

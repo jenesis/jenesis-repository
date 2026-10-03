@@ -201,5 +201,17 @@ public final class LicenseDerivation {
                 return Optional.of(new Bounded(truncated ? Arrays.copyOf(prefix, limit) : prefix, truncated));
             }
         }
+
+        /** The stored read: {@link #fetchBounded} already reads the published pointer, with no withhold probe. */
+        @Override
+        public Optional<Bounded> fetchStored(String path, int limit) throws IOException {
+            return fetchBounded(path, limit);
+        }
+
+        /** What a format recorded in this repository, by the key it wrote it under. */
+        @Override
+        public Optional<Bounded> fetchRecorded(String key, int limit) throws IOException {
+            return QualityInspector.Lookup.recorded(store, key, limit);
+        }
     }
 }

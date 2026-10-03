@@ -138,23 +138,19 @@ public interface ArtifactSignatures extends EcosystemLayout {
      * inspector already claims the path, as NuGet's does, the marginal cost is nothing. A format that says nothing
      * is untouched: no probe opens a body on its account.
      *
-     * <p>{@code false} by default, because a sidecar is the ordinary shape and it is already visible.
+     * <p>A sidecar layout answers {@code false}: a sidecar is the ordinary shape and it is already visible.
      */
-    default boolean embedsEvidence(String path) {
-        return false;
-    }
+    boolean embedsEvidence(String path);
 
     /**
      * The artifact a separately-addressed piece of signature material covers, for a format whose material is its own
-     * request path - {@code foo-1.0.jar} for {@code foo-1.0.jar.asc}. Empty by default, which is the right answer for
-     * every embedded scheme: a {@code .deb}'s signature has no path of its own.
+     * request path - {@code foo-1.0.jar} for {@code foo-1.0.jar.asc}. Empty for every embedded scheme: a
+     * {@code .deb}'s signature has no path of its own.
      *
      * <p>It exists because such material typically arrives <em>after</em> the artifact it covers - a Maven deploy is
      * several requests - so the caller needs to know which stored artifact a just-published sidecar completes.
      */
-    default Optional<String> covers(String path) {
-        return Optional.empty();
-    }
+    Optional<String> covers(String path);
 
     /**
      * {@link #covers(String)}, for material that names what it covers in its own bytes rather than in its path - an
@@ -176,6 +172,42 @@ public interface ArtifactSignatures extends EcosystemLayout {
      *                     simply absent
      */
     List<Evidence> evidence(String path, Material material) throws IOException;
+
+    /**
+     * A format whose signature story is another {@link ArtifactSignatures} - a {@link #detachedSidecar} or a
+     * {@link #composed} one it holds - answering every question through it. Each answer is the held story's, so none
+     * is the interface's own while the story it holds says otherwise.
+     */
+    interface Delegating extends ArtifactSignatures {
+
+        /** The signature story this format answers through. */
+        ArtifactSignatures signatures();
+
+        @Override
+        default List<Expectation> expects(String path) {
+            return signatures().expects(path);
+        }
+
+        @Override
+        default boolean embedsEvidence(String path) {
+            return signatures().embedsEvidence(path);
+        }
+
+        @Override
+        default Optional<String> covers(String path) {
+            return signatures().covers(path);
+        }
+
+        @Override
+        default Optional<String> covers(String path, Signed published) throws IOException {
+            return signatures().covers(path, published);
+        }
+
+        @Override
+        default List<Evidence> evidence(String path, Material material) throws IOException {
+            return signatures().evidence(path, material);
+        }
+    }
 
     /** A signature scheme, named by what a verifier must know to check it. */
     enum Scheme {
@@ -393,6 +425,11 @@ public interface ArtifactSignatures extends EcosystemLayout {
             }
 
             @Override
+            public boolean embedsEvidence(String path) {
+                return false;
+            }
+
+            @Override
             public Optional<String> covers(String path) {
                 // Exactly one suffix is stripped and the result is never re-examined, which is the rule
                 // ServableNames.subject already fixes for the sidecar family: a chain terminates in one step.
@@ -463,9 +500,30 @@ public interface ArtifactSignatures extends EcosystemLayout {
             }
 
             @Override
+            public boolean embedsEvidence(String path) {
+                for (ArtifactSignatures leg : parts) {
+                    if (leg.embedsEvidence(path)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            @Override
             public Optional<String> covers(String path) {
                 for (ArtifactSignatures leg : parts) {
                     Optional<String> covered = leg.covers(path);
+                    if (covered.isPresent()) {
+                        return covered;
+                    }
+                }
+                return Optional.empty();
+            }
+
+            @Override
+            public Optional<String> covers(String path, Signed published) throws IOException {
+                for (ArtifactSignatures leg : parts) {
+                    Optional<String> covered = leg.covers(path, published);
                     if (covered.isPresent()) {
                         return covered;
                     }

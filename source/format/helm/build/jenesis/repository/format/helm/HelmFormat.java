@@ -50,7 +50,7 @@ import build.jenesis.repository.store.Publication;
  * enforcement runs through the {@link BlobLayout} seam.
  */
 public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, RepositoryImporter.Delegating,
-        ArtifactSignatures, RepositoryExporter, ProxyLeg {
+        ArtifactSignatures.Delegating, RepositoryExporter, ProxyLeg {
 
     /** The ecosystem name Helm coordinates report. OSV has no Helm feed, so vulnerability lookup finds nothing while
      *  the deny-list, the malicious-package flag and licence policy still apply. */
@@ -77,19 +77,8 @@ public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobL
     }
 
     @Override
-    public List<ArtifactSignatures.Expectation> expects(String path) {
-        return SIGNATURES.expects(path);
-    }
-
-    @Override
-    public Optional<String> covers(String path) {
-        return SIGNATURES.covers(path);
-    }
-
-    @Override
-    public List<ArtifactSignatures.Evidence> evidence(String path, ArtifactSignatures.Material material)
-            throws IOException {
-        return SIGNATURES.evidence(path, material);
+    public ArtifactSignatures signatures() {
+        return SIGNATURES;
     }
 
     /** A request path's serving key for the compliance screen's sibling read: a chart or its provenance file under

@@ -109,6 +109,12 @@ public final class HomebrewFormat implements RepositoryFormat, ArtifactLayout, P
                 : List.of();
     }
 
+    /** The signature rides beside the artifact, where it is already visible, not inside its bytes. */
+    @Override
+    public boolean embedsEvidence(String path) {
+        return false;
+    }
+
     @Override
     public Optional<String> covers(String path) {
         if (!path.startsWith(PREFIX) || !path.endsWith(ATTESTATIONS)) {
