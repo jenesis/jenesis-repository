@@ -12,7 +12,6 @@ import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.audit.AuditTrailProvider;
-import build.jenesis.repository.server.spi.AnonymousRights;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.TokenExchange;
 import build.jenesis.repository.server.spi.TokenExchangeProvider;
@@ -43,10 +42,10 @@ import org.springframework.core.env.Environment;
 
 /**
  * The store, settings and tenant kernel wiring: this composition's layers over the artifact store, the
- * {@link Authorization}, the store-backed {@link Settings}, the token-exchange and audit-trail plugins, the
+ * store-backed {@link Settings}, the token-exchange and audit-trail plugins, the
  * settings-precedence probe, the tenant directory, the {@link Repositories} tenant kernel and the storage-namespace
  * registration. The declaration that resolves the store applies the layers, and the quota and read-only wrappers
- * this class must not restate.
+ * this class must not restate; the {@link Authorization} is the server's own, as every composition has it.
  */
 @Configuration(proxyBeanMethods = false)
 public class StoreConfig {
@@ -81,63 +80,6 @@ public class StoreConfig {
                 properties.getStore(),
                 properties.isAuth() ? "enforced" : "anonymous",
                 properties.getVulnerabilityThreshold());
-    }
-
-    @Bean
-    public Authorization authorization(RepositoryProperties properties, ArtifactStore store) throws IOException {
-        // Opt-in; empty grants no anonymous access at all.
-        String anonymousRights = properties.getAnonymousRights().strip();
-        if (!properties.isAuth()) {
-            // An explicit opt-out is legitimate, so it warns rather than failing the boot.
-            LOGGER.warn("SECURITY: per-credential authorization is DISABLED (jenrepo.auth=false) - the "
-                    + "repository is running ANONYMOUS/OPEN and every request is served without a credential. This is "
-                    + "an explicit opt-out; unset it or set jenrepo.auth=true (the default) to enforce "
-                    + "authorization.");
-            // Under auth=false every request is already anonymous, so the grant is redundant and ignored.
-            if (!anonymousRights.isEmpty()) {
-                LOGGER.warn("SECURITY: jenrepo.anonymous-rights is set but jenrepo.auth=false, so "
-                        + "the deployment is ALREADY fully open (every request is served anonymously) and the "
-                        + "anonymous-rights grant is redundant and ignored. Set jenrepo.auth=true to make it "
-                        + "meaningful: keys are then required and a keyless caller is limited to exactly this grant.");
-            }
-            return Authorization.anonymous();
-        }
-        // Names exactly what a keyless caller may do, louder for write or admin; the posture advisories carry it onto
-        // the console and /api/posture.
-        if (!anonymousRights.isEmpty()) {
-            if (AnonymousRights.grantsWriteOrAdmin(anonymousRights)) {
-                LOGGER.warn("SECURITY: anonymous access ENABLED with WRITE/ADMIN rights: {}. A keyless caller may "
-                        + "mutate or administer artifacts with NO credential (a public drop-box / open admin) - the "
-                        + "loudest anonymous combination. This is an explicit opt-in; unset "
-                        + "jenrepo.anonymous-rights to require a key for every request.", anonymousRights);
-            } else {
-                LOGGER.warn("SECURITY: anonymous access ENABLED: {}. A keyless caller is granted these rights with no "
-                        + "credential (the public-mirror pattern - pair with jenrepo.read-only=true for a "
-                        + "browsable-but-immutable mirror). This is an explicit opt-in; unset "
-                        + "jenrepo.anonymous-rights to require a key for every request.", anonymousRights);
-            }
-        }
-        // A keyless request is decided against the anonymous grants by the same authorize call as any other.
-        Authorization authorization = Authorization.enforcing(store)
-                .withLifetimes(properties.getCredentialDefaultLifetime(), properties.getCredentialMaxLifetime())
-                .withAnonymousRights(anonymousRights);
-        // Every route that mints a credential requires one, so jenrepo.bootstrap-key provisions the first - the
-        // contract of the server's own authorization bean, which this one replaces.
-        String tenant;
-        try {
-            tenant = authorization.bootstrap(properties.getBootstrapKey());
-        } catch (IllegalArgumentException malformed) {
-            throw new IllegalStateException(malformed.getMessage(), malformed);
-        }
-        if (tenant != null) {
-            LOGGER.warn("SECURITY: a bootstrap key is provisioned for tenant '{}' (jenrepo.bootstrap-key) - it grants "
-                    + "EVERY right on every repository of that tenant and never expires. Use it to issue the "
-                    + "credentials you actually want, then unset it; it is re-provisioned on every boot for as long "
-                    + "as it is set.", tenant);
-        }
-        // A process that died mid-derivation is one starting now, so boot repairs what it left behind.
-        authorization.groups().repairDerivedGrants();
-        return authorization;
     }
 
     @Bean
