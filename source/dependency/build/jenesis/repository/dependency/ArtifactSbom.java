@@ -115,11 +115,10 @@ public final class ArtifactSbom {
         return isSpdx(document) ? SpdxParser.parse(document) : CycloneDxParser.parse(document);
     }
 
-    /** As {@link #parse(byte[])}, but a present-but-unparseable CycloneDX document throws
-     *  {@link MalformedSbomException} through {@link CycloneDxParser#parseStrict}. SPDX has no strict variant: a
-     *  malformed SPDX document reads as empty. */
+    /** As {@link #parse(byte[])}, but a present-but-unparseable document throws {@link MalformedSbomException}, an
+     *  SPDX one as a CycloneDX one. */
     private static DependencyGraph parseStrict(byte[] document) throws MalformedSbomException {
-        return isSpdx(document) ? SpdxParser.parse(document) : CycloneDxParser.parseStrict(document);
+        return isSpdx(document) ? SpdxParser.parseStrict(document) : CycloneDxParser.parseStrict(document);
     }
 
     /** Whether {@code document} is SPDX, by the marker both its serialisations declare in their header. Only the header

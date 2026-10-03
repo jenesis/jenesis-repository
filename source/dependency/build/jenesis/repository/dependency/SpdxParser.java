@@ -41,29 +41,40 @@ public final class SpdxParser {
         return parse(document);
     }
 
-    /** Parse a BOM held in {@code document}, detecting the JSON (<code>&#123;</code>) or tag-value serialisation. */
+    /** Parse a BOM held in {@code document}, detecting the JSON (<code>&#123;</code>) or tag-value serialisation.
+     *  Fail-soft: a document that does not decode yields {@link DependencyGraph#EMPTY}, so one bad BOM never derails
+     *  the sweep. */
     public static DependencyGraph parse(byte[] document) {
-        int start = document.length >= 3
-                && (document[0] & 0xFF) == 0xEF && (document[1] & 0xFF) == 0xBB && (document[2] & 0xFF) == 0xBF
-                ? 3 : 0;                       // skip a leading UTF-8 byte-order mark
-        for (int index = start; index < document.length; index++) {
-            byte b = document[index];
-            if (b == ' ' || b == '\t' || b == '\n' || b == '\r') {
-                continue;
-            }
-            if (b == '{' || b == '[') {
-                return parseJson(document);
-            }
-            return parseTagValue(document, start);
+        try {
+            return parse(document, false);
+        } catch (MalformedSbomException _) {
+            return DependencyGraph.EMPTY;      // unreachable in lenient mode, but keeps the signature exception-free
         }
-        return DependencyGraph.EMPTY;          // empty / all-whitespace
     }
 
-    private static DependencyGraph parseJson(byte[] document) {
+    /** Like {@link #parse(byte[])}, but throws {@link MalformedSbomException} when the document announces JSON and does
+     *  not decode, so a served view renders "could not derive this SBOM" as it does for a CycloneDX document. A
+     *  tag-value document has no such failure: what it holds is read line by line. */
+    public static DependencyGraph parseStrict(byte[] document) throws MalformedSbomException {
+        return parse(document, true);
+    }
+
+    private static DependencyGraph parse(byte[] document, boolean strict) throws MalformedSbomException {
+        return switch (SbomSerialisation.of(document)) {
+            case JSON -> parseJson(document, strict);
+            case XML, TEXT -> parseTagValue(document, SbomSerialisation.start(document));
+            case EMPTY -> DependencyGraph.EMPTY;
+        };
+    }
+
+    private static DependencyGraph parseJson(byte[] document, boolean strict) throws MalformedSbomException {
         JsonNode spdx;
         try {
             spdx = MAPPER.readTree(document);
-        } catch (RuntimeException _) {
+        } catch (RuntimeException cause) {
+            if (strict) {
+                throw new MalformedSbomException("SPDX JSON document is not readable JSON", cause);
+            }
             return DependencyGraph.EMPTY;
         }
         if (spdx == null || !spdx.isObject()) {

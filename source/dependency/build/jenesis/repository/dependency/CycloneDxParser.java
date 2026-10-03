@@ -63,23 +63,12 @@ public final class CycloneDxParser {
     }
 
     private static DependencyGraph parse(byte[] document, boolean strict) throws MalformedSbomException {
-        int start = document.length >= 3
-                && (document[0] & 0xFF) == 0xEF && (document[1] & 0xFF) == 0xBB && (document[2] & 0xFF) == 0xBF
-                ? 3 : 0;                       // skip a leading UTF-8 byte-order mark
-        for (int index = start; index < document.length; index++) {
-            byte b = document[index];
-            if (b == ' ' || b == '\t' || b == '\n' || b == '\r') {
-                continue;
-            }
-            if (b == '{' || b == '[') {
-                return parseJson(document, strict);
-            }
-            if (b == '<') {
-                return parseXml(document, strict);
-            }
-            return DependencyGraph.EMPTY;      // not a BOM we recognise - a genuine negative, not a parse failure
-        }
-        return DependencyGraph.EMPTY;          // empty / all-whitespace
+        return switch (SbomSerialisation.of(document)) {
+            case JSON -> parseJson(document, strict);
+            case XML -> parseXml(document, strict);
+            // Not a BOM this parser reads, or nothing at all: a genuine negative, not a parse failure.
+            case TEXT, EMPTY -> DependencyGraph.EMPTY;
+        };
     }
 
     private static DependencyGraph parseJson(byte[] document, boolean strict) throws MalformedSbomException {

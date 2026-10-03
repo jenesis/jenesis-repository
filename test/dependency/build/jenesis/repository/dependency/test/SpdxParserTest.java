@@ -5,8 +5,10 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.dependency.DependencyComponent;
 import build.jenesis.repository.dependency.DependencyGraph;
 import build.jenesis.repository.dependency.SpdxParser;
+import build.jenesis.repository.dependency.MalformedSbomException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The SPDX side of SBOM ingestion pinned to the reference SPDX 2.x shape, the parity counterpart to the CycloneDX
@@ -241,5 +243,14 @@ class SpdxParserTest {
         assertThat(SpdxParser.parse(new ByteArrayInputStream(oversized)))
                 .as("a stream larger than MAX_DOCUMENT yields the empty graph").isEqualTo(DependencyGraph.EMPTY);
     }
-}
 
+    /** A document announcing JSON that does not decode is refused by the strict parse, as a CycloneDX one is, so a served
+     *  view says it could not derive the SBOM rather than that the artifact has no dependencies; the sweep's parse still
+     *  reads it as empty. */
+    @Test
+    void a_malformed_json_document_is_refused_strictly_and_read_as_empty_leniently() {
+        byte[] malformed = "{\"spdxVersion\": \"SPDX-2.3\", \"packages\": [".getBytes(StandardCharsets.UTF_8);
+        assertThatThrownBy(() -> SpdxParser.parseStrict(malformed)).isInstanceOf(MalformedSbomException.class);
+        assertThat(SpdxParser.parse(malformed)).isEqualTo(DependencyGraph.EMPTY);
+    }
+}
