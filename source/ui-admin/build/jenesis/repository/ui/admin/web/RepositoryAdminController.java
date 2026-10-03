@@ -51,6 +51,8 @@ public class RepositoryAdminController {
     /** How many recent holdings the browse root lists for a format with no folder tree; the full, paged list is the
      *  browse page's search. */
     private static final int DETAIL_HOLDINGS = 200;
+    /** How many of the newest holdings a repository's overview lists. */
+    private static final int OVERVIEW_HOLDINGS = 10;
 
 
     /** How many staging ids the staging page shows before saying more exist; the staging API answers a wider window. */
@@ -285,8 +287,9 @@ public class RepositoryAdminController {
     }
 
     /**
-     * A repository's overview: its routing, whether it hardens its proxy, what stands between it and its collector and
-     * its published index. Every read is a point read or a stored result.
+     * A repository's overview: what it took in most recently, its routing, whether it hardens its proxy, what stands
+     * between it and its collector and its published index. Every read is a point read, a stored result or a bounded
+     * page of a newest-first index.
      */
     @GetMapping("/ui/repositories/{repo}")
     public String detail(@PathVariable("repo") String repo, Model model) throws IOException {
@@ -320,6 +323,9 @@ public class RepositoryAdminController {
         }
         model.addAttribute("retirements", retirements);
         model.addAttribute("index", browse.publishedIndex(repo));
+        RepositoryAdmin.Held recent = repositories.recentHoldings(repo, OVERVIEW_HOLDINGS);
+        model.addAttribute("recent", recent.shown());
+        model.addAttribute("recentMore", recent.more());
         return "repository";
     }
 

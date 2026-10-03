@@ -29,6 +29,24 @@
         <p th:replace="~{base :: alert('Garbage collection refuses this repository: it records ecosystems no installed format can place. See Absent formats below.', 'warn')}"></p>
     </th:block>
 
+    <!--/* What the repository took in last: the versions published into it and the copies it cached from its upstreams,
+         newest first, each to its own page - the first thing someone opening a repository asks of it. One bounded page
+         of each newest-first index; a version withheld or gone since is left out. */-->
+    <article id="recent">
+        <h2>Recently added</h2>
+        <th:block th:if="${recent.isEmpty()}">
+            <div th:replace="~{base :: empty('Nothing has been published here or cached from an upstream yet.')}"></div>
+        </th:block>
+        <th:block th:unless="${recent.isEmpty()}">
+            <p><small>The newest versions published into this repository or cached from its upstreams<span
+                    th:if="${recentMore}"> - the <span th:text="${recent.size()}">10</span> most recent;
+                <a th:href="@{/ui/repositories/{repo}/browse(repo=${repo})}">browse</a> for the rest</span>.</small></p>
+            <figure>
+                <table th:replace="~{fragments :: holdingTable(${repo}, ${recent})}"></table>
+            </figure>
+        </th:block>
+    </article>
+
     <!--/* How the repository is routed, and where that comes from: its own routing setting, the deployment's definition
          of its name, which every tenant's repository of that name inherits, or none. The setting is edited where every
          other setting of the repository is, on its Settings page; the deployment's definitions stay on Upstreams. */-->
