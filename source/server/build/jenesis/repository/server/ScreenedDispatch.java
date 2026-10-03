@@ -166,9 +166,10 @@ public final class ScreenedDispatch {
                 // The held branch: the body is stored for review, not laid out. An edition records its replay context
                 // around the 202 (the gateway's QuarantineDispatch record); the no-op hook does nothing.
                 hooks.held(format, store, exchange.path(), commit.hash(), exchange);
-                exchange.respond(202);
+                format.explain(exchange, 202, commit.explanation());
             }
-            case REJECT -> exchange.respond(422);
+            // Refused, with the reasons the gate gave, so the client prints why rather than a bare status.
+            case REJECT -> format.explain(exchange, 422, commit.explanation());
         }
         // One verdict per screened write for an edition's deploy observation/metric; a no-op for the core.
         hooks.verdict(commit.disposition(), commit.artifact(), exchange);

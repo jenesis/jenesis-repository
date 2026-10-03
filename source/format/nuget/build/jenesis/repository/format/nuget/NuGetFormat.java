@@ -365,11 +365,11 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
             // clear rather than a replay of a push whose envelope is gone.
             case QUARANTINE -> {
                 held(blobs, store, exchange.path(), commit.hash());
-                exchange.respond(202);
+                explain(exchange, 202, commit.explanation());
             }
             // Refused: nothing is linked or marked, and the stored blob is an unreferenced object the collector
             // reclaims.
-            case REJECT -> exchange.respond(422);
+            case REJECT -> explain(exchange, 422, commit.explanation());
         }
     }
 

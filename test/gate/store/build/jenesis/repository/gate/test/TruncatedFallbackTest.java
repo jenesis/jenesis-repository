@@ -93,13 +93,16 @@ class TruncatedFallbackTest {
 
     @Test
     void the_hold_names_the_coordinate_the_fallback_derived_from_the_path() throws IOException {
-        publish("/gatetest/contentonly/padded-1.0.zip", body());
+        Publication.Published published = publish("/gatetest/contentonly/padded-1.0.zip", body());
 
         // The fallback put a licensable coordinate in front of the gate, which is the whole job: the license dimension
         // had something to bite on and the hold names the artifact rather than the content finding.
         assertThat(reasons()).anySatisfy(reason -> assertThat(reason).contains("No license declared"));
         assertThat(new QuarantineLog(store).events()).singleElement().satisfies(event ->
                 assertThat(event.coordinate()).contains("padded-1.0.zip"));
+        assertThat(published.reasons()).as("the publisher is told what the reviewer reads")
+                .isEqualTo(reasons()).isNotEmpty();
+        assertThat(published.explanation()).startsWith("Held for review: No license declared");
     }
 
     @Test

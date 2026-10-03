@@ -615,9 +615,9 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         switch (commit.disposition()) {
             case ACCEPT -> exchange.respond(commit.visible() ? 200 : 400);
             // Held: stored, laid out and withheld; the Simple index screens it out until released.
-            case QUARANTINE -> exchange.respond(202);
+            case QUARANTINE -> explain(exchange, 202, commit.explanation());
             // Refused: nothing linked or marked; the stored blob is an unreferenced object the collector reclaims.
-            case REJECT -> exchange.respond(422);
+            case REJECT -> explain(exchange, 422, commit.explanation());
         }
     }
 

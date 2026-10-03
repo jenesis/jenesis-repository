@@ -195,10 +195,11 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
     }
 
-    /** A failure in the Distribution error envelope, under the spec's catch-all code, so a registry client prints it. */
+    /** An answer in the Distribution error envelope, so a registry client prints it: {@code DENIED} for a refusal,
+     *  the spec's catch-all code for anything else. */
     @Override
-    public void failed(FormatExchange exchange, String sentence) throws IOException {
-        error(exchange, 500, "UNKNOWN", sentence);
+    public void explain(FormatExchange exchange, int status, String sentence) throws IOException {
+        error(exchange, status, status == 403 ? "DENIED" : "UNKNOWN", sentence);
     }
 
     /** An answer in the Distribution error envelope: {@code {"errors":[{"code":...,"message":...}]}}. */
@@ -670,13 +671,9 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
                 case QUARANTINE -> {
                     // Held for review: accepted, but withheld from serving until released.
                     exchange.setResponseHeader("Docker-Content-Digest", "sha256:" + hex);
-                    exchange.respond(202);
+                    explain(exchange, 202, ingested.explanation());
                 }
-                case REJECT -> {
-                    exchange.setResponseHeader("Content-Type", "application/json");
-                    exchange.respond(403, ("{\"errors\":[{\"code\":\"DENIED\",\"message\":"
-                            + "\"manifest withheld by the compliance screen\"}]}").getBytes(StandardCharsets.UTF_8));
-                }
+                case REJECT -> explain(exchange, 403, ingested.explanation());
             }
             return;
         }

@@ -461,10 +461,10 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
             // clear rather than a replay of a push whose envelope is gone.
             case QUARANTINE -> {
                 held(attestations, blobs, store, exchange.path(), commit.hash());
-                exchange.respond(202);
+                explain(exchange, 202, commit.explanation());
             }
             // Refused: nothing linked or marked; the stored blob is an unreferenced object the collector reclaims.
-            case REJECT -> exchange.respond(422);
+            case REJECT -> explain(exchange, 422, commit.explanation());
         }
     }
 

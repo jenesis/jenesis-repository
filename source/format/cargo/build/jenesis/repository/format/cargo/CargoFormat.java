@@ -140,13 +140,13 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
     }
 
-    /** A failure in Cargo's registry error document, {@code {"errors":[{"detail":...}]}}, which cargo prints. */
+    /** An answer in Cargo's registry error document, {@code {"errors":[{"detail":...}]}}, which cargo prints. */
     @Override
-    public void failed(FormatExchange exchange, String sentence) throws IOException {
+    public void explain(FormatExchange exchange, int status, String sentence) throws IOException {
         ObjectNode error = MAPPER.createObjectNode();
         error.putArray("errors").addObject().put("detail", sentence);
         exchange.setResponseHeader("Content-Type", "application/json");
-        exchange.respond(500, MAPPER.writeValueAsBytes(error));
+        exchange.respond(status, MAPPER.writeValueAsBytes(error));
     }
 
     /**
@@ -278,9 +278,9 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
             }
             // The chain held the crate: its layout is written behind the withhold marker (see held), so a review
             // release is the marker clear rather than a replay of a publish whose envelope is gone.
-            case QUARANTINE -> exchange.respond(202);
+            case QUARANTINE -> explain(exchange, 202, commit.explanation());
             // Refused: nothing is linked and no marker set, so the index never names it and the blob is collected.
-            case REJECT -> exchange.respond(422);
+            case REJECT -> explain(exchange, 422, commit.explanation());
         }
     }
 

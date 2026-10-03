@@ -171,11 +171,11 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
     /** The encoded slash of a scoped package name, {@code @scope%2Fname}: after a scope, and nowhere else. */
     private static final Pattern SCOPED_SEPARATOR = Pattern.compile("(@[A-Za-z0-9._~-]+)%2[Ff]");
 
-    /** A failure as npm's registry reports one, {@code {"error":...}}, which the npm client prints as it stands. */
+    /** An answer as npm's registry reports one, {@code {"error":...}}, which the npm client prints as it stands. */
     @Override
-    public void failed(FormatExchange exchange, String sentence) throws IOException {
+    public void explain(FormatExchange exchange, int status, String sentence) throws IOException {
         exchange.setResponseHeader("Content-Type", "application/json");
-        exchange.respond(500, MAPPER.writeValueAsBytes(Map.of("error", sentence)));
+        exchange.respond(status, MAPPER.writeValueAsBytes(Map.of("error", sentence)));
     }
 
     /**
@@ -297,13 +297,13 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
                         publishedOver(exchange);
                         return;
                     }
-                    exchange.respond(202);
+                    explain(exchange, 202, envelope.strongest().explanation());
                     return;
                 }
                 // Refused: no pointer, marker or index entry; the stored blob is an unreferenced object the collector
                 // reclaims.
                 case REJECT -> {
-                    exchange.respond(422);
+                    explain(exchange, 422, envelope.strongest().explanation());
                     return;
                 }
             }

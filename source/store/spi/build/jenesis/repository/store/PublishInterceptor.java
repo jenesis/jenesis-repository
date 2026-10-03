@@ -298,6 +298,16 @@ public interface PublishInterceptor extends PublicationObserver {
         return Disposition.ACCEPT;
     }
 
+    /**
+     * Why this screen's {@link #assess} of {@code artifact} answered as it did, one sentence a publisher reads per
+     * reason - empty when it has nothing it may say, which is always legal. Asked on the thread that assessed, after the
+     * chain's verdict and before {@link #committed}, and only of a screen whose verdict routed the publication, so the
+     * client a hold or a refusal answers is told why in that answer. A reason names what was found, never a secret.
+     */
+    default List<String> reasons(ArtifactDescriptor artifact) {
+        return List.of();
+    }
+
     /** Whether the artifact published at this request path is currently withheld from serving - the read side of a
      *  hold this screen places by a means of its own (a staging subtree, a record keyed some other way). Consulted by
      *  {@link Publication#located} against the same scoped store the publication serves from, on every read - so an

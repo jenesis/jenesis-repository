@@ -44,9 +44,10 @@ final class OciManifests {
         }
     }
 
-    /** The chain's {@link PublishInterceptor.Disposition} and the hex the manifest is stored under, present whatever
-     *  the verdict. */
-    record Ingested(PublishInterceptor.Disposition disposition, String hex, Optional<String> subject) {
+    /** The chain's {@link PublishInterceptor.Disposition}, the hex the manifest is stored under, present whatever
+     *  the verdict, and what a held or refused client is told ({@code Publication.explanation}). */
+    record Ingested(PublishInterceptor.Disposition disposition, String hex, Optional<String> subject,
+                    String explanation) {
     }
 
     /**
@@ -104,7 +105,7 @@ final class OciManifests {
         }
         return new Ingested(commit.disposition(), hex,
                 commit.disposition() == PublishInterceptor.Disposition.REJECT
-                        ? Optional.empty() : manifest.subject());
+                        ? Optional.empty() : manifest.subject(), commit.explanation());
     }
 
     /**

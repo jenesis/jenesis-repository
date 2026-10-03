@@ -1,5 +1,7 @@
 package build.jenesis.repository.test;
 
+import java.util.List;
+
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.PublishInterceptor;
 
@@ -29,5 +31,12 @@ public final class MarkerInterceptor implements PublishInterceptor {
             return Disposition.QUARANTINE;
         }
         return Disposition.ACCEPT;
+    }
+
+    /** Why it held or refused, as a gate would say it, so a test can read it back from the answer. */
+    @Override
+    public List<String> reasons(ArtifactDescriptor artifact) {
+        return List.of("The test gate " + (artifact.path().contains(REJECT_MARKER) ? "refuses" : "holds")
+                + " a marked path.");
     }
 }

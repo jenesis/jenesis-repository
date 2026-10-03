@@ -621,10 +621,10 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
             // Held for review: stored, laid out and withheld - the release list leaves it out until it is released.
             case QUARANTINE -> {
                 release.announceSignature(blobs);
-                exchange.respond(202);
+                explain(exchange, 202, commit.explanation());
             }
             // Refused: nothing is linked, and the stored archive is collected.
-            case REJECT -> exchange.respond(422);
+            case REJECT -> explain(exchange, 422, commit.explanation());
         }
     }
 

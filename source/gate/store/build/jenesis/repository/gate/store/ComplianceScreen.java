@@ -540,6 +540,34 @@ public final class ComplianceScreen implements PublishInterceptor {
         };
     }
 
+    /** The reasons the review screens and the publisher's answer both carry - see {@link #reasonsOf}. */
+    @Override
+    public List<String> reasons(ArtifactDescriptor artifact) {
+        return reasonsOf(artifact, assessed.get(), unparseable.get(), feedFailure.get());
+    }
+
+    /** Why an upload was held or refused, one line a reason: the gate's findings, and for an upload that could not be
+     *  fully screened the artifact and why - an unparseable body, or an advisory feed that failed closed, which a
+     *  reviewer reads as a screening outage to retry rather than a judgement of the content. */
+    private static List<String> reasonsOf(ArtifactDescriptor artifact, ComplianceGate.Assessment assessment,
+                                          String malformed, String feedFailed) {
+        List<String> reasons = new ArrayList<>();
+        if (assessment != null) {
+            for (ComplianceGate.Finding finding : assessment.findings()) {
+                reasons.add(finding.detail());
+            }
+        }
+        if (malformed != null) {
+            reasons.add("Could not fully screen the claimed artifact " + artifact.path()
+                    + " - its quality inspector could not parse it: " + malformed);
+        }
+        if (feedFailed != null) {
+            reasons.add("Could not fully screen the artifact " + artifact.path()
+                    + " - " + FEED_FAILED_CLOSED + ": " + feedFailed);
+        }
+        return reasons;
+    }
+
     /**
      * The gate this repository actually assesses through: the deployment's gate with its two per-repository overlays
      * applied. Extracted rather than inlined because a publish is not the only caller - the late-declaration
@@ -636,26 +664,7 @@ public final class ComplianceScreen implements PublishInterceptor {
                     recorder.recordMaintainers(store, inspected, artifact.path());
                 }
                 recorder.reportSigners(store, inspected, artifact.path(), false);
-                List<String> reasons = new ArrayList<>();
-                if (assessment != null) {
-                    for (ComplianceGate.Finding finding : assessment.findings()) {
-                        reasons.add(finding.detail());
-                    }
-                }
-                if (malformed != null) {
-                    // The hold's own reason when the artifact was held for being unparseable (no gate assessment): a
-                    // scoped, operator-legible line naming the artifact and the inspector's parse-failure message, so a
-                    // reviewer sees which artifact was held and why (errors made visible), not a silent reject.
-                    reasons.add("Could not fully screen the claimed artifact " + artifact.path()
-                            + " - its quality inspector could not parse it: " + malformed);
-                }
-                if (feedFailed != null) {
-                    // The hold's own reason when the artifact was held because an advisory feed failed closed mid-
-                    // assessment (no completed verdict): the artifact and the feed-failure message, so a reviewer sees
-                    // the hold is a screening outage to retry, not a policy rejection of the content itself.
-                    reasons.add("Could not fully screen the artifact " + artifact.path()
-                            + " - " + FEED_FAILED_CLOSED + ": " + feedFailed);
-                }
+                List<String> reasons = reasonsOf(artifact, assessment, malformed, feedFailed);
                 // The path a reviewer will meet this hold at, which is not always the path the screen was handed. A
                 // format whose coordinate lives INSIDE the artifact commits under the only descriptor it
                 // can build before the bytes are down - its push endpoint, one path every push of that format shares

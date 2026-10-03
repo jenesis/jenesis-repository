@@ -35,4 +35,10 @@ public final class CountingInterceptor implements PublishInterceptor {
         }
         return Disposition.ACCEPT;
     }
+
+    /** A reason no answer may carry: this screen accepts, so its verdict never decides a hold or a refusal. */
+    @Override
+    public List<String> reasons(ArtifactDescriptor artifact) {
+        return List.of("The counting screen accepted it.");
+    }
 }

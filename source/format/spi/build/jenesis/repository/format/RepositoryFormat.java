@@ -310,13 +310,22 @@ public interface RepositoryFormat extends IconContributor {
 
     /**
      * Answer a request this format failed on unexpectedly with {@code 500} and {@code sentence} - a line a person can
-     * read and quote, carrying the reference the whole failure was logged under - in this format's own error dialect,
-     * so the client prints it rather than a bare status. The edge has already logged the failure; nothing of it but the
-     * sentence may reach the response. The default answers it as plain text.
+     * read and quote, carrying the reference the whole failure was logged under - through {@link #explain}. The edge
+     * has already logged the failure; nothing of it but the sentence may reach the response.
      */
     default void failed(FormatExchange exchange, String sentence) throws IOException {
+        explain(exchange, 500, sentence);
+    }
+
+    /**
+     * Answer {@code status} with {@code sentence} - a line a person can read, saying what happened and what to do -
+     * in this format's own error dialect, so its client prints the sentence rather than a bare status: an upload held
+     * for review ({@code 202}) or refused ({@code 422}) with {@code Publication.explanation}, a failure ({@code 500}).
+     * The default answers it as plain text; a format whose client reads an error document answers in that document.
+     */
+    default void explain(FormatExchange exchange, int status, String sentence) throws IOException {
         exchange.setResponseHeader("Content-Type", "text/plain; charset=utf-8");
-        exchange.respond(500, sentence.getBytes(StandardCharsets.UTF_8));
+        exchange.respond(status, sentence.getBytes(StandardCharsets.UTF_8));
     }
 
     /**

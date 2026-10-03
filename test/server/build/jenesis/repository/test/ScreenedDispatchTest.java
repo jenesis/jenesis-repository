@@ -207,6 +207,11 @@ public class ScreenedDispatchTest {
         assertThat(edge(spy).dispatch("acme", put, store)).isTrue();
 
         assertThat(put.status).as("a rejected body is 422 at the edge").isEqualTo(422);
+        assertThat(put.responded.toString(StandardCharsets.UTF_8))
+                .as("and the publisher is told why, by the screen whose verdict refused it, and what happened")
+                .isEqualTo("Refused by the compliance gate: The test gate refuses a marked path. Nothing was "
+                        + "published; the refusal and its findings are listed on the repository's Refused screen.");
+        assertThat(put.headers).containsEntry("Content-Type", "text/plain; charset=utf-8");
         assertThat(spy.writes).as("the format is never handed a rejected body - the edge screened before layout")
                 .isZero();
     }
@@ -220,6 +225,10 @@ public class ScreenedDispatchTest {
         assertThat(edge(spy).dispatch("acme", put, store)).isTrue();
 
         assertThat(put.status).as("a quarantined body is 202 at the edge").isEqualTo(202);
+        assertThat(put.responded.toString(StandardCharsets.UTF_8))
+                .as("told why it is held and where it is decided, never what an accepting screen said")
+                .isEqualTo("Held for review: The test gate holds a marked path. It is stored but not served until a "
+                        + "reviewer releases it on the repository's Quarantine screen.");
         assertThat(spy.writes).as("a quarantined body is held, never laid out").isZero();
     }
 

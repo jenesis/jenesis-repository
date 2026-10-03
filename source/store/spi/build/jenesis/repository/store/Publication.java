@@ -908,9 +908,38 @@ public final class Publication {
                 observer -> observer.onMarked(subject, store));
     }
 
-    /** The outcome of a screened upload: the disposition the interceptor chain reached and the SHA-256 the blob was
-     *  stored under - present whatever the disposition, since the blob is written content-addressed before the gate. */
-    public record Published(PublishInterceptor.Disposition disposition, String hash, long size) {
+    /** The outcome of a screened upload: the disposition the interceptor chain reached, the SHA-256 the blob was
+     *  stored under - present whatever the disposition, since the blob is written content-addressed before the gate -
+     *  and, for a hold or a refusal, why ({@link PublishInterceptor#reasons}). */
+    public record Published(PublishInterceptor.Disposition disposition, String hash, long size, List<String> reasons) {
+
+        public Published {
+            reasons = List.copyOf(reasons);
+        }
+
+        /** What a client the upload's answer reaches is told: see {@link Publication#explanation}. */
+        public String explanation() {
+            return Publication.explanation(disposition, reasons);
+        }
+    }
+
+    /**
+     * What a client is told when its upload was held or refused, in one paragraph: the verdict, every reason the
+     * screens gave, and what happens next - where a reviewer decides a hold, and that a refusal published nothing.
+     * Every edge answering a held or refused upload sends this, in whatever shape its client prints an error in, so a
+     * publisher learns the same thing from every format. Empty for an accepted upload.
+     */
+    public static String explanation(PublishInterceptor.Disposition disposition, List<String> reasons) {
+        String why = String.join("; ", reasons.stream().map(String::strip)
+                .map(reason -> reason.endsWith(".") ? reason.substring(0, reason.length() - 1) : reason)
+                .filter(reason -> !reason.isEmpty()).toList());
+        return switch (disposition) {
+            case ACCEPT -> "";
+            case QUARANTINE -> "Held for review" + (why.isEmpty() ? "" : ": " + why) + ". It is stored but not "
+                    + "served until a reviewer releases it on the repository's Quarantine screen.";
+            case REJECT -> "Refused by the compliance gate" + (why.isEmpty() ? "" : ": " + why) + ". Nothing was "
+                    + "published; the refusal and its findings are listed on the repository's Refused screen.";
+        };
     }
 
     /**
@@ -949,8 +978,10 @@ public final class Publication {
         ArtifactDescriptor stored = artifact.withBlob(hash, size);
         PublishInterceptor.Content access = contentOf(hash);
         PublishInterceptor.Disposition disposition = PublishInterceptor.Disposition.ACCEPT;
+        List<PublishInterceptor.Disposition> verdicts = new ArrayList<>(interceptors.size());
         for (PublishInterceptor interceptor : interceptors) {
             PublishInterceptor.Disposition verdict = interceptor.assess(stored, access);
+            verdicts.add(verdict);
             if (verdict.compareTo(disposition) > 0) {
                 disposition = verdict;
             }
@@ -988,10 +1019,19 @@ public final class Publication {
             case REJECT -> {
             }
         }
+        // Why, from the screens whose verdict routed it, asked before committed() while they still hold it.
+        List<String> reasons = new ArrayList<>();
+        if (disposition != PublishInterceptor.Disposition.ACCEPT) {
+            for (int index = 0; index < interceptors.size(); index++) {
+                if (verdicts.get(index) == disposition) {
+                    reasons.addAll(interceptors.get(index).reasons(stored));
+                }
+            }
+        }
         for (PublishInterceptor interceptor : interceptors) {
             interceptor.committed(stored, disposition, store);
         }
-        return new Published(disposition, hash, stored.size());
+        return new Published(disposition, hash, stored.size(), reasons);
     }
 
     // --- the pointer-last accepted-layout commit --------------------------------------------------------------------
@@ -1286,11 +1326,21 @@ public final class Publication {
      *  actually committed - false for a non-{@code ACCEPT} disposition and for an accepted body whose layout
      *  {@linkplain Visibility#declined declined}. The after-commit observers were notified exactly when
      *  {@code visible} is true. */
-    public record Commit(PublishInterceptor.Disposition disposition, ArtifactDescriptor artifact, boolean visible) {
+    public record Commit(PublishInterceptor.Disposition disposition, ArtifactDescriptor artifact, boolean visible,
+                         List<String> reasons) {
+
+        public Commit {
+            reasons = List.copyOf(reasons);
+        }
 
         /** The SHA-256 the body was stored under, present whatever the disposition. */
         public String hash() {
             return artifact.hash();
+        }
+
+        /** What a client the upload's answer reaches is told: see {@link Publication#explanation}. */
+        public String explanation() {
+            return Publication.explanation(disposition, reasons);
         }
     }
 
@@ -1330,12 +1380,12 @@ public final class Publication {
         // The length was counted as the bytes streamed in; the blob is not stat-ed for a number the write knew.
         ArtifactDescriptor stored = artifact.withBlob(hash, screened.size());
         if (screened.disposition() != PublishInterceptor.Disposition.ACCEPT) {
-            return new Commit(screened.disposition(), stored, false);
+            return new Commit(screened.disposition(), stored, false, screened.reasons());
         }
         admit(republish, artifact, hash);
         Visibility visibility = layout.lay(new Accepted(stored));
         if (!visibility.commits) {
-            return new Commit(PublishInterceptor.Disposition.ACCEPT, stored, false);
+            return new Commit(PublishInterceptor.Disposition.ACCEPT, stored, false, List.of());
         }
         // The commit point. Every declared step is a compare-and-set write of a small pointer object; the artifact is
         // servable from the first one that lands and completely visible once the last has.
@@ -1360,7 +1410,7 @@ public final class Publication {
                     committed.size(), replaced);
         }
         published(committed);
-        return new Commit(PublishInterceptor.Disposition.ACCEPT, committed, true);
+        return new Commit(PublishInterceptor.Disposition.ACCEPT, committed, true, List.of());
     }
 
     /** Evaluate the republish policy before the layout writes anything: {@code OVERWRITE} does not even read, so the
