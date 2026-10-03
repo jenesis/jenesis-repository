@@ -4,6 +4,7 @@ import module java.base;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.store.RepositoryDocument;
+import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * What a routed repository holds and the path of the request as its formats see it - the type's mount in front of the
@@ -32,5 +33,30 @@ public record HeldFormat(RepositoryType type, String path) {
     /** The format of the repository's type that claims the request's path, or empty when none does. */
     public Optional<RepositoryFormat> claiming() {
         return type.claiming(path);
+    }
+
+    /** A read of a repository's artifact, as a surface answering it ahead of the controller sees it. */
+    public record Read(RepositoryRouting.Route route, HeldFormat held, RepositoryFormat format) {
+    }
+
+    /**
+     * {@code request} as a read a surface ahead of the controller may answer - a {@code GET} or {@code HEAD} under
+     * {@code /repository/} that {@code routing} resolves to a repository holding a format which claims the path - or
+     * empty, leaving the request to the controller, which routes it again and answers any refusal with its own
+     * status.
+     */
+    public static Optional<Read> read(HttpServletRequest request, RepositoryRouting routing,
+                                      List<RepositoryFormat> formats) throws IOException {
+        if (!"GET".equals(request.getMethod()) && !"HEAD".equals(request.getMethod())
+                || !request.getRequestURI().startsWith("/repository/")) {
+            return Optional.empty();
+        }
+        Optional<RepositoryRouting.Route> route = routing.resolve(request);
+        if (route.isEmpty()) {
+            return Optional.empty();
+        }
+        Optional<HeldFormat> held = of(routing, route.get(), formats);
+        Optional<RepositoryFormat> claiming = held.flatMap(HeldFormat::claiming);
+        return claiming.map(format -> new Read(route.get(), held.get(), format));
     }
 }
