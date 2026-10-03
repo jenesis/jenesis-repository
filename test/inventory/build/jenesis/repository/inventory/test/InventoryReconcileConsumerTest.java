@@ -82,7 +82,7 @@ class InventoryReconcileConsumerTest {
     void a_version_published_again_keeps_one_row_in_the_newest_first_feed_through_a_pass() throws IOException {
         link("twice", "1.0.0");
         inventory().record(InventoryTestFormat.path("twice", "1.0.0"), NOW);
-        // Another file of the version: the document's published instant moves on.
+        // Another file of the version: the document keeps its first publish and moves its last change.
         inventory().record(InventoryTestFormat.path("twice", "1.0.0"), NOW.plusSeconds(5));
 
         RebuildPass.run(WALK, store, new Publication(store), roots(), List.of(new InventoryReconcileConsumer()));

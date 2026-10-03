@@ -400,16 +400,16 @@ class RepositoryAdminControllerTest {
     @Test
     void the_recent_holdings_show_a_version_once_when_the_feed_holds_a_row_for_an_instant_it_moved_on_from()
             throws IOException {
-        // The state a deployment is left in when a version's published instant moved on after its feed row was
-        // written - a crash between writing the new row and forgetting the old, or a store from before the row moved
-        // with the instant - and a walk then backfilled a row under the new instant.
+        // The state a store is left in from when a version's published instant moved with each of its files: a feed
+        // row under an instant the version's document no longer records, and a walk then backfilling a row under the
+        // one it does. The section is written as such a store had it, since a publish no longer moves the instant.
         create("libs", "maven");
         publish("libs", "/maven/org/acme/lib/1.0/lib-1.0.jar", "released jar");
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(repository("libs"));
         inventory.record("Maven", "org.acme:lib", "1.0", Instant.parse("2026-01-01T00:00:00Z"));
         Instant moved = Instant.parse("2026-01-01T00:00:05Z");
         new StoreMetadata(repository("libs")).mutate("Maven", "org.acme:lib", "1.0", PublishedSection.TAG,
-                PublishedSection.record(moved, false, moved));
+                current -> PublishedSection.section(moved, false, false, moved, moved));
         RebuildPass.run(WalkProvider.resolve(key -> null).orElseThrow(), repository("libs"),
                 new Publication(repository("libs")), new RebuildPass.Roots(StoreRepositoryInventory.pointerRoots(),
                         List.of(StoreRepositoryInventory.publishedRoot()), List.of("blobs"),

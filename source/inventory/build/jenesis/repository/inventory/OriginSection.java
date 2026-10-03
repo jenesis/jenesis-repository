@@ -131,21 +131,19 @@ public final class OriginSection {
 
     /**
      * Record a hand upload through the publish path: append a {@code local-upload} row for {@code (local-upload,
-     * sha256)} when absent, else converge (idempotent - a re-publish of the same bytes refreshes the row's {@code at}
-     * without duplicating it). One row per distinct {@code (source, sha256)}: a different-bytes upload appends a new
-     * row, so the shadowing of a fallback by a local upload stays visible. Re-derivable each CAS attempt.
+     * sha256)} when absent, stamped with when those bytes first arrived, and keep an existing one as it is - a
+     * re-publish of the same bytes changes nothing about where they came from. One row per distinct
+     * {@code (source, sha256)}: a different-bytes upload appends a new row, so the shadowing of a fallback by a local
+     * upload stays visible. Re-derivable each CAS attempt.
      */
     public static SectionMutation recordUpload(String sha256, Instant at) {
         return current -> {
             ArrayNode rows = rows(current);
-            ObjectNode existing = find(rows, LOCAL_UPLOAD, sha256);
-            if (existing == null) {
+            if (find(rows, LOCAL_UPLOAD, sha256) == null) {
                 ObjectNode row = rows.addObject();
                 row.put(SOURCE_FIELD, LOCAL_UPLOAD);
                 putSha(row, sha256);
                 row.put(AT_FIELD, at.toString());
-            } else {
-                existing.put(AT_FIELD, at.toString());
             }
             return section(rows, at);
         };

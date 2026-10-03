@@ -68,10 +68,10 @@ class OriginSectionTest {
             assertThat(row.at()).isEqualTo(NOW);
         });
 
-        // Re-record the SAME bytes: idempotent - still one row (the at refreshes, no duplicate).
+        // Re-record the SAME bytes: idempotent - still one row, stamped with when those bytes first arrived.
         Section same = OriginSection.recordUpload("sha-a", LATER).apply(Optional.of(first));
         assertThat(OriginSection.acquisitions(Optional.of(same))).singleElement()
-                .satisfies(row -> assertThat(row.at()).isEqualTo(LATER));
+                .satisfies(row -> assertThat(row.at()).isEqualTo(NOW));
 
         // A digest change appends a NEW row (the shadowing/drift trail).
         Section changed = OriginSection.recordUpload("sha-b", LATER).apply(Optional.of(same));

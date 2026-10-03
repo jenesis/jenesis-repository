@@ -108,14 +108,15 @@ final class InventoryRecording {
     /** What one commit of a recording did to the version's document, read out of the mutation that landed. */
     private record Committed(boolean firstPublish, Optional<List<LicenseInventory.Declared>> licensesBefore,
                              Optional<List<LicenseInventory.Declared>> licensesAfter, boolean licensesChanged,
-                             Optional<PublishedSection.Facts> facts, Instant publishedBefore) {
+                             Optional<PublishedSection.Facts> facts) {
     }
 
     /**
      * One compare-and-set of the version's document carrying every section the recording holds, then one fold of
      * the identity index: on a first publish the member joins with the fingerprint of the licences the document now
      * records, and on a re-publish whose union changed the recorded set the member is re-folded from the old set to
-     * the new. The recent-releases feed sees a first publish only.
+     * the new. The recent-releases feed sees a first publish only, and a recording that changes nothing the document
+     * says - a client re-running a publish it already made - writes nothing.
      */
     void commit(Recording recording) throws IOException {
         Instant now = Clocks.now();
@@ -125,12 +126,10 @@ final class InventoryRecording {
             MetadataDocument document = current.map(versioned -> MetadataDocument.read(versioned.content()))
                     .orElseGet(MetadataDocument::empty);
             boolean firstPublish = !PublishedSection.published(document.section(PublishedSection.TAG));
-            Instant publishedBefore = PublishedSection.facts(document.section(PublishedSection.TAG))
-                    .map(PublishedSection.Facts::at).orElse(null);
             Optional<List<LicenseInventory.Declared>> before = declaredIn(document);
             SequencedMap<String, SectionMutation> mutations = new LinkedHashMap<>();
             mutations.put(PublishedSection.TAG, PublishedSection.record(
-                    publishedAt(document, recording.originSha256, recording.published), recording.prerelease,
+                    changedAt(document, recording.originSha256, recording.published), recording.prerelease,
                     recording.published));
             if (recording.originSha256 != null && !recording.originSha256.isBlank()) {
                 mutations.put(OriginSection.TAG, OriginSection.recordUpload(recording.originSha256, recording.published));
@@ -157,17 +156,16 @@ final class InventoryRecording {
             Optional<List<LicenseInventory.Declared>> after = declaredIn(next);
             boolean licensesChanged = before.isEmpty() ? after.isPresent()
                     : !new LinkedHashSet<>(before.get()).equals(new LinkedHashSet<>(after.orElse(List.of())));
-            return Retries.Verdict.write(next.serialize(), new Committed(firstPublish, before, after, licensesChanged,
-                    PublishedSection.facts(next.section(PublishedSection.TAG)), publishedBefore));
+            Committed landed = new Committed(firstPublish, before, after, licensesChanged,
+                    PublishedSection.facts(next.section(PublishedSection.TAG)));
+            return !firstPublish && same(document, next) ? Retries.Verdict.keep(landed)
+                    : Retries.Verdict.write(next.serialize(), landed);
         }));
         if (committed.firstPublish()) {
             identity.foldIn(InventoryIdentity.member(recording.ecosystem, recording.coordinate, recording.version,
                     LicenseSection.fingerprintOf(committed.licensesAfter())), recording.published);
             NewestFirst.RELEASES.record(store, recording.ecosystem, recording.coordinate, recording.version,
                     recording.published);
-        } else {
-            moveRecent(recording.ecosystem, recording.coordinate, recording.version, committed.publishedBefore(),
-                    committed.facts().map(PublishedSection.Facts::at).orElse(null));
         }
         if (!committed.firstPublish() && committed.licensesChanged() && committed.facts().isPresent()
                 && committed.facts().get().at() != null) {
@@ -214,82 +212,62 @@ final class InventoryRecording {
         // The publish facts land in the document's published section (its presence is membership of the published
         // set). Edge-triggered on the absent -> present transition, followed by the rollup fold-in on a first publish.
         // On a hand upload the local-upload origin row rides that SAME doc mutate.
-        Landed landed = recordPublishedSection(ecosystem, coordinate, version, prerelease, published, originSha256);
-        if (landed.first() != null) {
+        if (recordPublishedSection(ecosystem, coordinate, version, prerelease, published, originSha256)) {
+            // A version is listed in the newest-first feed under its first publish, which no later file moves.
             NewestFirst.RELEASES.record(store, ecosystem, coordinate, version, published);
-        } else {
-            moveRecent(ecosystem, coordinate, version, landed.before(), landed.at());
         }
-    }
-
-    /**
-     * Keep the newest-first row on the instant the document now records: a re-publish - another file of the version,
-     * or other bytes - refreshes the {@code published} instant ({@link #publishedAt}), and a row left under the
-     * earlier one would be a second row for one version once the reconcile backfills the new instant. The row is
-     * written under the new instant before the old one goes, so the version is never missing from the feed; a crash
-     * between the two leaves the extra row, which a reader shows once.
-     */
-    private void moveRecent(String ecosystem, String coordinate, String version, Instant before, Instant after)
-            throws IOException {
-        if (before == null || after == null || before.equals(after)) {
-            return;
-        }
-        NewestFirst.RELEASES.record(store, ecosystem, coordinate, version, after);
-        NewestFirst.RELEASES.forget(store, ecosystem, coordinate, version, before);
     }
 
     /** Write the publish facts into the document's {@code published} section and, on a first publish (the section
      *  was not a published member before), fold the member into the rollup identity once the document write has
      *  committed - from the document as committed, so the member's license fingerprint is the section that document
-     *  carries and a later license transition re-folds from exactly it. Answers the document it wrote on a first
-     *  publish; a re-publish of an existing member refreshes the instant/prerelease (preserving the pin) and answers
-     *  the instant the document recorded before it and the one it records now.
+     *  carries and a later license transition re-folds from exactly it. Answers whether it was the first publish; a
+     *  later file of an existing member moves its last-changed instant and refreshes the prerelease flag (preserving
+     *  the pin and the first publish), and one that changes nothing writes nothing.
      *
      *  <p>The fold does not ride the document write's batch as one unread compare-and-set attempt: a batch is not a
      *  transaction, so under concurrent publishers the document would commit while the rollup conflicted and the
      *  member would be gone from the identity until the next reconcile. Folding after the commit, through the
      *  retrying compare-and-set, is one small extra write per first publish. */
-    private Landed recordPublishedSection(String ecosystem, String coordinate, String version, boolean prerelease,
-                                          Instant published, String originSha256) throws IOException {
-        // The document as the landing try wrote it on a first publish, and the instants it recorded before and now.
+    private boolean recordPublishedSection(String ecosystem, String coordinate, String version, boolean prerelease,
+                                           Instant published, String originSha256) throws IOException {
+        // The document as the landing try wrote it on a first publish, else none.
         String key = MetadataKey.version(ecosystem, coordinate, version);
-        Landed landed = DocumentTurns.take(store, key, () -> Retries.decide(store, key, current -> {
+        MetadataDocument committed = DocumentTurns.take(store, key, () -> Retries.decide(store, key, current -> {
             MetadataDocument document = current.map(versioned -> MetadataDocument.read(versioned.content()))
                     .orElseGet(MetadataDocument::empty);
             boolean firstPublish = !PublishedSection.published(document.section(PublishedSection.TAG));
-            Instant before = PublishedSection.facts(document.section(PublishedSection.TAG))
-                    .map(PublishedSection.Facts::at).orElse(null);
             SequencedMap<String, build.jenesis.repository.metadata.SectionMutation> mutations = new LinkedHashMap<>();
-            Instant at = publishedAt(document, originSha256, published);
-            mutations.put(PublishedSection.TAG, PublishedSection.record(at, prerelease, published));
+            mutations.put(PublishedSection.TAG, PublishedSection.record(changedAt(document, originSha256, published),
+                    prerelease, published));
             if (originSha256 != null && !originSha256.isBlank()) {
                 // The hand-upload local-upload origin row rides the SAME doc mutate as the publish
                 // commit's published section - one CAS, no extra round-trip. Idempotent (one row per (source, sha256)).
                 mutations.put(OriginSection.TAG, OriginSection.recordUpload(originSha256, published));
             }
             MetadataDocument next = document.mutate(mutations);
-            return Retries.Verdict.write(next.serialize(), new Landed(firstPublish ? next : null, before, at));
+            return !firstPublish && same(document, next) ? Retries.Verdict.<MetadataDocument>keep(null)
+                    : Retries.Verdict.write(next.serialize(), firstPublish ? next : null);
         }));
-        if (landed.first() == null) {
-            return landed;
+        if (committed == null) {
+            return false;
         }
-        MetadataDocument committed = landed.first();
         // The absent -> present transition folds the coordinate's member into the rollup identity so the
         // whole-repository SBOM / NOTICE ETag revalidates - with the license fingerprint of the document that just
         // committed, so this fold and a rebuild reading that document agree on the member.
         identity.foldIn(InventoryIdentity.member(ecosystem, coordinate, version,
                 LicenseSection.fingerprintOf(declaredIn(committed))), published);
-        return landed;
+        return true;
     }
 
     /**
-     * The instant a publish of the version records: its own, unless it uploads bytes the version already holds from an
-     * upload. Such a re-upload changes nothing a reader sees, so the version keeps the instant it had and its row in
-     * the newest-first feed stays where it is; another file of the version, or other bytes, move both.
+     * The instant a file of the version records as its last change: its own publish, unless it uploads bytes the
+     * version already holds from an upload. Such a re-upload changes nothing a reader sees, so the version keeps the
+     * instant it had; another file of the version, or other bytes, move it.
      */
-    private static Instant publishedAt(MetadataDocument document, String originSha256, Instant published) {
+    private static Instant changedAt(MetadataDocument document, String originSha256, Instant published) {
         Optional<Instant> before = PublishedSection.facts(document.section(PublishedSection.TAG))
-                .map(PublishedSection.Facts::at);
+                .map(PublishedSection.Facts::changed);
         if (before.isEmpty() || originSha256 == null || originSha256.isBlank()) {
             return published;
         }
@@ -298,9 +276,29 @@ final class InventoryRecording {
         return held ? before.get() : published;
     }
 
-    /** What a publish's document write landed: the document on a first publish, else none, and the instants the
-     *  document recorded before and records now. */
-    private record Landed(MetadataDocument first, Instant before, Instant at) {
+    /** Whether {@code next} says what {@code document} says - the same sections with the same contents - whatever
+     *  instant each section was last stamped with: such a write changes nothing a reader sees, so it is not made. */
+    private static boolean same(MetadataDocument document, MetadataDocument next) {
+        if (!document.tags().equals(next.tags())) {
+            return false;
+        }
+        for (String tag : document.tags()) {
+            Optional<Section> was = document.section(tag);
+            Optional<Section> is = next.section(tag);
+            if (was.isEmpty() || is.isEmpty()) {
+                if (!Objects.equals(document.raw(tag), next.raw(tag))) {
+                    return false;
+                }
+                continue;
+            }
+            if (was.get().schema() != is.get().schema() || was.get().state() != is.get().state()
+                    || !Objects.equals(was.get().error(), is.get().error())
+                    || !Objects.equals(was.get().signal(), is.get().signal())
+                    || !Objects.equals(was.get().payload(), is.get().payload())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
