@@ -10,6 +10,7 @@ import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.walk.PagedTreeWalk;
 import build.jenesis.repository.walk.Traversal;
 import build.jenesis.repository.walk.WalkPass;
+import build.jenesis.repository.walk.SegmentedPartial;
 import build.jenesis.repository.walk.WalkSegment;
 import build.jenesis.repository.walk.Trees;
 
@@ -312,118 +313,66 @@ final class SubtreeSizeRollUp {
      * replay). A folder a range bound cuts is only partially seen by this segment; its partial goes to the
      * segment's {@code walks/rollup/state/<nnn>} object, summed by the pass-completion merge.
      *
-     * <p>Resumability: the whole in-memory state (frame stack, cut partials, the last folded key) is flushed to the
-     * segment's state object in {@link #beforeCheckpoint} - before the walk durably commits its cursor - so a
-     * committed cursor never lies about a partial still sitting in a crashed buffer. A worker that takes a segment
-     * over (or resumes after a crash) reloads that state; the walk redelivers at most the uncommitted stride tail,
-     * and keys at or below the state's own cursor are skipped as already folded - the flush may only ever be
-     * <em>ahead</em> of the walk's committed cursor, never behind it. State writes are compare-and-set fenced the
-     * same way the walk fences its segment claims: a flush that loses the CAS (or re-reads another holder's write)
-     * proves the segment was taken over, and this worker stops rather than double-counting.
+     * <p>The frame stack, the cut partials and the last folded key are the segment's state, checkpointed and taken
+     * over as {@link SegmentedPartial} does it.
      */
-    private final class RollUpVisitor implements ArtifactWalk.KeyVisitor {
+    private final class RollUpVisitor extends SegmentedPartial {
 
-        /** This worker's identity inside the state objects it flushes - the fencing token's human-readable half. */
-        private final String holder = UUID.randomUUID().toString().substring(0, 8);
-
-        /** The pass's static segment plan, read once on the first visit (the manifest exists by then). */
-        private List<WalkSegment> plan;
-        private long generation;
-
-        private int current = -1;
-        private Object token;
-        private String cursor;
         /** The open-folder chain, index 0 the {@code publish} root, the last entry the deepest open folder. */
         private final List<Frame> open = new ArrayList<>();
         /** Partials of range-cut folders this segment already left - only ever ancestors of the range's lower
          *  bound, so O(depth) entries. */
         private final Map<String, Long> closed = new LinkedHashMap<>();
-        private boolean dirty;
 
-        @Override
-        public void visit(String key) throws IOException {
-            if (plan == null) {
-                plan = walk.segments(store, "rollup");
-                generation = plan.isEmpty() ? 0 : plan.getFirst().generation();
-            }
-            int index = range(key);
-            if (index != current) {
-                load(index);
-            }
-            if (cursor != null && Trees.order(key, cursor) <= 0) {
-                return;                              // the crash-stride replay: already folded and durably flushed
-            }
-            if (underReview(key)) {
-                return;                              // a review handle, not a publication
-            }
-            fold(key);
-            cursor = key;
-            dirty = true;
+        RollUpVisitor() {
+            super(store, walk, "rollup", "roll-up");
         }
 
         @Override
-        public void beforeCheckpoint(String committed) throws IOException {
-            if (current < 0 || !dirty) {
-                return;                              // nothing folded since the last flush (or an empty segment)
-            }
-            byte[] content = RollUpState.serialize(generation, holder, cursor, open, closed);
-            String key = rollUpStateKey(current);
-            if (!store.writeVersioned(key, content, token)) {
-                throw new IOException("the roll-up partial of segment " + current + " was taken over");
-            }
-            // Re-read for the next compare-and-set's token - and verify the object is still ours, exactly as the
-            // walk's own checkpoint commit does: a state taken over between the write and this read must not hand
-            // this worker the new holder's token, or the next flush would double-count into a live holder's state.
-            Optional<ArtifactStore.Versioned> written = store.readVersioned(key);
-            RollUpState ours = written.map(versioned -> RollUpState.parse(versioned.content())).orElse(null);
-            if (ours == null || !holder.equals(ours.holder())) {
-                throw new IOException("the roll-up partial of segment " + current + " was taken over");
-            }
-            token = written.get().token();
-            dirty = false;
+        protected String stateKey(int segment) {
+            return rollUpStateKey(segment);
         }
 
-        /** The planned range containing {@code key}; the ranges partition the root, so exactly one matches. */
-        private int range(String key) throws IOException {
-            if (current >= 0 && contains(plan.get(current), key)) {
-                return current;
-            }
-            for (int index = 0; index < plan.size(); index++) {
-                if (contains(plan.get(index), key)) {
-                    return index;
-                }
-            }
-            throw new IOException("no planned roll-up range contains " + key);
+        @Override
+        protected String holderOf(byte[] state) {
+            RollUpState parsed = RollUpState.parse(state);
+            return parsed == null ? null : parsed.holder();
         }
 
-        private boolean contains(WalkSegment segment, String key) {
-            return (segment.from() == null || Trees.order(segment.from(), key) <= 0)
-                    && (segment.to() == null || Trees.order(key, segment.to()) < 0);
-        }
-
-        /** Enter a segment's range: drop the in-memory fold (any unflushed tail was never cursor-committed, so its
-         *  keys will be redelivered to whoever walks that range next) and adopt the persisted partial, if the
-         *  current pass wrote one - a superseded pass's leftover only donates its CAS token. */
-        private void load(int index) throws IOException {
+        @Override
+        protected void reset() {
             open.clear();
             closed.clear();
-            cursor = null;
-            dirty = false;
-            current = index;
-            Optional<ArtifactStore.Versioned> stored = store.readVersioned(rollUpStateKey(index));
-            token = stored.map(ArtifactStore.Versioned::token).orElse(null);
-            RollUpState state = stored.map(versioned -> RollUpState.parse(versioned.content())).orElse(null);
+        }
+
+        @Override
+        protected String adopt(byte[] content, long generation) {
+            RollUpState state = RollUpState.parse(content);
             if (state == null || state.generation() != generation) {
-                return;
+                return null;
             }
-            cursor = state.cursor();
             state.open().forEach((path, bytes) -> open.add(new Frame(path, bytes)));
             closed.putAll(state.closed());
+            return state.cursor();
+        }
+
+        @Override
+        protected boolean fold(String key) throws IOException {
+            if (underReview(key)) {
+                return false;                        // a review handle, not a publication
+            }
+            step(key);
+            return true;
+        }
+
+        @Override
+        protected byte[] flush(int segment, long generation, String cursor) throws IOException {
+            return RollUpState.serialize(generation, holder, cursor, open, closed);
         }
 
         /** One post-order fold step: pop the folders the stream just left (adding each into its parent and
          *  disposing it), push the newly entered ones, and add the leaf's blob size to its own folder. */
-        private void fold(String key) throws IOException {
+        private void step(String key) throws IOException {
             List<String> chain = chain(key);
             int shared = 0;
             while (shared < open.size() && shared < chain.size()
@@ -453,7 +402,7 @@ final class SubtreeSizeRollUp {
          *  walk's replay simply recomputing the same value - and a range-cut partial otherwise. In path order a
          *  folder's subtree spans {@code [path + "/", path + "0")} ({@code '0'} the character after {@code '/'}). */
         private void dispose(Frame frame) throws IOException {
-            WalkSegment segment = plan.get(current);
+            WalkSegment segment = segment();
             if ((segment.from() == null || Trees.order(segment.from(), frame.path + "/") <= 0)
                     && (segment.to() == null || Trees.order(frame.path + "0", segment.to()) <= 0)) {
                 new StoredCounter(store, sizeKey(rollUpFolder(frame.path))).set(frame.bytes);
