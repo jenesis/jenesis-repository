@@ -1,22 +1,8 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head th:fragment="head(title)">
-    <!--/* The shared list of what every page loads - one place, both consoles. Only the format icons' rules below are
-         local. */-->
+    <!--/* The shared list of what every page loads - one place, both consoles. */-->
     <th:block th:replace="~{base :: headContents(${title}, ${product ?: 'Jenesis Repository'})}"></th:block>
-    <style>
-        code { word-break: break-all; }
-        /* SPI-provided format icons: a uniform square box; the inlined SVG fills it and, being
-           stroke="currentColor", inherits the text colour so it inverts with the light/dark theme. */
-        .format-icon { display: inline-block; width: 1.25rem; height: 1.25rem; vertical-align: -0.2em;
-                       margin-right: 0.3rem; }
-        .format-icon svg { display: block; width: 100%; height: 100%; }
-        /* A mark whose contributor is no longer installed. The drawing already says so (an orphan is tiled dashed)
-           and so do the title and aria-label, so this tint is an extra cue and never the only one. */
-        .format-icon--orphaned { color: var(--pico-muted-color); }
-        /* How a setting, its filter and its switch look is the shared stylesheet's alone (console.css), so a row
-           reads the same on every screen that renders one. */
-    </style>
 </head>
 <body>
 <!--/* The shared console header. All of it - the edition's notice strip, the brand and theme switch, the tenant,

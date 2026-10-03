@@ -46,6 +46,9 @@
     <meta th:if="${_csrf != null}" name="_csrf_header" th:content="${_csrf.headerName}">
     <!--/* Deliberately not deferred: a stored dark/light choice must apply before the first paint. */-->
     <script th:src="@{/ui/js/theme.js}"></script>
+    <!--/* htmx would otherwise inject the stylesheet of its request indicator, an inline style the console's
+         Content-Security-Policy refuses; the console styles no indicator. */-->
+    <meta name="htmx-config" content='{"includeIndicatorStyles":false}'>
     <script th:src="@{/ui/js/htmx.min.js}" defer></script>
     <script th:src="@{/ui/js/console.js}" defer></script>
 </th:block>
@@ -253,14 +256,14 @@
 <!--/* Empty / loading / error state: one consistent treatment, never a blank screen. */-->
 <div th:fragment="empty(message)" class="app-empty" role="status">
     <div class="app-empty__icon" aria-hidden="true">∅</div>
-    <p th:text="${message}" style="margin:0">Nothing here yet.</p>
+    <p th:text="${message}" class="app-empty__message">Nothing here yet.</p>
 </div>
 
 <!--/* The same state where the way out of it is an action: the words that name it are its link, inside the sentence,
      as in "No repositories yet. Create one, then publish into it." `before` and `after` surround the linked words. */-->
 <div th:fragment="emptyAction(before, action, href, after)" class="app-empty" role="status">
     <div class="app-empty__icon" aria-hidden="true">∅</div>
-    <p style="margin:0"><th:block th:text="${before}">Nothing here yet. </th:block><a th:href="@{${href}}"
+    <p class="app-empty__message"><th:block th:text="${before}">Nothing here yet. </th:block><a th:href="@{${href}}"
             th:text="${action}">Create one</a><th:block th:text="${after}">.</th:block></p>
 </div>
 
@@ -398,8 +401,11 @@
      was, since one console can offer a search to reach the rest and the other cannot. */-->
 <th:block th:fragment="browseRows(rows, truncated, note)">
     <tr th:each="row : ${rows}">
-        <td class="app-list__name"
-            th:style="${row.depth} > 0 ? 'padding-left:calc(var(--app-space-4) * ' + ${row.depth} + ')' : null">
+        <td class="app-list__name">
+            <!--/* The depth as that many indents rather than a style attribute, which the console's
+                 Content-Security-Policy refuses. */-->
+            <th:block th:if="${row.depth > 0}"><span th:each="level : ${#numbers.sequence(1, row.depth)}"
+                    class="app-indent" aria-hidden="true"></span></th:block>
             <button th:if="${row.expandable()}" type="button" class="app-tree-toggle"
                     th:attr="hx-get=${row.childrenHref}"
                     hx-target="closest tr" hx-swap="afterend" hx-trigger="click once"

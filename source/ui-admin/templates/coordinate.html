@@ -54,7 +54,7 @@
                 <!--/* A row a version, its facts at a glance; the version opens its own page, where everything else
                      recorded about it - files, licences, manifest, signature - is listed. */-->
                 <th:block th:each="v : ${detail.versions}">
-                <tr th:style="${v.served} ? '' : 'opacity: 0.6'">
+                <tr th:classappend="${v.served} ? '' : 'app-list__row--unserved'">
                     <td>
                         <a th:href="@{/ui/repositories/{repo}/version(repo=${repo},ecosystem=${detail.ecosystem},coordinate=${detail.coordinate},version=${v.version})}"><code
                                 th:text="${v.version}">1.0.0</code></a>

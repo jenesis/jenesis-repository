@@ -34,7 +34,7 @@ public class DevConsoleSecurity {
     @Order(2)
     public SecurityFilterChain devSecurityFilterChain(HttpSecurity http, DevConsolePolicy policy, ConsoleAccess access,
                                                       UserDetailsService accounts) throws Exception {
-        return http
+        return ConsoleHeaders.apply(http)
                 .securityMatcher(policy.space().toArray(String[]::new))
                 .userDetailsService(accounts)
                 .authorizeHttpRequests(policy::rules)
