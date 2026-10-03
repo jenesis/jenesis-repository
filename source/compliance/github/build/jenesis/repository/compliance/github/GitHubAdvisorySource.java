@@ -132,7 +132,7 @@ public final class GitHubAdvisorySource implements AdvisorySource {
                     .fetch(request, () -> new Advisories(request, coordinate))
                     .orElse(List.of());
         } catch (FeedException e) {
-            throw new IOException(reason(e), e);
+            throw new IOException(e.reasonText(), e);
         }
     }
 
@@ -142,12 +142,6 @@ public final class GitHubAdvisorySource implements AdvisorySource {
     @Override
     public Freshness freshness() {
         return cache.freshness();
-    }
-
-    /** The client's failure reason in an operator's words, so a log line says whether the fetch hit the page cap, a
-     *  cross-origin cursor or a rejected status. */
-    private static String reason(FeedException failure) {
-        return failure.reason().name().toLowerCase(Locale.ROOT).replace('_', '-');
     }
 
     /** How this source reaches GitHub for one query: one shared JDK transport live (a client per lookup would leak

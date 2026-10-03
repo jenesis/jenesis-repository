@@ -69,6 +69,12 @@ public final class FeedException extends IOException {
         return reason;
     }
 
+    /** The reason in an operator's words - {@code page-cap}, {@code rejected-status} - so a log line says why the fetch
+     *  stopped without the operator decoding an enum name. */
+    public String reasonText() {
+        return reason.name().toLowerCase(Locale.ROOT).replace('_', '-');
+    }
+
     /** The HTTP status when {@link Reason#STATUS}, otherwise {@code 0}. */
     public int status() {
         return status;
