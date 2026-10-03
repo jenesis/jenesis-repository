@@ -10,6 +10,7 @@ import build.jenesis.repository.compliance.GatePolicyProvider;
 import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.FormatExchange;
+import build.jenesis.repository.format.ForwardingExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.inventory.OriginSection;
@@ -773,65 +774,15 @@ public final class RepositoryRouter {
      *  discarded) and reported through {@link #missed()} so the walk moves on to the next fallback. Any other status is
      *  a {@link #committed()} terminal (a served body, or a structural {@code 5xx}/{@code 508}) that streams through
      *  and ends the walk. Response headers are held until the commit; reads delegate to the real exchange unchanged. */
-    private static final class Deferred implements FormatExchange {
+    private static final class Deferred extends ForwardingExchange {
 
-        private final FormatExchange delegate;
         private final Map<String, String> headers = new LinkedHashMap<>();
         private boolean missed;
         private boolean committed;
         private int status = -1;
 
         private Deferred(FormatExchange delegate) {
-            this.delegate = delegate;
-        }
-
-        @Override
-        public String method() {
-            return delegate.method();
-        }
-
-        @Override
-        public String path() {
-            return delegate.path();
-        }
-
-        @Override
-        public String requestUri() {
-            return delegate.requestUri();
-        }
-
-        @Override
-        public String external(String formatPath) {
-            return delegate.external(formatPath);
-        }
-
-        @Override
-        public String scheme() {
-            return delegate.scheme();
-        }
-
-        @Override
-        public String queryParameter(String name) {
-            return delegate.queryParameter(name);
-        }
-
-        @Override
-        public String requestHeader(String name) {
-            return delegate.requestHeader(name);
-        }
-
-        @Override
-        public String setting(String key) {
-            // Delegate deployment toggles straight through: a format served through a fallback-walk leg (a group member
-            // recursion, a screened/spool leg) must read the operator's configured value, not the FormatExchange
-            // default null. Without this a walked leg silently sees the shipped default for every setting the
-            // direct-serve leg reads from the servlet environment (maven-metadata-compute, npm rewrite toggles, ...).
-            return delegate.setting(key);
-        }
-
-        @Override
-        public InputStream requestStream() throws IOException {
-            return delegate.requestStream();
+            super(delegate);
         }
 
         @Override
@@ -857,6 +808,20 @@ public final class RepositoryRouter {
             committed = true;
             headers.forEach(delegate::setResponseHeader);
             return delegate.respond(status, contentLength);
+        }
+
+        /** A whole body is probed for a miss like a streamed one, and a hit handed to the wrapped exchange whole, so
+         *  an index a leg serves keeps the wrapped exchange's conditional revalidation. */
+        @Override
+        public void respond(int status, byte[] content) throws IOException {
+            this.status = status;
+            if (status == 404) {
+                missed = true;
+                return;
+            }
+            committed = true;
+            headers.forEach(delegate::setResponseHeader);
+            delegate.respond(status, content);
         }
 
         private boolean missed() {

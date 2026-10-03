@@ -4,6 +4,7 @@ import module java.base;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.FormatExchange;
+import build.jenesis.repository.format.ForwardingExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactDescriptor;
@@ -378,29 +379,18 @@ public final class PullThroughCache {
      * and the request URI carries the kept path behind whatever the routing put in front of the requested one, so a
      * self-referential URL a leg writes keeps its routing. Everything else is the client's request and response.
      */
-    private static final class Kept implements FormatExchange {
+    private static final class Kept extends ForwardingExchange {
 
-        private final FormatExchange delegate;
         private final String kept;
 
         private Kept(FormatExchange delegate, String kept) {
-            this.delegate = delegate;
+            super(delegate);
             this.kept = kept;
-        }
-
-        @Override
-        public String method() {
-            return delegate.method();
         }
 
         @Override
         public String path() {
             return kept;
-        }
-
-        @Override
-        public String requestedPath() {
-            return delegate.requestedPath();
         }
 
         @Override
@@ -412,52 +402,6 @@ public final class PullThroughCache {
             return prefix + kept;
         }
 
-        @Override
-        public String scheme() {
-            return delegate.scheme();
-        }
-
-        @Override
-        public String remoteAddress() {
-            return delegate.remoteAddress();
-        }
-
-        @Override
-        public String queryParameter(String name) {
-            return delegate.queryParameter(name);
-        }
-
-        @Override
-        public String requestHeader(String name) {
-            return delegate.requestHeader(name);
-        }
-
-        @Override
-        public String setting(String key) {
-            return delegate.setting(key);
-        }
-
-        @Override
-        public InputStream requestStream() throws IOException {
-            return delegate.requestStream();
-        }
-
-        @Override
-        public void setResponseHeader(String name, String value) {
-            delegate.setResponseHeader(name, value);
-        }
-
-        @Override
-        public OutputStream respond(int status, long contentLength) throws IOException {
-            return delegate.respond(status, contentLength);
-        }
-
-        /** Forwarded whole, so a buffered answer keeps the delegate's conditional revalidation (see
-         *  {@link Deferred#respond(int, byte[])}). */
-        @Override
-        public void respond(int status, byte[] content) throws IOException {
-            delegate.respond(status, content);
-        }
     }
 
     /**
@@ -468,64 +412,13 @@ public final class PullThroughCache {
      * response headers) before it writes the body. Response headers are held until the commit; reads delegate to the
      * real exchange unchanged.
      */
-    private static final class Deferred implements FormatExchange {
+    private static final class Deferred extends ForwardingExchange {
 
-        private final FormatExchange delegate;
         private final Map<String, String> headers = new LinkedHashMap<>();
         private boolean missed;
 
         private Deferred(FormatExchange delegate) {
-            this.delegate = delegate;
-        }
-
-        @Override
-        public String method() {
-            return delegate.method();
-        }
-
-        @Override
-        public String path() {
-            return delegate.path();
-        }
-
-        @Override
-        public String requestUri() {
-            return delegate.requestUri();
-        }
-
-        @Override
-        public String external(String formatPath) {
-            return delegate.external(formatPath);
-        }
-
-        @Override
-        public String scheme() {
-            return delegate.scheme();
-        }
-
-        @Override
-        public String remoteAddress() {
-            return delegate.remoteAddress();
-        }
-
-        @Override
-        public String queryParameter(String name) {
-            return delegate.queryParameter(name);
-        }
-
-        @Override
-        public String requestHeader(String name) {
-            return delegate.requestHeader(name);
-        }
-
-        @Override
-        public String setting(String key) {
-            return delegate.setting(key);
-        }
-
-        @Override
-        public InputStream requestStream() throws IOException {
-            return delegate.requestStream();
+            super(delegate);
         }
 
         @Override
@@ -544,16 +437,11 @@ public final class PullThroughCache {
         }
 
         /**
-         * A buffered answer is handed to the delegate whole, rather than left to the interface default that would
-         * stream it through {@link #respond(int, long)}.
-         *
-         * <p>The default is what a wrapper silently inherits, and it costs the response its conditional
-         * revalidation: only the servlet exchange's own buffered override computes the {@code ETag} and answers a
-         * matching {@code If-None-Match} with {@code 304}. Every generated index a format serves - a packument, a
-         * {@code maven-metadata.xml}, a PyPI index - travels this way, so in a proxy-capable repository each of them
-         * would be re-downloaded in full on every resolve while the same index in a hosted-only repository
-         * revalidated.
-         * The 404 probe above still has to see the miss, which is why only the buffered path is forwarded here.
+         * A whole body is probed for a miss like a streamed one, and a hit handed to the delegate whole: only the
+         * servlet exchange's own buffered answer computes the {@code ETag} and answers a matching
+         * {@code If-None-Match} with {@code 304}, and every generated index a format serves - a packument, a
+         * {@code maven-metadata.xml}, a PyPI index - travels this way, so streamed through {@link #respond(int, long)}
+         * each would be re-downloaded in full on every resolve in a proxy-capable repository.
          */
         @Override
         public void respond(int status, byte[] content) throws IOException {

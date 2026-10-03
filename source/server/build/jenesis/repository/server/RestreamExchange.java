@@ -3,7 +3,7 @@ package build.jenesis.repository.server;
 import module java.base;
 
 import build.jenesis.repository.format.FormatExchange;
-import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.format.ForwardingExchange;
 import build.jenesis.repository.store.Publication;
 
 /**
@@ -23,88 +23,17 @@ import build.jenesis.repository.store.Publication;
  * only stores what it was given stores nothing: {@link Publication#storeBlob} recognises the stream and answers the
  * hash - so a screened publish writes its blob once, not twice with a read in between.
  */
-public final class RestreamExchange implements FormatExchange {
+public final class RestreamExchange extends ForwardingExchange {
 
-    private final FormatExchange delegate;
     private final Publication.Acceptance accepted;
 
     public RestreamExchange(FormatExchange delegate, Publication.Acceptance accepted) {
-        this.delegate = delegate;
+        super(delegate);
         this.accepted = accepted;
-    }
-
-    @Override
-    public boolean administers() {
-        return delegate.administers();
-    }
-
-    @Override
-    public String method() {
-        return delegate.method();
-    }
-
-    @Override
-    public String path() {
-        return delegate.path();
-    }
-
-    @Override
-    public String requestUri() {
-        return delegate.requestUri();
-    }
-
-    @Override
-    public String external(String formatPath) {
-        return delegate.external(formatPath);
-    }
-
-    @Override
-    public String scheme() {
-        return delegate.scheme();
-    }
-
-    @Override
-    public String remoteAddress() {
-        return delegate.remoteAddress();
-    }
-
-    @Override
-    public String queryParameter(String name) {
-        return delegate.queryParameter(name);
-    }
-
-    @Override
-    public String requestHeader(String name) {
-        return delegate.requestHeader(name);
-    }
-
-    @Override
-    public String setting(String key) {
-        return delegate.setting(key);
     }
 
     @Override
     public InputStream requestStream() throws IOException {
         return new Publication.Stored(accepted);
-    }
-
-    @Override
-    public void setResponseHeader(String name, String value) {
-        delegate.setResponseHeader(name, value);
-    }
-
-    @Override
-    public OutputStream respond(int status, long contentLength) throws IOException {
-        return delegate.respond(status, contentLength);
-    }
-
-    @Override
-    public void audit(String action, String target) {
-        delegate.audit(action, target);
-    }
-
-    @Override
-    public Optional<ArtifactStore> readable(String path) {
-        return delegate.readable(path);
     }
 }

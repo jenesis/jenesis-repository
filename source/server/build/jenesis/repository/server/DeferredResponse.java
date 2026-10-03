@@ -3,6 +3,7 @@ package build.jenesis.repository.server;
 import module java.base;
 
 import build.jenesis.repository.format.FormatExchange;
+import build.jenesis.repository.format.ForwardingExchange;
 
 /**
  * A {@link FormatExchange} that holds the format's response back until the edge lets it go.
@@ -21,71 +22,15 @@ import build.jenesis.repository.format.FormatExchange;
  * a few headers and at most a small document, so keeping it costs nothing measurable, and a streamed read never
  * passes through here - the edge screens single-body writes and nothing else.
  */
-public final class DeferredResponse implements FormatExchange {
+public final class DeferredResponse extends ForwardingExchange {
 
-    private final FormatExchange delegate;
     private final Map<String, String> headers = new LinkedHashMap<>();
     private final ByteArrayOutputStream body = new ByteArrayOutputStream();
     private int status = -1;
     private long contentLength = -1L;
 
     public DeferredResponse(FormatExchange delegate) {
-        this.delegate = delegate;
-    }
-
-    @Override
-    public boolean administers() {
-        return delegate.administers();
-    }
-
-    @Override
-    public String method() {
-        return delegate.method();
-    }
-
-    @Override
-    public String path() {
-        return delegate.path();
-    }
-
-    @Override
-    public String requestUri() {
-        return delegate.requestUri();
-    }
-
-    @Override
-    public String external(String formatPath) {
-        return delegate.external(formatPath);
-    }
-
-    @Override
-    public String scheme() {
-        return delegate.scheme();
-    }
-
-    @Override
-    public String remoteAddress() {
-        return delegate.remoteAddress();
-    }
-
-    @Override
-    public String queryParameter(String name) {
-        return delegate.queryParameter(name);
-    }
-
-    @Override
-    public String requestHeader(String name) {
-        return delegate.requestHeader(name);
-    }
-
-    @Override
-    public String setting(String key) {
-        return delegate.setting(key);
-    }
-
-    @Override
-    public InputStream requestStream() throws IOException {
-        return delegate.requestStream();
+        super(delegate);
     }
 
     @Override
@@ -110,6 +55,18 @@ public final class DeferredResponse implements FormatExchange {
                 // The client's stream is closed when the response is released, not when the format is done with it.
             }
         };
+    }
+
+    /** A whole body is held like a streamed one: forwarded, the wrapped exchange would answer the client now. */
+    @Override
+    public void respond(int status, byte[] content) throws IOException {
+        respond(status, content.length == 0 ? -1L : content.length).write(content);
+    }
+
+    /** The body is written from its start, since the wrapped exchange slices any range from what it is released. */
+    @Override
+    public long from(long contentLength) {
+        return 0L;
     }
 
     /** Whether the format answered at all; a format that laid out and said nothing leaves the edge to answer. */
