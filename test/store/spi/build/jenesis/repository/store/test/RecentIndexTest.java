@@ -121,4 +121,15 @@ public class RecentIndexTest {
                 .as("the forgotten row is gone and the kept one holds its original bytes")
                 .containsExactly("kept");
     }
+
+    @Test
+    void an_order_key_reads_back_as_its_instant_and_sorts_newest_first() {
+        long earlier = Instant.parse("2026-01-01T00:00:00Z").toEpochMilli();
+        long later = Instant.parse("2026-06-01T00:00:00Z").toEpochMilli();
+
+        assertThat(RecentIndex.epochMilli(RecentIndex.orderKey(later) + "-anything")).isEqualTo(later);
+        assertThat(RecentIndex.orderKey(later)).isLessThan(RecentIndex.orderKey(earlier));
+        assertThat(RecentIndex.orderKey(-5L)).as("clamped to the epoch").isEqualTo(RecentIndex.orderKey(0L));
+        assertThat(RecentIndex.epochMilli("not-a-key")).isEqualTo(Long.MIN_VALUE);
+    }
 }

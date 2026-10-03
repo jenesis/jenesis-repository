@@ -105,9 +105,31 @@ public final class RecentIndex {
     /** The key a row takes: the inverted instant, then a digest of the caller's identity to separate two entries
      *  sharing a millisecond. */
     private String key(Instant at, String identity) {
-        long milli = Math.max(0L, at.toEpochMilli());
-        return root + "/" + String.format(Locale.ROOT, "%0" + ORDER_KEY_DIGITS + "d", Long.MAX_VALUE - milli)
-                + "-" + digest(identity);
+        return root + "/" + orderKey(at.toEpochMilli()) + "-" + digest(identity);
+    }
+
+    /**
+     * The newest-first order key of an instant, for any namespace whose names begin with it: {@code MAX_VALUE} less
+     * the epoch-milli, zero-padded to {@value #ORDER_KEY_DIGITS} digits, an instant before the epoch clamped to it -
+     * so ascending name order is descending time order.
+     */
+    public static String orderKey(long epochMilli) {
+        return String.format(Locale.ROOT, "%0" + ORDER_KEY_DIGITS + "d", Long.MAX_VALUE - Math.max(0L, epochMilli));
+    }
+
+    /** The epoch-milli a name beginning with an {@linkplain #orderKey order key} and a {@code -} encodes, or
+     *  {@link Long#MIN_VALUE} for a name no order key begins. */
+    public static long epochMilli(String name) {
+        int dash = name.indexOf('-');
+        String key = dash < 0 ? name : name.substring(0, dash);
+        if (key.length() != ORDER_KEY_DIGITS) {
+            return Long.MIN_VALUE;
+        }
+        try {
+            return Long.MAX_VALUE - Long.parseLong(key);
+        } catch (NumberFormatException _) {
+            return Long.MIN_VALUE;
+        }
     }
 
     private static String digest(String text) {

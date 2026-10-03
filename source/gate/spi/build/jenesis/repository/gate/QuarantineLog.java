@@ -9,6 +9,7 @@ import build.jenesis.repository.events.EventSink;
 import build.jenesis.repository.events.RepositoryEvent;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Retries;
+import build.jenesis.repository.store.RecentIndex;
 
 /**
  * The record of what the compliance gate held back, over a repository's store. Every artifact the gate quarantines or
@@ -111,7 +112,7 @@ public final class QuarantineLog {
     public void record(Instant when, String path, String coordinate, Verdict verdict, List<String> reasons)
             throws IOException {
         String line = serialize(when, path, coordinate, verdict, reasons);
-        store.write(eventKey(orderKey(when.toEpochMilli()) + "-" + digest(path)),
+        store.write(eventKey(RecentIndex.orderKey(when.toEpochMilli()) + "-" + digest(path)),
                 new ByteArrayInputStream(line.getBytes(StandardCharsets.UTF_8)));
         indexLatest(when, path, line);
         // Best-effort, and a no-op without an installed event sink.
@@ -214,7 +215,7 @@ public final class QuarantineLog {
         for (List<String> names = page(ROOT, after); !names.isEmpty(); names = page(ROOT, after)) {
             after = names.getLast();
             for (String name : names) {
-                long stamp = millis(name);
+                long stamp = RecentIndex.epochMilli(name);
                 int index = position++;
                 if (stamp == Long.MIN_VALUE) {
                     continue;                                    // not this log's naming - never delete what we cannot judge
@@ -300,7 +301,7 @@ public final class QuarantineLog {
     }
 
     /** The hex SHA-256 of a request path, so two paths withheld in the same millisecond never share an event object.
-     *  Contains no {@code '-'}, so {@link #millis} splits the name on its first dash. */
+     *  Contains no {@code '-'}, so {@link RecentIndex#epochMilli} splits the name on its first dash. */
     private static String digest(String path) {
         try {
             return HexFormat.of().formatHex(
@@ -310,30 +311,6 @@ public final class QuarantineLog {
         }
     }
 
-    /** The width of the order key, the digits of {@link Long#MAX_VALUE}, so names compare lexicographically as the
-     *  instants compare numerically. */
-    private static final int ORDER_KEY_DIGITS = 19;
-
-    /** The order key of an instant: {@code MAX_VALUE - millis}, zero-padded, so ascending name order is descending
-     *  time order. */
-    private static String orderKey(long millis) {
-        return String.format(Locale.ROOT, "%0" + ORDER_KEY_DIGITS + "d", Long.MAX_VALUE - millis);
-    }
-
-    /** The epoch-millis an event object's name encodes, or {@link Long#MIN_VALUE} for a name this class could not have
-     *  composed, which the sweep never deletes. */
-    private static long millis(String name) {
-        int dash = name.indexOf('-');
-        String key = dash < 0 ? name : name.substring(0, dash);
-        if (key.length() != ORDER_KEY_DIGITS) {
-            return Long.MIN_VALUE;                              // not this log's naming
-        }
-        try {
-            return Long.MAX_VALUE - Long.parseLong(key);
-        } catch (NumberFormatException _) {
-            return Long.MIN_VALUE;
-        }
-    }
 
     /** One event object's key under {@link #ROOT}. */
     private static String eventKey(String name) {
