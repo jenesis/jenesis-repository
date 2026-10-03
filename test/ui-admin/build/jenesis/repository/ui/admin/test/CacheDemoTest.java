@@ -66,7 +66,7 @@ class CacheDemoTest {
 
         assertThat(plan.empty()).isFalse();
         assertThat(plan.repositories()).as("the run creates no repository for the cache").isEmpty();
-        assertThat(String.join("\n", plan.creates())).contains("jenesis_build (jenesis)", "android_app (gradle)");
+        assertThat(String.join("\n", plan.creates())).contains("jenesis_build (jenesis)", "payments_service (gradle)");
     }
 
     @Test
@@ -76,7 +76,7 @@ class CacheDemoTest {
         CacheService projects = new CacheService(root, AuditTrail.none(), () -> TENANT, () -> OPERATOR,
                 new SettingsAdmin(store));
         assertThat(projects.listProjects()).extracting(CacheService.ProjectSummary::name)
-                .containsExactlyInAnyOrder("jenesis_build", "android_app");
+                .containsExactlyInAnyOrder("jenesis_build", "payments_service");
         for (CacheService.ProjectSummary project : projects.listProjects()) {
             assertThat(project.stats().known()).as("%s is counted", project.name()).isTrue();
             assertThat(project.stats().counting()).isFalse();
@@ -98,7 +98,7 @@ class CacheDemoTest {
 
         assertThat(made).first().satisfies(line -> assertThat(line).startsWith("FAILED ")
                 .contains("jenesis_build").contains("exists"));
-        assertThat(made).last().satisfies(line -> assertThat(line).startsWith("DONE ").contains("android_app"));
+        assertThat(made).last().satisfies(line -> assertThat(line).startsWith("DONE ").contains("payments_service"));
     }
 
     private CacheDemo demo() {

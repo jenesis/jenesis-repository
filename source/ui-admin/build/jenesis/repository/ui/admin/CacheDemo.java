@@ -46,14 +46,14 @@ public final class CacheDemo implements DemoContributor {
                     new Output("module-test+store/observed/test/executed", 31_000),
                     new Output("module-test+format+maven/observed/test/executed", 22_000),
                     new Output("resolve/dependencies", 9_000))),
-            new Project("android_app", "gradle", "Demo: a Gradle build's cache - task outputs a CI build stores and "
+            new Project("payments_service", "gradle", "Demo: a Gradle build's cache - task outputs a CI build stores and "
                     + "every later build reuses.", List.of(
-                    new Output(":app:compileReleaseKotlin", 362_000),
-                    new Output(":app:compileReleaseJavaWithJavac", 141_000),
-                    new Output(":app:mergeReleaseResources", 298_000),
-                    new Output(":app:lintAnalyzeRelease", 77_000),
-                    new Output(":core:compileKotlin", 158_000),
-                    new Output(":core:test", 19_000))));
+                    new Output(":service:compileKotlin", 362_000),
+                    new Output(":service:compileJava", 141_000),
+                    new Output(":service:processResources", 298_000),
+                    new Output(":service:test", 77_000),
+                    new Output(":api:compileKotlin", 158_000),
+                    new Output(":api:test", 19_000))));
 
     private final CacheStorage root;
     private final ArtifactStore repositoryStore;

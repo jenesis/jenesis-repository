@@ -47,7 +47,7 @@
                                th:text="${p.stats.lastAction() == 'delete'} ? 'being deleted…' : 'counting…'">counting&hellip;</small>
                         <small th:if="${!p.stats.counting() and p.stats.known()}"><time th:replace="~{base :: time(${p.stats.countedAt()})}">time</time></small>
                         <small th:if="${!p.stats.counting() and !p.stats.known()}">never</small></td>
-                    <td th:text="${#strings.isEmpty(p.sizeCap)} ? '-' : ${p.sizeCap}">-</td>
+                    <td th:text="${#strings.isEmpty(p.sizeCap) or p.sizeCap == '0'} ? '-' : ${p.sizeCap}">-</td>
                     <td th:text="${@format.duration(p.ttl)}">-</td>
                 </tr>
                 </tbody>
