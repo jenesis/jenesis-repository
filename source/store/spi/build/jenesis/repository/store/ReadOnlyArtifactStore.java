@@ -22,12 +22,11 @@ import build.jenesis.repository.observation.TaskStatus;
  * a server maps to HTTP {@code 403}. This wrapper is applied only when the deployment opts in, so an ordinary
  * read-write deployment never pays for it.
  */
-public final class ReadOnlyArtifactStore implements ArtifactStore, ObservabilitySource {
+public final class ReadOnlyArtifactStore extends ForwardingArtifactStore implements ObservabilitySource {
 
-    private final ArtifactStore delegate;
 
     public ReadOnlyArtifactStore(ArtifactStore delegate) {
-        this.delegate = delegate;
+        super(delegate);
     }
 
     /** The wrapped store's signals - a quota's usage, say - since the context holds only this, the outermost store. */
@@ -46,102 +45,14 @@ public final class ReadOnlyArtifactStore implements ArtifactStore, Observability
         return delegate instanceof ObservabilitySource wrapped ? wrapped.taskStatuses() : List.of();
     }
 
+    /** Recency is a write of the access time, so a read-only store records none. */
+    @Override
+    public void touch(String key) {
+    }
+
     @Override
     public ArtifactStore scope(String tenant) {
         return new ReadOnlyArtifactStore(delegate.scope(tenant));
-    }
-
-    @Override
-    public Object identity() {
-        return delegate.identity();
-    }
-
-    @Override
-    public StoreBindings bindings() {
-        return delegate.bindings();
-    }
-
-    @Override
-    public boolean exists(String key) {
-        return delegate.exists(key);
-    }
-
-    @Override
-    public void read(String key, OutputStream out) throws IOException {
-        delegate.read(key, out);
-    }
-
-    @Override
-    public InputStream open(String key) throws IOException {
-        return delegate.open(key);
-    }
-
-    @Override
-    public InputStream open(String key, long offset) throws IOException {
-        return delegate.open(key, offset);
-    }
-
-    @Override
-    public long size(String key) throws IOException {
-        return delegate.size(key);
-    }
-
-    @Override
-    public Optional<Listed> listed(String key) throws IOException {
-        return delegate.listed(key);
-    }
-
-    @Override
-    public Optional<URI> presign(String key, Duration ttl) {
-        return delegate.presign(key, ttl);
-    }
-
-    @Override
-    public List<String> list(String prefix) {
-        return delegate.list(prefix);
-    }
-
-    /**
-     * Delegate the scan, for the same reason {@link #page} is delegated.
-     *
-     * <p>The SPI's inherited {@code scan} is {@code scanByListing}, which walks {@code list} recursively into heap
-     * and then refuses past ten thousand keys - a deliberate bound, because a fallback that buffered a namespace to
-     * answer one page would be worse than one that says it cannot. A decorator that inherits it <em>replaces</em> the
-     * backend's native, bounded prefix listing with that fallback, so a bounded question asked through the decorator -
-     * a tenant existence probe with a page limit of one - becomes an unbounded one, and fails over a store holding
-     * more than ten thousand keys.
-     */
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
-    }
-
-    @Override
-    public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-        delegate.page(prefix, startAfter, limit, consumer);
-    }
-
-    /** Forwarded like {@link #page}: the SPI's default would derive the page from names alone and drop the listing's
-     *  sizes and ages. */
-    @Override
-    public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
-        delegate.pageListed(prefix, startAfter, limit, consumer);
-    }
-
-    @Override
-    public Optional<Capacity> capacity() throws IOException {
-        return delegate.capacity();
-    }
-
-    @Override
-    public Optional<Versioned> readVersioned(String key) throws IOException {
-        return delegate.readVersioned(key);
-    }
-
-    /** Delegated rather than inherited: the default asks the delegate for the whole object to keep its token. */
-    @Override
-    public Optional<Object> version(String key) throws IOException {
-        return delegate.version(key);
     }
 
     @Override

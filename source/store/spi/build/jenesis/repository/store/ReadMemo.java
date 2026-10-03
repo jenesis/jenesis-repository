@@ -34,16 +34,15 @@ import module java.base;
  * (a review pointer that does not stand, a sidecar that was never uploaded), and a first link of a path reads its
  * review pointer for exactly the answer the screen read a moment earlier.
  */
-public final class ReadMemo implements ArtifactStore {
+public final class ReadMemo extends ForwardingArtifactStore {
 
     /** The most keys one memo remembers; a read past it is answered by the store and not kept. */
     static final int CAPACITY = 512;
 
-    private final ArtifactStore delegate;
     private final Map<String, Optional<Versioned>> remembered = new HashMap<>();
 
     private ReadMemo(ArtifactStore delegate) {
-        this.delegate = delegate;
+        super(delegate);
     }
 
     /** A memoising view over {@code store} for one operation - the store itself when it already is one, so a
@@ -76,16 +75,6 @@ public final class ReadMemo implements ArtifactStore {
     @Override
     public ArtifactStore scope(String tenant) {
         return new ReadMemo(delegate.scope(tenant));   // its own memo: keys are relative to the subspace
-    }
-
-    @Override
-    public Object identity() {
-        return delegate.identity();
-    }
-
-    @Override
-    public StoreBindings bindings() {
-        return delegate.bindings();
     }
 
     @Override
@@ -144,73 +133,4 @@ public final class ReadMemo implements ArtifactStore {
         delegate.touch(key);
     }
 
-    @Override
-    public String writeBlob(InputStream in) throws IOException {
-        return delegate.writeBlob(in);
-    }
-
-    @Override
-    public boolean exists(String key) {
-        return delegate.exists(key);
-    }
-
-    @Override
-    public void read(String key, OutputStream out) throws IOException {
-        delegate.read(key, out);
-    }
-
-    @Override
-    public InputStream open(String key) throws IOException {
-        return delegate.open(key);
-    }
-
-    @Override
-    public InputStream open(String key, long offset) throws IOException {
-        return delegate.open(key, offset);
-    }
-
-    @Override
-    public long size(String key) throws IOException {
-        return delegate.size(key);
-    }
-
-    @Override
-    public Optional<Listed> listed(String key) throws IOException {
-        return delegate.listed(key);
-    }
-
-    @Override
-    public Optional<URI> presign(String key, Duration ttl) {
-        return delegate.presign(key, ttl);
-    }
-
-    @Override
-    public Optional<Capacity> capacity() throws IOException {
-        return delegate.capacity();
-    }
-
-    @Override
-    public boolean isEmpty(String prefix) throws IOException {
-        return delegate.isEmpty(prefix);
-    }
-
-    @Override
-    public List<String> list(String prefix) {
-        return delegate.list(prefix);
-    }
-
-    @Override
-    public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-        delegate.page(prefix, startAfter, limit, consumer);
-    }
-
-    @Override
-    public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
-        delegate.pageListed(prefix, startAfter, limit, consumer);
-    }
-
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
-    }
 }

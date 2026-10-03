@@ -39,7 +39,7 @@ import build.jenesis.repository.observation.ObservabilitySource;
  * background task of its own (a periodic reconcile drives {@link #recompute} from outside), so it reports no
  * {@code TaskStatus}.
  */
-public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySource {
+public final class QuotaArtifactStore extends ForwardingArtifactStore implements ObservabilitySource {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(QuotaArtifactStore.class);
 
@@ -50,7 +50,6 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
     private static final String UPLOADS = "oci/.uploads/";
     private static final String USED = Scopes.space(Scopes.QUOTA) + "/used";
 
-    private final ArtifactStore delegate;
     private final ArtifactStore meter;
     private final long limit;
 
@@ -59,7 +58,7 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
     }
 
     private QuotaArtifactStore(ArtifactStore delegate, ArtifactStore meter, long limit) {
-        this.delegate = delegate;
+        super(delegate);
         this.meter = meter;
         this.limit = limit;
     }
@@ -270,113 +269,9 @@ public final class QuotaArtifactStore implements ArtifactStore, ObservabilitySou
     }
 
     @Override
-    public Object identity() {
-        return delegate.identity();
-    }
-
-    @Override
-    public StoreBindings bindings() {
-        return delegate.bindings();
-    }
-
-    @Override
-    public boolean exists(String key) {
-        return delegate.exists(key);
-    }
-
-    @Override
-    public long size(String key) throws IOException {
-        return delegate.size(key);
-    }
-
-    @Override
-    public Optional<Listed> listed(String key) throws IOException {
-        return delegate.listed(key);
-    }
-
-    @Override
     public Optional<URI> presign(String key, Duration ttl) {
         // A read-only capability: a quota decorator has no reason to block a presigned GET, so delegate like read/size.
         return delegate.presign(key, ttl);
     }
 
-    @Override
-    public void read(String key, OutputStream out) throws IOException {
-        delegate.read(key, out);
-    }
-
-    @Override
-    public InputStream open(String key) throws IOException {
-        return delegate.open(key);
-    }
-
-    @Override
-    public InputStream open(String key, long offset) throws IOException {
-        return delegate.open(key, offset);
-    }
-
-    @Override
-    public List<String> list(String prefix) {
-        return delegate.list(prefix);
-    }
-
-    /**
-     * Delegate the scan, for the same reason {@link #page} is delegated.
-     *
-     * <p>The SPI's inherited {@code scan} is {@code scanByListing}, which walks {@code list} recursively into heap
-     * and then refuses past ten thousand keys - a deliberate bound, because a fallback that buffered a namespace to
-     * answer one page would be worse than one that says it cannot. A decorator that inherits it <em>replaces</em> the
-     * backend's native, bounded prefix listing with that fallback, so a bounded question asked through the decorator -
-     * a tenant existence probe with a page limit of one - becomes an unbounded one, and fails over a store holding
-     * more than ten thousand keys.
-     */
-    @Override
-    public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-        return delegate.scan(prefix, startAfter, limit, consumer);
-    }
-
-    @Override
-    public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-        delegate.page(prefix, startAfter, limit, consumer);
-    }
-
-    @Override
-    public Optional<Versioned> readVersioned(String key) throws IOException {
-        return delegate.readVersioned(key);
-    }
-
-    /** Delegated rather than inherited: the default asks the delegate for the whole object to keep its token. */
-    @Override
-    public Optional<Object> version(String key) throws IOException {
-        return delegate.version(key);
-    }
-
-    @Override
-    public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-        return delegate.writeVersioned(key, content, expected);
-    }
-
-    /** Forwarded, so the listing's sizes and ages reach the caller: the SPI's default derives the page from names alone
-     *  and reports no metadata, which turns a descent into one that stats every leaf. */
-    @Override
-    public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
-        delegate.pageListed(prefix, startAfter, limit, consumer);
-    }
-
-    @Override
-    public Optional<Capacity> capacity() throws IOException {
-        return delegate.capacity();
-    }
-
-    @Override
-    public void touch(String key) throws IOException {
-        delegate.touch(key);
-    }
-
-    /** Delegated rather than inherited: the inherited body buffers, which would turn a streaming backend into a
-     *  buffering one for every deployment that meters a quota. */
-    @Override
-    public boolean writeVersioned(String key, InputStream content, long length, Object expected) throws IOException {
-        return delegate.writeVersioned(key, content, length, expected);
-    }
 }

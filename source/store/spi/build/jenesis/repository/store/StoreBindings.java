@@ -106,14 +106,13 @@ public final class StoreBindings {
      * listing, a ranged open with a skip - and it re-binds every scope, which is what makes a repository's view
      * carry what its root was given.
      */
-    private static final class Bound implements ArtifactStore {
+    private static final class Bound extends ForwardingArtifactStore {
 
-        private final ArtifactStore delegate;
         private final StoreBindings own;
         private final StoreBindings bindings;
 
         private Bound(ArtifactStore delegate, StoreBindings own) {
-            this.delegate = delegate;
+            super(delegate);
             this.own = own;
             this.bindings = delegate.bindings().and(own);
         }
@@ -126,111 +125,6 @@ public final class StoreBindings {
         @Override
         public ArtifactStore scope(String tenant) {
             return new Bound(delegate.scope(tenant), own);
-        }
-
-        @Override
-        public Object identity() {
-            return delegate.identity();
-        }
-
-        @Override
-        public boolean exists(String key) {
-            return delegate.exists(key);
-        }
-
-        @Override
-        public void read(String key, OutputStream out) throws IOException {
-            delegate.read(key, out);
-        }
-
-        @Override
-        public InputStream open(String key) throws IOException {
-            return delegate.open(key);
-        }
-
-        @Override
-        public InputStream open(String key, long offset) throws IOException {
-            return delegate.open(key, offset);
-        }
-
-        @Override
-        public Optional<URI> presign(String key, Duration ttl) {
-            return delegate.presign(key, ttl);
-        }
-
-        @Override
-        public void write(String key, InputStream in) throws IOException {
-            delegate.write(key, in);
-        }
-
-        @Override
-        public String writeBlob(InputStream in) throws IOException {
-            return delegate.writeBlob(in);
-        }
-
-        @Override
-        public long size(String key) throws IOException {
-            return delegate.size(key);
-        }
-
-        @Override
-        public Optional<Listed> listed(String key) throws IOException {
-            return delegate.listed(key);
-        }
-
-        @Override
-        public void delete(String key) throws IOException {
-            delegate.delete(key);
-        }
-
-        @Override
-        public Optional<Capacity> capacity() throws IOException {
-            return delegate.capacity();
-        }
-
-        @Override
-        public void touch(String key) throws IOException {
-            delegate.touch(key);
-        }
-
-        @Override
-        public boolean isEmpty(String prefix) throws IOException {
-            return delegate.isEmpty(prefix);
-        }
-
-        @Override
-        public List<String> list(String prefix) {
-            return delegate.list(prefix);
-        }
-
-        @Override
-        public void page(String prefix, String startAfter, int limit, Consumer<String> consumer) {
-            delegate.page(prefix, startAfter, limit, consumer);
-        }
-
-        @Override
-        public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
-            delegate.pageListed(prefix, startAfter, limit, consumer);
-        }
-
-        @Override
-        public Scan scan(String prefix, String startAfter, int limit, Consumer<Listed> consumer) throws IOException {
-            return delegate.scan(prefix, startAfter, limit, consumer);
-        }
-
-        @Override
-        public Optional<Versioned> readVersioned(String key) throws IOException {
-            return delegate.readVersioned(key);
-        }
-
-        @Override
-        public Optional<Object> version(String key) throws IOException {
-            return delegate.version(key);
-        }
-
-        @Override
-        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
-            return delegate.writeVersioned(key, content, expected);
         }
 
         @Override

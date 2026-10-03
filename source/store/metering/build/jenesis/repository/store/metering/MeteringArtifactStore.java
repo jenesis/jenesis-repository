@@ -2,6 +2,7 @@ package build.jenesis.repository.store.metering;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.StoreBindings;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -13,9 +14,8 @@ import io.micrometer.core.instrument.Timer;
  * dependency reaches the store SPI; a scoped view meters too. The bytes pass straight through: a
  * {@link ArtifactStore.RangedSink} target and {@link #writeBlob} reach the leaf backend unchanged.
  */
-public final class MeteringArtifactStore implements ArtifactStore {
+public final class MeteringArtifactStore extends ForwardingArtifactStore {
 
-    private final ArtifactStore delegate;
     private final MeterRegistry registry;
     private final String backend;
     // One timer per (op, outcome), resolved once and reused on the hottest path rather than looked up per call; the map
@@ -41,7 +41,7 @@ public final class MeteringArtifactStore implements ArtifactStore {
 
     private MeteringArtifactStore(ArtifactStore delegate, MeterRegistry registry, String backend,
                                   ConcurrentMap<String, Timer> timers, boolean families) {
-        this.delegate = delegate;
+        super(delegate);
         this.registry = registry;
         this.backend = backend;
         this.timers = timers;
@@ -51,21 +51,6 @@ public final class MeteringArtifactStore implements ArtifactStore {
     @Override
     public ArtifactStore scope(String tenant) {
         return new MeteringArtifactStore(delegate.scope(tenant), registry, backend, timers, families);
-    }
-
-    @Override
-    public Object identity() {
-        return delegate.identity();
-    }
-
-    @Override
-    public StoreBindings bindings() {
-        return delegate.bindings();
-    }
-
-    @Override
-    public Optional<URI> presign(String key, Duration ttl) {
-        return delegate.presign(key, ttl);
     }
 
     @Override
@@ -171,6 +156,12 @@ public final class MeteringArtifactStore implements ArtifactStore {
 
     /** Forwarded like {@link #page}, and because the default derives the page from names alone and drops the sizes and
      *  ages the store contract's decorator leg holds. */
+    /** An emptiness probe is a page of one, and is metered as the page it is. */
+    @Override
+    public boolean isEmpty(String prefix) throws IOException {
+        return timed("page", prefix, () -> delegate.isEmpty(prefix));
+    }
+
     @Override
     public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
         timedRuntime("pageListed", prefix, () -> {
