@@ -311,6 +311,18 @@ class AuthorizationTest {
                 .isEqualTo(Authorization.Decision.ALLOWED);
     }
 
+    @Test
+    void an_anonymous_repository_keeps_no_credentials_and_says_so_when_asked_for_one() {
+        Authorization open = Authorization.anonymous();
+        String hash = Authorization.hash(Authorization.mint("acme"));
+
+        assertThatThrownBy(() -> open.provision("acme", hash, "CI main", null))
+                .as("a credential issued where none is kept").isInstanceOf(Authorization.Open.class)
+                .hasMessageContaining("jenrepo.auth=false");
+        assertThatThrownBy(() -> open.setGrant("acme", hash, "*", Authorization.CACHE_WRITE))
+                .isInstanceOf(Authorization.Open.class);
+    }
+
     // The strictly-opt-in anonymous role at the enforcing choke-point.
 
     @Test

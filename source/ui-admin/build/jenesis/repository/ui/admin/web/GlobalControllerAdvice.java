@@ -1,5 +1,6 @@
 package build.jenesis.repository.ui.admin.web;
 
+import build.jenesis.repository.server.spi.Authorization;
 import module java.base;
 import module org.slf4j;
 
@@ -305,6 +306,14 @@ public class GlobalControllerAdvice {
         return tenant != null && memberships.roleIn(tenant, authentication.getName())
                 .map(role -> role.atLeast(min))
                 .orElse(false);
+    }
+
+    /** A credential change on a deployment with authorization off, which keeps none: said, rather than taken for the
+     *  missing tenant every other {@link IllegalStateException} here means. */
+    @ExceptionHandler(Authorization.Open.class)
+    public String open(Authorization.Open e, Model model) {
+        model.addAttribute("error", e.getMessage());
+        return "error";
     }
 
     @ExceptionHandler(IllegalStateException.class)

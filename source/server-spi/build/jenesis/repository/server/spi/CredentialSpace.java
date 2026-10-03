@@ -73,9 +73,11 @@ final class CredentialSpace {
         return store;
     }
 
+    /** Refuse a change on an open deployment, which keeps no credential documents to change - asked by every write
+     *  here, so a caller that forgets to ask still cannot reach a store there is not. */
     void require() {
         if (store == null) {
-            throw new IllegalStateException("Cannot manage credentials on an anonymous authorization");
+            throw new Authorization.Open();
         }
     }
 
@@ -189,6 +191,7 @@ final class CredentialSpace {
      * explicitly and every other node's within the epoch's ttl - the same pair {@link #tryUpdate} makes.
      */
     void mutate(String path, Consumer<Properties> change) throws IOException {
+        require();
         Retries.update(store, path, current -> {
             Properties properties = new Properties();
             if (current.isPresent()) {
@@ -204,6 +207,7 @@ final class CredentialSpace {
     /** {@link Retries#tryUpdate} on one document, past the cache: the node's own next read is invalidated and every
      *  other node's within {@link #EPOCH_TTL}, whether or not the write landed. Answers whether it landed. */
     boolean tryUpdate(String path, Retries.Mutation mutation) throws IOException {
+        require();
         boolean landed = Retries.tryUpdate(store, path, mutation);
         cache.invalidate(path);   // written past the cache: the node's next read must see it
         mutated();                // ...and every other node's, within EPOCH_TTL
@@ -220,6 +224,7 @@ final class CredentialSpace {
      * it decides is then decided from what the store holds at the write that lands.
      */
     boolean decide(String path, Change change) throws IOException {
+        require();
         AtomicBoolean asked = new AtomicBoolean();
         Retries.decide(store, path, current -> {
             Properties properties = null;
@@ -250,6 +255,7 @@ final class CredentialSpace {
     }
 
     void write(String path, Properties properties) throws IOException {
+        require();
         cache.write(path, Documents.bytes(properties));
         mutated();
     }
@@ -257,6 +263,7 @@ final class CredentialSpace {
     /** Remove one document and mark the deployment changed - the delete half of {@link #write}, so both directions
      *  of a mutation bump the epoch from one place. */
     void remove(String path) throws IOException {
+        require();
         cache.delete(path);
         mutated();
     }
@@ -264,6 +271,7 @@ final class CredentialSpace {
     /** Remove one document without bumping the epoch, for a caller removing several that bumps once after the
      *  last of them. */
     void delete(String path) throws IOException {
+        require();
         cache.delete(path);
     }
 

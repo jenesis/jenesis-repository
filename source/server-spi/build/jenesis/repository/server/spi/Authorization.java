@@ -98,6 +98,17 @@ public final class Authorization {
         return new Authorization(null);
     }
 
+    /** A credential, a grant or a role changed on an open deployment, which keeps none: every request is served
+     *  without one, so there is nothing to issue, grant or revoke until authorization is switched on. */
+    public static final class Open extends IllegalStateException {
+
+        Open() {
+            super("Authorization is off (jenrepo.auth=false), so this deployment keeps no credentials: every request "
+                    + "is served without one, and there is nothing to issue, grant or revoke. Switch authorization on "
+                    + "to manage credentials.");
+        }
+    }
+
     /** An enforcing deployment: every request is checked against the grants held in {@code store}. */
     public static Authorization enforcing(ArtifactStore store) {
         if (store == null) {

@@ -7,6 +7,7 @@ import build.jenesis.repository.server.spi.CredentialLifetimes;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -240,5 +241,13 @@ public final class CredentialsController {
     }
 
     public record AllowedAddressesRequest(String addresses) {
+    }
+
+    /** A credential change on a deployment with authorization off, which keeps none: {@code 409}, saying why. */
+    @ExceptionHandler(Authorization.Open.class)
+    public void open(Authorization.Open open, HttpServletResponse response) throws IOException {
+        response.setStatus(409);
+        response.setContentType("text/plain;charset=UTF-8");
+        response.getWriter().write(open.getMessage());
     }
 }
