@@ -408,7 +408,7 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
             return false;
         }
         if (sub.startsWith(P2) && sub.endsWith(JSON)) {
-            return proxyMetadata(repo, sub, root, exchange, fetcher);
+            return proxyMetadata(repo, sub, root, exchange, store, fetcher);
         }
         if (sub.startsWith(DISTS) && sub.endsWith(ZIP)) {
             return proxyDist(repo, sub.substring(DISTS.length()), root, exchange, store, fetcher);
@@ -419,7 +419,7 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
     /** Fetch an upstream {@code p2} file, rewrite each version's {@code dist.url} through this registry, and stream it
      *  fresh, never cached; it is bounded metadata, so it may be held to rewrite. A version that would not form a safe
      *  path segment keeps its upstream URL. */
-    private boolean proxyMetadata(String repo, String sub, String root, FormatExchange exchange,
+    private boolean proxyMetadata(String repo, String sub, String root, FormatExchange exchange, ArtifactStore store,
                                   ProxyFormat.Fetcher fetcher) throws IOException {
         String name = sub.substring(P2.length(), sub.length() - JSON.length());
         if (name.endsWith(DEV)) {
@@ -436,8 +436,8 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
         }
         // A p2 file is the version list Composer resolves against, an ENUMERATION: only an upstream that answered
         // 404/410 reaches the client as one, and anything else refuses visibly.
-        ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, URI.create(root + "/" + sub), Map.of(), exchange,
-                ProxyRelay.Document.ENUMERATION);
+        ProxyRelay.Answer answer = ProxyRelay.fetchRemembered(fetcher, URI.create(root + "/" + sub), Map.of(), exchange,
+                ProxyRelay.Document.ENUMERATION, store);
         if (!answer.answered()) {
             return answer.served();
         }

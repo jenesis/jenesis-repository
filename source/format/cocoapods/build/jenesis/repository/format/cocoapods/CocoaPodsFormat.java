@@ -360,10 +360,10 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
             return false;
         }
         if (sub.startsWith(ALL_PODS) && sub.endsWith(TXT)) {
-            return proxyShardListing(sub, root, exchange, fetcher);
+            return proxyShardListing(sub, root, exchange, store, fetcher);
         }
         if (sub.startsWith(SPECS) && sub.endsWith(PODSPEC_SUFFIX)) {
-            return proxySpec(rest.substring(0, slash), sub, root, exchange, fetcher);
+            return proxySpec(rest.substring(0, slash), sub, root, exchange, store, fetcher);
         }
         if (sub.startsWith(PODS) && sub.endsWith(ZIP)) {
             return proxyDownload(rest.substring(0, slash), sub.substring(PODS.length()), root, exchange, store, fetcher);
@@ -373,7 +373,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
 
     /** Stream an upstream shard listing fresh, never cached: it carries no URLs and can be large. The target is rebuilt
      *  from validated hex shard segments, so a crafted path cannot steer the fetch. */
-    private boolean proxyShardListing(String sub, String root, FormatExchange exchange, ProxyFormat.Fetcher fetcher)
+    private boolean proxyShardListing(String sub, String root, FormatExchange exchange, ArtifactStore store, ProxyFormat.Fetcher fetcher)
             throws IOException {
         String[] shard = sub.substring(ALL_PODS.length(), sub.length() - TXT.length()).split("_", -1);
         if (shard.length != 3 || !hex(shard[0]) || !hex(shard[1]) || !hex(shard[2])) {
@@ -382,13 +382,13 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         URI target = URI.create(root + "/" + ALL_PODS + shard[0] + "_" + shard[1] + "_" + shard[2] + TXT);
         // The shard listing is the pod-version list a Podfile resolves against, an ENUMERATION: only an upstream that
         // answered 404/410 reaches the client as one. Served as text/plain by default, as the CDN serves it.
-        return ProxyRelay.streamFresh(fetcher, target, "text/plain", exchange, ProxyRelay.Document.ENUMERATION);
+        return ProxyRelay.streamRemembered(fetcher, target, "text/plain", exchange, ProxyRelay.Document.ENUMERATION, store);
     }
 
     /** Fetch an upstream podspec, rewrite an http-zip {@code source} through this registry, and stream it fresh; a
      *  podspec is small metadata, so it may be held to rewrite. Another source is left for the client to fetch
      *  directly. Shard, name and version are validated as the local {@link #spec} validates them. */
-    private boolean proxySpec(String repo, String sub, String root, FormatExchange exchange,
+    private boolean proxySpec(String repo, String sub, String root, FormatExchange exchange, ArtifactStore store,
                               ProxyFormat.Fetcher fetcher) throws IOException {
         String[] parts = sub.split("/", -1);
         if (parts.length != 7 || !hex(parts[1]) || !hex(parts[2]) || !hex(parts[3])
@@ -398,8 +398,8 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         String name = parts[4];
         String version = parts[5];
         // PINNED: the request names the pod and version, so its absence decides nothing about what exists.
-        ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, URI.create(root + "/" + sub), Map.of(), exchange,
-                ProxyRelay.Document.PINNED);
+        ProxyRelay.Answer answer = ProxyRelay.fetchRemembered(fetcher, URI.create(root + "/" + sub), Map.of(), exchange,
+                ProxyRelay.Document.PINNED, store);
         if (!answer.answered()) {
             return answer.served();
         }

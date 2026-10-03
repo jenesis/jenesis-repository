@@ -254,13 +254,13 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Path
             if (url == null || url.isBlank()) {
                 return false;
             }
-            return relay(exchange, fetcher, URI.create(root + "identifiers?url="
+            return relay(exchange, store, fetcher, URI.create(root + "identifiers?url="
                     + URLEncoder.encode(url, StandardCharsets.UTF_8)), "json", ProxyRelay.Document.ENUMERATION);
         }
         if (rest.length == 2) {
             URI list = URI.create(root + rest[0] + "/" + strip(rest[1]));
-            ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, list, Map.of("Accept", ACCEPT + "json"),
-                    exchange, ProxyRelay.Document.ENUMERATION);
+            ProxyRelay.Answer answer = ProxyRelay.fetchRemembered(fetcher, list, Map.of("Accept", ACCEPT + "json"),
+                    exchange, ProxyRelay.Document.ENUMERATION, store);
             if (!answer.answered()) {
                 return answer.served();
             }
@@ -305,12 +305,12 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Path
             return true;
         }
         if (rest.length == 3) {
-            return relay(exchange, fetcher, URI.create(root + rest[0] + "/" + rest[1] + "/" + strip(rest[2])), "json",
+            return relay(exchange, store, fetcher, URI.create(root + rest[0] + "/" + rest[1] + "/" + strip(rest[2])), "json",
                     ProxyRelay.Document.PINNED);
         }
         if (rest.length == 4 && rest[3].equals("Package.swift")) {
             String swiftVersion = exchange.queryParameter("swift-version");
-            return relay(exchange, fetcher, URI.create(root + rest[0] + "/" + rest[1] + "/" + rest[2]
+            return relay(exchange, store, fetcher, URI.create(root + rest[0] + "/" + rest[1] + "/" + rest[2]
                     + "/Package.swift" + (swiftVersion == null ? ""
                     : "?swift-version=" + URLEncoder.encode(swiftVersion, StandardCharsets.UTF_8))), "swift",
                     ProxyRelay.Document.PINNED);
@@ -319,10 +319,10 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Path
     }
 
     /** Relay one document fresh, asked for with the media type the specification gives it. */
-    private static boolean relay(FormatExchange exchange, ProxyFormat.Fetcher fetcher, URI url, String kind,
+    private static boolean relay(FormatExchange exchange, ArtifactStore store, ProxyFormat.Fetcher fetcher, URI url, String kind,
                                  ProxyRelay.Document document) throws IOException {
-        ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, url, Map.of("Accept", ACCEPT + kind), exchange,
-                document);
+        ProxyRelay.Answer answer = ProxyRelay.fetchRemembered(fetcher, url, Map.of("Accept", ACCEPT + kind), exchange,
+                document, store);
         if (!answer.answered()) {
             return answer.served();
         }

@@ -4,8 +4,10 @@ import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
+import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Features;
 import build.jenesis.repository.store.OwnerOnly;
+import build.jenesis.repository.store.UpstreamMemory;
 
 
 /**
@@ -485,6 +487,50 @@ public final class ProxyRelay {
      */
     public static boolean streamFresh(ProxyFormat.Fetcher fetcher, URI url, String defaultContentType,
             FormatExchange exchange, Document document, Tap tap) throws IOException {
+        return relay(fetcher, url, defaultContentType, exchange, document, tap, null);
+    }
+
+    /**
+     * {@link #streamFresh}, answered from the node's {@link UpstreamMemory} for {@code repository} while it remembers
+     * the document, and remembering a {@code 200} small enough to keep: the next read within the memory's ttl costs
+     * the upstream nothing, and a client revalidating with the remembered {@code ETag} is answered {@code 304} here.
+     * A document past the memory's entry cap streams through uncached, as {@link #streamFresh} streams it.
+     *
+     * <p>For a document a client reads alone. A document another one names by digest - a Debian {@code Packages}
+     * its {@code InRelease} lists - must not be remembered apart from the one that names it, or a root remembered
+     * at one moment names a member fetched after the upstream moved; such a family is relayed fresh.
+     */
+    public static boolean streamRemembered(ProxyFormat.Fetcher fetcher, URI url, String defaultContentType,
+            FormatExchange exchange, Document document, ArtifactStore repository) throws IOException {
+        Objects.requireNonNull(repository, "repository");
+        Optional<UpstreamMemory.Remembered> remembered = UpstreamMemory.node().get(repository, url);
+        if (remembered.isPresent()) {
+            answer(remembered.get(), defaultContentType, exchange);
+            return true;
+        }
+        return relay(fetcher, url, defaultContentType, exchange, document, null, repository);
+    }
+
+    /** Answer a remembered document: {@code 304} to a client whose {@code If-None-Match} names its {@code ETag},
+     *  else the document with its {@code Content-Type} and validators. */
+    private static void answer(UpstreamMemory.Remembered remembered, String defaultContentType,
+            FormatExchange exchange) throws IOException {
+        String etag = remembered.headers().get("ETag");
+        relay(etag, remembered.headers().get("Last-Modified"), exchange);
+        String ifNoneMatch = exchange.requestHeader("If-None-Match");
+        if (etag != null && ifNoneMatch != null && ifNoneMatch.contains(etag)) {
+            exchange.respond(304);
+            return;
+        }
+        String contentType = remembered.headers().getOrDefault("Content-Type", defaultContentType);
+        if (contentType != null) {
+            exchange.setResponseHeader("Content-Type", contentType);
+        }
+        exchange.respond(200, remembered.body());
+    }
+
+    private static boolean relay(ProxyFormat.Fetcher fetcher, URI url, String defaultContentType,
+            FormatExchange exchange, Document document, Tap tap, ArtifactStore remembering) throws IOException {
         try (ProxyFormat.Download download = fetcher.download(url, conditionalHeaders(exchange)).orElse(null)) {
             if (download == null) {
                 return unanswered(url, exchange, document, "the upstream could not be reached");
@@ -507,6 +553,21 @@ public final class ProxyRelay {
                 exchange.setResponseHeader("Content-Type", defaultContentType);
             }
             relayValidators(download, exchange);
+            if (remembering != null) {
+                // Small enough to remember: read whole, remembered and served. Larger: the head already read and the
+                // rest stream on, uncached.
+                byte[] head = download.body().readNBytes(UpstreamMemory.ENTRY_CAP + 1);
+                if (head.length <= UpstreamMemory.ENTRY_CAP) {
+                    UpstreamMemory.node().put(remembering, url, head, download::header);
+                    exchange.respond(200, head);
+                    return true;
+                }
+                try (OutputStream out = exchange.respond(200, length(download.header("Content-Length")))) {
+                    out.write(head);
+                    download.body().transferTo(out);
+                }
+                return true;
+            }
             if (tap == null) {
                 try (OutputStream out = exchange.respond(200, length(download.header("Content-Length")))) {
                     download.body().transferTo(out);
@@ -604,6 +665,35 @@ public final class ProxyRelay {
                     unanswered(url, exchange, document, "the upstream answered " + response.status()));
         }
         return new Answer(response, true);
+    }
+
+    /**
+     * {@link #fetchFresh}, answered from the node's {@link UpstreamMemory} for {@code repository} while it remembers
+     * the document, and remembering a {@code 200} it fetches: the leg rewrites and serves the answer exactly as it
+     * would a fresh one. A client revalidating with the remembered {@code ETag} is answered {@code 304} here. The same
+     * caution as {@link #streamRemembered} holds for a document another names by digest.
+     */
+    public static Answer fetchRemembered(ProxyFormat.Fetcher fetcher, URI url, Map<String, String> requestHeaders,
+            FormatExchange exchange, Document document, ArtifactStore repository) throws IOException {
+        Objects.requireNonNull(repository, "repository");
+        UpstreamMemory memory = UpstreamMemory.node();
+        Optional<UpstreamMemory.Remembered> remembered = memory.get(repository, url);
+        if (remembered.isPresent()) {
+            String etag = remembered.get().headers().get("ETag");
+            String ifNoneMatch = exchange.requestHeader("If-None-Match");
+            if (etag != null && ifNoneMatch != null && ifNoneMatch.contains(etag)) {
+                relay(etag, remembered.get().headers().get("Last-Modified"), exchange);
+                exchange.respond(304);
+                return new Answer(null, true);
+            }
+            return new Answer(new ProxyFormat.Fetched(200, remembered.get().body(), remembered.get().headers()),
+                    true);
+        }
+        Answer answer = fetchFresh(fetcher, url, requestHeaders, exchange, document);
+        if (answer.answered()) {
+            memory.put(repository, url, answer.document().body(), answer.document()::header);
+        }
+        return answer;
     }
 
     /**

@@ -388,8 +388,8 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
             String project = normalize(slash < 0 ? after : after.substring(0, slash));
             // The project page is pip's file list for the project, an ENUMERATION: absent means no such project, empty
             // means no matching distribution, so only an upstream that answered 404/410 reaches the client as a 404.
-            ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, URI.create(root + "simple/" + project + "/"),
-                    Map.of(), exchange, ProxyRelay.Document.ENUMERATION);
+            ProxyRelay.Answer answer = ProxyRelay.fetchRemembered(fetcher, URI.create(root + "simple/" + project + "/"),
+                    Map.of(), exchange, ProxyRelay.Document.ENUMERATION, store);
             if (!answer.answered()) {
                 return answer.served();
             }

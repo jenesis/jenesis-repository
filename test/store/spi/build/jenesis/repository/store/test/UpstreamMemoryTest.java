@@ -33,9 +33,13 @@ class UpstreamMemoryTest {
         ArtifactStore releases = repository("releases");
 
         assertThat(memory.get(releases, DOCUMENT)).as("nothing remembered yet").isEmpty();
-        memory.put(releases, DOCUMENT, BODY);
+        memory.put(releases, DOCUMENT, BODY, Map.of("ETag", "\"v1\"")::get);
         clock.advance(Duration.ofHours(5));
-        assertThat(memory.get(releases, DOCUMENT)).hasValue(BODY);
+        assertThat(memory.get(releases, DOCUMENT)).hasValueSatisfying(remembered -> {
+            assertThat(remembered.body()).isEqualTo(BODY);
+            assertThat(remembered.headers()).as("the validator a client revalidates against is kept")
+                    .containsEntry("ETag", "\"v1\"");
+        });
         clock.advance(Duration.ofHours(1));
         assertThat(memory.get(releases, DOCUMENT)).as("six hours on, the upstream is asked again").isEmpty();
         assertThat(memory.hits()).isEqualTo(1);
@@ -45,7 +49,7 @@ class UpstreamMemoryTest {
     @Test
     void a_document_relayed_for_one_repository_never_answers_another() {
         UpstreamMemory memory = new UpstreamMemory(Duration.ofHours(6));
-        memory.put(repository("releases"), DOCUMENT, BODY);
+        memory.put(repository("releases"), DOCUMENT, BODY, _ -> null);
 
         assertThat(memory.get(repository("private"), DOCUMENT))
                 .as("another repository may reach the same upstream with other credentials").isEmpty();
@@ -55,11 +59,11 @@ class UpstreamMemoryTest {
     void a_document_past_the_cap_or_a_zero_ttl_keeps_nothing() {
         ArtifactStore releases = repository("releases");
         UpstreamMemory memory = new UpstreamMemory(Duration.ofHours(6));
-        memory.put(releases, DOCUMENT, new byte[(1 << 20) + 1]);
+        memory.put(releases, DOCUMENT, new byte[(1 << 20) + 1], _ -> null);
         assertThat(memory.get(releases, DOCUMENT)).as("a document past the entry cap is relayed uncached").isEmpty();
 
         UpstreamMemory off = new UpstreamMemory(Duration.ZERO);
-        off.put(releases, DOCUMENT, BODY);
+        off.put(releases, DOCUMENT, BODY, _ -> null);
         assertThat(off.get(releases, DOCUMENT)).as("a zero ttl switches the memory off").isEmpty();
         assertThat(off.bytes()).isZero();
     }

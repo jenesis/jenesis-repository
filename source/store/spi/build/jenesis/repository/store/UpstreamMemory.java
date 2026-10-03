@@ -12,8 +12,9 @@ import com.github.benmanes.caffeine.cache.Caffeine;
  * policy, which is what the default spends.
  *
  * <h2>What it holds</h2>
- * The body of an upstream answer that was a document - a {@code 200} - up to {@value #ENTRY_CAP} bytes; a larger one
- * is relayed uncached. Never a refusal or a miss: an upstream that could not be reached or answered an error is asked
+ * The body of an upstream answer that was a document - a {@code 200} - up to {@value #ENTRY_CAP} bytes, with the
+ * headers a client reads it by: its {@code Content-Type} and the validators it revalidates against. A larger one is
+ * relayed uncached. Never a refusal or a miss: an upstream that could not be reached or answered an error is asked
  * again on the next request, so a remembered document is always one the upstream served. Keyed by the
  * {@linkplain ArtifactStore#identity() identity} of the repository the document was relayed for and the upstream
  * URL, so a document one repository fetched with its own upstream credentials never answers another.
@@ -38,7 +39,7 @@ public final class UpstreamMemory {
     static final long MAX_BYTES = 64L << 20;
 
     /** The largest document remembered; a larger one is relayed uncached. */
-    static final int ENTRY_CAP = 1 << 20;
+    public static final int ENTRY_CAP = 1 << 20;
 
     private static final Object NODE_LOCK = new Object();
     private static UpstreamMemory node;
@@ -49,7 +50,19 @@ public final class UpstreamMemory {
     private final AtomicLong hits = new AtomicLong();
     private final AtomicLong misses = new AtomicLong();
 
-    private record Entry(byte[] body, Instant at) {
+    /** The headers a remembered document keeps: what a client reads it as, and what it revalidates against. */
+    public static final List<String> HEADERS = List.of("Content-Type", "ETag", "Last-Modified");
+
+    /** A remembered document: its body and those of its {@link #HEADERS} the upstream sent. */
+    public record Remembered(byte[] body, Map<String, String> headers) {
+
+        public Remembered {
+            Objects.requireNonNull(body, "body");
+            headers = Map.copyOf(headers);
+        }
+    }
+
+    private record Entry(Remembered document, Instant at) {
     }
 
     /** A memory that keeps a document for {@code ttl}; {@code Duration.ZERO} keeps nothing. */
@@ -68,7 +81,7 @@ public final class UpstreamMemory {
         this.documents = Caffeine.newBuilder()
                 .expireAfterWrite(ttl.isZero() ? Duration.ofNanos(1) : ttl)
                 .maximumWeight(MAX_BYTES)
-                .weigher((String key, Entry entry) -> entry.body().length + key.length())
+                .weigher((String key, Entry entry) -> entry.document().body().length + key.length())
                 .build();
     }
 
@@ -100,8 +113,8 @@ public final class UpstreamMemory {
         return ttl;
     }
 
-    /** The remembered body the upstream served at {@code url} for {@code repository}, while the entry is live. */
-    public Optional<byte[]> get(ArtifactStore repository, URI url) {
+    /** What the upstream served at {@code url} for {@code repository}, while the entry is live. */
+    public Optional<Remembered> get(ArtifactStore repository, URI url) {
         if (ttl.isZero()) {
             return Optional.empty();
         }
@@ -115,16 +128,23 @@ public final class UpstreamMemory {
             return Optional.empty();
         }
         hits.incrementAndGet();
-        return Optional.of(entry.body());
+        return Optional.of(entry.document());
     }
 
-    /** Remember {@code body} as what the upstream served at {@code url} for {@code repository}; a document past
-     *  {@link #ENTRY_CAP} is not kept. */
-    public void put(ArtifactStore repository, URI url, byte[] body) {
+    /** Remember {@code body} as what the upstream served at {@code url} for {@code repository}, with its
+     *  {@link #HEADERS} as {@code header} answers them; a document past {@link #ENTRY_CAP} is not kept. */
+    public void put(ArtifactStore repository, URI url, byte[] body, UnaryOperator<String> header) {
         if (ttl.isZero() || body.length > ENTRY_CAP) {
             return;
         }
-        documents.put(id(repository, url), new Entry(body, clock.instant()));
+        Map<String, String> kept = new LinkedHashMap<>();
+        for (String name : HEADERS) {
+            String value = header.apply(name);
+            if (value != null) {
+                kept.put(name, value);
+            }
+        }
+        documents.put(id(repository, url), new Entry(new Remembered(body, kept), clock.instant()));
     }
 
     /** Drop every document and answer how many went. */
@@ -140,7 +160,7 @@ public final class UpstreamMemory {
         documents.cleanUp();
         long total = 0;
         for (Entry entry : documents.asMap().values()) {
-            total += entry.body().length;
+            total += entry.document().body().length;
         }
         return total;
     }

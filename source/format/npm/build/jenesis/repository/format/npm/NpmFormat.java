@@ -1160,8 +1160,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         request.put("Accept", "application/json");
         // The packument is the enumeration a resolver decides versions from, so a 404 means "no such package"; only an
         // upstream that answered 404/410 may reach the client as one, and anything else refuses visibly.
-        ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, URI.create(root + rest), request, exchange,
-                ProxyRelay.Document.ENUMERATION);
+        ProxyRelay.Answer answer = ProxyRelay.fetchRemembered(fetcher, URI.create(root + rest), request, exchange,
+                ProxyRelay.Document.ENUMERATION, store);
         if (!answer.answered()) {
             return answer.served();
         }

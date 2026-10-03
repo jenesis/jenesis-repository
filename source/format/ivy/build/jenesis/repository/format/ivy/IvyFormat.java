@@ -276,9 +276,9 @@ public final class IvyFormat implements RepositoryFormat, ArtifactLayout, Artifa
         String root = upstream.toString().endsWith("/") ? upstream.toString() : upstream + "/";
         Optional<Module> module = Module.of(path);
         if (module.isPresent()) {
-            return ProxyRelay.streamFresh(fetcher,
+            return ProxyRelay.streamRemembered(fetcher,
                     URI.create(root + module.get().organisation() + "/" + module.get().module() + "/"), "text/html",
-                    exchange, ProxyRelay.Document.ENUMERATION);
+                    exchange, ProxyRelay.Document.ENUMERATION, store);
         }
         Optional<Coordinate> coordinate = Coordinate.of(path);
         if (coordinate.isEmpty()) {

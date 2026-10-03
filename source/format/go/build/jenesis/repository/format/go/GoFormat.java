@@ -275,10 +275,11 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
         String root = upstream.toString();
         URI target = URI.create(root.endsWith("/") ? root + rest : root + "/" + rest);
         if (query) {
-            // The version queries are streamed fresh with validators forwarded both ways. They are ENUMERATION: a 404
-            // is an empty answer a build resolves against, so only an upstream 404/410 reaches the client as one.
-            ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, target, ProxyRelay.conditionalHeaders(exchange),
-                    exchange, ProxyRelay.Document.ENUMERATION);
+            // The version queries are relayed with validators forwarded both ways and remembered for the repository.
+            // They are ENUMERATION: a 404 is an empty answer a build resolves against, so only an upstream 404/410
+            // reaches the client as one.
+            ProxyRelay.Answer answer = ProxyRelay.fetchRemembered(fetcher, target,
+                    ProxyRelay.conditionalHeaders(exchange), exchange, ProxyRelay.Document.ENUMERATION, store);
             if (!answer.answered()) {
                 return answer.served();
             }

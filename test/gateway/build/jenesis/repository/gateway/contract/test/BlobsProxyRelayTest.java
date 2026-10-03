@@ -6,6 +6,7 @@ import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.blobs.ProxyRelay;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.gateway.testkit.FormatDrive;
+import build.jenesis.repository.store.UpstreamMemory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIOException;
@@ -160,6 +161,72 @@ class BlobsProxyRelayTest {
                 .isEqualTo(index.length);
         assertThat(tapped.get()).as("and the tap read the body the client got").isEqualTo(index);
         assertThat(exchange.body()).isEqualTo(index);
+    }
+
+    @Test
+    void a_remembered_document_answers_without_the_upstream_and_revalidates_against_its_etag() throws IOException {
+        UpstreamMemory.reset();
+        try {
+            FormatDrive.MemStore repository = new FormatDrive.MemStore();
+            AtomicInteger fetched = new AtomicInteger();
+            ProxyFormat.Fetcher upstream = (ProxyFormat.Fetcher.Buffered) (url, headers) -> {
+                fetched.incrementAndGet();
+                return Optional.of(new ProxyFormat.Fetched(200, "index".getBytes(StandardCharsets.UTF_8),
+                        Map.of("ETag", "\"v1\"", "Content-Type", "application/json")));
+            };
+            URI index = URI.create("https://upstream.example/index");
+
+            for (int read = 0; read < 2; read++) {
+                FormatDrive.Call call = new FormatDrive.Call("GET", "/npm/left-pad");
+                assertThat(ProxyRelay.streamRemembered(upstream, index, null, call, ProxyRelay.Document.ENUMERATION,
+                        repository)).isTrue();
+                assertThat(call.status).isEqualTo(200);
+                assertThat(call.body()).isEqualTo("index".getBytes(StandardCharsets.UTF_8));
+                assertThat(call.responseHeader("Content-Type")).isEqualTo("application/json");
+            }
+            FormatDrive.Call revalidating = new FormatDrive.Call("GET", "/npm/left-pad").header("If-None-Match", "\"v1\"");
+            ProxyRelay.Answer answer = ProxyRelay.fetchRemembered(upstream, index, Map.of(), revalidating,
+                    ProxyRelay.Document.ENUMERATION, repository);
+            assertThat(answer.answered()).isFalse();
+            assertThat(revalidating.status).as("the remembered ETag answers the revalidation").isEqualTo(304);
+            assertThat(fetched).as("one fetch served all three reads").hasValue(1);
+
+            FormatDrive.Call elsewhere = new FormatDrive.Call("GET", "/npm/left-pad");
+            ProxyRelay.streamRemembered(upstream, index, null, elsewhere, ProxyRelay.Document.ENUMERATION,
+                    new FormatDrive.MemStore());
+            assertThat(fetched).as("another repository asks its upstream itself").hasValue(2);
+        } finally {
+            UpstreamMemory.reset();
+        }
+    }
+
+    @Test
+    void a_refusal_or_a_document_past_the_cap_is_never_remembered() throws IOException {
+        UpstreamMemory.reset();
+        try {
+            FormatDrive.MemStore repository = new FormatDrive.MemStore();
+            URI index = URI.create("https://upstream.example/index");
+            FormatDrive.Call refused = new FormatDrive.Call("GET", "/npm/left-pad");
+            assertThat(ProxyRelay.streamRemembered(answering(503), index, null, refused,
+                    ProxyRelay.Document.ENUMERATION, repository)).isTrue();
+            assertThat(refused.status).isEqualTo(502);
+
+            AtomicInteger fetched = new AtomicInteger();
+            byte[] large = new byte[UpstreamMemory.ENTRY_CAP + 1];
+            ProxyFormat.Fetcher upstream = (ProxyFormat.Fetcher.Buffered) (url, headers) -> {
+                fetched.incrementAndGet();
+                return Optional.of(new ProxyFormat.Fetched(200, large, Map.of()));
+            };
+            for (int read = 0; read < 2; read++) {
+                FormatDrive.Call call = new FormatDrive.Call("GET", "/npm/left-pad");
+                assertThat(ProxyRelay.streamRemembered(upstream, index, null, call, ProxyRelay.Document.ENUMERATION,
+                        repository)).isTrue();
+                assertThat(call.body()).as("streamed whole past the cap").isEqualTo(large);
+            }
+            assertThat(fetched).as("neither the refusal nor the large document was remembered").hasValue(2);
+        } finally {
+            UpstreamMemory.reset();
+        }
     }
 
     /** An upstream that is never reached: the SPI's empty-{@link Optional} transport-failure sentinel. */

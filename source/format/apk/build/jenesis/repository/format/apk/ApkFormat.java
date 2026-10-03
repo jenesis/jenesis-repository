@@ -311,8 +311,8 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, PathKe
         String root = upstream.toString().endsWith("/") ? upstream.toString() : upstream + "/";
         URI index = URI.create(root + architecture + "/" + ARCHIVE);
         if (file.equals(ARCHIVE)) {
-            return ProxyRelay.streamFresh(fetcher, index, "application/gzip", exchange,
-                    ProxyRelay.Document.ENUMERATION);
+            return ProxyRelay.streamRemembered(fetcher, index, "application/gzip", exchange,
+                    ProxyRelay.Document.ENUMERATION, store);
         }
         if (!file.endsWith(APK)) {
             return false;

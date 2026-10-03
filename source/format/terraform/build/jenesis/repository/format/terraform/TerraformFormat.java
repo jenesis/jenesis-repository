@@ -433,16 +433,16 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         boolean allowInternal = ProxyLeg.allowInternalTargets(exchange);
         Services services = services(upstream, fetcher, allowInternal);
         if (path.length == 5 && path[0].equals("v1") && path[1].equals("providers") && path[4].equals("versions")) {
-            return relay(exchange, fetcher, services.providers().resolve(path[2] + "/" + path[3] + "/versions"),
+            return relay(exchange, store, fetcher, services.providers().resolve(path[2] + "/" + path[3] + "/versions"),
                     "application/json", ProxyRelay.Document.ENUMERATION);
         }
         if (path.length == 6 && path[0].equals("v1") && path[1].equals("modules") && path[5].equals("versions")) {
-            return relay(exchange, fetcher,
+            return relay(exchange, store, fetcher,
                     services.modules().resolve(path[2] + "/" + path[3] + "/" + path[4] + "/versions"),
                     "application/json", ProxyRelay.Document.ENUMERATION);
         }
         if (path.length == 8 && path[0].equals("v1") && path[1].equals("providers") && path[5].equals("download")) {
-            return proxiedPackage(exchange, fetcher, services, repo, path[2], path[3], path[4], path[6], path[7]);
+            return proxiedPackage(exchange, store, fetcher, services, repo, path[2], path[3], path[4], path[6], path[7]);
         }
         if (path.length == 7 && path[0].equals("v1") && path[1].equals("modules") && path[6].equals("download")) {
             return proxiedModuleDownload(exchange, store, fetcher, services, repo, path[2], path[3], path[4], path[5],
@@ -458,7 +458,7 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
                 JsonNode document = packageDocument(fetcher, services, namespace, type, version, os, arch);
                 URI sums = document == null ? null : advertised(document, file.equals("SHA256SUMS")
                         ? "shasums_url" : "shasums_signature_url", upstream, allowInternal);
-                return sums != null && relay(exchange, fetcher, sums, file.equals("SHA256SUMS")
+                return sums != null && relay(exchange, store, fetcher, sums, file.equals("SHA256SUMS")
                         ? "text/plain; charset=utf-8" : "application/octet-stream", ProxyRelay.Document.PINNED);
             }
             Optional<String[]> platform = TerraformCoordinates.platformOf(type, version, file);
@@ -561,12 +561,12 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
     }
 
     /** The package document, with its URLs naming this repository's own paths. */
-    private boolean proxiedPackage(FormatExchange exchange, ProxyFormat.Fetcher fetcher, Services services,
+    private boolean proxiedPackage(FormatExchange exchange, ArtifactStore store, ProxyFormat.Fetcher fetcher, Services services,
                                    String repo, String namespace, String type, String version, String os,
                                    String arch) throws IOException {
         URI url = services.providers().resolve(namespace + "/" + type + "/" + version + "/download/" + os + "/"
                 + arch);
-        ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, url, Map.of(), exchange, ProxyRelay.Document.PINNED);
+        ProxyRelay.Answer answer = ProxyRelay.fetchRemembered(fetcher, url, Map.of(), exchange, ProxyRelay.Document.PINNED, store);
         if (!answer.answered()) {
             return answer.served();
         }
@@ -739,9 +739,9 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
     }
 
     /** Relay one document fresh. */
-    private static boolean relay(FormatExchange exchange, ProxyFormat.Fetcher fetcher, URI url, String contentType,
+    private static boolean relay(FormatExchange exchange, ArtifactStore store, ProxyFormat.Fetcher fetcher, URI url, String contentType,
                                  ProxyRelay.Document document) throws IOException {
-        ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, url, Map.of(), exchange, document);
+        ProxyRelay.Answer answer = ProxyRelay.fetchRemembered(fetcher, url, Map.of(), exchange, document, store);
         if (!answer.answered()) {
             return answer.served();
         }

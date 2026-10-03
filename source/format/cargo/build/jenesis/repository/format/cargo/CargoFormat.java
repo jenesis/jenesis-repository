@@ -449,7 +449,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         if (sub.startsWith(API_CRATES) && sub.endsWith(DOWNLOAD)) {
             return proxyCrate(repo, sub, exchange, store, root, fetcher);
         }
-        return proxyIndex(root + sub, exchange, fetcher);
+        return proxyIndex(root + sub, exchange, store, fetcher);
     }
 
     /** Fetch, cache and serve an immutable {@code .crate} from the URL the upstream's {@code dl} template names. */
@@ -544,9 +544,9 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
      * {@code 404}/{@code 410} reaches the client as one. The generated {@code config.json} is never proxied, and a
      * {@code .crate} download is PINNED.
      */
-    private boolean proxyIndex(String target, FormatExchange exchange, ProxyFormat.Fetcher fetcher) throws IOException {
-        return ProxyRelay.streamFresh(fetcher, URI.create(target), "text/plain; charset=utf-8", exchange,
-                ProxyRelay.Document.ENUMERATION);
+    private boolean proxyIndex(String target, FormatExchange exchange, ArtifactStore store, ProxyFormat.Fetcher fetcher) throws IOException {
+        return ProxyRelay.streamRemembered(fetcher, URI.create(target), "text/plain; charset=utf-8", exchange,
+                ProxyRelay.Document.ENUMERATION, store);
     }
 
     /** Resolve the upstream {@code .crate} URL from the upstream {@code config.json} {@code dl} template, substituting

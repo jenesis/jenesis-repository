@@ -791,8 +791,8 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
             // The version index is streamed through with conditional-request validators forwarded both ways. It is an
             // enumeration restore resolves floating versions against, so only an upstream that answered 404/410 reaches
             // the client as a 404.
-            ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, URI.create(root + "v3-flatcontainer/" + after),
-                    ProxyRelay.conditionalHeaders(exchange), exchange, ProxyRelay.Document.ENUMERATION);
+            ProxyRelay.Answer answer = ProxyRelay.fetchRemembered(fetcher, URI.create(root + "v3-flatcontainer/" + after),
+                    ProxyRelay.conditionalHeaders(exchange), exchange, ProxyRelay.Document.ENUMERATION, store);
             if (!answer.answered()) {
                 return answer.served();
             }

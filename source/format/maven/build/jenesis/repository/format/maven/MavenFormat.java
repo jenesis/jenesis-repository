@@ -421,7 +421,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
             String asked = merging ? rest.substring(0, rest.lastIndexOf(METADATA) + METADATA.length()) : rest;
             URI document = URI.create(prefix + asked);
             UpstreamMemory memory = UpstreamMemory.node();
-            Optional<byte[]> body = memory.get(store, document);
+            Optional<byte[]> body = memory.get(store, document).map(UpstreamMemory.Remembered::body);
             if (body.isEmpty()) {
                 Optional<ProxyFormat.Fetched> index = fetcher.fetch(document, Map.of());
                 // Clause 2: maven-metadata.xml is an enumeration a range or LATEST/RELEASE resolves against, so a 404
@@ -437,7 +437,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                     }
                 }
                 if (index.isPresent() && index.get().status() == 200) {
-                    memory.put(store, document, index.get().body());
+                    memory.put(store, document, index.get().body(), index.get()::header);
                     body = Optional.of(index.get().body());
                 } else if (!merging) {
                     return false;

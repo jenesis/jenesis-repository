@@ -506,7 +506,7 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
         // The index streamed fresh with the upstream's Content-Type. repodata.json is the subdir's package list a
         // solver reads, an ENUMERATION, so only an upstream 404/410 reaches the client as one.
-        return ProxyRelay.streamFresh(fetcher, target, null, exchange, ProxyRelay.Document.ENUMERATION);
+        return ProxyRelay.streamRemembered(fetcher, target, null, exchange, ProxyRelay.Document.ENUMERATION, store);
     }
 
     @Override

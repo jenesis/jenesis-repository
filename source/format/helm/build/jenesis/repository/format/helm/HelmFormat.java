@@ -306,8 +306,8 @@ public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobL
         String root = upstream.toString().endsWith("/") ? upstream.toString() : upstream + "/";
         URI index = URI.create(root + INDEX);
         if (sub.equals(INDEX)) {
-            ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, index, Map.of(), exchange,
-                    ProxyRelay.Document.ENUMERATION);
+            ProxyRelay.Answer answer = ProxyRelay.fetchRemembered(fetcher, index, Map.of(), exchange,
+                    ProxyRelay.Document.ENUMERATION, store);
             if (!answer.answered()) {
                 return answer.served();
             }
