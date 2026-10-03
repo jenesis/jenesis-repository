@@ -217,11 +217,12 @@ public enum ChoreographyMutant {
         }
 
         /** A screen under the arranged choreography. */
-        private final class Screen implements PublishInterceptor {
+        private final class Screen extends ForwardingInterceptor {
 
             private final PublishInterceptor delegate;
 
             private Screen(PublishInterceptor delegate) {
+                super(delegate);
                 this.delegate = delegate;
             }
 
@@ -318,14 +319,25 @@ public enum ChoreographyMutant {
             public void onWithholdCleared(ArtifactDescriptor subject, ArtifactStore store) throws IOException {
                 observed(delegate, hook -> hook.onWithholdCleared(subject, store));
             }
+
+            @Override
+            public void onCached(ArtifactDescriptor artifact, URI upstream, ArtifactStore store) throws IOException {
+                observed(delegate, hook -> hook.onCached(artifact, upstream, store));
+            }
+
+            @Override
+            public void onMarked(ArtifactDescriptor subject, ArtifactStore store) throws IOException {
+                observed(delegate, hook -> hook.onMarked(subject, store));
+            }
         }
 
         /** A plain after-commit observer under the arranged choreography - the same four legs, no verdict. */
-        private final class Observer implements PublicationObserver {
+        private final class Observer extends ForwardingObserver {
 
             private final PublicationObserver delegate;
 
             private Observer(PublicationObserver delegate) {
+                super(delegate);
                 this.delegate = delegate;
             }
 
@@ -351,10 +363,20 @@ public enum ChoreographyMutant {
             public void onWithholdCleared(ArtifactDescriptor subject, ArtifactStore store) throws IOException {
                 observed(delegate, hook -> hook.onWithholdCleared(subject, store));
             }
+
+            @Override
+            public void onCached(ArtifactDescriptor artifact, URI upstream, ArtifactStore store) throws IOException {
+                observed(delegate, hook -> hook.onCached(artifact, upstream, store));
+            }
+
+            @Override
+            public void onMarked(ArtifactDescriptor subject, ArtifactStore store) throws IOException {
+                observed(delegate, hook -> hook.onMarked(subject, store));
+            }
         }
     }
 
-    /** One observer leg, so the containment is expressed once for all four rather than four times over. */
+    /** One observer leg, so the containment is expressed once for all of them rather than once per leg. */
     @FunctionalInterface
     private interface Leg {
         void run(PublicationObserver hook) throws IOException;

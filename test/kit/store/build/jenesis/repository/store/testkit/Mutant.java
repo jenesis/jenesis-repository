@@ -353,26 +353,20 @@ public enum Mutant {
 
         /** An observer that also answers {@code PublishInterceptor}, so the derivation puts it in the fail-closed
          *  family. It votes the neutral ACCEPT and answers "serves", so nothing but the derivation changes. */
-        private static final class MiswiredObserver implements PublishInterceptor {
-
-            private final PublicationObserver hook;
+        private static final class MiswiredObserver extends ForwardingObserver implements PublishInterceptor {
 
             private MiswiredObserver(PublicationObserver hook) {
-                this.hook = hook;
-            }
-
-            @Override
-            public void onPublished(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
-                hook.onPublished(artifact, store);
+                super(hook);
             }
         }
 
         /** The fixture's observer with exactly one of its four legs' behaviours removed. */
-        private final class BrokenObserver implements PublicationObserver {
+        private final class BrokenObserver extends ForwardingObserver {
 
             private final PublicationObserver hook;
 
             private BrokenObserver(PublicationObserver hook) {
+                super(hook);
                 this.hook = hook;
             }
 
@@ -433,6 +427,20 @@ public enum Mutant {
                 hook.onWithholdCleared(subject, store);
                 if (mutant == A_KEY_OUTSIDE_THE_NAMESPACES) {
                     plant(store);
+                }
+            }
+
+            @Override
+            public void onCached(ArtifactDescriptor artifact, URI upstream, ArtifactStore store) throws IOException {
+                if (mutant != NO_WORK_AT_ALL) {
+                    super.onCached(artifact, upstream, store);
+                }
+            }
+
+            @Override
+            public void onMarked(ArtifactDescriptor subject, ArtifactStore store) throws IOException {
+                if (mutant != NO_WORK_AT_ALL) {
+                    super.onMarked(subject, store);
                 }
             }
         }
@@ -520,21 +528,17 @@ public enum Mutant {
             return shared;
         }
 
-        /** The fixture's screen with exactly one behaviour removed. {@code order()} is forwarded, so the chain still
-         *  sorts this screen where the deployment would. */
-        private final class BrokenScreen implements PublishInterceptor {
+        /** The fixture's screen with exactly one behaviour removed. Everything it does not break is forwarded - its
+         *  order among them, so the chain still sorts this screen where the deployment would. */
+        private final class BrokenScreen extends ForwardingInterceptor {
 
             private final PublishInterceptor screen;
             private final AtomicReference<Disposition> remembered = new AtomicReference<>();
             private final AtomicReference<Boolean> latched = new AtomicReference<>();
 
             private BrokenScreen(PublishInterceptor screen) {
+                super(screen);
                 this.screen = screen;
-            }
-
-            @Override
-            public int order() {
-                return screen.order();
             }
 
             @Override
@@ -649,6 +653,25 @@ public enum Mutant {
                     return;
                 }
                 screen.onWithholdCleared(subject, store);
+            }
+
+            @Override
+            public List<String> reasons(ArtifactDescriptor artifact) {
+                return mutant == NO_WORK_AT_ALL ? List.of() : super.reasons(artifact);
+            }
+
+            @Override
+            public void onCached(ArtifactDescriptor artifact, URI upstream, ArtifactStore store) throws IOException {
+                if (mutant != NO_WORK_AT_ALL) {
+                    super.onCached(artifact, upstream, store);
+                }
+            }
+
+            @Override
+            public void onMarked(ArtifactDescriptor subject, ArtifactStore store) throws IOException {
+                if (mutant != NO_WORK_AT_ALL) {
+                    super.onMarked(subject, store);
+                }
             }
         }
     }

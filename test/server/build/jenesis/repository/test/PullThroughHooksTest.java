@@ -381,6 +381,11 @@ public class PullThroughHooksTest {
                 public Optional<ProxyFormat.Head> head(URI url, Map<String, String> headers) throws IOException {
                     return upstream.head(url, headers);
                 }
+
+                @Override
+                public ProxyFormat.Fetcher beside() {
+                    return upstream.beside();
+                }
             };
         }
     }

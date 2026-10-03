@@ -41,6 +41,12 @@ public final class OpenPgpDetachedScheme implements SignatureScheme {
         return "not an OpenPGP signature";
     }
 
+    /** An operator-supplied key or anchor of this scheme names whom it admits. */
+    @Override
+    public boolean materialNamesSigner() {
+        return true;
+    }
+
     /** Whatever a keyserver, a Web Key Directory or GitHub served, binary or armour, as one armoured block for the
      *  discovered bundle; empty for bytes holding no OpenPGP public key. */
     @Override

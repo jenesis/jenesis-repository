@@ -36,6 +36,11 @@ class ImportDownloadsTest {
             public Optional<ProxyFormat.Head> head(URI url, Map<String, String> requestHeaders) {
                 throw new AssertionError("an asset is downloaded, never probed");
             }
+
+            @Override
+            public ProxyFormat.Fetcher beside() {
+                return this;
+            }
         };
     }
 

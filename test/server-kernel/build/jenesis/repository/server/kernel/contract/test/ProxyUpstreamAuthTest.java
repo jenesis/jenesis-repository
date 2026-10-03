@@ -108,6 +108,11 @@ public class ProxyUpstreamAuthTest {
                 seen.putAll(headers);
                 return Optional.of(new ProxyFormat.Head(200, Map.of("Content-Length", "1073741824")));
             }
+
+            @Override
+            public ProxyFormat.Fetcher beside() {
+                return this;
+            }
         };
         AuthFetcher fetcher = new AuthFetcher(transport, credentials);
 

@@ -203,4 +203,9 @@ public final class HttpFetcher implements ProxyFormat.Fetcher {
         });
         return headers;
     }
+
+    @Override
+    public ProxyFormat.Fetcher beside() {
+        return this;
+    }
 }

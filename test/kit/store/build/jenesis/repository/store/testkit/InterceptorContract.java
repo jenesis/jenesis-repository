@@ -1165,28 +1165,12 @@ final class InterceptorContract {
 
         private PublishInterceptor watching(PublishInterceptor delegate) {
             Verdicts owner = this;
-            return new PublishInterceptor() {
-                @Override
-                public int order() {
-                    return delegate.order();
-                }
-
+            return new ForwardingInterceptor(delegate) {
                 @Override
                 public Disposition assess(ArtifactDescriptor artifact, Content content) throws IOException {
-                    Disposition verdict = delegate.assess(artifact, content);
+                    Disposition verdict = super.assess(artifact, content);
                     owner.verdicts.add(verdict);
                     return verdict;
-                }
-
-                @Override
-                public boolean withheld(String path, ArtifactStore store) throws IOException {
-                    return delegate.withheld(path, store);
-                }
-
-                @Override
-                public void committed(ArtifactDescriptor artifact, Disposition disposition, ArtifactStore store)
-                        throws IOException {
-                    delegate.committed(artifact, disposition, store);
                 }
             };
         }

@@ -198,9 +198,25 @@ class TornWriteReconcileTest {
                 throws IOException {
             this.consumer = consumer;
             this.roots = roots;
-            return delegate.walk(store, consumer, roots, key -> {
-                streamed.add(key);
-                visitor.visit(key);
+            // Every leg of the visitor is handed on - the listed entry with its metadata and the checkpoint hook too -
+            // so spying on the keys changes nothing the pass under test sees.
+            return delegate.walk(store, consumer, roots, new KeyVisitor() {
+                @Override
+                public void visit(String key) throws IOException {
+                    streamed.add(key);
+                    visitor.visit(key);
+                }
+
+                @Override
+                public void visit(ArtifactStore.Listed entry) throws IOException {
+                    streamed.add(entry.key());
+                    visitor.visit(entry);
+                }
+
+                @Override
+                public void beforeCheckpoint(String cursor) throws IOException {
+                    visitor.beforeCheckpoint(cursor);
+                }
             });
         }
 

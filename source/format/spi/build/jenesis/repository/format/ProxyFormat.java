@@ -286,6 +286,11 @@ public interface ProxyFormat {
             public String toString() {
                 return "Fetcher.NONE";
             }
+
+            @Override
+            public ProxyFormat.Fetcher beside() {
+                return this;
+            }
         };
 
         /**
@@ -302,12 +307,11 @@ public interface ProxyFormat {
          * every answer it fetches as that path's content; a document beside the artifact is not that content, so a
          * screen answers with the fetcher it wraps and leaves the document unscreened - judged as the artifact, it
          * would be held in the artifact's place, by the document's own dates. Every other decorator answers with
-         * itself over the fetcher it wraps, so what it adds - credentials, a negative cache - still applies. This
-         * fetcher, by default.
+         * itself over the fetcher it wraps, so what it adds - credentials, a negative cache - still applies. A
+         * transport answers with itself, as {@link Buffered} does; a decorator states which of the two it is, since
+         * answering itself where it should answer the fetcher it wraps would screen a document as the artifact.
          */
-        default Fetcher beside() {
-            return this;
-        }
+        Fetcher beside();
 
         /**
          * Open a streaming download of an upstream {@code GET}, so a large artifact copies straight from the network
@@ -379,10 +383,16 @@ public interface ProxyFormat {
          * throws away the real {@link #download} and {@link #head} of the fetcher it wraps and replaces them with
          * derivations - a credential wrapper, a screen or a probe that did this would collapse a deployment's
          * streaming path back onto the buffered one without any of its own code saying so. A decorator delegates all
-         * three legs; that is not boilerplate, it is the declaration that it kept them.
+         * four legs; that is not boilerplate, it is the declaration that it kept them.
          */
         @FunctionalInterface
         interface Buffered extends Fetcher {
+
+            /** A scripted upstream reads a document beside an artifact as it reads the artifact: itself. */
+            @Override
+            default Fetcher beside() {
+                return this;
+            }
 
             @Override
             default Optional<Download> download(URI url, Map<String, String> requestHeaders) throws IOException {

@@ -47,6 +47,11 @@ class ImportScreenTest {
             urls.add(url.toString());
             return Optional.of(new ProxyFormat.Head(200, Map.of()));
         }
+
+        @Override
+        public ProxyFormat.Fetcher beside() {
+            return this;
+        }
     }
 
     // ---- the fetch shape ------------------------------------------------------------------------------------

@@ -105,27 +105,21 @@ public interface SignatureScheme {
      * certifies anyone its issuers know. Decides whom the caller asks whether a verified signer is trusted here:
      * the material's holder alone, or every source of the composed trust.
      */
-    default boolean materialNamesSigner() {
-        return true;
-    }
+    boolean materialNamesSigner();
 
     /**
      * The stored form of trust material of this scheme's kind that a discovery source or a fetched document served,
      * or empty when the bytes are not this scheme's material at all. A lookup over the bytes handed over, never a
-     * fetch; the default, for a scheme whose material is only ever supplied by an operator, is empty.
+     * fetch; empty for a scheme whose material is only ever supplied by an operator.
      */
-    default Optional<byte[]> trustMaterial(byte[] served) {
-        return Optional.empty();
-    }
+    Optional<byte[]> trustMaterial(byte[] served);
 
     /**
      * Whether {@code material} of this scheme's kind holds the key {@code keyId} names - the id a signature of this
      * scheme carries when it names its key rather than its signer. A lookup over the material handed over, false
-     * for {@code null}, empty or foreign material; the default is false.
+     * for {@code null}, empty or foreign material, and always false for a scheme whose signatures name their signer.
      */
-    default boolean holdsKey(String keyId, byte[] material) {
-        return false;
-    }
+    boolean holdsKey(String keyId, byte[] material);
 
     /** A signature read but not yet checked: what it states about its signer, and the check itself. */
     interface Reading {

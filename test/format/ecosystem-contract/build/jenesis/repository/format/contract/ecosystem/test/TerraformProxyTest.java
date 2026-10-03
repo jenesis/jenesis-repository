@@ -218,9 +218,10 @@ class TerraformProxyTest {
         };
     }
 
-    /** {@code fetcher}, noting every URL it is asked for in {@code asked}. */
+    /** {@code fetcher}, noting every URL it is asked for in {@code asked}: a decorator, so it hands every leg on rather
+     *  than deriving one from another. */
     private static ProxyFormat.Fetcher recording(List<String> asked, ProxyFormat.Fetcher fetcher) {
-        return new ProxyFormat.Fetcher.Buffered() {
+        return new ProxyFormat.Fetcher() {
 
             @Override
             public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders)
@@ -234,6 +235,17 @@ class TerraformProxyTest {
                     throws IOException {
                 asked.add(url.toString());
                 return fetcher.download(url, requestHeaders);
+            }
+
+            @Override
+            public Optional<ProxyFormat.Head> head(URI url, Map<String, String> requestHeaders) throws IOException {
+                asked.add(url.toString());
+                return fetcher.head(url, requestHeaders);
+            }
+
+            @Override
+            public ProxyFormat.Fetcher beside() {
+                return this;
             }
         };
     }

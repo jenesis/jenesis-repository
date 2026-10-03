@@ -577,6 +577,39 @@ public final class WalkConsumerContract {
             return delegate.settings();
         }
 
+        // What the walk asks of a consumer before delivering anything - whether it runs, what it needs read, where it
+        // sorts - is the delegate's, so the pass under test walks for the consumer and not for this wrapper.
+
+        @Override
+        public boolean enabled() {
+            return delegate.enabled();
+        }
+
+        @Override
+        public boolean needsWithheldStatus() {
+            return delegate.needsWithheldStatus();
+        }
+
+        @Override
+        public boolean needsPointers() {
+            return delegate.needsPointers();
+        }
+
+        @Override
+        public boolean needsEveryKey() {
+            return delegate.needsEveryKey();
+        }
+
+        @Override
+        public int order() {
+            return delegate.order();
+        }
+
+        @Override
+        public void onRepository(ArtifactStore store, UnaryOperator<String> config) {
+            delegate.onRepository(store, config);
+        }
+
         @Override
         public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
             events.add("retained");

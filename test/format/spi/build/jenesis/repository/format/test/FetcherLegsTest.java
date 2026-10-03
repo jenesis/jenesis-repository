@@ -100,6 +100,11 @@ class FetcherLegsTest {
             public Optional<ProxyFormat.Head> head(URI url, Map<String, String> headers) {
                 return Optional.of(new ProxyFormat.Head(200, Map.of("Content-Length", "4096")));
             }
+
+            @Override
+            public ProxyFormat.Fetcher beside() {
+                return this;
+            }
         };
         ProxyFormat.Fetcher decorator = new ProxyFormat.Fetcher() {
 
@@ -116,6 +121,11 @@ class FetcherLegsTest {
             @Override
             public Optional<ProxyFormat.Head> head(URI url, Map<String, String> headers) throws IOException {
                 return transport.head(url, headers);
+            }
+
+            @Override
+            public ProxyFormat.Fetcher beside() {
+                return this;
             }
         };
 

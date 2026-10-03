@@ -265,5 +265,20 @@ public enum SignatureSchemeMutant {
         public String unrecognised() {
             return real.unrecognised();
         }
+
+        @Override
+        public boolean materialNamesSigner() {
+            return real.materialNamesSigner();
+        }
+
+        @Override
+        public Optional<byte[]> trustMaterial(byte[] served) {
+            return real.trustMaterial(served);
+        }
+
+        @Override
+        public boolean holdsKey(String keyId, byte[] material) {
+            return real.holdsKey(keyId, material);
+        }
     }
 }

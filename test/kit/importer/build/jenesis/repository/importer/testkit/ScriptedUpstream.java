@@ -147,4 +147,9 @@ public final class ScriptedUpstream implements ProxyFormat.Fetcher {
         requests.add(new Request(url.toString(), requestHeaders));
         return responses.get(url.toString());
     }
+
+    @Override
+    public ProxyFormat.Fetcher beside() {
+        return this;
+    }
 }

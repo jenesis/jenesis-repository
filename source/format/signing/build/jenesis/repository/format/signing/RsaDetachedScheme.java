@@ -36,6 +36,24 @@ public final class RsaDetachedScheme implements SignatureScheme {
         return "not a signature member naming its key file and digest";
     }
 
+    /** An operator-supplied key or anchor of this scheme names whom it admits. */
+    @Override
+    public boolean materialNamesSigner() {
+        return true;
+    }
+
+    /** This scheme's material is only ever supplied by an operator, never discovered. */
+    @Override
+    public Optional<byte[]> trustMaterial(byte[] served) {
+        return Optional.empty();
+    }
+
+    /** A signature of this scheme does not name its key by an id, so no material is looked up by one. */
+    @Override
+    public boolean holdsKey(String keyId, byte[] material) {
+        return false;
+    }
+
     private record Bare(ArtifactSignatures.Evidence evidence, RsaVerification.Facts facts) implements Reading {
 
         @Override

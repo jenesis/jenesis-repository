@@ -66,6 +66,11 @@ class DemoRunTest {
         public Optional<ProxyFormat.Head> head(URI url, Map<String, String> requestHeaders) throws IOException {
             throw new ConnectException("the demo's suite reaches no network: " + url);
         }
+
+        @Override
+        public ProxyFormat.Fetcher beside() {
+            return this;
+        }
     };
 
     @TempDir

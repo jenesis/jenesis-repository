@@ -207,6 +207,29 @@ public enum InspectorMutant {
             return mutant == A_WIDER_CLAIM || real.handles(path);
         }
 
+        // The questions the inspector answers about itself are the real one's: a stand-in answering the interface's
+        // defaults would claim, complete and stream differently from what it stands in for.
+
+        @Override
+        public boolean claims(String path, Lookup siblings) {
+            return mutant == A_WIDER_CLAIM ? handles(path) : real.claims(path, siblings);
+        }
+
+        @Override
+        public Optional<String> completes(String path) {
+            return real.completes(path);
+        }
+
+        @Override
+        public boolean streams() {
+            return real.streams();
+        }
+
+        @Override
+        public boolean incompleteOnTruncatedSibling() {
+            return real.incompleteOnTruncatedSibling();
+        }
+
         @Override
         public List<ComplianceGate.Subject> inspect(String path, byte[] content, Lookup lookup) throws IOException {
             return mutate(path, () -> real.inspect(path, content, lookup));

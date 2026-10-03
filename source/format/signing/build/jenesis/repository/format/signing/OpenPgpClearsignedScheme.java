@@ -40,6 +40,24 @@ public final class OpenPgpClearsignedScheme implements SignatureScheme {
         return "not an OpenPGP clearsigned document";
     }
 
+    /** An operator-supplied key or anchor of this scheme names whom it admits. */
+    @Override
+    public boolean materialNamesSigner() {
+        return true;
+    }
+
+    /** This scheme's material is only ever supplied by an operator, never discovered. */
+    @Override
+    public Optional<byte[]> trustMaterial(byte[] served) {
+        return Optional.empty();
+    }
+
+    /** The keyring is chosen by issuer through {@link OpenPgpDetachedScheme}'s probe, which answers for the key id. */
+    @Override
+    public boolean holdsKey(String keyId, byte[] material) {
+        return false;
+    }
+
     private record Clearsigned(ArtifactSignatures.Evidence evidence, OpenPgpVerification.Facts facts,
                                byte[] cleartext) implements Reading {
 
