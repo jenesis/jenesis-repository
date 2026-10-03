@@ -10,11 +10,9 @@ import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.feed.FeedClient;
 import build.jenesis.repository.feed.FeedException;
 import build.jenesis.repository.feed.FeedPolicy;
-import build.jenesis.repository.feed.FeedRequest;
 import build.jenesis.repository.feed.FeedResponse;
 import build.jenesis.repository.feed.FeedTransport;
 import build.jenesis.repository.feed.Osv;
-import build.jenesis.repository.compliance.Ecosystems;
 
 /**
  * An {@link AdvisorySource} over OSV (osv.dev). For each coordinate it posts {@code /v1/query} for the package at the
@@ -102,10 +100,11 @@ public final class OsvAdvisorySource implements AdvisorySource {
         String ecosystem = key.substring(0, middle), coordinate = key.substring(middle + 1, last),
                 version = key.substring(last + 1);
         try {
-            return client.fetch(request(ecosystem, coordinate, version, null),
-                    () -> new Vulnerabilities(ecosystem, coordinate, version)).orElse(List.of());
+            return client.fetch(OsvQuery.request(query, ecosystem, coordinate, version, null),
+                    () -> new OsvQuery.Pages(query, ecosystem, coordinate, version, vuln -> advisory(vuln, coordinate)))
+                    .orElse(List.of());
         } catch (FeedException e) {
-            throw new IOException(reason(e), e);
+            throw new IOException(OsvQuery.reason(e), e);
         }
     }
 
@@ -117,75 +116,21 @@ public final class OsvAdvisorySource implements AdvisorySource {
         return cache.freshness();
     }
 
-    /** The product's ecosystem names OSV spells otherwise. OSV answers only its schema's ecosystems, and a query in
-     *  another spelling gets nothing, which would read as "no advisory". Conan is OSV's {@code ConanCenter}; every
-     *  other declared name is OSV's own or one OSV does not publish. */
-    private static final Map<String, String> OSV_NAMES = Map.of(Ecosystems.CONAN, "ConanCenter");
-
-    /** The name OSV knows the product's {@code ecosystem} by, which is the one an advisory query carries. */
-    public static String osvName(String ecosystem) {
-        return OSV_NAMES.getOrDefault(ecosystem, ecosystem);
-    }
-
-    /** One page's request: the vendor's query URL and body, with the cursor token echoed back from the second page on. */
-    private FeedRequest request(String ecosystem, String coordinate, String version, String pageToken) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("version", version);
-        body.put("package", Map.of("ecosystem", osvName(ecosystem), "name", coordinate));
-        if (pageToken != null) {
-            body.put("page_token", pageToken);
-        }
-        return FeedRequest.post(query, JSON.writeValueAsString(body), "application/json");
-    }
-
-    /** The client's failure reason in an operator's words, so a log line says whether the fetch hit the page cap, the
-     *  deadline or a rejected status. */
-    private static String reason(FeedException failure) {
-        return failure.reason().name().toLowerCase(Locale.ROOT).replace('_', '-');
-    }
-
     /** The {@link Endpoint} seam as a transport: a recorded body answered as a 200, bounded, screened and paginated by
      *  the client exactly as a live one. */
     private static FeedTransport transport(Endpoint endpoint) {
         return (request, timeout) -> FeedResponse.of(200, endpoint.query(request.body()));
     }
 
-    /** Folds OSV's pages into the advisory list - a fresh instance per attempt, so a retry never folds a page twice and
-     *  a capped fetch drops its partial list. */
-    private final class Vulnerabilities implements FeedClient.Reader<List<Advisory>> {
-
-        private final String ecosystem;
-        private final String coordinate;
-        private final String version;
-        private final List<Advisory> advisories = new ArrayList<>();
-
-        private Vulnerabilities(String ecosystem, String coordinate, String version) {
-            this.ecosystem = ecosystem;
-            this.coordinate = coordinate;
-            this.version = version;
+    /** The advisory a record makes: every record OSV answers, a {@code MAL-} one flagged malicious. */
+    private Optional<Advisory> advisory(JsonNode vuln, String coordinate) {
+        String id = vuln.path("id").asString(null);
+        if (id == null) {
+            return Optional.empty();
         }
-
-        @Override
-        public Optional<FeedRequest> read(int page, FeedResponse response) throws IOException {
-            JsonNode root = JSON.readTree(response.body());
-            for (JsonNode vuln : root.path("vulns")) {
-                String id = vuln.path("id").asString(null);
-                if (id != null) {
-                    boolean malicious = id.startsWith("MAL-");
-                    advisories.add(new Advisory(id, severityOf(vuln, malicious), malicious,
-                            Osv.fixedVersions(vuln, coordinate), cvesOf(vuln, id), descriptionOf(vuln)));
-                }
-            }
-            String pageToken = root.path("next_page_token").asString(null);
-            return pageToken == null || pageToken.isBlank()
-                    ? Optional.empty()
-                    : Optional.of(request(ecosystem, coordinate, version, pageToken));
-        }
-
-        @Override
-        public List<Advisory> complete() {
-            return List.copyOf(advisories);
-        }
+        boolean malicious = id.startsWith("MAL-");
+        return Optional.of(new Advisory(id, severityOf(vuln, malicious), malicious,
+                Osv.fixedVersions(vuln, coordinate), cvesOf(vuln, id), descriptionOf(vuln)));
     }
 
     // The summary, else a bounded prefix of the details, so the findings ledger keeps what the advisory says without

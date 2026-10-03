@@ -10,10 +10,10 @@ import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.feed.FeedClient;
 import build.jenesis.repository.feed.FeedException;
 import build.jenesis.repository.feed.FeedPolicy;
-import build.jenesis.repository.feed.FeedRequest;
 import build.jenesis.repository.feed.FeedResponse;
 import build.jenesis.repository.feed.FeedTransport;
 import build.jenesis.repository.feed.Osv;
+import build.jenesis.repository.compliance.osv.OsvQuery;
 
 /**
  * An {@link AdvisorySource} over the curated OpenSSF malicious-packages dataset (github.com/ossf/malicious-packages,
@@ -47,8 +47,6 @@ public final class OpenSsfMaliciousSource implements AdvisorySource {
 
     /** The feed's name - the attribution key its provider answers to and the client names in every failure. */
     private static final String FEED = "openssf";
-
-    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private static final URI DEFAULT_ENDPOINT = URI.create("https://api.osv.dev");
 
@@ -86,14 +84,15 @@ public final class OpenSsfMaliciousSource implements AdvisorySource {
     public List<Advisory> advisories(String ecosystem, String coordinate, String version) {
         String key = ecosystem + '|' + coordinate + '|' + version;
         try {
-            List<Advisory> advisories = client.fetch(request(ecosystem, coordinate, version, null),
-                    () -> new Malicious(ecosystem, coordinate, version)).orElse(List.of());
+            List<Advisory> advisories = client.fetch(OsvQuery.request(query, ecosystem, coordinate, version, null),
+                    () -> new OsvQuery.Pages(query, ecosystem, coordinate, version,
+                            vuln -> malicious(vuln, coordinate))).orElse(List.of());
             fetches.fetched(key);
             return advisories;
         } catch (FeedException e) {
             fetches.failed(key);
             throw new UncheckedIOException("Failed to query the malicious-package feed for "
-                    + ecosystem + " " + coordinate + " " + version + " (" + reason(e) + ")", e);
+                    + ecosystem + " " + coordinate + " " + version + " (" + OsvQuery.reason(e) + ")", e);
         }
     }
 
@@ -105,69 +104,21 @@ public final class OpenSsfMaliciousSource implements AdvisorySource {
         return fetches.freshness();
     }
 
-    /** One page's request: the dataset's query URL and body, with the cursor token echoed back from the second page
-     *  on. */
-    private FeedRequest request(String ecosystem, String coordinate, String version, String pageToken) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("version", version);
-        body.put("package", Map.of("ecosystem", ecosystem, "name", coordinate));
-        if (pageToken != null) {
-            body.put("page_token", pageToken);
-        }
-        return FeedRequest.post(query, JSON.writeValueAsString(body), "application/json");
-    }
-
-    /** The client's machine-readable failure reason in the operator's words, so a log line says whether the fetch hit
-     *  the page cap, the deadline or a rejected status without an operator decoding an enum name. */
-    private static String reason(FeedException failure) {
-        return failure.reason().name().toLowerCase(Locale.ROOT).replace('_', '-');
-    }
-
     /** The {@link Endpoint} seam as a transport: a recorded body answered as a 200, which the client bounds, screens
      *  and paginates as it does a live response. */
     private static FeedTransport transport(Endpoint endpoint) {
         return (request, timeout) -> FeedResponse.of(200, endpoint.query(request.body()));
     }
 
-    /**
-     * Folds the dataset's pages into the advisory list. A fresh instance per attempt (the client's contract), so a
-     * retry never folds a page twice and a fetch that hits a cap drops its half-filled accumulator instead of
-     * answering with it.
-     */
-    private final class Malicious implements FeedClient.Reader<List<Advisory>> {
-
-        private final String ecosystem;
-        private final String coordinate;
-        private final String version;
-        private final List<Advisory> advisories = new ArrayList<>();
-
-        private Malicious(String ecosystem, String coordinate, String version) {
-            this.ecosystem = ecosystem;
-            this.coordinate = coordinate;
-            this.version = version;
+    /** The advisory a record makes: one of the dataset's own {@code MAL-} records, and nothing for any other OSV
+     *  answers beside it. */
+    private static Optional<Advisory> malicious(JsonNode vuln, String coordinate) {
+        String id = vuln.path("id").asString(null);
+        if (id == null || !id.startsWith("MAL-")) {
+            return Optional.empty();
         }
-
-        @Override
-        public Optional<FeedRequest> read(int page, FeedResponse response) throws IOException {
-            JsonNode root = JSON.readTree(response.body());
-            for (JsonNode vuln : root.path("vulns")) {
-                String id = vuln.path("id").asString(null);
-                if (id != null && id.startsWith("MAL-")) {
-                    advisories.add(new Advisory(id, severityOf(vuln), true, Osv.fixedVersions(vuln, coordinate), cvesOf(vuln),
-                            descriptionOf(vuln)));
-                }
-            }
-            String pageToken = root.path("next_page_token").asString(null);
-            if (pageToken == null || pageToken.isBlank()) {
-                return Optional.empty();
-            }
-            return Optional.of(request(ecosystem, coordinate, version, pageToken));
-        }
-
-        @Override
-        public List<Advisory> complete() {
-            return List.copyOf(advisories);
-        }
+        return Optional.of(new Advisory(id, severityOf(vuln), true, Osv.fixedVersions(vuln, coordinate),
+                cvesOf(vuln), descriptionOf(vuln)));
     }
 
     // The record's one-line summary, falling back to a bounded prefix of the long-form details - carried so the

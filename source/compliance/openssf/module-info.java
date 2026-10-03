@@ -13,6 +13,7 @@ module build.jenesis.repository.compliance.openssf {
     requires build.jenesis.repository.compliance;
     // The bounded feed client, which owns the HTTP client, the caps, the origin guard and the retry schedule.
     requires build.jenesis.repository.feed;
+    requires build.jenesis.repository.compliance.osv;
     requires build.jenesis.repository.settings;
     requires tools.jackson.databind;
     exports build.jenesis.repository.compliance.openssf;

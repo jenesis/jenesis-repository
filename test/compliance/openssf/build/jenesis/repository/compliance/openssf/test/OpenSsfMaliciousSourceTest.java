@@ -48,6 +48,20 @@ class OpenSsfMaliciousSourceTest {
                 .contains("\"version\":\"1.0.0\"");
     }
 
+    /** OSV keys ecosystems by its own schema names and answers nothing to another spelling, so a Conan package is
+     *  asked for under OSV's {@code ConanCenter} - asked under the product's name, every Conan query came back empty,
+     *  which reads as "not malicious". */
+    @Test
+    void a_conan_package_is_asked_for_under_the_name_osv_knows_it_by() {
+        StringBuilder seen = new StringBuilder();
+        OpenSsfMaliciousSource source = new OpenSsfMaliciousSource(body -> {
+            seen.append(body);
+            return "{\"vulns\":[]}";
+        });
+        source.advisories("Conan", "zlib", "1.3");
+        assertThat(seen.toString()).contains("\"ecosystem\":\"ConanCenter\"");
+    }
+
     @Test
     void the_reviewers_severity_word_maps_to_a_band() {
         String response = """
