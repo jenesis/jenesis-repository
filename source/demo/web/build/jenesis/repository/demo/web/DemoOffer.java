@@ -8,9 +8,9 @@ import build.jenesis.repository.ui.SetupOffer;
 /**
  * The demo, as the first-run guide offers it on its first page: while the tenant holds no repository, what the demo
  * is, the plain warning that it switches features on, reaches public registries and loads code with known
- * vulnerabilities, every repository, setting, registry and vulnerable artifact the contributors' plans name, and the
- * button confirmed by typing {@value DemoRun#PHRASE}. While a run is under way it links to its progress instead; once
- * the tenant holds a repository, or while no tenant is selected, it offers nothing.
+ * vulnerabilities, every repository and other creation, setting, registry and vulnerable artifact the contributors'
+ * plans name, and the button confirmed by typing {@value DemoRun#PHRASE}. While a run is under way it links to its
+ * progress instead; once the tenant holds a repository, or while no tenant is selected, it offers nothing.
  *
  * <p>Two point reads and one bounded page of names: the run's document, its lease while it says it is running, and
  * the tenant's first names.
@@ -62,9 +62,11 @@ public final class DemoOffer implements SetupOffer {
                                 + "loads code with known vulnerabilities."))))));
     }
 
-    /** Every repository, setting, registry and vulnerable artifact the plans name, a line each kind. */
+    /** Every repository, other creation, setting, registry and vulnerable artifact the plans name, a line each
+     *  kind. */
     private static List<String> consequences(List<DemoRun.Planned> plans) {
         List<String> repositories = new ArrayList<>();
+        List<String> creates = new ArrayList<>();
         List<String> settings = new ArrayList<>();
         List<String> reaches = new ArrayList<>();
         List<String> vulnerable = new ArrayList<>();
@@ -74,12 +76,18 @@ public final class DemoOffer implements SetupOffer {
                 repositories.add(repository.name() + " (" + (repository.hosted() ? "hosted " + repository.type()
                         : "a " + repository.type() + " proxy of " + repository.upstream().orElseThrow()) + ")");
             }
+            creates.addAll(plan.creates());
             plan.settings().forEach((key, brings) -> settings.add(Labels.of(key) + ": " + brings));
             reaches.addAll(plan.reaches());
             vulnerable.addAll(plan.vulnerable());
         }
         List<String> lines = new ArrayList<>();
-        lines.add("Creates the repositories " + String.join(", ", repositories) + ".");
+        if (!repositories.isEmpty()) {
+            lines.add("Creates the repositories " + String.join(", ", repositories) + ".");
+        }
+        if (!creates.isEmpty()) {
+            lines.add("Also creates " + String.join("; ", creates) + ".");
+        }
         if (!settings.isEmpty()) {
             lines.add("Switches on, for the whole deployment and recorded on the audit trail as you: "
                     + String.join("; ", settings) + ".");

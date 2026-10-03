@@ -7,6 +7,7 @@ import build.jenesis.repository.demo.DemoContributor;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryType;
+import build.jenesis.repository.store.Requests;
 
 /**
  * The core's own demo content, contributed through the seam another module adds its own by.
@@ -18,6 +19,7 @@ import build.jenesis.repository.format.RepositoryType;
  * <li><b>A proxy of each installed format's public registry</b> that suggests demo artifacts
  *     ({@link RepositoryFormat#demoArtifacts()} over {@link ProxyFormat#defaultUpstream()}), and those artifacts - old
  *     releases with known vulnerabilities - read through it, so they are cached, recorded and screened.</li>
+ * <li><b>A walk of the store</b> asked for once the content is in, so the walks screen reports a run over it.</li>
  * <li><b>The OSV advisory feed</b> switched on after the reads, where its module is installed and something was read
  *     through a proxy, and the scheduled scan asked for, so the vulnerability screens fill. It is switched on last,
  *     and only once the public registries answered, because it screens fail-closed: a publish it would screen while
@@ -39,6 +41,9 @@ public final class StarterDemo implements DemoContributor {
     /** Settings are re-read by every node on a cadence of half a minute by default, and the scan resolves its feeds
      *  from them, so it is asked for once the feed switched on has reached the node that runs it. */
     static final Duration SCAN_AFTER = Duration.ofMinutes(1);
+
+    /** The walk is asked for once the demo's own writes have settled, so it walks what the demo left. */
+    static final Duration WALK_AFTER = Duration.ofSeconds(30);
 
     static final String HOSTED_MAVEN = "demo-maven";
     static final String HOSTED_NPM = "demo-npm";
@@ -100,7 +105,7 @@ public final class StarterDemo implements DemoContributor {
             reaches.add("the OSV vulnerability database (the endpoint the osv-endpoint setting names, "
                     + "api.osv.dev by default)");
         }
-        return repositories.isEmpty() ? Plan.NONE : new Plan(repositories, settings, reaches, vulnerable);
+        return repositories.isEmpty() ? Plan.NONE : new Plan(repositories, List.of(), settings, reaches, vulnerable);
     }
 
     @Override
@@ -141,6 +146,8 @@ public final class StarterDemo implements DemoContributor {
                 read += demo.fetch(proxied.repository(), proxied.type().servedPath(path)) == Demo.Outcome.DONE ? 1 : 0;
             }
         }
+        demo.request(Requests.WALK, "the demo filled its repositories, and a walk over them is what the walks "
+                + "screen reports", WALK_AFTER);
         if (!Labels.catalogued(OSV) || PROXIED.isEmpty()) {
             return;
         }

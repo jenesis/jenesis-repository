@@ -3,6 +3,7 @@ package build.jenesis.repository.ui.admin.config;
 import module java.base;
 
 import build.jenesis.repository.ui.GithubCredentials;
+import build.jenesis.repository.ui.admin.CacheDemo;
 import build.jenesis.repository.ui.PostureSource;
 import build.jenesis.repository.ui.SpiCatalogSource;
 import build.jenesis.repository.store.Features;
@@ -57,6 +58,13 @@ public class DomainConfig {
         // Cached build output lives in the cache's own segment of the store, not at the deployment root; the service
         // scopes it to the selected tenant on each call, so a pass it starts keeps the tenant past the request.
         return new CacheService(cacheRootStorage, audit, currentTenant, actor, settingsAdmin);
+    }
+
+    /** The build cache's sample projects, which the first-run demo loads beside the repositories' content. */
+    @Bean
+    public CacheDemo cacheDemo(@Qualifier("cacheRootStorage") CacheStorage cacheRootStorage,
+                               ArtifactStore repositoryStore, SettingsEditor settingsEditor, AuditTrail audit) {
+        return new CacheDemo(cacheRootStorage, repositoryStore, settingsEditor, audit);
     }
 
     @Bean

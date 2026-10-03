@@ -7,8 +7,8 @@ import module java.base;
  * settings their screens need switched on, and what is published into them or pulled through them, so that someone
  * trying the product sees every screen populated. The console's demo module contributes the core's own content -
  * hosted and proxy repositories of the formats installed, first-party packages, one held for review, and versions with
- * known vulnerabilities - and another module adds its own beside it (build-cache projects, a licence policy) as a bean
- * of its console configuration.
+ * known vulnerabilities - and another module adds its own beside it (the console's build-cache projects, a licence
+ * policy) as a bean of its console configuration.
  *
  * <p>A contributor speaks twice. {@link #plan()} says what it will do before anything is done, which the offer turns
  * into its warning and the operator confirms by typing a phrase; {@link #load} then does it, through the
@@ -64,24 +64,27 @@ public interface DemoContributor {
     void load(Demo demo) throws IOException;
 
     /**
-     * What a contributor will do: the repositories it creates, each deployment setting it switches and the value it
-     * brings, the public registries a load reaches, and the code with known vulnerabilities it loads - each line read
-     * out to the operator before the demo is confirmed.
+     * What a contributor will do: the repositories it creates, anything else it creates through its own module, each
+     * deployment setting it switches and the value it brings, the public registries a load reaches, and the code with
+     * known vulnerabilities it loads - each line read out to the operator before the demo is confirmed.
      *
      * @param repositories the repositories the run creates for this contributor before it loads.
+     * @param creates      what a load creates besides repositories, through its own module's services, one line each
+     *                     as an operator recognises it - a build-cache project and what it holds.
      * @param settings     each deployment setting a load may switch, by key, with what it brings - the value it is set
      *                     to, or what a list setting gains.
      * @param reaches      the public registries and services a load reaches, as an operator recognises them.
      * @param vulnerable   the artifacts with known vulnerabilities a load brings in, one line each.
      */
-    record Plan(List<Repository> repositories, SequencedMap<String, String> settings, List<String> reaches,
-                List<String> vulnerable) {
+    record Plan(List<Repository> repositories, List<String> creates, SequencedMap<String, String> settings,
+                List<String> reaches, List<String> vulnerable) {
 
         /** Nothing to add. */
-        public static final Plan NONE = new Plan(List.of(), new LinkedHashMap<>(), List.of(), List.of());
+        public static final Plan NONE = new Plan(List.of(), List.of(), new LinkedHashMap<>(), List.of(), List.of());
 
         public Plan {
             repositories = List.copyOf(repositories);
+            creates = List.copyOf(creates);
             settings = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(settings));
             reaches = List.copyOf(reaches);
             vulnerable = List.copyOf(vulnerable);
@@ -89,7 +92,7 @@ public interface DemoContributor {
 
         /** Whether the plan does anything at all. */
         public boolean empty() {
-            return repositories.isEmpty() && settings.isEmpty();
+            return repositories.isEmpty() && creates.isEmpty() && settings.isEmpty();
         }
     }
 

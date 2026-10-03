@@ -147,7 +147,7 @@ public final class DemoRun {
     }
 
     /** What a step was: the kind of operation, which the screen sums by. */
-    public enum Kind { REPOSITORY, SETTING, PUBLISH, FETCH, REQUEST, SKIP, LOAD }
+    public enum Kind { REPOSITORY, SETTING, PUBLISH, FETCH, REQUEST, SKIP, LOAD, MADE }
 
     /** One step of a run: what kind of operation, what it was, how it ended and what the deployment said. */
     public record Step(Kind kind, String what, Outcome outcome, String detail) {
@@ -203,9 +203,10 @@ public final class DemoRun {
                     && count(Kind.FETCH, Outcome.DONE) == 0;
         }
 
-        /** Whether the run asked for a background pass. */
-        public boolean requested() {
-            return count(Kind.REQUEST, Outcome.DONE) > 0;
+        /** Whether the run asked for the background pass {@code pass}. */
+        public boolean requested(String pass) {
+            return steps.stream().anyMatch(step -> step.kind() == Kind.REQUEST && step.outcome() == Outcome.DONE
+                    && step.what().equals(asking(pass)));
         }
     }
 
@@ -381,6 +382,11 @@ public final class DemoRun {
         }
 
         @Override
+        public String actor() {
+            return recorder.actor;
+        }
+
+        @Override
         public String setting(String key) {
             String value = editor.effective(null, key, "");
             return value == null ? "" : value;
@@ -474,7 +480,7 @@ public final class DemoRun {
 
         @Override
         public void request(String pass, String reason, Duration after) throws IOException {
-            String what = "Ask for the " + pass + " pass";
+            String what = asking(pass);
             try {
                 Requests.request(root, pass, reason, Instant.now().plus(after));
             } catch (IllegalArgumentException refused) {
@@ -488,6 +494,11 @@ public final class DemoRun {
         @Override
         public void skipped(String what, String why) throws IOException {
             recorder.add(new Step(Kind.SKIP, what, Outcome.SKIPPED, why));
+        }
+
+        @Override
+        public Outcome made(String what, Outcome outcome, String detail) throws IOException {
+            return recorder.add(new Step(Kind.MADE, what, outcome, detail));
         }
     }
 
@@ -562,6 +573,11 @@ public final class DemoRun {
             }
             space.write(DOCUMENT, new ByteArrayInputStream(JSON.writeValueAsBytes(document)));
         }
+    }
+
+    /** What the step asking for {@code pass} is called. */
+    private static String asking(String pass) {
+        return "Ask for the " + pass + " pass";
     }
 
     private static Lease lease(ArtifactStore space) {

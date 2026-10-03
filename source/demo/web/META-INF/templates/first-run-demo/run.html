@@ -36,7 +36,7 @@
         <th:block th:if="${!run.running() and run.nothingFetched()}">
             <p th:replace="~{base :: alert('Nothing was read through the proxies: the public registries did not answer from this server. The proxies exist and stay empty until a client reads through them, and the vulnerability screens stay empty until something vulnerable is held.', 'warn')}"></p>
         </th:block>
-        <p th:if="${!run.running() and run.requested()}"><small>The vulnerability scan has been asked for and runs within
+        <p th:if="${!run.running() and run.requested('scan')}"><small>The vulnerability scan has been asked for and runs within
             a minute or two; a repository's Vulnerabilities page fills once it has.</small></p>
 
         <figure>

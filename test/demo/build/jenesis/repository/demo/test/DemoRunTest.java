@@ -183,7 +183,10 @@ class DemoRunTest {
             assertThat(step.what()).contains("OSV feed");
         });
         assertThat(Requests.pending(store, "scan")).isEmpty();
-        assertThat(state.requested()).isFalse();
+        assertThat(state.requested("scan")).isFalse();
+        assertThat(Requests.pending(store, Requests.WALK)).as("a walk over what was published is asked for offline too")
+                .isPresent();
+        assertThat(state.requested(Requests.WALK)).isTrue();
     }
 
     @Test
@@ -214,7 +217,7 @@ class DemoRunTest {
         assertThat(editor.effective(null, "osv", "")).as("the advisory feed is switched on").isEqualTo("true");
         assertThat(Requests.pending(store, "scan")).as("the scan is asked for, a minute on").isPresent()
                 .get().satisfies(request -> assertThat(request.notBefore()).isAfter(Instant.now()));
-        assertThat(state.requested()).isTrue();
+        assertThat(state.requested("scan")).isTrue();
     }
 
     @Test
@@ -269,7 +272,7 @@ class DemoRunTest {
             @Override
             public Plan plan() {
                 return new Plan(List.of(new Repository("extra", "maven", "Demo: another module's", Optional.empty())),
-                        new LinkedHashMap<>(), List.of(), List.of());
+                        List.of(), new LinkedHashMap<>(), List.of(), List.of());
             }
 
             @Override
@@ -287,12 +290,13 @@ class DemoRunTest {
             @Override
             public Plan plan() {
                 return new Plan(List.of(new Repository("later", "npm", "Demo: loaded after a failure", Optional.empty())),
-                        new LinkedHashMap<>(), List.of(), List.of());
+                        List.of("a thing of its own module's"), new LinkedHashMap<>(), List.of(), List.of());
             }
 
             @Override
             public void load(Demo demo) throws IOException {
                 demo.skipped("Nothing", "this contributor only proves it was reached");
+                demo.made("Make a thing as " + demo.actor(), Demo.Outcome.DONE, "made through its own module");
             }
         };
 
@@ -311,6 +315,9 @@ class DemoRunTest {
         });
         assertThat(state.steps()).as("and the next contributor still loads").anySatisfy(step ->
                 assertThat(step.outcome()).isEqualTo(Demo.Outcome.SKIPPED));
+        assertThat(state.steps()).as("what it made through its own module is recorded as it said, as the operator")
+                .contains(new DemoRun.Step(DemoRun.Kind.MADE, "Make a thing as " + OPERATOR, Demo.Outcome.DONE,
+                        "made through its own module"));
         assertThat(state.running()).isFalse();
     }
 

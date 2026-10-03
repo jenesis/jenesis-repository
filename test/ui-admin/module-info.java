@@ -45,6 +45,9 @@ open module build.jenesis.repository.ui.admin.test {
     requires build.jenesis.repository.cache.storage;
     requires build.jenesis.repository.cache.storage.delegating;
     requires build.jenesis.repository.cache.storage.testkit;
+    requires build.jenesis.repository.cache.protocol.gradle;
+    requires build.jenesis.repository.cache.protocol.jenesis;
+    requires build.jenesis.repository.demo;
     requires micrometer.observation;
     requires spring.beans;
     requires spring.context;

@@ -31,6 +31,9 @@ public interface Demo {
     /** The tenant the demo fills. */
     String tenant();
 
+    /** The operator who confirmed the demo, as whom a contributor records what it creates on the audit trail. */
+    String actor();
+
     /** The deployment's value of {@code key} in force - a pin, else the stored value - or empty when none is set. */
     String setting(String key);
 
@@ -69,4 +72,13 @@ public interface Demo {
 
     /** Record that {@code what} was left out, and why. */
     void skipped(String what, String why) throws IOException;
+
+    /**
+     * Record an operation the contributor made through its own module's services rather than through this run - a
+     * build-cache project created, the entries a build stored in it - with how it ended and what the deployment said,
+     * which is what the run's screen lists for it.
+     *
+     * @return {@code outcome}, so a load may branch on it as on the run's own operations.
+     */
+    Outcome made(String what, Outcome outcome, String detail) throws IOException;
 }

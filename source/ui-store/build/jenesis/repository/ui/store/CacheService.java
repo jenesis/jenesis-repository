@@ -304,7 +304,7 @@ public class CacheService {
      * Creates a project as one build tool's cache, described, with {@code values} as its own settings, as the wizard,
      * {@code POST /api/cache/projects} and {@code jenrepo projects create} do. Every value is validated first; the
      * settings are stored before the provisioning marker, so a project exists configured, and one stopped between the
-     * two lists as a build-made project does.
+     * two lists as a build-made project does. The creation is recorded on the audit trail as the acting member's.
      *
      * @throws IllegalArgumentException when the name, the type, the description or any value is refused, or the project
      *     exists already.
@@ -328,6 +328,7 @@ public class CacheService {
             settings.saveProject(current.name(), validated, values);
         }
         storage().createProject(validated, type, line);
+        audit("cache.project.create", validated);
     }
 
     /** What refuses {@code type} for a new project, empty when it names a build tool this deployment serves. */

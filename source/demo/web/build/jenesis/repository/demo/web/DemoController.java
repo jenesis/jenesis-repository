@@ -81,6 +81,10 @@ public class DemoController {
         said.add(count(state.count(DemoRun.Kind.REPOSITORY, Demo.Outcome.DONE), "repository", "repositories")
                 + " created");
         said.add(count(state.count(DemoRun.Kind.PUBLISH, Demo.Outcome.DONE), "file", "files") + " published");
+        long made = state.count(DemoRun.Kind.MADE, Demo.Outcome.DONE);
+        if (made > 0) {
+            said.add(count(made, "more thing", "more things") + " made");
+        }
         long held = state.count(Demo.Outcome.HELD);
         if (held > 0) {
             said.add(count(held, "file", "files") + " held for review");
