@@ -49,6 +49,15 @@ public final class StoreCacheObservability implements ObservabilitySource {
                 listings.misses(), "reads"));
         metrics.add(Metric.gauge("jenrepo.cache.documents.bytes", "Bytes of listings this node currently remembers, "
                 + "bounded and dropped with the caches by POST /api/admin/caches/clear.", listings.bytes(), "bytes"));
+        UpstreamMemory relayed = UpstreamMemory.node();
+        metrics.add(Metric.counter("jenrepo.cache.upstream.hits", "Relayed upstream documents - a proxied "
+                + "maven-metadata.xml - this node answered from memory instead of fetching them again; the fetches "
+                + "jenrepo.cache.upstream-ttl spares the upstream.", relayed.hits(), "reads"));
+        metrics.add(Metric.counter("jenrepo.cache.upstream.misses", "Relayed upstream documents this node fetched and "
+                + "remembered, each for jenrepo.cache.upstream-ttl.", relayed.misses(), "reads"));
+        metrics.add(Metric.gauge("jenrepo.cache.upstream.bytes", "Bytes of relayed upstream documents this node "
+                + "currently remembers, bounded and dropped with the caches by POST /api/admin/caches/clear.",
+                relayed.bytes(), "bytes"));
         metrics.addAll(each);
         return metrics;
     }

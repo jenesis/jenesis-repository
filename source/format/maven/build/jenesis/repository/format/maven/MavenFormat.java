@@ -6,6 +6,7 @@ import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.Publication;
+import build.jenesis.repository.store.UpstreamMemory;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.FormatExchange;
@@ -384,8 +385,8 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
 
     /**
      * Proxy a {@code /maven/} miss to the upstream Maven repository. Artifacts are immutable and cached, a modular jar
-     * cross-published like a local one; {@code maven-metadata.xml} is mutable and proxied fresh on each miss, never
-     * cached.
+     * cross-published like a local one; {@code maven-metadata.xml} is mutable, relayed as the upstream serves it and
+     * never stored, and remembered in the node's {@link UpstreamMemory} for its ttl.
      *
      * <p>A cached artifact is stored as the upstream serves it, and its checksum sidecars are relayed beside it as the
      * upstream serves them: a checksum is the publisher's to provide and a client's to check, never verified here.
@@ -402,8 +403,16 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         String root = upstream.toString();
         String prefix = root.endsWith("/") ? root : root + "/";
         if (MavenMetadata.isMetadataRequest(path)) {
-            // A mutable index: fetched fresh and streamed to the client, nothing cached.
-            Optional<ProxyFormat.Fetched> index = fetcher.fetch(URI.create(prefix + rest), Map.of());
+            // A mutable index: relayed as the upstream serves it, never stored, and remembered in the node's memory of
+            // upstream documents for its ttl, so a burst of builds costs the upstream one fetch.
+            URI document = URI.create(prefix + rest);
+            UpstreamMemory memory = UpstreamMemory.node();
+            Optional<byte[]> remembered = memory.get(store, document);
+            if (remembered.isPresent()) {
+                exchange.respond(200, remembered.get());
+                return true;
+            }
+            Optional<ProxyFormat.Fetched> index = fetcher.fetch(document, Map.of());
             // Clause 2: maven-metadata.xml is an enumeration a range or LATEST/RELEASE resolves against, so a 404 means
             // "no versions"; only an upstream that answered 404/410 may reach the client as one, and anything else
             // refuses visibly. Its checksums keep the plain decline, since nothing resolves against their absence.
@@ -418,6 +427,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
             if (index.isEmpty() || index.get().status() != 200) {
                 return false;
             }
+            memory.put(store, document, index.get().body());
             exchange.respond(200, index.get().body());
             return true;
         }

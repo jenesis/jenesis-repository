@@ -6,6 +6,7 @@ import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 import build.jenesis.repository.store.DocumentMemory;
+import build.jenesis.repository.store.UpstreamMemory;
 import build.jenesis.repository.store.MissMemory;
 import build.jenesis.repository.store.StoreCache;
 import build.jenesis.repository.store.StoredCounter;
@@ -45,6 +46,15 @@ public final class CachingSettingsContributor implements SettingsContributor {
                                 + "see its release listed by another. A stale read, never a lost write. Zero switches "
                                 + "it off.",
                         Setting.Kind.DURATION, DocumentMemory.DEFAULT_TTL_TEXT, false).advanced(),
+                new Setting(UpstreamMemory.TTL_SETTING, "Caches", "Upstream document memory ttl",
+                        "How long a node serves a document it relayed from an upstream - a proxied "
+                                + "maven-metadata.xml the repository holds none of - from memory before fetching it "
+                                + "again, so a burst of builds costs the upstream one fetch. This is how long a "
+                                + "release published upstream may take to be listed here; a Maven client itself "
+                                + "asks again only once a day by default. Only a document the upstream served is "
+                                + "remembered, never a refusal, and the memory is bounded. POST "
+                                + "/api/admin/caches/clear drops it. Zero switches it off.",
+                        Setting.Kind.DURATION, UpstreamMemory.DEFAULT_TTL_TEXT, false).advanced(),
                 new Setting(Authorization.CACHE_TTL_SETTING, "Caches", "Credential cache ttl",
                         "How long a node serves a credential's documents before asking the store again. Longer than "
                                 + "the store cache ttl on purpose: a revocation reaches every node within seconds "
