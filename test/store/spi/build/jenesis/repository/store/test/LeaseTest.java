@@ -4,6 +4,7 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.Lease;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -62,6 +63,33 @@ class LeaseTest {
         assertThat(lease.acquire("sweep", "node-b", T0.plusSeconds(20))).as("not the rival's to release").isFalse();
         assertThat(lease.release("sweep", "node-a", T0.plusSeconds(20))).isTrue();
         assertThat(lease.acquire("sweep", "node-b", T0.plusSeconds(21))).as("released: free at once").isTrue();
+    }
+
+    @Test
+    void a_renewal_that_meets_the_holders_own_renewal_still_holds() throws IOException {
+        assertThat(lease.acquire("sweep", "node-a", T0)).isTrue();
+        // Between this renewal's read and its write the holder's timer renews too, so the token it read is stale -
+        // a compare-and-set lost to itself, not to a rival.
+        AtomicBoolean interleaved = new AtomicBoolean();
+        ArtifactStore racing = new ForwardingArtifactStore(store) {
+            @Override
+            public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
+                if (interleaved.compareAndSet(false, true)) {
+                    assertThat(lease.renew("sweep", "node-a", T0.plusSeconds(5))).isTrue();
+                }
+                return super.writeVersioned(key, content, expected);
+            }
+
+            @Override
+            public ArtifactStore scope(String tenant) {
+                throw new UnsupportedOperationException("the lease reads one level");
+            }
+        };
+
+        assertThat(new Lease(racing, "locks", TTL).renew("sweep", "node-a", T0.plusSeconds(10)))
+                .as("the lease is still node-a's, so the lost compare-and-set is tried again").isTrue();
+        assertThat(lease.acquire("sweep", "node-b", T0.plusSeconds(10).plus(TTL).minusSeconds(1)))
+                .as("the second renewal landed").isFalse();
     }
 
     @Test

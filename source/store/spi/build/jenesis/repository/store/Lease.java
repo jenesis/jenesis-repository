@@ -84,7 +84,9 @@ public final class Lease {
      * is gone (never held, or expired and reclaimed) or a different holder now owns it (this node's lease lapsed and
      * was stolen): the caller has lost single-writer status and must stop. The extension is a compare-and-set
      * against the read token, so a renewal that races a concurrent takeover also answers {@code false} rather than
-     * overwriting the winner.
+     * overwriting the winner. A compare-and-set lost to this holder's own concurrent renewal - a run renews on a
+     * timer and before every guarded write, and the two meet - is tried again, since the re-read finds the lease
+     * still this holder's: reading that loss as a takeover would stop a run that never lost its lease.
      *
      * <p>It is therefore also the ownership fence: any unconditional mutation of shared state on a leased path - an
      * unpublish, a delete another node could race - gates on a fresh renew, because the lease may have lapsed
@@ -93,12 +95,12 @@ public final class Lease {
      * branch on ownership for more than one action.
      */
     public boolean renew(String name, String holder, Instant now) throws IOException {
-        String key = key(name);
-        Optional<ArtifactStore.Versioned> current = store.readVersioned(key);
-        if (current.isEmpty() || !holder.equals(owner(current.get()))) {
-            return false;
-        }
-        return store.writeVersioned(key, body(holder, now.plus(ttl)), current.get().token());
+        return Retries.tryDecide(store, key(name), current ->
+                        current.isEmpty() || !holder.equals(owner(current.get()))
+                                ? Retries.Verdict.keep(false)
+                                : Retries.Verdict.write(body(holder, now.plus(ttl)), true))
+                .map(Retries.Verdict::result)
+                .orElse(false);
     }
 
     /**
