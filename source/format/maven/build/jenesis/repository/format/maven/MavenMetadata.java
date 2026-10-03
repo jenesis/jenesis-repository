@@ -387,6 +387,9 @@ public final class MavenMetadata {
                 versions.addAll(listedVersions(document.substring(open + "<versions>".length(), close)));
             }
         }
+        // A version an operator yanked leaves the list whichever side lists it: a retraction from resolution.
+        SortedMap<String, Lifecycle.Flag> marks = Lifecycle.versions(store, mavenCoordinate(coordinatePath));
+        versions.removeIf(version -> yanked(marks, version));
         if (versions.isEmpty()) {
             return Optional.empty();
         }

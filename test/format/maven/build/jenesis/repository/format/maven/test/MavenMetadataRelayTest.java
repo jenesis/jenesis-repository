@@ -3,7 +3,9 @@ package build.jenesis.repository.format.maven.test;
 import module org.junit.jupiter.api;
 import module java.base;
 
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.ProxyFormat;
+import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.format.maven.MavenFormat;
 import build.jenesis.repository.format.maven.MavenMetadata;
 import build.jenesis.repository.store.ArtifactStore;
@@ -101,6 +103,18 @@ class MavenMetadataRelayTest {
                 .as("the checksum is the merged document's").isEqualTo(sha1(get.responseBytes()));
         assertThat(asked).as("the checksum is derived from the remembered document, not fetched")
                 .containsExactly(UPSTREAM + "org/example/lib/maven-metadata.xml");
+    }
+
+    @Test
+    void a_yanked_version_leaves_the_merged_document_whichever_side_lists_it() throws IOException {
+        new Publication(store).link("/maven/org/example/lib/2.0/lib-2.0.jar", "abc20");
+        Lifecycle.mark(store, "org.example:lib", "1.0", new Lifecycle.Flag(LifecycleMark.YANKED, "broken"));
+        FakeExchange get = FakeExchange.get(METADATA, Map.of(MavenMetadata.COMPUTE_SETTING, "true"));
+
+        assertThat(format.proxy(get, store, UPSTREAM, answering(200))).isTrue();
+        assertThat(new String(get.responseBytes(), StandardCharsets.UTF_8))
+                .as("1.0, listed by the upstream, is yanked here").doesNotContain("<version>1.0</version>")
+                .contains("<version>2.0</version>");
     }
 
     @Test
