@@ -46,7 +46,8 @@ module build.jenesis.repository.gate {
                     build.jenesis.repository.gate.store.OciHoldRecorder;
     provides build.jenesis.repository.gate.HoldReleaseObserver
             with build.jenesis.repository.gate.store.KevHoldReleaseObserver,
-                    build.jenesis.repository.gate.store.LicenseHoldReleaseObserver;
+                    build.jenesis.repository.gate.store.LicenseHoldReleaseObserver,
+                    build.jenesis.repository.gate.store.ManualHoldReleaseObserver;
     provides build.jenesis.repository.maintenance.MaintenanceTaskProvider
             with build.jenesis.repository.gate.store.QuarantineRetentionTaskProvider;
     provides build.jenesis.repository.walk.WalkConsumer

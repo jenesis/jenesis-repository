@@ -86,6 +86,8 @@ public final class Commands {
                     noun("quarantine", "what the compliance gate held for review",
                             ComplianceCommands::quarantine,
                             act("quarantine <repo>", "the review queue"),
+                            act("quarantine hold <repo> <ecosystem> <coordinate> <version>",
+                                    "hold a version for review by hand - every file of it"),
                             act("quarantine release <repo> <path>...",
                                     "release held files - every file of a version - into the layout"),
                             act("quarantine discard <repo> <path>...", "discard held files")),

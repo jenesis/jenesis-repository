@@ -39,6 +39,7 @@ final class PublicationHookFixtures {
                 new ComplianceScreenFixture(), new StagingWithholdFixture(), new OciHoldRecorderFixture(),
                 // ... and the hold-release hooks, which are not PublicationObservers at all.
                 new KevReleaseFixture(), new LicenseReleaseFixture(), new SignatureReleaseFixture(),
+                new ManualReleaseFixture(),
                 new DiscardedFindingsFixture()));
         for (String observer : LISTING_OBSERVERS) {
             String format = observer.substring(0, observer.indexOf('.'));

@@ -365,6 +365,16 @@ final class ComplianceCommands {
                 System.out.println("Released " + String.join(", ", paths) + " into " + args[2] + ".");
                 return 0;
             }
+            case "hold" -> {
+                if (args.length != 6) {
+                    throw new IllegalArgumentException("Usage: quarantine hold <repo> <ecosystem> <coordinate> <version>");
+                }
+                boolean held = client.review().holdVersion(args[2], args[3], args[4], args[5]);
+                System.out.println(held
+                        ? "Held " + args[4] + ":" + args[5] + " for review in " + args[2] + "."
+                        : "Nothing of " + args[4] + ":" + args[5] + " serves in " + args[2] + ", so nothing was held.");
+                return 0;
+            }
             case "discard" -> {
                 if (args.length < 4) {
                     throw new IllegalArgumentException("Usage: quarantine discard <repo> <path>...");

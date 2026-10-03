@@ -195,7 +195,7 @@ class HoldLifecycleTest {
     void an_uninstalled_kinds_hold_still_holds() throws IOException {
         assertThat(HoldRecords.installedKinds())
                 .as("the reachability module really is absent from this graph, or the case proves nothing")
-                .containsExactlyInAnyOrder("kev", "license");
+                .containsExactlyInAnyOrder("kev", "license", "manual");
         // What that module's enforce sweep left behind before it was uninstalled.
         store.write(HoldRecords.key("reachability", ECOSYSTEM, COORD, VERSION),
                 new ByteArrayInputStream("GHSA-0000-0000-0000".getBytes(StandardCharsets.UTF_8)));

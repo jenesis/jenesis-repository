@@ -7,9 +7,11 @@ import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.compliance.VulnerabilityPolicy;
+import build.jenesis.repository.gate.ManualHold;
 import build.jenesis.repository.gate.QuarantineLog;
 import build.jenesis.repository.gate.store.ComplianceScreen;
 import build.jenesis.repository.gate.store.GatedRepository;
+import build.jenesis.repository.gate.store.HoldLifecycle;
 import build.jenesis.repository.inventory.HeldSubjects;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
@@ -110,5 +112,32 @@ class VersionReviewTest {
         assertThat(publication.blob("/quarantine" + JAR)).as("discarded with its version").isEmpty();
         assertThat(publication.located(JAR)).isEmpty();
         assertThat(new GatedRepository(store).discard(POM)).as("nothing is left to discard").isEmpty();
+    }
+
+    @Test
+    void an_operator_can_hold_any_version_and_it_is_released_like_any_other() throws IOException {
+        Publication publication = new Publication(store);
+        publication.link(JAR, publication.storeBlob(new ByteArrayInputStream("jar".getBytes(StandardCharsets.UTF_8))));
+        publication.link(POM, publication.storeBlob(new ByteArrayInputStream("pom".getBytes(StandardCharsets.UTF_8))));
+
+        assertThat(HoldLifecycle.holdVersion(store, ECOSYSTEM, COORD, VERSION, "keylogin/admin")).isTrue();
+
+        assertThat(publication.located(JAR)).as("held, so not served").isEmpty();
+        assertThat(publication.located(POM)).isEmpty();
+        assertThat(new QuarantineLog(store).latest(POM)).get().satisfies(event -> {
+            assertThat(event.rules()).containsExactly(ManualHold.RULE);
+            assertThat(event.reasons()).containsExactly("Held for review by keylogin/admin");
+        });
+        assertThat(ManualHold.held(store, ECOSYSTEM, COORD, VERSION)).as("who held it").get()
+                .isEqualTo(Set.of("keylogin/admin"));
+
+        assertThat(new GatedRepository(store).release(POM)).containsExactlyInAnyOrder(JAR, POM);
+        assertThat(publication.located(JAR)).as("released, so served again").isPresent();
+        assertThat(ManualHold.held(store, ECOSYSTEM, COORD, VERSION)).as("the operator's record is consumed").isEmpty();
+    }
+
+    @Test
+    void a_version_that_serves_nothing_is_not_held() throws IOException {
+        assertThat(HoldLifecycle.holdVersion(store, ECOSYSTEM, COORD, "9.9", "keylogin/admin")).isFalse();
     }
 }

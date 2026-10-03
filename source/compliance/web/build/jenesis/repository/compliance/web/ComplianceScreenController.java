@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.List;
 
 import static build.jenesis.repository.compliance.web.ComplianceConsoleConfig.QUALIFIER;
+import org.springframework.web.util.UriComponentsBuilder;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -190,6 +191,22 @@ public class ComplianceScreenController {
         model.addAttribute("next", page.next());
         model.addAttribute("pageSize", QUARANTINE_PAGE);
         return QUALIFIER + "/signer";
+    }
+
+    /** Hold a version for review by hand, from its package's list of versions or its own page, and return there. */
+    @PostMapping("/ui/repositories/{repo}/quarantine/hold")
+    public String holdVersion(@PathVariable("repo") String repo,
+                              @RequestParam("ecosystem") String ecosystem,
+                              @RequestParam("coordinate") String coordinate,
+                              @RequestParam("version") String version,
+                              RedirectAttributes redirect) throws IOException {
+        boolean held = compliance.holdVersion(repo, ecosystem, coordinate, version);
+        redirect.addFlashAttribute("message", held
+                ? "Held " + coordinate + ":" + version + " for review; it is in the quarantine queue."
+                : "Nothing of " + coordinate + ":" + version + " serves, so nothing was held.");
+        return "redirect:" + UriComponentsBuilder.fromPath("/ui/repositories/{repo}/coordinate")
+                .queryParam("ecosystem", ecosystem).queryParam("coordinate", coordinate)
+                .buildAndExpand(repo).encode().toUriString();
     }
 
     /** Release the held files of one version - each {@code path} the queue's row names - into the layout. */

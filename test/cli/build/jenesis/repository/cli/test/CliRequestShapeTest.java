@@ -117,6 +117,9 @@ public class CliRequestShapeTest {
 
             // Review
             action("quarantine <repo>", "quarantine releases", get("/api/quarantine", "repo")),
+            action("quarantine hold <repo> <ecosystem> <coordinate> <version>",
+                    "quarantine hold releases Maven org.acme:lib 1.0",
+                    post("/api/quarantine/hold", "repo").body("ecosystem", "coordinate", "version")),
             action("quarantine release <repo> <path>...", "quarantine release releases /a/b.jar /a/b.pom",
                     post("/api/quarantine/release", "repo").body("paths")),
             action("quarantine discard <repo> <path>...", "quarantine discard releases /a/b.jar /a/b.pom",

@@ -285,6 +285,14 @@ public class ComplianceReview extends TenantScope {
                         row.since() == null ? "" : row.since().toString(), row.last())).toList(), page.next());
     }
 
+    /** Hold a version for review by hand, as the signed-in operator - every file of it, whatever the gate found.
+     *  Answers whether anything was held; a version that serves no file holds nothing. */
+    public boolean holdVersion(String repository, String ecosystem, String coordinate, String version)
+            throws IOException {
+        audit(AuditActions.QUARANTINE_HOLD, repository + " " + ecosystem + " " + coordinate + ":" + version);
+        return HoldLifecycle.holdVersion(scope(repository), ecosystem, coordinate, version, actor.name());
+    }
+
     /** Release the version {@code path} belongs to - every file of it held for review. A path no longer held was
      *  released with its version by an earlier call for another of its files, and is passed over. */
     public void releaseQuarantined(String repository, String path) throws IOException {

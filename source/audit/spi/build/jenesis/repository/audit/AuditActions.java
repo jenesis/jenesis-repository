@@ -26,6 +26,9 @@ public final class AuditActions {
     /** A compliance hold discarded without release. */
     public static final String QUARANTINE_DISCARD = action("quarantine.discard");
 
+    /** A version held for review by hand. */
+    public static final String QUARANTINE_HOLD = action("quarantine.hold");
+
     /** A compliance hold released into the layout. */
     public static final String QUARANTINE_RELEASE = action("quarantine.release");
 

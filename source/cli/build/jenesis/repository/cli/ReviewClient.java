@@ -30,6 +30,19 @@ public final class ReviewClient extends ClientCalls {
                 "application/json"), 200, "release " + String.join(", ", paths));
     }
 
+    /** Hold a version for review by hand, answering whether anything was held. */
+    public boolean holdVersion(String repo, String ecosystem, String coordinate, String version)
+            throws IOException, InterruptedException {
+        HttpResponse<String> response = send("POST", "/api/quarantine/hold?repo=" + enc(repo),
+                body(Map.of("ecosystem", ecosystem, "coordinate", coordinate, "version", version)), "application/json");
+        require(response, 200, "hold " + coordinate + ":" + version);
+        return JSON.readValue(response.body(), Held.class).held();
+    }
+
+    /** A hold's answer: whether anything was held. */
+    public record Held(boolean held) {
+    }
+
     /** Discard held files so they are never served, and say which were still held. */
     public Discarded discardQuarantine(String repo, List<String> paths) throws IOException, InterruptedException {
         HttpResponse<String> response = send("POST", "/api/quarantine/discard?repo=" + enc(repo),

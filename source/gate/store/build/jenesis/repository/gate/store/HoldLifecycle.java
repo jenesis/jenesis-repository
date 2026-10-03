@@ -24,6 +24,9 @@ import build.jenesis.repository.gate.QuarantineLog;
 import build.jenesis.repository.gate.QuarantineDispatch;
 import build.jenesis.repository.gate.HoldClears;
 import build.jenesis.repository.gate.HeldElsewhere;
+import build.jenesis.repository.gate.ManualHold;
+import build.jenesis.repository.gate.RetroactiveHolds;
+import build.jenesis.repository.store.Clocks;
 
 /**
  * The one release/discard primitive every review surface delegates to, so the HTTP API ({@code GatedRepository})
@@ -221,6 +224,30 @@ public final class HoldLifecycle {
             // window.
             HoldClears.clearReleased(store, hash, ownPaths, "hold-release version-withhold", described.get());
         }
+    }
+
+    /**
+     * Hold a version for review by hand: every file of it, whatever the gate found, recorded as {@code actor}'s
+     * {@link ManualHold} and released or discarded like any other hold. A version some other kind already holds gains
+     * the operator's record and keeps its other reasons. Answers whether anything was held - nothing is for a version
+     * that serves no file.
+     */
+    public static boolean holdVersion(ArtifactStore store, String ecosystem, String coordinate, String version,
+                                      String actor) throws IOException {
+        StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
+        Publication publication = new Publication(store);
+        List<String> paths = inventory.paths(ecosystem, coordinate, version);
+        RetroactiveHolds.Grounds grounds = new RetroactiveHolds.Grounds(ManualHold.RULE, coordinate + ":" + version,
+                List.of("Held for review by " + actor));
+        QuarantineLog log = new QuarantineLog(store);
+        if (RetroactiveHolds.anyHeld(store, paths)) {
+            ManualHold.hold(store, ecosystem, coordinate, version, actor);
+            RetroactiveHolds.converge(store, publication, inventory, log, Clocks.now(), ecosystem, coordinate, version,
+                    paths, grounds);
+            return true;
+        }
+        return RetroactiveHolds.hold(store, publication, inventory, log, Clocks.now(), ecosystem, coordinate, version,
+                paths, grounds, () -> ManualHold.hold(store, ecosystem, coordinate, version, actor));
     }
 
     /**

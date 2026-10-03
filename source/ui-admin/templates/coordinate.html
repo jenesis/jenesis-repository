@@ -48,6 +48,7 @@
                     <th scope="col" th:if="${downloadsTracked}">Downloads</th>
                     <th scope="col" th:if="${capabilities.findings()}">Findings</th>
                     <th scope="col">Files</th>
+                    <th scope="col" th:if="${isEditor and repositoryPagePaths.contains('/quarantine')}"><span class="app-sr-only">Actions</span></th>
                 </tr>
                 </thead>
                 <tbody>
@@ -76,6 +77,16 @@
                             th:replace="~{fragments :: findingsState(${v.findings}, @{'/ui/repositories/' + ${repo} + '/findings'(coordinate=${detail.coordinate + ':' + v.version})})}"></th:block></td>
                     <td class="app-list__num"><small th:text="${v.paths.isEmpty() ? '—'
                             : (v.paths.size() == 1 ? '1 file' : v.paths.size() + ' files')}">4 files</small></td>
+                    <!--/* Any served version can be held for review by hand; a withheld one is already. */-->
+                    <td th:if="${isEditor and repositoryPagePaths.contains('/quarantine')}" class="app-list__actions">
+                        <form th:if="${v.served and !v.paths.isEmpty()}" method="post"
+                              th:action="@{/ui/repositories/{repo}/quarantine/hold(repo=${repo})}">
+                            <input type="hidden" name="ecosystem" th:value="${detail.ecosystem}">
+                            <input type="hidden" name="coordinate" th:value="${detail.coordinate}">
+                            <input type="hidden" name="version" th:value="${v.version}">
+                            <button th:replace="~{base :: cautionButton('Hold', |Hold ${detail.coordinate}:${v.version} for review? Every file of it stops serving until it is released.|)}">Hold</button>
+                        </form>
+                    </td>
                 </tr>
                 </th:block>
                 </tbody>

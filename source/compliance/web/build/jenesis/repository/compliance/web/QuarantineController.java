@@ -6,6 +6,7 @@ import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.gate.QuarantineLog;
+import build.jenesis.repository.gate.store.HoldLifecycle;
 import build.jenesis.repository.gate.store.ReviewQueue;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.kernel.RepositoryRequests;
@@ -89,6 +90,33 @@ public class QuarantineController {
     private static final int MAX_PAGE = 1000;
 
     /**
+     * Hold a version for review by hand - every file of it, whatever the gate found - as the key that asks, answering
+     * whether anything was held: a version that serves no file holds nothing.
+     */
+    @PostMapping("/api/quarantine/hold")
+    @ResponseBody
+    public Held holdVersion(@RequestParam("repo") String repo,
+                            @RequestHeader(value = Repositories.KEY, required = false) String key,
+                            @RequestBody HoldRequest request,
+                            HttpServletRequest http, HttpServletResponse response) throws IOException {
+        String tenant = RepositoryRequests.access(routing, repo, http, response);
+        if (tenant == null) {
+            return null;
+        }
+        if (request.ecosystem() == null || request.coordinate() == null || request.version() == null) {
+            response.setStatus(400);
+            return null;
+        }
+        String actor = key == null ? "anonymous" : Authorization.hash(key);
+        audit(tenant, key, AuditActions.QUARANTINE_HOLD,
+                repo + " " + request.ecosystem() + " " + request.coordinate() + ":" + request.version());
+        boolean held = HoldLifecycle.holdVersion(repositories.writable(tenant, repo), request.ecosystem(),
+                request.coordinate(), request.version(), actor);
+        response.setStatus(200);
+        return new Held(held);
+    }
+
+    /**
      * Release a held path, or every held file of a version, into the layout.
      */
     @PostMapping("/api/quarantine/release")
@@ -164,6 +192,14 @@ public class QuarantineController {
     /** The review surface: {@code events}, the held artifacts, each releasable or discardable; {@code refusals}, the
      *  recent refusals of every leg, read-only; {@code next}, the queue's cursor, {@code null} on the last page. */
     public record QuarantineView(List<ReviewQueue.Row> events, List<ReviewQueue.Row> refusals, String next) {
+    }
+
+    /** What a hold by hand acts on: one version of one coordinate. */
+    public record HoldRequest(String ecosystem, String coordinate, String version) {
+    }
+
+    /** A hold's answer: whether anything was held. */
+    public record Held(boolean held) {
     }
 
     /** A discard's answer: the paths it dropped held bytes at, and those at which nothing was held any more - already
