@@ -74,7 +74,8 @@ import module org.slf4j;
  *       notifications are contained: a throwing {@link PublicationObserver} is logged and the publish stands, because
  *       a lost notification may over-serve or over-count but can never hide a served artifact or a hold.</li>
  *   <li><b>Ordering / concurrency.</b> Within one {@code commit} the order is fixed and total: store, screen, gate the
- *       republish, lay out sidecars, link the declared visibility in declaration order, notify. Interceptors run
+ *       republish, lay out sidecars, link the declared visibility in declaration order, tell the interceptors an
+ *       accepted publish committed, notify. Interceptors run
  *       sorted by {@link PublishInterceptor#order()} (ties keep discovery order) and the strongest disposition across
  *       the chain routes the publication; observers are notified in discovery order, sequentially, and no observer
  *       ordering is otherwise promised.</li>
@@ -962,19 +963,20 @@ public final class Publication {
      * screen by hand, it commits, and the operation screens once on its behalf, gates the republish, drives the
      * accepted layout and fires {@link #published} after the declared visibility has landed. A hosted route that
      * called this directly would own the ordering that {@code commit} exists to own, so the core's ingress census
-     * asserts there is no such caller. The interceptors' {@link PublishInterceptor#committed} notifications fire here,
-     * before any layout; the after-commit observers do not - they ride the {@link #published} seam
-     * {@code commit} fires once the accepted artifact is visible.
+     * asserts there is no such caller. The interceptors' {@link PublishInterceptor#committed} notifications fire here
+     * for every disposition, since the caller lays out after; the after-commit observers do not - they ride the
+     * {@link #published} seam {@code commit} fires once the accepted artifact is visible.
      */
     public Published screen(ArtifactDescriptor artifact, InputStream content) throws IOException {
-        return route(artifact, content, null);
+        return route(artifact, content, null, false);
     }
 
     /** Screen and store {@code content}, and hold it when the chain says so - asking {@code republish}, where there is
      *  one, before the hold is written: a held upload that could never be released, since a released version stands
-     *  at other bytes, is refused rather than left on the review queue. */
-    private Published route(ArtifactDescriptor artifact, InputStream content, Republish republish)
-            throws IOException {
+     *  at other bytes, is refused rather than left on the review queue. The interceptors hear {@code committed} here,
+     *  unless {@code afterLayout} asks it of an accepted upload, which its caller then tells once it is visible. */
+    private Published route(ArtifactDescriptor artifact, InputStream content, Republish republish,
+                            boolean afterLayout) throws IOException {
         // The length is counted as the bytes stream into the store, so the descriptor never stats the blob it just
         // wrote - one read per publish that answered a question the write itself had answered.
         Blob blob = stored(content);
@@ -1032,8 +1034,10 @@ public final class Publication {
                 }
             }
         }
-        for (PublishInterceptor interceptor : interceptors) {
-            interceptor.committed(stored, disposition, store);
+        if (!afterLayout || disposition != PublishInterceptor.Disposition.ACCEPT) {
+            for (PublishInterceptor interceptor : interceptors) {
+                interceptor.committed(stored, disposition, store);
+            }
         }
         return new Published(disposition, hash, stored.size(), reasons);
     }
@@ -1366,6 +1370,10 @@ public final class Publication {
      *       {@link Visibility}. Nothing it writes here is servable.</li>
      *   <li>The declared visibility is linked, in declaration order. <b>This is the commit point</b>: before the first
      *       step the publication serves nothing, after the last it serves fully.</li>
+     *   <li>The interceptors hear {@link PublishInterceptor#committed} for the accepted publish, once its visibility
+     *       has landed: a publish the layout refused - a released version re-pointed at other bytes - or whose link
+     *       raised records nothing. A held or refused upload's {@code committed} fires in the screen, since nothing
+     *       is laid out for it.</li>
      *   <li>{@link #published} notifies the after-commit observers exactly once - strictly after visibility committed,
      *       never before, and never at all when the layout declined or the chain did not accept.</li>
      * </ol>
@@ -1379,7 +1387,7 @@ public final class Publication {
             throws IOException {
         Objects.requireNonNull(republish, "republish");
         Objects.requireNonNull(layout, "layout");
-        Published screened = route(artifact, body, republish);
+        Published screened = route(artifact, body, republish, true);
         String hash = screened.hash();
         // The length was counted as the bytes streamed in; the blob is not stat-ed for a number the write knew.
         ArtifactDescriptor stored = artifact.withBlob(hash, screened.size());
@@ -1412,6 +1420,10 @@ public final class Publication {
             committed = new ArtifactDescriptor(committed.ecosystem(), committed.coordinate(), committed.version(),
                     committed.path(), committed.contentType(), committed.prerelease(), committed.hash(),
                     committed.size(), replaced);
+        }
+        // Visible now, so what the interceptors record of it is what serves: a refused re-point never got here.
+        for (PublishInterceptor interceptor : interceptors) {
+            interceptor.committed(stored, PublishInterceptor.Disposition.ACCEPT, store);
         }
         published(committed);
         return new Commit(PublishInterceptor.Disposition.ACCEPT, committed, true, List.of());

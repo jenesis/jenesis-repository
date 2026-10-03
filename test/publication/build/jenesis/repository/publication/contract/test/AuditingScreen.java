@@ -12,10 +12,8 @@ import build.jenesis.repository.hooks.testkit.Hooks;
  *
  * <p>This is the shape the {@code PublishInterceptor} contract's clause 7 is written for. Its {@code committed} leg
  * is a <b>verdict</b> leg - a throw there fails the publish - while the {@code onPublished} it overrides is an
- * <b>observer</b> leg whose throw is logged and swallowed, and the exchange it makes for that containment is the only
- * way to learn that the artifact really serves: {@code committed} fires before the layout and before the commit
- * point, so its {@code ACCEPT} is not a visibility claim. A screen that overrides neither would never be double
- * counted as an observer of its own verdict, which is what the inherited no-op default buys.
+ * <b>observer</b> leg whose throw is logged and swallowed. A screen that overrides neither is never double counted as
+ * an observer of its own verdict, which is what the inherited no-op default buys.
  */
 public final class AuditingScreen implements PublishInterceptor {
 

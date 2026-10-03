@@ -136,18 +136,18 @@ import module java.base;
  *           garbage collection, so there is no published-then-retracted window;</li>
  *       <li>a {@code QUARANTINE}'s {@code /quarantine<path>} review pointer is written inside the chain run, before
  *           {@link #committed} fires;</li>
- *       <li>{@link #committed} fires <b>before the accepted layout runs and before the commit point</b>, not after it.
- *           An {@code ACCEPT} reported there means "the chain accepted" and <em>not</em> "the artifact is visible":
- *           the republish policy may still refuse, the accepted layout may still decline, and a declared visibility
- *           write may still fail. A screen that must know the artifact really serves overrides the inherited
- *           {@link #onPublished}, which fires only once the declared visibility has committed - and takes that leg's
- *           contained, best-effort delivery in exchange.</li>
+ *       <li>{@link #committed} is told of an {@code ACCEPT} <b>once the accepted layout's declared visibility has
+ *           landed</b>, and of a {@code QUARANTINE} or {@code REJECT} as soon as the chain has routed it. An
+ *           {@code ACCEPT} reported there therefore means the artifact serves: a republish the policy refuses, a
+ *           layout that declines and a visibility write that fails are never reported, so a screen records nothing
+ *           about a version that never served.</li>
  *     </ul>
  *     The delivery class of {@link #assess} and {@link #committed} is therefore <b>synchronous and commit-coupled</b>:
  *     called exactly once per {@code commit}, inside the publish, with the failure propagating. The crash window a
- *     screen must reason about is the mirror of an observer's - a crash between {@link #committed} and the commit
- *     point leaves a screen believing it accepted an artifact that never became visible, which is why clause 2
- *     requires {@code committed} to be an upsert the replay may repeat.</li>
+ *     screen must reason about is the one after visibility - a crash between the visibility write and
+ *     {@link #committed} leaves an artifact serving that no screen recorded, and a throwing {@code committed} fails
+ *     the publish over an artifact that already serves - which is why clause 2 requires {@code committed} to be an
+ *     upsert the publisher's replay may repeat.</li>
  * </ol>
  */
 public interface PublishInterceptor extends PublicationObserver {
@@ -362,8 +362,10 @@ public interface PublishInterceptor extends PublicationObserver {
         return false;
     }
 
-    /** React to the routed outcome once the collective disposition is decided - the seam for inventory recording on
-     *  {@code ACCEPT}, a quarantine or rejection audit otherwise. The scoped store the publication routed through
+    /** React to the routed outcome - the seam for inventory recording on {@code ACCEPT}, a quarantine or rejection
+     *  audit otherwise. A held or refused upload is told once the collective disposition is decided; an accepted one
+     *  once its layout is visible, so a publish the layout refuses - a released version re-pointed at other bytes -
+     *  is never recorded. The scoped store the publication routed through
      *  rides along so such a record lands in the publish's own tenant/repository space - the doubly-scoped store
      *  <em>is</em> the routed space, per this SPI's convention. A hook that only rides an accepted publish and has
      *  no say in the verdict belongs in the other hook class, the after-commit {@link PublicationObserver}. */

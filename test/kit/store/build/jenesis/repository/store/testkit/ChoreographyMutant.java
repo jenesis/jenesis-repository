@@ -121,6 +121,12 @@ public enum ChoreographyMutant {
     A_POINTER_LINKED_BEFORE_THE_CHAIN_VOTES("clause 13's store-then-gate ordering - a serving pointer is linked "
             + "before the chain votes, so an artifact serves while it is still being screened"),
 
+    /** Clause 13's accept ordering: a screen is told of an {@code ACCEPT} as soon as the chain voted, before the
+     *  layout and its visibility write - so it records a version the layout may decline or the republish policy
+     *  refuse, and that never serves. */
+    A_COMMITTED_TOLD_BEFORE_THE_LAYOUT("clause 13's accept ordering - committed is told of an ACCEPT before the "
+            + "layout runs, so a screen records an artifact that may never serve"),
+
     /** Clause 13's quarantine ordering: the review pointer is gone by the time {@code committed} fires, so a screen
      *  notified of a hold cannot read the pointer its own verdict created - and a crashed hold becomes a release. */
     A_REVIEW_POINTER_REMOVED_BEFORE_COMMITTED("clause 13's quarantine ordering - the review pointer is removed before "
@@ -148,11 +154,11 @@ public enum ChoreographyMutant {
      * split is untouched - because a mutant that changed which list a hook lands in would fail a check for a reason
      * that has nothing to do with the clause.
      */
-    List<PublicationObserver> arrange(List<? extends PublicationObserver> hooks) {
+    List<PublicationObserver> arrange(List<? extends PublicationObserver> hooks, ArtifactStore store) {
         if (this == NONE) {
             return List.copyOf(hooks);
         }
-        Run run = new Run(this);
+        Run run = new Run(this, store);
         List<PublicationObserver> arranged = new ArrayList<>();
         if (this == A_POINTER_LINKED_BEFORE_THE_CHAIN_VOTES) {
             arranged.add(new EagerLink());
@@ -174,15 +180,18 @@ public enum ChoreographyMutant {
     private final class Run {
 
         private final ChoreographyMutant mutant;
+        private final ArtifactStore store;
         private final List<PublishInterceptor> screens = new ArrayList<>();
+        private final Set<String> toldEarly = ConcurrentHashMap.newKeySet();
         private final Set<String> rejected = ConcurrentHashMap.newKeySet();
         private final Set<String> assessedOnce = ConcurrentHashMap.newKeySet();
         private final Map<String, Set<PublishInterceptor>> asked = new ConcurrentHashMap<>();
         private final AtomicBoolean fanningOut = new AtomicBoolean();
         private final AtomicBoolean observerFailed = new AtomicBoolean();
 
-        private Run(ChoreographyMutant mutant) {
+        private Run(ChoreographyMutant mutant, ArtifactStore store) {
             this.mutant = mutant;
+            this.store = store;
         }
 
         /** Whether this screen's {@code assess} is delegated at all for {@code path}, or skipped as an abandoned,
@@ -249,6 +258,10 @@ public enum ChoreographyMutant {
                 if (verdict == Disposition.REJECT) {
                     rejected.add(artifact.path());
                 }
+                if (mutant == A_COMMITTED_TOLD_BEFORE_THE_LAYOUT && verdict == Disposition.ACCEPT
+                        && toldEarly.add(artifact.path() + '\u0000' + System.identityHashCode(delegate))) {
+                    delegate.committed(artifact, Disposition.ACCEPT, store);
+                }
                 return verdict;
             }
 
@@ -280,6 +293,9 @@ public enum ChoreographyMutant {
                     throws IOException {
                 if (mutant == A_COMMITTED_THAT_SKIPS_THE_NEUTRAL_VERDICT && disposition == Disposition.ACCEPT) {
                     return;
+                }
+                if (mutant == A_COMMITTED_TOLD_BEFORE_THE_LAYOUT && disposition == Disposition.ACCEPT) {
+                    return;                    // already told when the chain voted
                 }
                 if (mutant == A_REVIEW_POINTER_REMOVED_BEFORE_COMMITTED) {
                     String pointer = Publication.quarantineKey(artifact.path());

@@ -200,13 +200,13 @@ public final class PublicationHookContract {
         /** Clause 13. A {@code QUARANTINE}'s review pointer is written inside the chain run, before {@code committed}
          *  fires - so a screen notified of a quarantine can already read it. */
         A_QUARANTINE_REVIEW_POINTER_IS_WRITTEN_BEFORE_COMMITTED_FIRES(Role.PUBLISH_INTERCEPTOR),
-        /** Clause 13, the trap: {@code committed} fires <em>before</em> the accepted layout and before the commit
-         *  point, so an {@code ACCEPT} reported there does not mean the artifact is visible. */
-        COMMITTED_FIRES_BEFORE_THE_COMMIT_POINT_SO_ACCEPT_IS_NOT_VISIBILITY(Role.PUBLISH_INTERCEPTOR),
-        /** Clause 13's crash window, never before driven: the process dies between {@code committed} and the
-         *  visibility write. The screen believes it accepted an artifact that never served; the replay repairs it, and
-         *  only because {@code committed} upserts. */
-        THE_COMMITTED_TO_VISIBILITY_CRASH_WINDOW_REPLAYS_CLEAN(Role.PUBLISH_INTERCEPTOR),
+        /** Clause 13: {@code committed} is told of an {@code ACCEPT} only once the artifact serves, so a layout that
+         *  declines or a republish the policy refuses is never reported. */
+        AN_ACCEPT_IS_TOLD_ONLY_ONCE_IT_SERVES(Role.PUBLISH_INTERCEPTOR),
+        /** Clause 13's crash window before visibility: the process dies before the visibility write. No screen was
+         *  told, nothing serves, and the publisher's replay lands and records it once, because {@code committed}
+         *  upserts. */
+        A_CRASH_BEFORE_THE_VISIBILITY_WRITE_TELLS_NO_SCREEN_AND_REPLAYS_CLEAN(Role.PUBLISH_INTERCEPTOR),
         /** Clause 13's earlier window: the blob landed and the process died before the chain ran. Nothing was
          *  screened, nothing serves, and the replay converges onto the same state. */
         THE_BLOB_TO_CHAIN_CRASH_WINDOW_LEAVES_ONLY_AN_UNREFERENCED_BLOB(Role.PUBLISH_INTERCEPTOR),
@@ -282,9 +282,9 @@ public final class PublicationHookContract {
         /** A {@code QUARANTINE}'s review pointer landed and the process died before {@code committed} fired. */
         AFTER_THE_QUARANTINE_POINTER_BEFORE_COMMITTED(
                 Property.THE_QUARANTINE_POINTER_TO_COMMITTED_CRASH_WINDOW_REPLAYS_CLEAN),
-        /** {@code committed} fired and the process died before the declared visibility write - the screen believes it
-         *  accepted an artifact that never became visible. */
-        AFTER_COMMITTED_BEFORE_THE_VISIBILITY_WRITE(Property.THE_COMMITTED_TO_VISIBILITY_CRASH_WINDOW_REPLAYS_CLEAN),
+        /** The chain voted and the process died before the declared visibility write: nothing serves and no screen
+         *  was told of an accept. */
+        BEFORE_THE_VISIBILITY_WRITE(Property.A_CRASH_BEFORE_THE_VISIBILITY_WRITE_TELLS_NO_SCREEN_AND_REPLAYS_CLEAN),
         /** The visibility write landed and the caller never learned it did: the artifact serves and no after-commit
          *  observer ever saw it - the window {@code Publication} documents and does not close. */
         AFTER_THE_VISIBILITY_WRITE_BEFORE_PUBLISHED(Property.THE_COMMIT_TO_CALLBACK_WINDOW_LOSES_THE_CALL);
@@ -525,12 +525,12 @@ public final class PublicationHookContract {
                                 + "interleaving cooperates is not a check. Declared only for a screen that can reach "
                                 + "more than one verdict, since otherwise every answer is the same answer and there "
                                 + "is nothing to confuse")));
-        mutations.put(Property.THE_COMMITTED_TO_VISIBILITY_CRASH_WINDOW_REPLAYS_CLEAN, List.of(
+        mutations.put(Property.A_CRASH_BEFORE_THE_VISIBILITY_WRITE_TELLS_NO_SCREEN_AND_REPLAYS_CLEAN, List.of(
                 new Mutation(Mutant.A_ROW_PER_DELIVERY,
-                        "the hook-facing half of this window is that the replay REPAIRS it, and it only does so "
-                                + "because committed upserts - the check says so out loud and then compares the "
-                                + "record across the replay. A screen that appends turns the repair into an "
-                                + "accumulation, one row per crashed attempt")));
+                        "the hook-facing half of this window is that the publisher's replay lands it and the screen "
+                                + "records it once, which it only does because committed upserts - the check compares "
+                                + "the record across a further replay. A screen that appends turns the replay into an "
+                                + "accumulation, one row per attempt")));
 
         // --- the pre-commit release hook ------------------------------------------------------------------------------
         mutations.put(Property.A_RELEASE_HOOK_IS_NOT_A_CONTAINED_PUBLICATION_OBSERVER, List.of(
@@ -743,7 +743,7 @@ public final class PublicationHookContract {
      * is every ordinary run - {@link ChoreographyMutant#NONE} hands the hooks straight through.
      */
     static Publication publication(ArtifactStore store, List<? extends PublicationObserver> hooks) {
-        List<PublicationObserver> observers = FaultInjectingStore.choreographyOf(store).arrange(hooks);
+        List<PublicationObserver> observers = FaultInjectingStore.choreographyOf(store).arrange(hooks, store);
         return new Publication(store, observers.stream()
                 .filter(hook -> hook instanceof PublishInterceptor)
                 .map(hook -> (PublishInterceptor) hook)
@@ -815,7 +815,7 @@ public final class PublicationHookContract {
      * The arrangement that falsifies each clause about {@code Publication}'s own commit choreography.
      *
      * <p>These clauses are not un-falsifiable, they are un-falsifiable-<em>by-a-hook</em>: no substitution of a
-     * hook's own answers can make "the chain ran in ascending order" or "committed fired before the commit point"
+     * hook's own answers can make "the chain ran in ascending order" or "committed was told of an accept only once it served"
      * come out false, because the behaviour belongs to the choreography around the hook rather than to the hook. The
      * mutation is applied to the arrangement instead, and {@link Falsification#requireBrokenByChoreography} requires
      * the clause to say otherwise.
@@ -859,8 +859,8 @@ public final class PublicationHookContract {
                         ChoreographyMutant.A_CHAIN_ABANDONED_AFTER_THE_FIRST_SCREEN),
                 Map.entry(Property.STORE_THEN_GATE_LINKS_NO_POINTER_BEFORE_THE_CHAIN_VOTED,
                         ChoreographyMutant.A_POINTER_LINKED_BEFORE_THE_CHAIN_VOTES),
-                Map.entry(Property.COMMITTED_FIRES_BEFORE_THE_COMMIT_POINT_SO_ACCEPT_IS_NOT_VISIBILITY,
-                        ChoreographyMutant.A_POINTER_LINKED_BEFORE_THE_CHAIN_VOTES),
+                Map.entry(Property.AN_ACCEPT_IS_TOLD_ONLY_ONCE_IT_SERVES,
+                        ChoreographyMutant.A_COMMITTED_TOLD_BEFORE_THE_LAYOUT),
                 Map.entry(Property.A_QUARANTINE_REVIEW_POINTER_IS_WRITTEN_BEFORE_COMMITTED_FIRES,
                         ChoreographyMutant.A_REVIEW_POINTER_REMOVED_BEFORE_COMMITTED),
                 Map.entry(Property.THE_QUARANTINE_POINTER_TO_COMMITTED_CRASH_WINDOW_REPLAYS_CLEAN,

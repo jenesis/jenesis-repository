@@ -122,12 +122,12 @@ final class InterceptorContract {
         add(checks, PublicationHookContract.Property.A_QUARANTINE_REVIEW_POINTER_IS_WRITTEN_BEFORE_COMMITTED_FIRES,
                 "a QUARANTINE's review pointer is already linked when committed fires",
                 InterceptorContract::aQuarantinePointerPrecedesCommitted);
-        add(checks, PublicationHookContract.Property.COMMITTED_FIRES_BEFORE_THE_COMMIT_POINT_SO_ACCEPT_IS_NOT_VISIBILITY,
-                "committed fires before the layout and the commit point, so its ACCEPT is not a visibility claim",
-                InterceptorContract::committedIsNotAVisibilityClaim);
-        add(checks, PublicationHookContract.Property.THE_COMMITTED_TO_VISIBILITY_CRASH_WINDOW_REPLAYS_CLEAN,
-                "a crash between committed and the visibility write leaves nothing served and replays clean",
-                InterceptorContract::theCommittedToVisibilityCrashWindow);
+        add(checks, PublicationHookContract.Property.AN_ACCEPT_IS_TOLD_ONLY_ONCE_IT_SERVES,
+                "committed is told of an ACCEPT only once the artifact serves, never of one that did not land",
+                InterceptorContract::anAcceptIsToldOnlyOnceItServes);
+        add(checks, PublicationHookContract.Property.A_CRASH_BEFORE_THE_VISIBILITY_WRITE_TELLS_NO_SCREEN_AND_REPLAYS_CLEAN,
+                "a crash before the visibility write tells no screen, serves nothing and replays clean",
+                InterceptorContract::aCrashBeforeTheVisibilityWrite);
         add(checks, PublicationHookContract.Property.THE_BLOB_TO_CHAIN_CRASH_WINDOW_LEAVES_ONLY_AN_UNREFERENCED_BLOB,
                 "a crash between the blob write and the chain leaves an unreferenced blob and no verdict",
                 InterceptorContract::theBlobToChainCrashWindow);
@@ -376,13 +376,16 @@ final class InterceptorContract {
 
         isTrue(failed instanceof IOException, fixture,
                 "committed is a VERDICT leg, not an observer leg: a throw there fails the publish (was " + failed + ")");
-        equal(publication.located(artifact.path()).isPresent(), false, fixture,
-                "and leaves nothing servable, because committed fires before the layout and before the commit point");
+        equal(publication.located(artifact.path()).isPresent(), true, fixture,
+                "an accept is told once the artifact serves, so the failure reaches a publisher whose artifact is "
+                        + "already visible");
+        isTrue(commit(publication(store, List.of(screen.create())), artifact).visible(), fixture,
+                "and the publisher's replay, with the screen healthy, lands and records it");
 
-        // The QUARANTINE leg, where clause 13 puts the review pointer INSIDE the chain run and therefore BEFORE
-        // committed. So "leaves nothing servable" is exactly true of the publication's own path and no wider than
-        // that: the review pointer the verdict already linked stands, and a reviewer still finds the held bytes -
-        // which is the safe direction, since a lost hold is the disclosure and a stranded review pointer is not.
+        // The QUARANTINE leg, where clause 13 puts the review pointer INSIDE the chain run and committed right after
+        // it, before any layout: the artifact's own path serves nothing, and the review pointer the verdict already
+        // linked stands, so a reviewer still finds the held bytes - the safe direction, since a lost hold is the
+        // disclosure and a stranded review pointer is not.
         ArtifactDescriptor held = descriptor("/kit/committed-throws-held");
         Sequence quarantine = new Sequence();
         Probe holder = (Probe) quarantine.probe("holder", -5, Disposition.QUARANTINE);
@@ -912,11 +915,10 @@ final class InterceptorContract {
         isTrue(!quarantined.visible(), fixture, "and nothing about it is a committed publication");
     }
 
-    private static void committedIsNotAVisibilityClaim(PublicationHookFixture fixture, FaultInjectingStore store)
+    private static void anAcceptIsToldOnlyOnceItServes(PublicationHookFixture fixture, FaultInjectingStore store)
             throws Exception {
         Interceptor screen = (Interceptor) fixture;
-        ArtifactDescriptor declined = descriptor("/kit/declined");
-        List<Boolean> servingWhenNotified = new ArrayList<>();
+        List<Boolean> servingWhenNotified = new CopyOnWriteArrayList<>();
         PublishInterceptor witness = new PublishInterceptor() {
             @Override
             public void committed(ArtifactDescriptor stored, Disposition disposition, ArtifactStore store)
@@ -924,69 +926,67 @@ final class InterceptorContract {
                 servingWhenNotified.add(store.readVersioned("publish" + stored.path()).isPresent());
             }
         };
-
-        // (a) the layout declines: the chain accepted, committed fired, and nothing ever serves.
         Publication publication = publication(store, List.of(witness, screen.create()));
+
+        // (a) the layout declines: the chain accepted, and nothing ever serves.
+        ArtifactDescriptor declined = descriptor("/kit/declined");
         Publication.Commit outcome = publication.commit(declined, bytes(BODY), Publication.Republish.overwrite(),
                 _ -> Publication.Visibility.declined());
         equal(outcome.disposition(), Disposition.ACCEPT, fixture, "the chain accepted");
         isTrue(!outcome.visible(), fixture, "and the layout declined, so nothing committed");
-        equal(servingWhenNotified, List.of(false), fixture,
-                "committed fires BEFORE the accepted layout and before the commit point, so its ACCEPT means 'the "
-                        + "chain accepted' and not 'the artifact is visible'");
-        equal(publication.located(declined.path()).isPresent(), false, fixture, "nothing serves");
+        equal(servingWhenNotified, List.of(), fixture,
+                "no screen was told of an accept for an artifact the layout declined");
 
-        // (b) the republish policy refuses AFTER the chain accepted - the same trap by the other route.
+        // (b) the republish policy refuses after the chain accepted - the same trap by the other route.
         ArtifactDescriptor taken = descriptor("/kit/taken");
         commit(publication(store, List.of()), taken, "the-first-body");
-        servingWhenNotified.clear();
         Throwable refused = thrownBy(() -> publication.commit(taken, bytes(BODY), Publication.Republish.refused(),
                 accepted -> Publication.Visibility.at(taken.path())));
         isTrue(refused instanceof Publication.RepublishConflict, fixture,
-                "a refused republish raises after the chain has already accepted and notified (was " + refused + ")");
+                "a refused republish raises after the chain accepted (was " + refused + ")");
+        equal(servingWhenNotified, List.of(), fixture,
+                "and no screen was told of an accept for a re-point that never landed");
+
+        // (c) a publish that lands: told once, and serving by then.
+        ArtifactDescriptor landed = descriptor("/kit/landed");
+        isTrue(commit(publication, landed).visible(), fixture, "the publish landed");
         equal(servingWhenNotified, List.of(true), fixture,
-                "the screen was notified of an ACCEPT for a publish that never landed - which is exactly why clause 2 "
-                        + "requires committed to be an upsert the replay may repeat");
+                "the screen was told of the accept once, with the artifact already serving");
     }
 
     // --- clause 13's crash windows ---------------------------------------------------------------------------------
 
-    private static void theCommittedToVisibilityCrashWindow(PublicationHookFixture fixture, FaultInjectingStore store)
+    private static void aCrashBeforeTheVisibilityWrite(PublicationHookFixture fixture, FaultInjectingStore store)
             throws Exception {
         Interceptor screen = (Interceptor) fixture;
-        ArtifactDescriptor artifact = descriptor("/kit/crash-committed");
+        ArtifactDescriptor artifact = descriptor("/kit/crash-visibility");
         Sequence log = new Sequence();
         Publication publication = publication(store,
                 List.of(log.probe("witness", 0, Disposition.ACCEPT), screen.create()));
 
-        // The window nothing had ever armed: committed has fired, the declared visibility write has not.
+        // The chain has voted ACCEPT and the declared visibility write fails.
         store.failNextOn(FaultInjectingStore.Op.WRITE_VERSIONED, FaultInjectingStore.keyPrefix("publish/"));
         Throwable failed = thrownBy(() -> commit(publication, artifact));
         store.heal();
 
         isTrue(failed instanceof IOException, fixture, "the injected crash must fail the commit, or this check kills "
                 + "nothing and everything below it is vacuous");
-        // Re-derived from durable state: the chain really ran to completion and the pointer really did not
-        // land. A crash point that stopped biting fails here rather than passing.
-        equal(log.committed, List.of("witness"), fixture,
-                "the screen was told it ACCEPTED - it believes it accepted an artifact that never became visible");
         equal(store.delegate().readVersioned("publish" + artifact.path()).isEmpty(), true, fixture,
-                "while the declared visibility write never landed, so the crash is in the window this check names");
+                "the declared visibility write never landed, so the crash is in the window this check names");
+        equal(log.committed, List.of(), fixture,
+                "and no screen was told it accepted an artifact that never served");
         isTrue(store.delegate().exists("blobs/" + PublicationHookContract.hash(BODY)), fixture,
                 "the blob is there, unreferenced - nothing serves, nothing is observed");
         equal(publication.located(artifact.path()).isPresent(), false, fixture, "and the path does not serve");
 
-        // The replay repairs it, and only because committed is an upsert.
-        Map<String, String> afterCrash = screen.projection(store);
+        // The publisher's replay lands it, and the screen records it once, because committed upserts.
         Publication.Commit replayed = commit(publication(store, List.of(screen.create())), artifact);
         isTrue(replayed.visible(), fixture, "the byte-identical replay completes the publish");
         equal(publication.located(artifact.path()).isPresent(), true, fixture, "and the artifact now serves");
         Map<String, String> afterReplay = screen.projection(store);
         commit(publication(store, List.of(screen.create())), artifact);
         equal(screen.projection(store), afterReplay, fixture,
-                "and the screen's record upserted across the replay rather than growing once per attempt (it held "
-                        + afterCrash.size() + " row(s) after the crash and " + afterReplay.size() + " after the "
-                        + "replay, and a further replay changed nothing)");
+                "and the screen's record upserted across a further replay rather than growing once per attempt");
     }
 
     private static void theBlobToChainCrashWindow(PublicationHookFixture fixture, FaultInjectingStore store)
