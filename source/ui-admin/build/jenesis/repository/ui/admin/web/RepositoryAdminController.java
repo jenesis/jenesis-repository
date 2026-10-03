@@ -1,6 +1,7 @@
 package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
+import build.jenesis.repository.ui.SuperadminRole;
 import build.jenesis.repository.store.JobState;
 import build.jenesis.repository.store.RepositoryDocument;
 import build.jenesis.repository.cleanup.RetentionPolicy;
@@ -215,7 +216,7 @@ public class RepositoryAdminController {
     public String settings(@PathVariable("repo") String repo, Authentication authentication, Model model)
             throws IOException {
         model.addAttribute("repo", repo);
-        model.addAttribute("groups", settings.repositoryGroups(tenant.name(), repo, superadmin(authentication)));
+        model.addAttribute("groups", settings.repositoryGroups(tenant.name(), repo, SuperadminRole.held(authentication)));
         // The tenant's other repositories, which the routing form offers as fallbacks.
         model.addAttribute("routingRepositories", repositories.repositories().stream()
                 .filter(name -> !name.equals(repo)).toList());
@@ -233,7 +234,7 @@ public class RepositoryAdminController {
                               @RequestParam(name = "return", defaultValue = "") String back,
                               Authentication authentication, RedirectAttributes redirect) throws IOException {
         try {
-            settings.saveRepository(tenant.name(), repo, Map.of(key, value), superadmin(authentication));
+            settings.saveRepository(tenant.name(), repo, Map.of(key, value), SuperadminRole.held(authentication));
             redirect.addFlashAttribute("message", value.isBlank()
                     ? "'" + key + "' is inherited again for '" + repo + "'."
                     : "Saved '" + key + "' for '" + repo + "'.");
@@ -241,11 +242,6 @@ public class RepositoryAdminController {
             redirect.addFlashAttribute("error", refused.getMessage());
         }
         return "redirect:" + within(repo, back, "/settings");
-    }
-
-    private static boolean superadmin(Authentication authentication) {
-        return authentication != null && authentication.getAuthorities().stream()
-                .anyMatch(authority -> authority.getAuthority().equals("ROLE_SUPERADMIN"));
     }
 
     /**

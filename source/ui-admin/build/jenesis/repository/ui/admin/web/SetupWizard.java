@@ -2,6 +2,7 @@ package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
 
+import build.jenesis.repository.ui.SuperadminRole;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.Wizard;
 import build.jenesis.repository.ui.AdministratorKeys;
@@ -78,7 +79,7 @@ public class SetupWizard {
      */
     public boolean redirects(Authentication authentication, HttpSession session) throws IOException {
         return StarterCredential.signedInWith(authentication)
-                && superadmin(authentication)
+                && SuperadminRole.held(authentication)
                 && (session == null || session.getAttribute(SKIPPED) == null)
                 && on();
     }
@@ -122,7 +123,7 @@ public class SetupWizard {
                         : "Name the person who administers this deployment from now on: applying the setup grants "
                                 + "them administration, and they sign in as themselves instead of with the starter "
                                 + "key.");
-                steps.add(WizardFlow.Step.identity(information.title(), paragraphs, List.of(new WizardFlow.Field(
+                steps.add(new WizardFlow.Step.Identity(information.title(), paragraphs, List.of(new WizardFlow.Field(
                         ADMINISTRATOR, "Administrator", keys.isPresent()
                                 ? "Keep it to sign in with the key it is issued, or name someone another sign-in "
                                         + "method signs in, such as github/alice. Empty grants nobody."
@@ -130,7 +131,7 @@ public class SetupWizard {
                                         + "github/alice. Empty grants nobody; grant one later under Access.",
                         List.of(), false))));
             } else {
-                steps.add(WizardFlow.Step.information(information.title(), paragraphs, List.of()));
+                steps.add(new WizardFlow.Step.Information(information.title(), paragraphs, List.of()));
             }
         }
         steps.addAll(WizardFlow.settingsSteps(Wizard.SETUP, views()));
@@ -201,12 +202,5 @@ public class SetupWizard {
 
     private Map<String, SettingsAdmin.SettingView> views() throws IOException {
         return settings.wizardViews(Wizard.SETUP, null, true);
-    }
-
-    /** Whether the session is a super-admin's - who alone sets the deployment's settings and, among a repository's,
-     *  the operator-only ones. */
-    static boolean superadmin(Authentication authentication) {
-        return authentication != null && authentication.getAuthorities().stream()
-                .anyMatch(authority -> authority.getAuthority().equals("ROLE_SUPERADMIN"));
     }
 }

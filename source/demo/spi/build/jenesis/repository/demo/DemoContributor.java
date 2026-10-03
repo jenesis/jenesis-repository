@@ -94,21 +94,21 @@ public interface DemoContributor {
     }
 
     /**
-     * A repository the run creates: its name, the type it holds, the description it is shown with, and its routing -
-     * empty for a hosted repository that accepts uploads, {@code fallback <url>} for a proxy of a registry.
+     * A repository the run creates: its name, the type it holds, the description it is shown with, and the registry
+     * it proxies - empty for a hosted repository that accepts uploads.
      */
-    record Repository(String name, String type, String description, String routing) {
+    record Repository(String name, String type, String description, Optional<URI> upstream) {
 
         public Repository {
             Objects.requireNonNull(name, "name");
             Objects.requireNonNull(type, "type");
             description = description == null ? "" : description;
-            routing = routing == null ? "" : routing;
+            Objects.requireNonNull(upstream, "upstream");
         }
 
         /** Whether the repository accepts uploads rather than fetching from a registry. */
         public boolean hosted() {
-            return routing.isBlank();
+            return upstream.isEmpty();
         }
     }
 }

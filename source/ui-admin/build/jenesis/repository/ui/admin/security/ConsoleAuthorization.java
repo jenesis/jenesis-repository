@@ -1,5 +1,6 @@
 package build.jenesis.repository.ui.admin.security;
 
+import build.jenesis.repository.ui.SuperadminRole;
 import build.jenesis.repository.ui.identity.UserDirectory;
 import build.jenesis.repository.ui.ConsoleAccess;
 import build.jenesis.repository.ui.ConsoleAccessRule;
@@ -30,22 +31,22 @@ final class ConsoleAuthorization {
                 .requestMatchers(HttpMethod.POST, "/ui/logout").permitAll()
                 // Where the floor sends a refusal, so it cannot be behind the floor.
                 .requestMatchers("/ui/no-access").authenticated()
-                .requestMatchers("/ui/tenants/create", "/ui/tenants/delete").hasRole("SUPERADMIN")
+                .requestMatchers("/ui/tenants/create", "/ui/tenants/delete").hasRole(SuperadminRole.ROLE)
                 // The reclaim sweeps every tenant's projects.
-                .requestMatchers("/ui/projects/cache-volume").hasRole("SUPERADMIN")
-                .requestMatchers(HttpMethod.POST, "/ui/projects/volume-reclaim").hasRole("SUPERADMIN")
+                .requestMatchers("/ui/projects/cache-volume").hasRole(SuperadminRole.ROLE)
+                .requestMatchers(HttpMethod.POST, "/ui/projects/volume-reclaim").hasRole(SuperadminRole.ROLE)
                 // The picker needs no selected tenant but does need the floor, which a rule ahead of anyRequest() does
                 // not inherit.
                 .requestMatchers("/ui/tenants", "/ui/tenants/select")
                         .access(ConsoleAccessRule.holdsSomething(access))
-                .requestMatchers("/ui/setup", "/ui/setup/**").hasRole("SUPERADMIN")
-                .requestMatchers("/ui/settings", "/ui/settings/**").hasRole("SUPERADMIN")
+                .requestMatchers("/ui/setup", "/ui/setup/**").hasRole(SuperadminRole.ROLE)
+                .requestMatchers("/ui/settings", "/ui/settings/**").hasRole(SuperadminRole.ROLE)
                 // Walks are deployment-wide settings reading every tenant's store; the form is gated with them.
-                .requestMatchers("/ui/walks", "/ui/walks/**").hasRole("SUPERADMIN")
+                .requestMatchers("/ui/walks", "/ui/walks/**").hasRole(SuperadminRole.ROLE)
                 // Deployment-wide screens outside /settings/**, named one by one.
-                .requestMatchers("/ui/metrics", "/ui/posture").hasRole("SUPERADMIN")
+                .requestMatchers("/ui/metrics", "/ui/posture").hasRole(SuperadminRole.ROLE)
                 // The caches belong to no tenant.
-                .requestMatchers("/ui/caches", "/ui/caches/**").hasRole("SUPERADMIN")
+                .requestMatchers("/ui/caches", "/ui/caches/**").hasRole(SuperadminRole.ROLE)
                 .requestMatchers("/ui/admin/**").access(tenants.require(UserDirectory.Role.ADMIN))
                 // Credential administration and the limits are admin-grade, as the API's manage:write: an editor
                 // must not mint an admin key, add a trust exchanging to admin, or relax a limit.

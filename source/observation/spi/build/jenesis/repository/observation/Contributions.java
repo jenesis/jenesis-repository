@@ -34,7 +34,8 @@ import module java.base;
  *   <li><b>Error visibility.</b> Every contained failure reaches the returned list as the degraded contribution and the
  *       log once. The blast radius is one contributor's rows.</li>
  *   <li><b>Ordering / determinism.</b> One result per contributor in the caller's order, degraded ones in place.
- *       Nothing is sorted here.</li>
+ *       {@link #collect} sorts nothing; a seam whose contributors declare an order puts them in it with
+ *       {@link #ordered}, so two of one order are asked the same way on every node.</li>
  *   <li><b>Bounded work / cancellation.</b> {@code contributors} is iterated once, {@code contribution} called at most
  *       once per contributor and {@code degraded} at most once after a failure; nothing is retried. No thread or
  *       timeout: a contributor that hangs must be bounded by its own SPI.</li>
@@ -123,6 +124,12 @@ public final class Contributions {
             collected.add(contributed);
         }
         return List.copyOf(collected);
+    }
+
+    /** {@code contributors} in their declared {@code order}, lower first, then by class name. */
+    public static <C> List<C> ordered(Stream<C> contributors, ToIntFunction<? super C> order) {
+        return contributors.sorted(Comparator.<C>comparingInt(order)
+                .thenComparing(contributor -> contributor.getClass().getName())).toList();
     }
 
     /** A declaration read off a contributor that already failed, or {@code fallback} when reading it fails or yields

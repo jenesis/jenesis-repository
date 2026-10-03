@@ -42,11 +42,6 @@ public final class WizardFlow {
     /** The prefix of a setting's form name. */
     public static final String SETTING = "setting.";
 
-    /** What a step is: the identity of what is created, information, a group of settings, or the closing review. */
-    public enum Kind {
-        IDENTITY, INFORMATION, SETTINGS, REVIEW
-    }
-
     /** An identity field: what a wizard asks of the thing it creates beyond its settings. A field with options is a
      *  choice among them. */
     public record Field(String name, String label, String help, List<String> options, boolean required) {
@@ -65,31 +60,116 @@ public final class WizardFlow {
     public record Link(String label, String href) {
     }
 
-    /** One step: what it is, its title, the paragraphs it opens with, and its fields, settings or links. */
-    public record Step(Kind kind, String title, List<String> paragraphs, List<Field> fields,
-                       List<SettingsAdmin.SettingView> settings, List<Link> links) {
+    /**
+     * One step: its title and the paragraphs it opens with, and what it is - the identity of what is created, a step
+     * that informs, a group of settings, or the closing review. The one template draws every step, so each answers
+     * the parts it lacks as empty.
+     */
+    public sealed interface Step {
 
-        public Step {
-            paragraphs = List.copyOf(paragraphs);
-            fields = List.copyOf(fields);
-            settings = List.copyOf(settings);
-            links = List.copyOf(links);
+        String title();
+
+        List<String> paragraphs();
+
+        /** The identity fields the step asks. */
+        default List<Field> fields() {
+            return List.of();
         }
 
-        public static Step identity(String title, List<String> paragraphs, List<Field> fields) {
-            return new Step(Kind.IDENTITY, title, paragraphs, fields, List.of(), List.of());
+        /** The settings the step asks. */
+        default List<SettingsAdmin.SettingView> settings() {
+            return List.of();
         }
 
-        public static Step information(String title, List<String> paragraphs, List<Link> links) {
-            return new Step(Kind.INFORMATION, title, paragraphs, List.of(), List.of(), links);
+        /** Where the step's subject is done. */
+        default List<Link> links() {
+            return List.of();
         }
 
-        public static Step settings(String title, List<SettingsAdmin.SettingView> settings) {
-            return new Step(Kind.SETTINGS, title, List.of(), List.of(), settings, List.of());
+        /** The identity of what a wizard creates: the fields asked of it beyond its settings. */
+        record Identity(String title, List<String> paragraphs, List<Field> fields) implements Step {
+
+            public Identity {
+                paragraphs = List.copyOf(paragraphs);
+                fields = List.copyOf(fields);
+            }
         }
 
-        static Step review(List<String> paragraphs) {
-            return new Step(Kind.REVIEW, "Review", paragraphs, List.of(), List.of(), List.of());
+        /** A step that informs, and links to where its subject is done. */
+        record Information(String title, List<String> paragraphs, List<Link> links) implements Step {
+
+            public Information {
+                paragraphs = List.copyOf(paragraphs);
+                links = List.copyOf(links);
+            }
+        }
+
+        /** A group of the catalogue's settings, titled by the group. */
+        record Settings(String title, List<SettingsAdmin.SettingView> settings) implements Step {
+
+            public Settings {
+                settings = List.copyOf(settings);
+            }
+
+            @Override
+            public List<String> paragraphs() {
+                return List.of();
+            }
+        }
+
+        /** The closing review, which lists every choice the run makes. */
+        record Review(List<String> paragraphs) implements Step {
+
+            public Review {
+                paragraphs = List.copyOf(paragraphs);
+            }
+
+            @Override
+            public String title() {
+                return "Review";
+            }
+        }
+    }
+
+    /**
+     * What a posted form asks of the run, read once from its {@link #ACTION} field: move on, move back, stand on a
+     * step, stand on the review having checked every step, or complete.
+     */
+    public sealed interface Action {
+
+        record Next() implements Action {
+        }
+
+        record Back() implements Action {
+        }
+
+        /** Stand on the step at {@code index}. */
+        record Go(int index) implements Action {
+        }
+
+        record Now() implements Action {
+        }
+
+        record Complete() implements Action {
+        }
+
+        /** The action {@code posted} names, or empty for one that names none - a step number that is not one
+         *  included. */
+        static Optional<Action> parse(String posted) {
+            return switch (posted == null ? "" : posted) {
+                case NEXT -> Optional.of(new Next());
+                case BACK -> Optional.of(new Back());
+                case NOW -> Optional.of(new Now());
+                case COMPLETE -> Optional.of(new Complete());
+                case String other when other.startsWith(GOTO) -> {
+                    try {
+                        yield Optional.of(new Go(Integer.parseInt(other.substring(GOTO.length()))));
+                    } catch (NumberFormatException notAStep) {
+                        yield Optional.empty();
+                    }
+                }
+                default -> Optional.empty();
+            };
         }
     }
 
@@ -140,7 +220,7 @@ public final class WizardFlow {
     private WizardFlow(Definition definition, Map<String, String> values, int index) {
         this.definition = definition;
         List<Step> all = new ArrayList<>(definition.steps());
-        all.add(Step.review(definition.review()));
+        all.add(new Step.Review(definition.review()));
         this.steps = List.copyOf(all);
         this.values = values;
         this.index = Math.clamp(index, 0, steps.size() - 1);
@@ -155,7 +235,7 @@ public final class WizardFlow {
             List<SettingsAdmin.SettingView> rows = step.settings().stream().map(setting -> views.get(setting.key()))
                     .filter(Objects::nonNull).toList();
             if (!rows.isEmpty()) {
-                steps.add(Step.settings(step.group(), rows));
+                steps.add(new Step.Settings(step.group(), rows));
             }
         }
         return steps;
@@ -194,76 +274,57 @@ public final class WizardFlow {
     }
 
     /**
-     * Do what the form asks. {@link #NEXT} checks the step and moves on when nothing on it is refused; {@link #BACK}
-     * moves back and checks nothing; a {@link #GOTO} step stands on that step - an earlier one at once, a later one
-     * once every step before it is accepted, else on the first refused; {@link #NOW} checks every step and stands on
-     * the review, so what the run will do is confirmed before it is done; {@link #COMPLETE} checks every step and
-     * completes, standing on the first one refused.
+     * Do what the form asks ({@link Action}). Next checks the step and moves on when nothing on it is refused; Back
+     * moves back and checks nothing; a step from the list is stood on - an earlier one at once, a later one once every
+     * step before it is accepted, else the first refused; Now checks every step and stands on the review, so what the
+     * run will do is confirmed before it is done; Complete checks every step and completes, standing on the first one
+     * refused. An action that names nothing leaves the run where it is.
      *
      * @return {@code true} when the run is complete - every step accepted - and its owner writes it now.
      */
-    public boolean apply(String action) throws IOException {
-        switch (action == null ? "" : action) {
-            case BACK -> index = Math.max(0, index - 1);
-            case NEXT -> {
-                errors.putAll(check(index));
-                if (errors.isEmpty()) {
+    public boolean apply(String posted) throws IOException {
+        Optional<Action> action = Action.parse(posted);
+        if (action.isEmpty()) {
+            return false;
+        }
+        switch (action.get()) {
+            case Action.Back _ -> index = Math.max(0, index - 1);
+            case Action.Next _ -> {
+                if (accepted(index, index + 1)) {
                     index = Math.min(index + 1, steps.size() - 1);
                 }
             }
-            case NOW -> {
-                for (int step = 0; step < steps.size(); step++) {
-                    Map<String, String> refused = check(step);
-                    if (!refused.isEmpty()) {
-                        errors.putAll(refused);
-                        index = step;
-                        return false;
-                    }
+            case Action.Go go when go.index() >= 0 && go.index() < steps.size() -> {
+                if (accepted(index, go.index())) {
+                    index = go.index();
                 }
-                index = steps.size() - 1;
-                return false;
             }
-            case COMPLETE -> {
-                for (int step = 0; step < steps.size(); step++) {
-                    Map<String, String> refused = check(step);
-                    if (!refused.isEmpty()) {
-                        errors.putAll(refused);
-                        index = step;
-                        return false;
-                    }
-                }
-                return true;
+            case Action.Go _ -> {
             }
-            default -> {
-                if (action != null && action.startsWith(GOTO)) {
-                    go(action.substring(GOTO.length()));
+            case Action.Now _ -> {
+                if (accepted(0, steps.size())) {
+                    index = steps.size() - 1;
                 }
+            }
+            case Action.Complete _ -> {
+                return accepted(0, steps.size());
             }
         }
         return false;
     }
 
-    /** Stand on the step {@code target} names: an earlier one at once, a later one once every step on the way is
-     *  accepted, else on the first refused. A target that names no step leaves the run where it is. */
-    private void go(String target) throws IOException {
-        int wanted;
-        try {
-            wanted = Integer.parseInt(target);
-        } catch (NumberFormatException notAStep) {
-            return;
-        }
-        if (wanted < 0 || wanted >= steps.size()) {
-            return;
-        }
-        for (int step = index; step < wanted; step++) {
+    /** Whether every step from {@code from} up to {@code until} is accepted; else the run stands on the first
+     *  refused, each refusal beside its field. */
+    private boolean accepted(int from, int until) throws IOException {
+        for (int step = from; step < until; step++) {
             Map<String, String> refused = check(step);
             if (!refused.isEmpty()) {
                 errors.putAll(refused);
                 index = step;
-                return;
+                return false;
             }
         }
-        index = wanted;
+        return true;
     }
 
     /** Refuse the run where its owner found it could not be written after all - a name taken since it was checked -
@@ -279,12 +340,11 @@ public final class WizardFlow {
     }
 
     private Map<String, String> check(int step) throws IOException {
-        Step checked = steps.get(step);
         Map<String, String> refused = new LinkedHashMap<>();
-        switch (checked.kind()) {
-            case IDENTITY -> definition.checks().identity(identity())
+        switch (steps.get(step)) {
+            case Step.Identity _ -> definition.checks().identity(identity())
                     .forEach((name, reason) -> refused.put(IDENTITY + name, reason));
-            case SETTINGS -> {
+            case Step.Settings checked -> {
                 Map<String, String> given = new LinkedHashMap<>();
                 for (SettingsAdmin.SettingView setting : checked.settings()) {
                     String value = values.getOrDefault(SETTING + setting.key(), "");
@@ -296,7 +356,7 @@ public final class WizardFlow {
                     definition.checks().settings(given).forEach((key, reason) -> refused.put(SETTING + key, reason));
                 }
             }
-            default -> {
+            case Step.Information _, Step.Review _ -> {
             }
         }
         return refused;
@@ -347,13 +407,13 @@ public final class WizardFlow {
 
     /** Whether the run stands on its review, whose submit completes it. */
     public boolean reviewing() {
-        return current().kind() == Kind.REVIEW;
+        return current() instanceof Step.Review;
     }
 
     /** Whether the quicker completion is offered here: on every step but the review and an identity step, which
      *  has to be answered before anything can be created. */
     public boolean completesEarly() {
-        return current().kind() != Kind.REVIEW && current().kind() != Kind.IDENTITY;
+        return !(current() instanceof Step.Review || current() instanceof Step.Identity);
     }
 
     /** The value the page carries under a form name, empty when it carries none. */

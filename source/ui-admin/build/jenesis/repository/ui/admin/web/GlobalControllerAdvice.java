@@ -3,6 +3,7 @@ package build.jenesis.repository.ui.admin.web;
 import module java.base;
 import module org.slf4j;
 
+import build.jenesis.repository.ui.SuperadminRole;
 import build.jenesis.repository.failure.Failures;
 import build.jenesis.repository.store.ReadOnlyException;
 import build.jenesis.repository.ui.PrincipalNameResolver;
@@ -108,7 +109,7 @@ public class GlobalControllerAdvice {
      *  dropped on a settings change. A failed collection is {@link PostureBadge#unknown()}, never zero or a 500. */
     @ModelAttribute("postureBadge")
     public PostureBadge postureBadge(Authentication authentication) {
-        if (!hasSuperadmin(authentication)) {
+        if (!SuperadminRole.held(authentication)) {
             return null;
         }
         try {
@@ -138,7 +139,7 @@ public class GlobalControllerAdvice {
 
     @ModelAttribute("isSuperadmin")
     public boolean isSuperadmin(Authentication authentication) {
-        return hasSuperadmin(authentication);
+        return SuperadminRole.held(authentication);
     }
 
     @ModelAttribute("isAdmin")
@@ -166,7 +167,7 @@ public class GlobalControllerAdvice {
         if (authentication == null) {
             return false;
         }
-        return hasSuperadmin(authentication) || memberships.accessibleTo(authentication.getName(), false).size() >= 2;
+        return SuperadminRole.held(authentication) || memberships.accessibleTo(authentication.getName(), false).size() >= 2;
     }
 
     /** Whether the header shows the tenant beside the brand: where the deployment serves several tenants. */
@@ -196,7 +197,7 @@ public class GlobalControllerAdvice {
         }
         boolean editor = roleAtLeast(authentication, Role.EDITOR);
         boolean admin = roleAtLeast(authentication, Role.ADMIN);
-        boolean superadmin = hasSuperadmin(authentication);
+        boolean superadmin = SuperadminRole.held(authentication);
         List<NavEntry> entries = new ArrayList<>();
         entries.add(new NavEntry("Current repositories", "/ui/repositories", Group.REPOSITORIES));
         entries.add(new NavEntry("New repository", "/ui/new/repository", Access.EDITOR, Group.REPOSITORIES));
@@ -297,18 +298,13 @@ public class GlobalControllerAdvice {
         if (authentication == null) {
             return false;
         }
-        if (hasSuperadmin(authentication)) {
+        if (SuperadminRole.held(authentication)) {
             return true;
         }
         String tenant = current.name();
         return tenant != null && memberships.roleIn(tenant, authentication.getName())
                 .map(role -> role.atLeast(min))
                 .orElse(false);
-    }
-
-    private static boolean hasSuperadmin(Authentication authentication) {
-        return authentication != null && authentication.getAuthorities().stream()
-                .anyMatch(authority -> authority.getAuthority().equals("ROLE_SUPERADMIN"));
     }
 
     @ExceptionHandler(IllegalStateException.class)

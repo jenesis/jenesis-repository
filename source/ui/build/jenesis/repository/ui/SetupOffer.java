@@ -23,8 +23,8 @@ import module java.base;
  * <li><b>Tenant scoping.</b> {@link Viewer#tenant()} is the tenant the console has selected, empty while none is; an
  *     offer that speaks of a tenant speaks of that one and offers nothing without it. The guide is a super-admin's, so
  *     an offer may propose deployment-wide changes, and says so.</li>
- * <li><b>Error visibility.</b> An exception is the offer's failure, not the guide's: the page renders without it and
- *     the failure is logged naming the offering bean.</li>
+ * <li><b>Error visibility.</b> An exception is the offer's failure, not the guide's: the page shows the offer as
+ *     failed ({@link Offer#failed}) and the failure is logged naming the offering bean.</li>
  * <li><b>Read purity.</b> A request costs a constant number of point reads and bounded pages, whatever the tenant
  *     holds; an offer never fetches or writes, and what it writes it writes from the route its action posts to. The work an action starts runs off the request path, and the screen it
  *     leads to shows its progress rather than waiting for it.</li>
@@ -79,6 +79,12 @@ public interface SetupOffer {
             Objects.requireNonNull(link, "link");
             values = List.copyOf(values);
             Objects.requireNonNull(action, "action");
+        }
+
+        /** An offer that could not be made: the offering bean's {@code name} and the {@code reason} it failed. */
+        public static Offer failed(String name, String reason) {
+            return new Offer(name, List.of("This offer could not be read (" + reason + "); the log says why."), "",
+                    List.of(), Optional.empty(), List.of(), Optional.empty());
         }
 
         /** An offer that only says what it says and leads where its link does. */

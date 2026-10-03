@@ -42,6 +42,24 @@ class ContributionsTest {
                 (fixture, failure) -> "failed:" + Contributions.reason(failure));
     }
 
+    record First(int order) {
+    }
+
+    record Second(int order) {
+    }
+
+    @Test
+    void contributors_that_declare_an_order_are_put_in_it_and_then_by_class_name_whatever_order_they_came_in() {
+        List<Record> found = List.of(new Second(10), new First(20), new First(10));
+        ToIntFunction<Record> order = contributor -> contributor instanceof First first ? first.order()
+                : ((Second) contributor).order();
+
+        assertThat(Contributions.ordered(found.stream(), order))
+                .containsExactly(found.get(2), found.get(0), found.get(1));
+        assertThat(Contributions.ordered(found.reversed().stream(), order))
+                .containsExactly(found.get(2), found.get(0), found.get(1));
+    }
+
     @Test
     void a_failing_contributor_is_replaced_in_place_and_never_hides_the_others() {
         Fixture first = Fixture.answering("first");

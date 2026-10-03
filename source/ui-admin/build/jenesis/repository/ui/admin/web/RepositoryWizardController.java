@@ -2,6 +2,7 @@ package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
 
+import build.jenesis.repository.ui.SuperadminRole;
 import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.Wizard;
@@ -47,7 +48,7 @@ public class RepositoryWizardController {
     /** The wizard's first step; it reads the settings documents its rows inherit from. */
     @GetMapping(ROUTE)
     public String start(Authentication authentication, Model model) throws IOException {
-        model.addAttribute("wizard", WizardFlow.start(definition(SetupWizard.superadmin(authentication)), Map.of()));
+        model.addAttribute("wizard", WizardFlow.start(definition(SuperadminRole.held(authentication)), Map.of()));
         return "wizard";
     }
 
@@ -56,7 +57,7 @@ public class RepositoryWizardController {
     @PostMapping(ROUTE)
     public String step(@RequestParam Map<String, String> form, Authentication authentication, Model model,
                        RedirectAttributes redirect) throws IOException {
-        boolean operator = SetupWizard.superadmin(authentication);
+        boolean operator = SuperadminRole.held(authentication);
         WizardFlow flow = WizardFlow.resume(definition(operator), form);
         if (flow.apply(form.get(WizardFlow.ACTION))) {
             Map<String, String> identity = flow.identity();
@@ -81,7 +82,7 @@ public class RepositoryWizardController {
     private WizardFlow.Definition definition(boolean operator) throws IOException {
         String current = tenant.name();
         List<WizardFlow.Step> steps = new ArrayList<>();
-        steps.add(WizardFlow.Step.identity("Repository", List.of("A repository holds one format, and every URL a "
+        steps.add(new WizardFlow.Step.Identity("Repository", List.of("A repository holds one format, and every URL a "
                         + "client uses names it: /repository/" + current + "/<name>/..."),
                 List.of(new WizardFlow.Field("name", "Name", "Letters, digits, hyphens and underscores.", List.of(),
                                 true),

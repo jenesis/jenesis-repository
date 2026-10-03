@@ -72,8 +72,7 @@ public final class DemoOffer implements SetupOffer {
             DemoContributor.Plan plan = planned.plan();
             for (DemoContributor.Repository repository : plan.repositories()) {
                 repositories.add(repository.name() + " (" + (repository.hosted() ? "hosted " + repository.type()
-                        : "a " + repository.type() + " proxy of " + repository.routing().substring(
-                                repository.routing().indexOf(' ') + 1)) + ")");
+                        : "a " + repository.type() + " proxy of " + repository.upstream().orElseThrow()) + ")");
             }
             plan.settings().forEach((key, brings) -> settings.add(Labels.of(key) + ": " + brings));
             reaches.addAll(plan.reaches());

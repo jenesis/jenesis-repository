@@ -1,14 +1,14 @@
 package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
+import build.jenesis.repository.ui.SuperadminRole;
+import build.jenesis.repository.observation.Contributions;
 import build.jenesis.repository.ui.DashboardContributor;
 import build.jenesis.repository.ui.DashboardPanel;
 import build.jenesis.repository.ui.admin.config.DomainConfig;
 import build.jenesis.repository.ui.admin.security.Memberships;
 import build.jenesis.repository.ui.admin.security.SessionCurrentTenant;
 import jakarta.servlet.http.HttpSession;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -31,8 +31,6 @@ public class HomeController {
     private final Memberships memberships;
     private final SessionCurrentTenant current;
     private final SetupWizard setup;
-    private static final Logger LOGGER = LoggerFactory.getLogger(HomeController.class);
-
     private final DomainConfig.Tenancy tenancy;
     private final ObjectProvider<DashboardContributor> contributors;
 
@@ -64,7 +62,7 @@ public class HomeController {
         }
         // One reachable tenant is chosen at once; a multi-tenant deployment's administrator starts in none and
         // chooses.
-        boolean superadmin = hasSuperadmin(authentication);
+        boolean superadmin = SuperadminRole.held(authentication);
         List<String> accessible = memberships.accessibleTo(authentication.getName(), superadmin);
         if (current.name() == null && accessible.size() == 1 && !(superadmin && tenancy.multi())) {
             current.select(accessible.get(0));
@@ -90,34 +88,18 @@ public class HomeController {
     /** Every contributor's panels in its order; one that fails is drawn as unreadable, naming it, and the rest as
      *  usual. */
     private List<DashboardPanel> panels(DashboardContributor.Viewer viewer) {
-        List<DashboardContributor> ordered = contributors.stream()
-                .sorted(Comparator.comparingInt(DashboardContributor::order)
-                        .thenComparing(contributor -> contributor.getClass().getName()))
-                .toList();
-        List<DashboardPanel> panels = new ArrayList<>();
-        for (DashboardContributor contributor : ordered) {
-            try {
-                panels.addAll(contributor.panels(viewer));
-            } catch (IOException | RuntimeException failure) {
-                LOGGER.warn("The dashboard contributor {} could not be read", contributor.getClass().getName(),
-                        failure);
-                panels.add(new DashboardPanel(contributor.getClass().getSimpleName(), "/ui/", "",
-                        "could not be read", DashboardPanel.Tone.ATTENTION, List.of(),
-                        Optional.empty(), String.valueOf(failure.getMessage()), Optional.empty(), false));
-            }
-        }
-        return panels;
+        return Contributions.collect("dashboard contributor",
+                Contributions.ordered(contributors.stream(), DashboardContributor::order),
+                contributor -> contributor.panels(viewer),
+                (contributor, failure) -> List.of(new DashboardPanel(contributor.getClass().getSimpleName(), "/ui/",
+                        "", "could not be read", DashboardPanel.Tone.ATTENTION, List.of(), Optional.empty(),
+                        Contributions.reason(failure), Optional.empty(), false)))
+                .stream().flatMap(List::stream).toList();
     }
-
 
     private static boolean authenticated(Authentication authentication) {
         return authentication != null
                 && authentication.isAuthenticated()
                 && !(authentication instanceof AnonymousAuthenticationToken);
-    }
-
-    private static boolean hasSuperadmin(Authentication authentication) {
-        return authentication.getAuthorities().stream()
-                .anyMatch(authority -> authority.getAuthority().equals("ROLE_SUPERADMIN"));
     }
 }

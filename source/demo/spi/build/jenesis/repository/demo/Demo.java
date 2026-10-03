@@ -14,6 +14,20 @@ import module java.base;
  */
 public interface Demo {
 
+    /** How an operation of a run ended. */
+    enum Outcome {
+        /** It was done. */
+        DONE,
+        /** It was published and held for review. */
+        HELD,
+        /** The deployment refused it. */
+        REFUSED,
+        /** It could not be done: a registry that did not answer, a repository that is not there. */
+        FAILED,
+        /** It was left out, and the run says why. */
+        SKIPPED
+    }
+
     /** The tenant the demo fills. */
     String tenant();
 
@@ -33,18 +47,19 @@ public interface Demo {
      * Publish {@code body} into {@code repository} at {@code path} - the path a client names after the repository's
      * URL - through the edge a client's upload takes, screened by the deployment's gate.
      *
-     * @return the status the edge answered: {@code 2xx} published, {@code 202} held for review, {@code 422} refused,
-     *         {@code 404} claimed by no format or no repository, {@code 503} when no repository edge runs here.
+     * @return how the publish ended: done, held for review, refused by the gate, or failed - claimed by no format, no
+     *         repository, or no repository edge running here.
      */
-    int publish(String repository, String path, InputStream body) throws IOException;
+    Outcome publish(String repository, String path, InputStream body) throws IOException;
 
     /**
      * Read {@code path} from {@code repository} through the serving path a client's {@code GET} takes, so a proxy
      * pulls it from its registry, screens it and caches it.
      *
-     * @return the status the read answered; a registry that cannot be reached answers as the proxy answers a client.
+     * @return {@link Outcome#DONE} when it was read, else {@link Outcome#FAILED}: a registry that cannot be reached, a
+     *         version the gate withholds.
      */
-    int fetch(String repository, String path) throws IOException;
+    Outcome fetch(String repository, String path) throws IOException;
 
     /**
      * Ask for the background pass {@code pass} to run no earlier than {@code after} from now, for {@code reason} - as

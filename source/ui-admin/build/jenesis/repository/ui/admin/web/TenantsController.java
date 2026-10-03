@@ -1,6 +1,7 @@
 package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
+import build.jenesis.repository.ui.SuperadminRole;
 import build.jenesis.repository.server.spi.AccessDenial;
 import build.jenesis.repository.ui.admin.security.Memberships;
 import build.jenesis.repository.ui.admin.security.SessionCurrentTenant;
@@ -39,7 +40,7 @@ public class TenantsController {
 
     @GetMapping("/ui/tenants")
     public String list(Authentication authentication, Model model) throws IOException {
-        boolean superadmin = hasSuperadmin(authentication);
+        boolean superadmin = SuperadminRole.held(authentication);
         List<String> all = superadmin ? tenants.all() : memberships.accessibleTo(authentication.getName(), false);
         model.addAttribute("tenants", all);
         model.addAttribute("selected", current.name());
@@ -55,7 +56,7 @@ public class TenantsController {
     @PostMapping("/ui/tenants/select")
     public String select(@RequestParam("tenant") String tenant, Authentication authentication) {
         String absent = "No such tenant '" + tenant + "'.";
-        if (!hasSuperadmin(authentication)) {
+        if (!SuperadminRole.held(authentication)) {
             if (memberships.roleIn(tenant, authentication.getName()).isEmpty()) {
                 throw new IllegalArgumentException(AccessDenial.configured()
                         .explain(absent, "You do not have access to tenant '" + tenant + "'."));
@@ -83,10 +84,5 @@ public class TenantsController {
         }
         redirect.addFlashAttribute("message", "Deleted tenant '" + name + "'.");
         return "redirect:/ui/tenants";
-    }
-
-    private static boolean hasSuperadmin(Authentication authentication) {
-        return authentication != null && authentication.getAuthorities().stream()
-                .anyMatch(authority -> authority.getAuthority().equals("ROLE_SUPERADMIN"));
     }
 }

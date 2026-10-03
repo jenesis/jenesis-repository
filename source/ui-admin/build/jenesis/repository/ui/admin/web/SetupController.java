@@ -1,8 +1,8 @@
 package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
-import module org.slf4j;
 
+import build.jenesis.repository.observation.Contributions;
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.ui.SetupOffer;
 import build.jenesis.repository.ui.identity.StarterCredential;
@@ -32,8 +32,6 @@ import build.jenesis.repository.ui.ConsoleScreen;
 @ConsoleScreen
 public class SetupController {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(SetupController.class);
-
     private final SetupWizard wizard;
     private final Environment environment;
     private final ObjectProvider<SetupOffer> offers;
@@ -58,21 +56,15 @@ public class SetupController {
 
     /**
      * What the installed modules offer on the first page, for the selected tenant if there is one, in their order. An
-     * offer that fails is left out and logged, and the guide renders without it.
+     * offer that fails is shown as failed, and logged.
      */
     private List<SetupOffer.Offer> offers() {
         SetupOffer.Viewer viewer = new SetupOffer.Viewer(Optional.ofNullable(tenant.name()));
-        List<SetupOffer.Offer> made = new ArrayList<>();
-        offers.stream().sorted(Comparator.comparingInt(SetupOffer::order)
-                .thenComparing(offer -> offer.getClass().getName())).forEach(offer -> {
-                    try {
-                        offer.offer(viewer).ifPresent(made::add);
-                    } catch (IOException | RuntimeException failure) {
-                        LOGGER.warn("The first-run guide's offer {} could not be read",
-                                offer.getClass().getName(), failure);
-                    }
-                });
-        return made;
+        return Contributions.collect("first-run offer", Contributions.ordered(offers.stream(), SetupOffer::order),
+                offer -> offer.offer(viewer),
+                (offer, failure) -> Optional.of(SetupOffer.Offer.failed(offer.getClass().getSimpleName(),
+                        Contributions.reason(failure))))
+                .stream().flatMap(Optional::stream).toList();
     }
 
     /** A step posted ({@link WizardFlow#apply}); a completed run saves what it changed and lands where the console

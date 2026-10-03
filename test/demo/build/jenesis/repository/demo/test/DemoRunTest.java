@@ -150,14 +150,14 @@ class DemoRunTest {
         assertThat(editor.config(Setting.Scope.REPOSITORY, TENANT, "demo-maven").apply("routing"))
                 .as("a hosted repository takes uploads").isNullOrEmpty();
 
-        assertThat(state.count(DemoRun.Kind.PUBLISH, DemoRun.Outcome.DONE))
+        assertThat(state.count(DemoRun.Kind.PUBLISH, Demo.Outcome.DONE))
                 .as("two releases of a library, POM and jar each, and an npm package, in %s", state.steps())
                 .isEqualTo(5);
         assertThat(edge.fetch(TENANT, "demo-maven", GREETING)).as("a published library is served").isEqualTo(200);
         assertThat(edge.fetch(TENANT, "demo-npm", "/jenesis-demo-greeting"))
                 .as("and so is the published npm package's document").isEqualTo(200);
 
-        assertThat(state.count(DemoRun.Kind.PUBLISH, DemoRun.Outcome.HELD))
+        assertThat(state.count(DemoRun.Kind.PUBLISH, Demo.Outcome.HELD))
                 .as("the library the deny list names is held, POM and jar").isEqualTo(2);
         assertThat(edge.fetch(TENANT, "demo-maven", HELD)).as("a held library is not served").isEqualTo(404);
         assertThat(repository("demo-maven").readVersioned(Publication.quarantineKey(HELD)))
@@ -169,7 +169,7 @@ class DemoRunTest {
                 .filteredOn(row -> row.action().equals(AuditActions.SETTING_SET))
                 .extracting(Web.Recorded::actor).isNotEmpty().containsOnly(OPERATOR);
 
-        assertThat(state.count(DemoRun.Kind.FETCH, DemoRun.Outcome.FAILED))
+        assertThat(state.count(DemoRun.Kind.FETCH, Demo.Outcome.FAILED))
                 .as("every read through a proxy is reported as not made, none thrown").isEqualTo(
                         RepositoryType.installed("maven").orElseThrow().formats().stream()
                                 .mapToLong(format -> format.demoArtifacts().size()).sum()
@@ -223,9 +223,8 @@ class DemoRunTest {
         run.runNow(TENANT, OPERATOR);
 
         assertThat(new DemoOffer(run).offer(new SetupOffer.Viewer(Optional.of(TENANT)))).isEmpty();
-        DemoRun.Started again = run.start(TENANT, OPERATOR);
-        assertThat(again.started()).isFalse();
-        assertThat(again.reason()).contains("A repository exists here already");
+        assertThat(run.start(TENANT, OPERATOR)).hasValueSatisfying(reason -> assertThat(reason)
+                .contains("A repository exists here already"));
         assertThat(run.runNow(TENANT, OPERATOR)).isEmpty();
     }
 
@@ -240,7 +239,7 @@ class DemoRunTest {
 
             @Override
             public Plan plan() {
-                return new Plan(List.of(new Repository("extra", "maven", "Demo: another module's", "")),
+                return new Plan(List.of(new Repository("extra", "maven", "Demo: another module's", Optional.empty())),
                         new LinkedHashMap<>(), List.of(), List.of());
             }
 
@@ -258,7 +257,7 @@ class DemoRunTest {
 
             @Override
             public Plan plan() {
-                return new Plan(List.of(new Repository("later", "npm", "Demo: loaded after a failure", "")),
+                return new Plan(List.of(new Repository("later", "npm", "Demo: loaded after a failure", Optional.empty())),
                         new LinkedHashMap<>(), List.of(), List.of());
             }
 
@@ -274,7 +273,7 @@ class DemoRunTest {
                 .as("a setting the warning did not name is not switched").isEqualTo("true");
         assertThat(state.steps()).anySatisfy(step -> {
             assertThat(step.kind()).isEqualTo(DemoRun.Kind.SETTING);
-            assertThat(step.outcome()).isEqualTo(DemoRun.Outcome.FAILED);
+            assertThat(step.outcome()).isEqualTo(Demo.Outcome.FAILED);
             assertThat(step.detail()).contains("did not name proxy-enabled");
         });
         assertThat(state.steps()).as("the failure is recorded against the contributor").anySatisfy(step -> {
@@ -282,7 +281,7 @@ class DemoRunTest {
             assertThat(step.detail()).contains("a contributor that fails part way");
         });
         assertThat(state.steps()).as("and the next contributor still loads").anySatisfy(step ->
-                assertThat(step.outcome()).isEqualTo(DemoRun.Outcome.SKIPPED));
+                assertThat(step.outcome()).isEqualTo(Demo.Outcome.SKIPPED));
         assertThat(state.running()).isFalse();
     }
 

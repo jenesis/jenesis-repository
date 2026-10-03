@@ -1,6 +1,7 @@
 package build.jenesis.repository.ui.admin.security;
 
 import module java.base;
+import build.jenesis.repository.ui.SuperadminRole;
 import build.jenesis.repository.ui.identity.UserDirectory;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.ui.ConsoleAccess;
@@ -54,7 +55,7 @@ public class DevSecurityConfig {
     @Bean
     public UserDetailsService devUsers() {
         return new InMemoryUserDetailsManager(
-                User.withUsername("root").password("{noop}root").roles("USER", "SUPERADMIN").build(),
+                User.withUsername("root").password("{noop}root").roles("USER", SuperadminRole.ROLE).build(),
                 User.withUsername("admin").password("{noop}admin").roles("USER").build(),
                 User.withUsername("editor").password("{noop}editor").roles("USER").build(),
                 User.withUsername("viewer").password("{noop}viewer").roles("USER").build());

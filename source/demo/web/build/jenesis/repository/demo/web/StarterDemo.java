@@ -78,17 +78,18 @@ public final class StarterDemo implements DemoContributor {
         List<String> vulnerable = new ArrayList<>();
         if (offerable.contains(MAVEN)) {
             repositories.add(new Repository(HOSTED_MAVEN, MAVEN, "Demo: first-party Java libraries, published here.",
-                    ""));
+                    Optional.empty()));
             settings.put(DENY_LIST, HELD.coordinate() + " added, so its publish is held for review");
             settings.put(DENY_LIST_ACTION, "Hold for review, so a denied coordinate waits for a decision rather than "
                     + "being refused");
         }
         if (offerable.contains(NPM)) {
-            repositories.add(new Repository(HOSTED_NPM, NPM, "Demo: first-party npm packages, published here.", ""));
+            repositories.add(new Repository(HOSTED_NPM, NPM, "Demo: first-party npm packages, published here.",
+                    Optional.empty()));
         }
         for (Proxied proxied : PROXIED) {
             repositories.add(new Repository(proxied.repository(), proxied.type().name(), "Demo: a proxy of "
-                    + proxied.registry() + ", caching what is read through it.", "fallback " + proxied.registry()));
+                    + proxied.registry() + ", caching what is read through it.", Optional.of(proxied.registry())));
             reaches.add(proxied.registry().toString());
             vulnerable.add(String.join(", ", proxied.paths().stream().map(StarterDemo::file).toList()) + ", from "
                     + proxied.registry());
@@ -137,8 +138,7 @@ public final class StarterDemo implements DemoContributor {
         int read = 0;
         for (Proxied proxied : PROXIED) {
             for (String path : proxied.paths()) {
-                int status = demo.fetch(proxied.repository(), proxied.type().servedPath(path));
-                read += status >= 200 && status < 300 ? 1 : 0;
+                read += demo.fetch(proxied.repository(), proxied.type().servedPath(path)) == Demo.Outcome.DONE ? 1 : 0;
             }
         }
         if (!Labels.catalogued(OSV) || PROXIED.isEmpty()) {

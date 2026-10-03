@@ -73,8 +73,9 @@ public class ProjectWizardController {
 
     private WizardFlow.Definition definition() throws IOException {
         List<WizardFlow.Step> steps = new ArrayList<>();
-        steps.add(WizardFlow.Step.identity("Project", List.of("A project is the build cache's unit of isolation: one "
-                        + "build tool's cache, whose entries are its own, and a credential is granted access to it."),
+        steps.add(new WizardFlow.Step.Identity("Project", List.of("A project is the build cache's unit of isolation: "
+                        + "one build tool's cache, whose entries are its own, and a credential is granted access to "
+                        + "it."),
                 List.of(new WizardFlow.Field("name", "Name", "Letters, digits and underscores.", List.of(), true),
                         new WizardFlow.Field("type", "Build tool", "The tool whose cache this is; the project answers "
                                 + "that tool's endpoint and no other.", CacheService.TYPES, true),

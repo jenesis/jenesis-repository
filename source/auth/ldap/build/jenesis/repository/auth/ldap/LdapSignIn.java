@@ -1,6 +1,7 @@
 package build.jenesis.repository.auth.ldap;
 
 import module java.base;
+import build.jenesis.repository.ui.SuperadminRole;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.RateLimiter;
@@ -76,8 +77,8 @@ public final class LdapSignIn implements AuthenticationProvider {
         }
         List<GrantedAuthority> granted = new ArrayList<>(authorities.authorities(id, username));
         if (!properties.getAdminGroup().isBlank() && groups.contains(properties.getAdminGroup().trim())
-                && granted.stream().noneMatch(held -> "ROLE_SUPERADMIN".equals(held.getAuthority()))) {
-            granted.add(new SimpleGrantedAuthority("ROLE_SUPERADMIN"));
+                && granted.stream().noneMatch(held -> SuperadminRole.AUTHORITY.equals(held.getAuthority()))) {
+            granted.add(new SimpleGrantedAuthority(SuperadminRole.AUTHORITY));
         }
         audit.record(tenant, id, "login", LdapLoginMechanism.NAME);
         return UsernamePasswordAuthenticationToken.authenticated(id, null, granted);

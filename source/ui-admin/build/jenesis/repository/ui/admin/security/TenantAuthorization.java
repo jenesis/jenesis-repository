@@ -8,6 +8,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.stereotype.Component;
+import build.jenesis.repository.ui.SuperadminRole;
 import build.jenesis.repository.ui.identity.UserDirectory;
 
 /**
@@ -30,7 +31,7 @@ public class TenantAuthorization {
                 return new AuthorizationDecision(false);
             }
             for (GrantedAuthority authority : auth.getAuthorities()) {
-                if (authority.getAuthority().equals("ROLE_SUPERADMIN")) {
+                if (authority.getAuthority().equals(SuperadminRole.AUTHORITY)) {
                     return new AuthorizationDecision(true);
                 }
             }

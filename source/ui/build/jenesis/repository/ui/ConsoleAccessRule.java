@@ -24,7 +24,7 @@ public final class ConsoleAccessRule {
      * administrator established it, and some such principals (the bootstrap key's {@code admin}, the development
      * profile's users) have no grant row to find. {@code ROLE_USER} is absent, since everyone signed in holds it.
      */
-    private static final Set<String> ADMINISTERS = Set.of("ROLE_SUPERADMIN", "ROLE_ADMIN");
+    private static final Set<String> ADMINISTERS = Set.of(SuperadminRole.AUTHORITY, "ROLE_ADMIN");
 
     /** Allow a request only from a signed-in principal that {@code access} says holds something here - or that the
      *  mechanism which signed them in has already established as an administrator. */

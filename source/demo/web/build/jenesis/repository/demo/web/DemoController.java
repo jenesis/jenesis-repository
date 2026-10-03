@@ -2,6 +2,7 @@ package build.jenesis.repository.demo.web;
 
 import module java.base;
 
+import build.jenesis.repository.demo.Demo;
 import build.jenesis.repository.ui.ConsoleScreen;
 import build.jenesis.repository.ui.CurrentTenant;
 import org.springframework.security.core.Authentication;
@@ -64,9 +65,10 @@ public class DemoController {
                     + "demo.");
             return "redirect:/ui/setup";
         }
-        DemoRun.Started started = run.start(selected, authentication == null ? "console" : authentication.getName());
-        if (!started.started()) {
-            redirect.addFlashAttribute("error", "Nothing was loaded: " + started.reason());
+        Optional<String> refused = run.start(selected, authentication == null ? "console"
+                : authentication.getName());
+        if (refused.isPresent()) {
+            redirect.addFlashAttribute("error", "Nothing was loaded: " + refused.get());
             return "redirect:" + ROUTE;
         }
         redirect.addFlashAttribute("message", "The demo is loading into " + selected + ".");
@@ -76,18 +78,18 @@ public class DemoController {
     /** One sentence summing a run up by outcome. */
     static String summary(DemoRun.State state) {
         List<String> said = new ArrayList<>();
-        said.add(count(state.count(DemoRun.Kind.REPOSITORY, DemoRun.Outcome.DONE), "repository", "repositories")
+        said.add(count(state.count(DemoRun.Kind.REPOSITORY, Demo.Outcome.DONE), "repository", "repositories")
                 + " created");
-        said.add(count(state.count(DemoRun.Kind.PUBLISH, DemoRun.Outcome.DONE), "file", "files") + " published");
-        long held = state.count(DemoRun.Kind.PUBLISH, DemoRun.Outcome.HELD);
+        said.add(count(state.count(DemoRun.Kind.PUBLISH, Demo.Outcome.DONE), "file", "files") + " published");
+        long held = state.count(DemoRun.Kind.PUBLISH, Demo.Outcome.HELD);
         if (held > 0) {
             said.add(count(held, "file", "files") + " held for review");
         }
-        said.add(count(state.count(DemoRun.Kind.FETCH, DemoRun.Outcome.DONE), "file", "files")
+        said.add(count(state.count(DemoRun.Kind.FETCH, Demo.Outcome.DONE), "file", "files")
                 + " read through the proxies");
-        said.add(count(state.count(DemoRun.Kind.SETTING, DemoRun.Outcome.DONE), "settings change", "settings changes")
+        said.add(count(state.count(DemoRun.Kind.SETTING, Demo.Outcome.DONE), "settings change", "settings changes")
                 + " made");
-        long failed = state.count(DemoRun.Outcome.FAILED) + state.count(DemoRun.Outcome.REFUSED);
+        long failed = state.count(Demo.Outcome.FAILED) + state.count(Demo.Outcome.REFUSED);
         if (failed > 0) {
             said.add(count(failed, "step", "steps") + " did not go through");
         }

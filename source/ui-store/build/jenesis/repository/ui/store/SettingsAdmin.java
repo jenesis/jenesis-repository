@@ -807,11 +807,6 @@ public class SettingsAdmin {
         public List<SettingView> tuning() {
             return settings.stream().filter(SettingView::advanced).toList();
         }
-
-        /** How many of the folded settings carry a value of their own, which the disclosure says. */
-        public long tuningChanged() {
-            return tuning().stream().filter(SettingView::overridden).count();
-        }
     }
 
     /**

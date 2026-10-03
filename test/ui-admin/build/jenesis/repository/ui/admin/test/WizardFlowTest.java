@@ -42,11 +42,11 @@ class WizardFlowTest {
     private final WizardFlow.Definition definition = new WizardFlow.Definition("New repository",
             "/ui/new/repository", new WizardFlow.Exit("Cancel", "/ui/repositories", false), "Create repository",
             "Create now",
-            List.of(WizardFlow.Step.identity("Repository", List.of("What it is called."),
+            List.of(new WizardFlow.Step.Identity("Repository", List.of("What it is called."),
                             List.of(new WizardFlow.Field("name", "Name", "Letters and digits.", List.of(), true))),
-                    WizardFlow.Step.settings("Retention", List.of(view("keep-last", "LONG", "0", false),
+                    new WizardFlow.Step.Settings("Retention", List.of(view("keep-last", "LONG", "0", false),
                             view("max-age", "DURATION_OR_NONE", "", false))),
-                    WizardFlow.Step.settings("Routing", List.of(view("routing", "STRING", "writable", true)))),
+                    new WizardFlow.Step.Settings("Routing", List.of(view("routing", "STRING", "writable", true)))),
             List.of("Nothing is created until the review is completed."), checks);
 
     private static Map<String, String> form(String... pairs) {
@@ -124,7 +124,7 @@ class WizardFlowTest {
     void the_review_shows_a_chosen_value_as_the_settings_screen_does_and_never_a_secret() {
         WizardFlow.Definition secrets = new WizardFlow.Definition("Setup", "/ui/setup",
                 new WizardFlow.Exit("Skip", "/ui/setup/skip", true), "Apply", "Apply now",
-                List.of(WizardFlow.Step.settings("Access", List.of(view("token", "SECRET", "", false),
+                List.of(new WizardFlow.Step.Settings("Access", List.of(view("token", "SECRET", "", false),
                         view("enabled", "BOOLEAN", "false", false), view("max-age", "DURATION_OR_NONE", "", false)))),
                 List.of(), checks);
         WizardFlow flow = WizardFlow.resume(secrets,

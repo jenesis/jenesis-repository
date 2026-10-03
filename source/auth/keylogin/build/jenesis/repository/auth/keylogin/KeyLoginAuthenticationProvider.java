@@ -1,6 +1,7 @@
 package build.jenesis.repository.auth.keylogin;
 
 import module java.base;
+import build.jenesis.repository.ui.SuperadminRole;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.ui.identity.StarterCredential;
@@ -92,7 +93,7 @@ public final class KeyLoginAuthenticationProvider implements AuthenticationProvi
         Set<GrantedAuthority> authorities = new LinkedHashSet<>();
         authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
         if (superadmin) {
-            authorities.add(new SimpleGrantedAuthority("ROLE_SUPERADMIN"));
+            authorities.add(new SimpleGrantedAuthority(SuperadminRole.AUTHORITY));
         }
         if (starter) {
             authorities.add(new SimpleGrantedAuthority(StarterCredential.AUTHORITY));

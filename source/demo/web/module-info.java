@@ -29,6 +29,7 @@ module build.jenesis.repository.demo.web {
     requires build.jenesis.repository.settings;
     requires build.jenesis.repository.definitions;
     requires build.jenesis.repository.audit;
+    requires build.jenesis.repository.observation;
     requires micrometer.observation;
     requires org.slf4j;
     requires org.apache.commons.compress;

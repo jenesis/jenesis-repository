@@ -2,6 +2,7 @@ package build.jenesis.repository.ui.identity;
 
 import module java.base;
 
+import build.jenesis.repository.ui.SuperadminRole;
 import build.jenesis.repository.ui.KnownPrincipals;
 import build.jenesis.repository.ui.LoginAuthorities;
 import org.springframework.security.core.GrantedAuthority;
@@ -40,7 +41,7 @@ public class LoginAuthorization implements LoginAuthorities {
         Set<GrantedAuthority> authorities = new LinkedHashSet<>();
         authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
         if (superadmin) {
-            authorities.add(new SimpleGrantedAuthority("ROLE_SUPERADMIN"));
+            authorities.add(new SimpleGrantedAuthority(SuperadminRole.AUTHORITY));
         }
         return authorities;
     }

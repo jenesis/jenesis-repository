@@ -6,8 +6,10 @@ import module org.slf4j;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.definitions.RoutingSettingsContributor;
 import build.jenesis.repository.demo.Demo;
+import build.jenesis.repository.demo.Demo.Outcome;
 import build.jenesis.repository.demo.DemoContributor;
 import build.jenesis.repository.format.RepositoryType;
+import build.jenesis.repository.observation.Contributions;
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.server.RepositoryController;
 import build.jenesis.repository.server.kernel.PublishTenant;
@@ -52,6 +54,9 @@ public final class DemoRun {
 
     /** The run's document, in the tenant's own product space. */
     static final String DOCUMENT = Scopes.space("demo") + "/run";
+
+    /** The status a run's document carries while it is under way. */
+    private static final String RUNNING = "RUNNING";
 
     /** How many of a tenant's top-level names are looked at to decide whether it holds a repository: its own product
      *  spaces sort among them, and there are a handful of those. */
@@ -143,9 +148,6 @@ public final class DemoRun {
     /** What a step was: the kind of operation, which the screen sums by. */
     public enum Kind { REPOSITORY, SETTING, PUBLISH, FETCH, REQUEST, SKIP, LOAD }
 
-    /** How a step ended. */
-    public enum Outcome { DONE, HELD, REFUSED, FAILED, SKIPPED }
-
     /** One step of a run: what kind of operation, what it was, how it ended and what the deployment said. */
     public record Step(Kind kind, String what, Outcome outcome, String detail) {
 
@@ -157,16 +159,30 @@ public final class DemoRun {
         }
     }
 
+    /** Where a run stands: still going, stopped part way - its document says running and nothing holds its lease -
+     *  or finished. */
+    public enum Status { RUNNING, STOPPED, FINISHED }
+
     /**
-     * A run as stored: whether it is still going, whether it stopped part way (its document says running and nothing
-     * holds its lease), who confirmed it, when it started and finished, its steps, and how many steps past the
-     * {@link #STEPS} kept were left out.
+     * A run as stored: where it stands, who confirmed it, when it started and finished, its steps, and how many steps
+     * past the {@link #STEPS} kept were left out.
      */
-    public record State(boolean running, boolean stopped, String actor, Instant started, Instant finished,
-                        List<Step> steps, int omitted) {
+    public record State(Status status, String actor, Instant started, Instant finished, List<Step> steps,
+                        int omitted) {
 
         public State {
+            Objects.requireNonNull(status, "status");
             steps = List.copyOf(steps);
+        }
+
+        /** Whether the run is still going. */
+        public boolean running() {
+            return status == Status.RUNNING;
+        }
+
+        /** Whether the run stopped part way. */
+        public boolean stopped() {
+            return status == Status.STOPPED;
         }
 
         /** How many steps of {@code kind} ended {@code outcome}. */
@@ -192,19 +208,13 @@ public final class DemoRun {
         }
     }
 
-    /** Whether a run was started, and why not when it was not. */
-    public record Started(boolean started, String reason) {
-    }
-
     /** Each contributor with its plan, in the order they load. */
     public record Planned(DemoContributor contributor, DemoContributor.Plan plan) {
     }
 
     /** The contributors' plans, in the order they load: by {@link DemoContributor#order()}, then by class name. */
     public List<Planned> plans() {
-        return contributors.get().stream()
-                .sorted(Comparator.comparingInt(DemoContributor::order)
-                        .thenComparing(contributor -> contributor.getClass().getName()))
+        return Contributions.ordered(contributors.get().stream(), DemoContributor::order).stream()
                 .map(contributor -> new Planned(contributor, contributor.plan()))
                 .toList();
     }
@@ -224,8 +234,8 @@ public final class DemoRun {
             return Optional.empty();
         }
         JsonNode document = JSON.readTree(stored.get().content());
-        boolean running = document.path("status").asString("").equals("RUNNING");
-        boolean stopped = running && lease(space).holder(LOCK, Instant.now()).isEmpty();
+        Status status = !document.path("status").asString("").equals(RUNNING) ? Status.FINISHED
+                : lease(space).holder(LOCK, Instant.now()).isPresent() ? Status.RUNNING : Status.STOPPED;
         List<Step> steps = new ArrayList<>();
         for (JsonNode step : document.path("steps")) {
             try {
@@ -237,22 +247,24 @@ public final class DemoRun {
                         step.path("detail").asString("")));
             }
         }
-        return Optional.of(new State(running && !stopped, stopped, document.path("actor").asString(""),
+        return Optional.of(new State(status, document.path("actor").asString(""),
                 instant(document.path("started").asString("")), instant(document.path("finished").asString("")),
                 steps, document.path("omitted").asInt(0)));
     }
 
     /**
-     * Start the demo for {@code tenant} on a thread of its own, confirmed by {@code actor}, and answer at once. Refused
-     * while the tenant holds a repository or a run is under way.
+     * Start the demo for {@code tenant} on a thread of its own, confirmed by {@code actor}, and answer at once: empty
+     * when it started, else why not - the tenant holds a repository, or a run is under way.
      */
-    public Started start(String tenant, String actor) throws IOException {
+    public Optional<String> start(String tenant, String actor) throws IOException {
         Optional<Recorder> recorder = begin(tenant, actor);
         if (recorder.isEmpty()) {
-            return refusal(tenant);
+            return Optional.of(holdsRepository(tenant)
+                    ? "A repository exists here already; the demo loads only into an empty start."
+                    : "A demo is loading here already.");
         }
         Thread.ofVirtual().name("demo-" + tenant).start(() -> finish(recorder.get()));
-        return new Started(true, "");
+        return Optional.empty();
     }
 
     /**
@@ -266,12 +278,6 @@ public final class DemoRun {
         }
         finish(recorder.get());
         return state(tenant);
-    }
-
-    private Started refusal(String tenant) {
-        return new Started(false, holdsRepository(tenant)
-                ? "A repository exists here already; the demo loads only into an empty start."
-                : "A demo is loading here already.");
     }
 
     /** Take the run's lease and record it as running, unless the tenant holds a repository or another run holds the
@@ -329,8 +335,8 @@ public final class DemoRun {
         String what = "Create " + repository.name() + " (" + (repository.hosted() ? "hosted " + repository.type()
                 : repository.type() + " proxy") + ")";
         try {
-            Map<String, String> values = repository.hosted() ? Map.of()
-                    : Map.of(RoutingSettingsContributor.KEY, repository.routing());
+            Map<String, String> values = repository.upstream().map(upstream -> Map.of(RoutingSettingsContributor.KEY,
+                    "fallback " + upstream)).orElse(Map.of());
             RepositoryType.Creation creation = lifecycle.create(repository.name(), repository.type(),
                     repository.description(), values, true);
             return switch (creation) {
@@ -402,16 +408,16 @@ public final class DemoRun {
         }
 
         @Override
-        public int publish(String repository, String path, InputStream body) throws IOException {
+        public Outcome publish(String repository, String path, InputStream body) throws IOException {
             String what = "Publish " + path + " to " + repository;
             int status;
             try {
                 status = edge.publish(recorder.tenant, repository, path, body);
             } catch (IOException | RuntimeException failed) {
-                recorder.add(new Step(Kind.PUBLISH, what, Outcome.FAILED, "Not published: " + failed.getMessage()));
-                return 500;
+                return recorder.add(new Step(Kind.PUBLISH, what, Outcome.FAILED, "Not published: "
+                        + failed.getMessage()));
             }
-            recorder.add(switch (status) {
+            return recorder.add(switch (status) {
                 case 202 -> new Step(Kind.PUBLISH, what, Outcome.HELD, "Held for review: it waits in the "
                         + "repository's quarantine queue for a reviewer to release or refuse it.");
                 case 422 -> new Step(Kind.PUBLISH, what, Outcome.REFUSED, "Refused by the compliance gate: nothing "
@@ -423,20 +429,19 @@ public final class DemoRun {
                         : new Step(Kind.PUBLISH, what, Outcome.FAILED, "Not published: the repository answered "
                                 + status + ".");
             });
-            return status;
         }
 
         @Override
-        public int fetch(String repository, String path) throws IOException {
+        public Outcome fetch(String repository, String path) throws IOException {
             String what = "Fetch " + path + " through " + repository;
             int status;
             try {
                 status = edge.fetch(recorder.tenant, repository, path);
             } catch (IOException | RuntimeException failed) {
-                recorder.add(new Step(Kind.FETCH, what, Outcome.FAILED, "Not fetched: " + failed.getMessage()));
-                return 500;
+                return recorder.add(new Step(Kind.FETCH, what, Outcome.FAILED, "Not fetched: "
+                        + failed.getMessage()));
             }
-            recorder.add(switch (status) {
+            return recorder.add(switch (status) {
                 case 404 -> new Step(Kind.FETCH, what, Outcome.FAILED, "Not fetched: the registry did not answer "
                         + "with it from this server, or the gate withheld it; the proxy stays without it.");
                 case Edge.UNSERVED -> new Step(Kind.FETCH, what, Outcome.FAILED, "Not fetched: no repository runs in "
@@ -447,7 +452,6 @@ public final class DemoRun {
                         : new Step(Kind.FETCH, what, Outcome.FAILED, "Not fetched: the proxy answered " + status
                                 + ".");
             });
-            return status;
         }
 
         @Override
@@ -489,13 +493,15 @@ public final class DemoRun {
             this.started = started;
         }
 
-        private void add(Step step) throws IOException {
+        /** Record {@code step}, answering how it ended. */
+        private Outcome add(Step step) throws IOException {
             if (steps.size() < STEPS) {
                 steps.add(step);
             } else {
                 omitted++;
             }
             write();
+            return step.outcome();
         }
 
         private void addQuietly(Step step) {
@@ -521,7 +527,7 @@ public final class DemoRun {
         private void write() throws IOException {
             ObjectNode document = JSON.createObjectNode();
             document.put("version", 1);
-            document.put("status", finished == null ? "RUNNING" : "DONE");
+            document.put("status", finished == null ? RUNNING : "DONE");
             document.put("actor", actor);
             document.put("started", started.toString());
             if (finished != null) {
