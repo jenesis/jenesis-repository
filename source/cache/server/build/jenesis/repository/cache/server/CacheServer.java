@@ -1,5 +1,6 @@
 package build.jenesis.repository.cache.server;
 
+import build.jenesis.repository.server.Launched;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -81,23 +82,10 @@ public class CacheServer {
         return new Running(bound, context);
     }
 
-    public static final class Running implements AutoCloseable {
-
-        private final int port;
-        private final ConfigurableApplicationContext context;
+    public static final class Running extends Launched {
 
         private Running(int port, ConfigurableApplicationContext context) {
-            this.port = port;
-            this.context = context;
-        }
-
-        public int port() {
-            return port;
-        }
-
-        @Override
-        public void close() {
-            context.close();
+            super(port, context);
         }
     }
 }

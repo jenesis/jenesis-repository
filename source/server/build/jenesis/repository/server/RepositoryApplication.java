@@ -85,23 +85,10 @@ public class RepositoryApplication {
      * discover it) and an orderly shutdown. Keeps the Spring {@link ConfigurableApplicationContext} private so a
      * caller - a test, say - need not require any Spring module to drive the server over HTTP.
      */
-    public static final class Running implements AutoCloseable {
-
-        private final int port;
-        private final ConfigurableApplicationContext context;
+    public static final class Running extends Launched {
 
         private Running(int port, ConfigurableApplicationContext context) {
-            this.port = port;
-            this.context = context;
-        }
-
-        public int port() {
-            return port;
-        }
-
-        @Override
-        public void close() {
-            context.close();
+            super(port, context);
         }
     }
 }

@@ -1,5 +1,6 @@
 package build.jenesis.repository.bundle;
 
+import build.jenesis.repository.server.Launched;
 import build.jenesis.repository.cache.server.CacheNode;
 import build.jenesis.repository.server.RepositoryApplication;
 import build.jenesis.repository.ui.admin.AdminConsoleNode;
@@ -71,23 +72,10 @@ public class Server {
     }
 
     /** A handle on a started server: the actually bound port and an orderly shutdown, without leaking Spring types. */
-    public static final class Running implements AutoCloseable {
-
-        private final int port;
-        private final ConfigurableApplicationContext context;
+    public static final class Running extends Launched {
 
         private Running(int port, ConfigurableApplicationContext context) {
-            this.port = port;
-            this.context = context;
-        }
-
-        public int port() {
-            return port;
-        }
-
-        @Override
-        public void close() {
-            context.close();
+            super(port, context);
         }
     }
 }

@@ -1,5 +1,6 @@
 package build.jenesis.repository.ui.admin;
 
+import build.jenesis.repository.server.Launched;
 import build.jenesis.repository.ui.identity.ConsoleIdentityConfig;
 import build.jenesis.repository.ui.ConsoleScreensConfig;
 import org.springframework.context.annotation.Import;
@@ -43,23 +44,10 @@ public class Application {
     }
 
     /** A booted console: the port it bound and the context to close. */
-    public static final class Running implements AutoCloseable {
-
-        private final int port;
-        private final ConfigurableApplicationContext context;
+    public static final class Running extends Launched {
 
         private Running(int port, ConfigurableApplicationContext context) {
-            this.port = port;
-            this.context = context;
-        }
-
-        public int port() {
-            return port;
-        }
-
-        @Override
-        public void close() {
-            context.close();
+            super(port, context);
         }
     }
 }

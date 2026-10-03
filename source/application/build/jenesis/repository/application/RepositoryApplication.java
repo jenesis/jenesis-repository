@@ -1,6 +1,7 @@
 package build.jenesis.repository.application;
 
 import module java.base;
+import build.jenesis.repository.server.Launched;
 import build.jenesis.repository.server.kernel.MaintenanceScheduler;
 import build.jenesis.repository.store.ArtifactStore;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -85,18 +86,10 @@ public class RepositoryApplication {
         return routes;
     }
 
-    public static final class Running implements AutoCloseable {
-
-        private final int port;
-        private final ConfigurableApplicationContext context;
+    public static final class Running extends Launched {
 
         private Running(int port, ConfigurableApplicationContext context) {
-            this.port = port;
-            this.context = context;
-        }
-
-        public int port() {
-            return port;
+            super(port, context);
         }
 
         /**
@@ -120,11 +113,6 @@ public class RepositoryApplication {
          */
         public ArtifactStore store() {
             return context.getBean(ArtifactStore.class);
-        }
-
-        @Override
-        public void close() {
-            context.close();
         }
     }
 }
