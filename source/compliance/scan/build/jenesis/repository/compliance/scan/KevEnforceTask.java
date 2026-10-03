@@ -112,8 +112,8 @@ public final class KevEnforceTask implements MaintenanceTask {
                 // Converge a partially held release rather than skipping it, so a crash after the first pointer, or a
                 // path added later, is held on the next pass.
                 RetroactiveHolds.converge(store, publication, inventory, log, context.now(), eco, coordinate, version,
-                        paths, "KEV retroactive: " + String.join(", ",
-                                kevCves.stream().filter(cve -> !overridden.contains(cve)).toList()),
+                        paths, List.of("KEV retroactive: " + String.join(", ",
+                                kevCves.stream().filter(cve -> !overridden.contains(cve)).toList())),
                         release.coordinate() + ":" + version);
                 held[0]++;
                 return;   // already held (idempotent)
@@ -123,7 +123,8 @@ public final class KevEnforceTask implements MaintenanceTask {
             }
             List<String> enforcing = kevCves.stream().filter(cve -> !overridden.contains(cve)).toList();
             if (RetroactiveHolds.hold(store, publication, inventory, log, context.now(), eco, coordinate, version,
-                    paths, "KEV retroactive: " + String.join(", ", enforcing), release.coordinate() + ":" + version,
+                    paths, List.of("KEV retroactive: " + String.join(", ", enforcing)),
+                    release.coordinate() + ":" + version,
                     () -> KevHold.hold(store, eco, coordinate, version, kevCves))) {
                 held[0]++;
             } else if (inventory.servesFromBlobs(eco)) {
