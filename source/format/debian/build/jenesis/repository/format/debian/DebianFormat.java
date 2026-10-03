@@ -3,6 +3,7 @@ package build.jenesis.repository.format.debian;
 import module java.base;
 import module org.apache.commons.compress;
 
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.format.debian.keys.DebianKeyring;
 import build.jenesis.repository.format.signing.OpenPgpSigner;
@@ -73,10 +74,10 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         return "debian";
     }
 
-    /** A yank surfaces in the metadata this format's clients read, so one is accepted here. */
+    /** The marks this format's clients see, each by its own word. */
     @Override
-    public boolean surfacesYank() {
-        return true;
+    public Map<LifecycleMark, String> lifecycleMarks() {
+        return LifecycleMark.shown(LifecycleMark.YANKED);
     }
 
     @Override

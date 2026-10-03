@@ -1,7 +1,7 @@
 package build.jenesis.repository.format.lifecycle.console;
 
 import module java.base;
-import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.lifecycle.web.LifecycleMarks;
 import build.jenesis.repository.ui.ConsoleModuleProvider;
 import build.jenesis.repository.ui.NavEntry;
@@ -30,24 +30,22 @@ public final class LifecycleConsoleModule implements ConsoleModuleProvider {
 
     @Override
     public List<RepositoryPage> repositoryPages() {
-        return List.of(page(title(EnumSet.allOf(Lifecycle.State.class), "yanked")));
+        return List.of(page(title(LifecycleMark.shown(LifecycleMark.values()))));
     }
 
     /** The page named for the marks a repository of {@code type} shows, and none where it shows none. */
     @Override
     public List<RepositoryPage> repositoryPages(String type) {
-        Set<Lifecycle.State> shown = LifecycleMarks.states(type);
-        return shown.isEmpty() ? List.of() : List.of(page(title(shown, LifecycleMarks.yankName(type))));
+        Map<LifecycleMark, String> shown = LifecycleMarks.shown(type);
+        return shown.isEmpty() ? List.of() : List.of(page(title(shown)));
     }
 
-    /** What the page is called where a repository shows {@code shown}: the one name its sidebar entry and its
-     *  heading share. */
-    static String title(Set<Lifecycle.State> shown, String yankName) {
-        if (shown.contains(Lifecycle.State.DEPRECATED) && shown.contains(Lifecycle.State.YANKED)) {
-            return "Deprecated & " + yankName + " versions";
-        }
-        return shown.contains(Lifecycle.State.DEPRECATED) ? "Deprecated versions"
-                : Character.toUpperCase(yankName.charAt(0)) + yankName.substring(1) + " versions";
+    /** What the page is called where a repository shows {@code shown}, each mark by its word, in the marks' order:
+     *  the one name its sidebar entry and its heading share. */
+    static String title(Map<LifecycleMark, String> shown) {
+        String marks = Stream.of(LifecycleMark.values()).filter(shown::containsKey).map(shown::get)
+                .collect(Collectors.joining(" & "));
+        return Character.toUpperCase(marks.charAt(0)) + marks.substring(1) + " versions";
     }
 
     private static RepositoryPage page(String title) {

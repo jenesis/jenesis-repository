@@ -3,6 +3,7 @@ package build.jenesis.repository.format.lifecycle;
 import module java.base;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.format.FormatExchange;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
@@ -30,32 +31,8 @@ public final class Lifecycle {
     private Lifecycle() {
     }
 
-    /** Whether a version is affected by a lifecycle mark and, if so, what kind. */
-    public enum State {
-
-        /** The version is discouraged but still resolvable - npm renders a {@code deprecated} warning. */
-        DEPRECATED,
-
-        /** The version is withdrawn - Cargo renders it {@code yanked}, so a resolver skips it unless already pinned. */
-        YANKED;
-
-        /** Parse a case-insensitive state name ({@code deprecated} / {@code yanked}), or empty when unrecognised. */
-        public static Optional<State> parse(String value) {
-            if (value == null) {
-                return Optional.empty();
-            }
-            String trimmed = value.trim();
-            for (State state : values()) {
-                if (state.name().equalsIgnoreCase(trimmed)) {
-                    return Optional.of(state);
-                }
-            }
-            return Optional.empty();
-        }
-    }
-
-    /** A lifecycle mark: its {@link State} and an optional operator message (never {@code null}; empty when none). */
-    public record Flag(State state, String message) {
+    /** A lifecycle mark: its {@link LifecycleMark} and an optional operator message (never {@code null}; empty when none). */
+    public record Flag(LifecycleMark state, String message) {
 
         public Flag {
             Objects.requireNonNull(state, "state");
@@ -218,7 +195,7 @@ public final class Lifecycle {
     }
 
     /** The audit action a mark of {@code state} is recorded under, on every surface that sets one. */
-    public static String action(State state) {
+    public static String action(LifecycleMark state) {
         return switch (state) {
             case DEPRECATED -> AuditActions.LIFECYCLE_DEPRECATED;
             case YANKED -> AuditActions.LIFECYCLE_YANKED;
@@ -247,7 +224,7 @@ public final class Lifecycle {
         int newline = text.indexOf('\n');
         String stateName = newline < 0 ? text : text.substring(0, newline);
         String message = newline < 0 ? "" : text.substring(newline + 1);
-        return State.parse(stateName.strip()).map(state -> new Flag(state, message)).orElse(null);
+        return LifecycleMark.parse(stateName.strip()).map(state -> new Flag(state, message)).orElse(null);
     }
 
 

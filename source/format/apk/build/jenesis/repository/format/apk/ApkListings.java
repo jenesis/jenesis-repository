@@ -5,6 +5,7 @@ import module org.apache.commons.compress;
 
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.OwnerOnly;
@@ -256,7 +257,7 @@ final class ApkListings {
             return false;
         }
         return Lifecycle.read(store, name, version)
-                .filter(flag -> flag.state() == Lifecycle.State.YANKED)
+                .filter(flag -> flag.state() == LifecycleMark.YANKED)
                 .isEmpty();
     }
 

@@ -336,30 +336,16 @@ public interface RepositoryFormat extends IconContributor {
     }
 
     /**
-     * Whether a deprecation mark on a version of this format surfaces in the metadata its clients read: npm's
-     * {@code deprecated}, Composer's {@code abandoned}, a Helm chart's {@code deprecated}. A format whose clients have
-     * no deprecation signal leaves this {@code false}, and a deprecation on a repository of that format is refused
-     * rather than stored, since an accepted mark nobody sees reads as done. Off by default, so a new format refuses
-     * a deprecation until it shows one.
+     * The lifecycle marks a version of this format shows its clients in the metadata they read, each by this
+     * ecosystem's word for it: a deprecation as npm's {@code deprecated}, Composer's {@code abandoned} or a Helm
+     * chart's {@code deprecated}; a yank as a yanked flag in a Cargo index line or a PyPI {@code data-yanked}, and as
+     * "unlisted" where a version is left out of the listing a client resolves from (Maven, NuGet). A mark absent here
+     * is refused on a repository of this format rather than stored, since an accepted mark nobody sees reads as done.
+     * None by default, so a new format refuses every mark until it shows one. The map's order means nothing; a reader
+     * offering the marks offers them in {@link LifecycleMark}'s.
      */
-    default boolean surfacesDeprecation() {
-        return false;
-    }
-
-    /**
-     * Whether a yank on a version of this format surfaces in the metadata its clients read: a yanked flag in a Cargo
-     * index line, a PyPI {@code data-yanked}, a Maven version left out of {@code maven-metadata.xml}. A format whose
-     * clients have nowhere to see a yank leaves this {@code false}, and a yank on a repository of that format is
-     * refused rather than stored. Off by default, as {@link #surfacesDeprecation()} is.
-     */
-    default boolean surfacesYank() {
-        return false;
-    }
-
-    /** What this format's people call a yank, as a console names the mark: "yanked" where the ecosystem yanks
-     *  (Cargo, PyPI), "unlisted" where a version is left out of the listing a client resolves from (Maven, NuGet). */
-    default String yankName() {
-        return "yanked";
+    default Map<LifecycleMark, String> lifecycleMarks() {
+        return Map.of();
     }
 
     /**

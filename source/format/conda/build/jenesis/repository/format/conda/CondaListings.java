@@ -5,6 +5,7 @@ import module org.slf4j;
 
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.walk.BoundedChildren;
@@ -294,7 +295,7 @@ final class CondaListings {
         // A YANKED version leaves the index, its bytes still fetchable, as conda retires a build. Conda has no
         // deprecation.
         return Lifecycle.read(store, name, version)
-                .filter(flag -> flag.state() == Lifecycle.State.YANKED)
+                .filter(flag -> flag.state() == LifecycleMark.YANKED)
                 .isEmpty();
     }
 

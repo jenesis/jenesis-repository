@@ -4,6 +4,7 @@ import module java.base;
 import module java.xml;
 import module org.slf4j;
 
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.format.signing.OpenPgpSigner;
@@ -89,10 +90,10 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         return "rpm";
     }
 
-    /** A yank surfaces in the metadata this format's clients read, so one is accepted here. */
+    /** The marks this format's clients see, each by its own word. */
     @Override
-    public boolean surfacesYank() {
-        return true;
+    public Map<LifecycleMark, String> lifecycleMarks() {
+        return LifecycleMark.shown(LifecycleMark.YANKED);
     }
 
     @Override

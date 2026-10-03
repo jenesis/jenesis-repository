@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.walk.BoundedChildren;
@@ -252,7 +253,7 @@ final class RpmListings {
             return true;
         }
         return Lifecycle.read(store, repo + "/" + nevra[0], nevra[1] + "-" + nevra[2] + "." + nevra[3])
-                .filter(flag -> flag.state() == Lifecycle.State.YANKED)
+                .filter(flag -> flag.state() == LifecycleMark.YANKED)
                 .isEmpty();
     }
 

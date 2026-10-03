@@ -6,6 +6,7 @@ import tools.jackson.core.JsonParser;
 
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.signing.OpenPgpSigner;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
@@ -279,7 +280,7 @@ final class TerraformListings {
 
     private boolean yanked(String coordinate, String version) throws IOException {
         return Lifecycle.read(store, coordinate, version)
-                .filter(flag -> flag.state() == Lifecycle.State.YANKED)
+                .filter(flag -> flag.state() == LifecycleMark.YANKED)
                 .isPresent();
     }
 

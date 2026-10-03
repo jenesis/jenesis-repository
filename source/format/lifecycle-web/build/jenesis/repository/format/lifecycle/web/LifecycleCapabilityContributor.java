@@ -2,6 +2,7 @@ package build.jenesis.repository.format.lifecycle.web;
 
 import module java.base;
 
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.server.spi.CapabilityContributor;
 
@@ -16,15 +17,10 @@ public final class LifecycleCapabilityContributor implements CapabilityContribut
     public Map<String, Object> capabilities(UnaryOperator<String> configuration) {
         Map<String, Object> formats = new TreeMap<>();
         for (RepositoryFormat format : RepositoryFormat.installed()) {
-            List<String> marks = new ArrayList<>();
-            if (format.surfacesDeprecation()) {
-                marks.add("deprecated");
-            }
-            if (format.surfacesYank()) {
-                marks.add("yanked");
-            }
+            List<String> marks = Stream.of(LifecycleMark.values()).filter(format.lifecycleMarks()::containsKey)
+                    .map(LifecycleMark::word).toList();
             if (!marks.isEmpty()) {
-                formats.put(format.name(), List.copyOf(marks));
+                formats.put(format.name(), marks);
             }
         }
         return Map.of("lifecycleMarks", formats);

@@ -7,6 +7,7 @@ import tools.jackson.core.JsonParser;
 
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
 import tools.jackson.databind.ObjectMapper;
@@ -176,7 +177,7 @@ final class SwiftListings {
             return Optional.empty();
         }
         Optional<Lifecycle.Flag> flag = Lifecycle.read(store, scope + "." + name, version);
-        if (flag.isPresent() && flag.get().state() == Lifecycle.State.YANKED) {
+        if (flag.isPresent() && flag.get().state() == LifecycleMark.YANKED) {
             // The specification's word for a release a client must not resolve, and it stays listed - unlike a hold.
             String detail = flag.get().message() == null || flag.get().message().isBlank()
                     ? "this release was removed from the registry"

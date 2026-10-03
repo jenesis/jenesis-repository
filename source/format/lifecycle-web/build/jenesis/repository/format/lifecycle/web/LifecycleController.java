@@ -4,6 +4,7 @@ import module java.base;
 import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.server.kernel.RepositoryRequests;
 import build.jenesis.repository.server.spi.Authorization;
 import jakarta.servlet.http.HttpServletRequest;
@@ -81,7 +82,7 @@ public class LifecycleController {
         if (tenant == null) {
             return;
         }
-        Lifecycle.State parsed = Lifecycle.State.parse(state).orElse(null);
+        LifecycleMark parsed = LifecycleMark.parse(state).orElse(null);
         if (parsed == null) {
             response.setStatus(400);
             return;

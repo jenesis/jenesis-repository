@@ -18,6 +18,7 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
@@ -55,16 +56,10 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         return "npm";
     }
 
-    /** A deprecation surfaces in the metadata this format's clients read, so one is accepted here. */
+    /** The marks this format's clients see, each by its own word. */
     @Override
-    public boolean surfacesDeprecation() {
-        return true;
-    }
-
-    /** A yank surfaces in the metadata this format's clients read, so one is accepted here. */
-    @Override
-    public boolean surfacesYank() {
-        return true;
+    public Map<LifecycleMark, String> lifecycleMarks() {
+        return LifecycleMark.shown(LifecycleMark.DEPRECATED, LifecycleMark.YANKED);
     }
 
     @Override
@@ -352,7 +347,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
             }
             String message = deprecated.asString();
             Optional<Lifecycle.Flag> mark = Lifecycle.read(store, name, version.getKey());
-            if (mark.filter(flag -> flag.state() == Lifecycle.State.YANKED).isPresent()) {
+            if (mark.filter(flag -> flag.state() == LifecycleMark.YANKED).isPresent()) {
                 continue;
             }
             if (message.isEmpty()) {
@@ -361,7 +356,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
                 }
             } else if (mark.map(NpmFormat::deprecation).filter(message::equals).isEmpty()) {
                 Lifecycle.mark(exchange, store, name, version.getKey(),
-                        new Lifecycle.Flag(Lifecycle.State.DEPRECATED, message));
+                        new Lifecycle.Flag(LifecycleMark.DEPRECATED, message));
             }
         }
     }
@@ -1141,7 +1136,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         if (!flag.message().isEmpty()) {
             return flag.message();
         }
-        return flag.state() == Lifecycle.State.YANKED
+        return flag.state() == LifecycleMark.YANKED
                 ? "This version has been yanked."
                 : "This version is deprecated.";
     }

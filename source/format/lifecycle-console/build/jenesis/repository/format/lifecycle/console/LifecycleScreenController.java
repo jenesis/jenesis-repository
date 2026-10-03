@@ -1,7 +1,7 @@
 package build.jenesis.repository.format.lifecycle.console;
 
 import module java.base;
-import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.lifecycle.web.LifecycleMarks;
 import build.jenesis.repository.ui.ConsoleScreen;
 import build.jenesis.repository.ui.CurrentTenant;
@@ -55,15 +55,14 @@ public class LifecycleScreenController {
         model.addAttribute("version", version);
         // The marks this repository's clients see, the only ones offered; a repository of no installed type is
         // offered both, as the API takes either there.
-        Set<Lifecycle.State> shown = marks.states(tenant.name(), repository);
-        Set<Lifecycle.State> offered = shown.isEmpty() ? EnumSet.allOf(Lifecycle.State.class) : shown;
-        String yankName = marks.yankName(tenant.name(), repository);
-        model.addAttribute("states", offered);
-        model.addAttribute("labels", labels(yankName));
-        model.addAttribute("yankName", yankName);
-        model.addAttribute("title", LifecycleConsoleModule.title(offered, yankName));
-        model.addAttribute("deprecates", offered.contains(Lifecycle.State.DEPRECATED));
-        model.addAttribute("yanks", offered.contains(Lifecycle.State.YANKED));
+        Map<LifecycleMark, String> shown = marks.shown(tenant.name(), repository);
+        Map<LifecycleMark, String> offered = shown.isEmpty() ? LifecycleMark.shown(LifecycleMark.values()) : shown;
+        model.addAttribute("states", Stream.of(LifecycleMark.values()).filter(offered::containsKey).toList());
+        model.addAttribute("labels", offered);
+        model.addAttribute("title", LifecycleConsoleModule.title(offered));
+        model.addAttribute("deprecates", offered.containsKey(LifecycleMark.DEPRECATED));
+        model.addAttribute("yanks", offered.containsKey(LifecycleMark.YANKED));
+        model.addAttribute("yank", LifecycleMark.YANKED);
         model.addAttribute("refusal", marks.refusal(tenant.name(), repository).orElse(null));
         if (coordinate.isBlank()) {
             LifecycleMarks.Page page = marks.page(tenant.name(), repository, after.isBlank() ? null : after, null);
@@ -83,7 +82,7 @@ public class LifecycleScreenController {
                        @RequestParam("state") String state,
                        @RequestParam(name = "message", defaultValue = "") String message,
                        RedirectAttributes redirect) throws IOException {
-        Optional<Lifecycle.State> parsed = Lifecycle.State.parse(state);
+        Optional<LifecycleMark> parsed = LifecycleMark.parse(state);
         if (parsed.isEmpty()) {
             redirect.addFlashAttribute("error", "Choose a mark.");
             return back(repository, coordinate);
@@ -94,7 +93,7 @@ public class LifecycleScreenController {
             redirect.addFlashAttribute("error", refused.get());
         } else {
             redirect.addFlashAttribute("message", coordinate.trim() + " " + version.trim() + " is marked "
-                    + labels(marks.yankName(tenant.name(), repository)).get(parsed.get()) + ".");
+                    + marks.shown(tenant.name(), repository).getOrDefault(parsed.get(), parsed.get().word()) + ".");
         }
         return back(repository, coordinate.trim());
     }
@@ -115,10 +114,5 @@ public class LifecycleScreenController {
     private static String back(String repository, String coordinate) {
         return "redirect:/ui/repositories/" + repository + "/lifecycle" + (coordinate.isBlank() ? ""
                 : "?coordinate=" + URLEncoder.encode(coordinate, StandardCharsets.UTF_8));
-    }
-
-    /** What each mark reads as on this repository: deprecated, and its formats' own word for a yank. */
-    private static Map<Lifecycle.State, String> labels(String yankName) {
-        return Map.of(Lifecycle.State.DEPRECATED, "deprecated", Lifecycle.State.YANKED, yankName);
     }
 }

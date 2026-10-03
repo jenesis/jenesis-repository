@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.store.StoredListing;
@@ -85,7 +86,7 @@ final class GoListings {
             return false;
         }
         return Lifecycle.read(store, modulePath, version)
-                .filter(flag -> flag.state() == Lifecycle.State.YANKED)
+                .filter(flag -> flag.state() == LifecycleMark.YANKED)
                 .isEmpty();
     }
 }

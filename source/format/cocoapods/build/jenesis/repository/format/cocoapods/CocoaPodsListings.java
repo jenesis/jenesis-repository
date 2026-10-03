@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
 import org.slf4j.Logger;
@@ -73,7 +74,7 @@ final class CocoaPodsListings {
         Map<String, Lifecycle.Flag> marks = Lifecycle.versions(store, name);
         for (String version : blobs.list(CocoaPodsFormat.shardPrefix(repo, CocoaPodsFormat.shard(name)) + "/" + name)) {
             Lifecycle.Flag flag = marks.get(version);
-            if ((flag == null || flag.state() != Lifecycle.State.YANKED)
+            if ((flag == null || flag.state() != LifecycleMark.YANKED)
                     && !blobs.withheld(CocoaPodsFormat.blobKey(repo, name, version))) {
                 entries.put(version, version.getBytes(StandardCharsets.UTF_8));
             }
@@ -128,7 +129,7 @@ final class CocoaPodsListings {
         boolean spec = blobs.exists(CocoaPodsFormat.specKey(repo, CocoaPodsFormat.shard(name), name, version));
         boolean withheld = spec && blobs.withheld(CocoaPodsFormat.blobKey(repo, name, version));
         boolean yanked = spec && !withheld
-                && Lifecycle.read(store, name, version).filter(flag -> flag.state() == Lifecycle.State.YANKED).isPresent();
+                && Lifecycle.read(store, name, version).filter(flag -> flag.state() == LifecycleMark.YANKED).isPresent();
         boolean servable = spec && !withheld && !yanked;
         LOGGER.debug("{} {} of {}: spec {}, withheld {}, yanked {}", servable ? "put" : "remove", version, name, spec,
                 withheld, yanked);

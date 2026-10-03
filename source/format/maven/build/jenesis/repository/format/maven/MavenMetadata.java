@@ -7,6 +7,7 @@ import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.walk.ScreenedNames;
 import build.jenesis.repository.walk.Traversal;
 import build.jenesis.repository.format.Checksums;
@@ -308,7 +309,7 @@ public final class MavenMetadata {
     /** Whether an operator has yanked {@code version} - a retraction from resolution, not a hold on the bytes. */
     private static boolean yanked(SortedMap<String, Lifecycle.Flag> marks, String version) {
         Lifecycle.Flag flag = marks.get(version);
-        return flag != null && flag.state() == Lifecycle.State.YANKED;
+        return flag != null && flag.state() == LifecycleMark.YANKED;
     }
 
     /** The {@code group:artifact} coordinate a {@code group/path/artifact} folder names: what {@code describe} reports,

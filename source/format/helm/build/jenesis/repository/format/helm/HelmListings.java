@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.walk.BoundedChildren;
@@ -80,7 +81,7 @@ final class HelmListings {
         versions.sort(Comparator.reverseOrder());
         for (String version : versions) {
             Lifecycle.Flag flag = marks.get(version);
-            if (flag != null && flag.state() == Lifecycle.State.YANKED) {
+            if (flag != null && flag.state() == LifecycleMark.YANKED) {
                 continue;
             }
             if (blobs.withheld(HelmFormat.blobKey(repo, chart, version))) {
@@ -91,7 +92,7 @@ final class HelmListings {
                 continue;
             }
             block.append(new String(stanza.toByteArray(), StandardCharsets.UTF_8));
-            if (flag != null && flag.state() == Lifecycle.State.DEPRECATED) {
+            if (flag != null && flag.state() == LifecycleMark.DEPRECATED) {
                 // Helm's native word: a deprecated chart stays listed and resolvable and the client warns, so the mark
                 // is rendered into the entry - the opposite of a yank.
                 block.append("    deprecated: true\n");

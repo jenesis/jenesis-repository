@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.walk.BoundedChildren;
@@ -73,7 +74,7 @@ final class WingetListings {
         Map<String, Lifecycle.Flag> marks = Lifecycle.versions(store, identifier);
         for (String version : blobs.list(WingetFormat.manifestPrefix(repo) + "/" + identifier)) {
             Lifecycle.Flag flag = marks.get(version);
-            if ((flag == null || flag.state() != Lifecycle.State.YANKED)
+            if ((flag == null || flag.state() != LifecycleMark.YANKED)
                     && !blobs.withheld(WingetFormat.manifestKey(repo, identifier, version))) {
                 entries.put(version, version.getBytes(StandardCharsets.UTF_8));
             }
@@ -146,7 +147,7 @@ final class WingetListings {
         boolean servable = blobs.exists(WingetFormat.manifestKey(repo, identifier, version))
                 && !blobs.withheld(WingetFormat.manifestKey(repo, identifier, version))
                 && Lifecycle.read(store, identifier, version)
-                        .filter(flag -> flag.state() == Lifecycle.State.YANKED).isEmpty();
+                        .filter(flag -> flag.state() == LifecycleMark.YANKED).isEmpty();
         if (servable) {
             StoredListing.put(store, packageSpec(repo, identifier), version, version.getBytes(StandardCharsets.UTF_8));
         } else {

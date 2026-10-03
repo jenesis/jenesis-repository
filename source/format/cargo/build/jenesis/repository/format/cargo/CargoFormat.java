@@ -20,6 +20,7 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
@@ -79,10 +80,10 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         return "cargo";
     }
 
-    /** A yank surfaces in the metadata this format's clients read, so one is accepted here. */
+    /** The marks this format's clients see, each by its own word. */
     @Override
-    public boolean surfacesYank() {
-        return true;
+    public Map<LifecycleMark, String> lifecycleMarks() {
+        return LifecycleMark.shown(LifecycleMark.YANKED);
     }
 
     /** A crate's marks are its registry's: {@code <registry>/<crate>}, the registry read off the path it serves at. */
@@ -395,7 +396,7 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         String coordinate = repo + "/" + crate;
         boolean yanked = Lifecycle.read(store, coordinate, version).isPresent();
         if (yank && !yanked) {
-            Lifecycle.mark(exchange, store, coordinate, version, new Lifecycle.Flag(Lifecycle.State.YANKED, ""));
+            Lifecycle.mark(exchange, store, coordinate, version, new Lifecycle.Flag(LifecycleMark.YANKED, ""));
         } else if (!yank && yanked) {
             Lifecycle.clear(exchange, store, coordinate, version);
         }

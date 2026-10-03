@@ -2,6 +2,7 @@ package build.jenesis.repository.format.swift;
 
 import module java.base;
 
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.store.Publication;
@@ -167,10 +168,10 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
         importer.importArtifact(path, content, store);
     }
 
-    /** A yank surfaces in the metadata this format's clients read, so one is accepted here. */
+    /** The marks this format's clients see, each by its own word. */
     @Override
-    public boolean surfacesYank() {
-        return true;
+    public Map<LifecycleMark, String> lifecycleMarks() {
+        return LifecycleMark.shown(LifecycleMark.YANKED);
     }
 
     @Override

@@ -6,6 +6,7 @@ import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.server.kernel.RepositoryRequests;
 import build.jenesis.repository.store.ArtifactStore;
@@ -48,7 +49,7 @@ public final class LifecycleMarks {
     }
 
     /** One marked version. */
-    public record Mark(String coordinate, String version, Lifecycle.State state, String message) {
+    public record Mark(String coordinate, String version, LifecycleMark state, String message) {
     }
 
     /** A page of marks and the cursor that continues it, {@code null} at the end. */
@@ -95,52 +96,36 @@ public final class LifecycleMarks {
                 .orElse(coordinate);
     }
 
-    /** The marks a repository of type {@code type} shows its clients, in the order a reader is offered them: each its
-     *  formats surface ({@link RepositoryFormat#surfacesDeprecation()}, {@link RepositoryFormat#surfacesYank()}), none
-     *  for a type nothing installed defines. Held per type, since a type's formats are fixed for the life of the
-     *  process and a page asks on every render. */
-    public static Set<Lifecycle.State> states(String type) {
-        return type == null ? Set.of() : STATES.computeIfAbsent(type, name -> RepositoryType.installed(name)
-                .map(LifecycleMarks::states).orElse(Set.of()));
+    /** The marks a repository of type {@code type} shows its clients, in {@link LifecycleMark}'s order, each by its
+     *  formats' word for it ({@link RepositoryFormat#lifecycleMarks()}) - the first format of the type that shows a
+     *  mark names it - and none for a type nothing installed defines. Held per type, since a type's formats are fixed
+     *  for the life of the process and a page asks on every render. */
+    public static Map<LifecycleMark, String> shown(String type) {
+        return type == null ? Map.of() : SHOWN.computeIfAbsent(type, name -> RepositoryType.installed(name)
+                .map(LifecycleMarks::shown).orElse(Map.of()));
     }
 
-    private static final Map<String, Set<Lifecycle.State>> STATES = new ConcurrentHashMap<>();
+    private static final Map<String, Map<LifecycleMark, String>> SHOWN = new ConcurrentHashMap<>();
 
-    /** What a repository of {@code type} calls a yank: its formats' own word, "yanked" where none says otherwise. */
-    public static String yankName(String type) {
-        return type == null ? "yanked" : RepositoryType.installed(type).stream()
-                .flatMap(installed -> installed.formats().stream()).filter(RepositoryFormat::surfacesYank)
-                .map(RepositoryFormat::yankName).findFirst().orElse("yanked");
-    }
-
-    /** What {@code repository} calls a yank, as {@link #yankName(String)} answers for its type. */
-    public String yankName(String tenant, String repository) throws IOException {
-        return yankName(type(tenant, repository).map(RepositoryType::name).orElse(null));
-    }
-
-    private static Set<Lifecycle.State> states(RepositoryType type) {
-        Set<Lifecycle.State> shown = EnumSet.noneOf(Lifecycle.State.class);
+    private static Map<LifecycleMark, String> shown(RepositoryType type) {
+        Map<LifecycleMark, String> shown = new EnumMap<>(LifecycleMark.class);
         for (RepositoryFormat format : type.formats()) {
-            if (format.surfacesDeprecation()) {
-                shown.add(Lifecycle.State.DEPRECATED);
-            }
-            if (format.surfacesYank()) {
-                shown.add(Lifecycle.State.YANKED);
-            }
+            format.lifecycleMarks().forEach(shown::putIfAbsent);
         }
-        return Collections.unmodifiableSet(shown);
+        return Collections.unmodifiableMap(shown);
     }
 
-    /** The marks {@code repository} shows its clients, by its type; none for a repository of no installed type. */
-    public Set<Lifecycle.State> states(String tenant, String repository) throws IOException {
-        return type(tenant, repository).map(LifecycleMarks::states).orElse(Set.of());
+    /** The marks {@code repository} shows its clients, by its type, as {@link #shown(String)} answers; none for a
+     *  repository of no installed type. */
+    public Map<LifecycleMark, String> shown(String tenant, String repository) throws IOException {
+        return type(tenant, repository).map(RepositoryType::name).map(LifecycleMarks::shown).orElse(Map.of());
     }
 
     /** Why {@code repository} takes no mark at all, or empty when it takes one: a format that shows a mark to no client
      *  refuses every one, since stored it would read as done while every client went on offering the version. */
     public Optional<String> refusal(String tenant, String repository) throws IOException {
         Optional<RepositoryType> type = type(tenant, repository);
-        if (type.isPresent() && states(type.get()).isEmpty()) {
+        if (type.isPresent() && shown(type.get().name()).isEmpty()) {
             return Optional.of("A " + type.get().name() + " repository shows a lifecycle mark to no client: its "
                     + "format has no metadata a client reads a deprecation or a yank from, so the mark is refused "
                     + "rather than stored where nobody would see it.");
@@ -150,26 +135,28 @@ public final class LifecycleMarks {
 
     /** Why {@code repository} takes no mark of {@code state}, or empty when it does: a deprecation on a format whose
      *  clients have no deprecation signal is refused as a mark on a format that shows none is. */
-    public Optional<String> refusal(String tenant, String repository, Lifecycle.State state) throws IOException {
+    public Optional<String> refusal(String tenant, String repository, LifecycleMark state) throws IOException {
         Optional<RepositoryType> type = type(tenant, repository);
-        if (type.isEmpty() || states(type.get()).contains(state)) {
+        if (type.isEmpty()) {
             return Optional.empty();
         }
-        Set<Lifecycle.State> shown = states(type.get());
+        Map<LifecycleMark, String> shown = shown(type.get().name());
+        if (shown.containsKey(state)) {
+            return Optional.empty();
+        }
         if (shown.isEmpty()) {
             return refusal(tenant, repository);
         }
-        String asked = state.name().toLowerCase(Locale.ROOT);
-        return Optional.of("A " + type.get().name() + " repository shows no " + asked + " mark to a client: its "
-                + "format's clients read only " + String.join(" and ", shown.stream()
-                        .map(shownState -> shownState.name().toLowerCase(Locale.ROOT)).toList())
-                + " marks, so a " + asked + " mark is refused rather than stored where nobody would see it.");
+        return Optional.of("A " + type.get().name() + " repository shows no " + state.word() + " mark to a client: "
+                + "its format's clients read only " + String.join(" and ", shown.keySet().stream()
+                        .map(LifecycleMark::word).toList())
+                + " marks, so a " + state.word() + " mark is refused rather than stored where nobody would see it.");
     }
 
     /** Mark a version, audited as {@code actor}: the refusal when the repository takes no mark, empty when marked. A
      *  traversal-unsafe coordinate or version is an {@link IllegalArgumentException}. */
     public Optional<String> mark(String tenant, String repository, String coordinate, String version,
-                                 Lifecycle.State state, String message, String actor) throws IOException {
+                                 LifecycleMark state, String message, String actor) throws IOException {
         RepositoryRequests.rejectTraversal(coordinate);
         RepositoryRequests.rejectTraversal(version);
         Optional<String> refused = refusal(tenant, repository, state);

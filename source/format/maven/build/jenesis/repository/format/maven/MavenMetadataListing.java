@@ -3,6 +3,7 @@ package build.jenesis.repository.format.maven;
 import module java.base;
 
 import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.format.Checksums;
@@ -131,7 +132,7 @@ final class MavenMetadataListing {
     void refresh(String coordinatePath, String version) throws IOException {
         StoredListing.Spec spec = spec(coordinatePath);
         if (Lifecycle.read(store, MavenMetadata.mavenCoordinate(coordinatePath), version)
-                .filter(flag -> flag.state() == Lifecycle.State.YANKED).isEmpty()
+                .filter(flag -> flag.state() == LifecycleMark.YANKED).isEmpty()
                 && new ServableNames(store).disclosableVersionFolder("/maven/" + coordinatePath + "/" + version)) {
             StoredListing.put(store, spec, version, version.getBytes(StandardCharsets.UTF_8));
             return;

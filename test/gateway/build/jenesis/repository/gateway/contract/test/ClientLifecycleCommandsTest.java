@@ -6,6 +6,7 @@ import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.gateway.testkit.FormatDrive;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
@@ -54,7 +55,7 @@ class ClientLifecycleCommandsTest {
         assertThat(yank.status).isEqualTo(200);
         assertThat(new String(yank.body(), StandardCharsets.UTF_8)).isEqualTo("Successfully deleted gem: rake (13.0.0)");
         assertThat(Lifecycle.read(store, "rake", "13.0.0")).get().extracting(Lifecycle.Flag::state)
-                .isEqualTo(Lifecycle.State.YANKED);
+                .isEqualTo(LifecycleMark.YANKED);
         assertThat(yank.audited).containsExactly(AuditActions.LIFECYCLE_YANKED + " rake@13.0.0");
 
         FormatDrive.Call again = call("rubygems", new FormatDrive.Call("DELETE", "/rubygems/api/v1/gems/yank",
@@ -126,7 +127,7 @@ class ClientLifecycleCommandsTest {
 
         assertThat(delete.status).isEqualTo(204);
         assertThat(Lifecycle.read(store, "newtonsoft.json", "13.0.1")).get().extracting(Lifecycle.Flag::state)
-                .as("the mark NuGet renders as listed: false").isEqualTo(Lifecycle.State.YANKED);
+                .as("the mark NuGet renders as listed: false").isEqualTo(LifecycleMark.YANKED);
         assertThat(delete.audited).containsExactly(AuditActions.LIFECYCLE_YANKED + " newtonsoft.json@13.0.1");
         assertThat(call("nuget", new FormatDrive.Call("DELETE", "/nuget/v3/package/Newtonsoft.Json/2.0.0")).status)
                 .as("a version the feed does not hold").isEqualTo(404);
@@ -140,7 +141,7 @@ class ClientLifecycleCommandsTest {
                 "use something else")));
         assertThat(deprecate.status).isEqualTo(201);
         assertThat(Lifecycle.read(store, "left-pad", "1.3.0")).contains(
-                new Lifecycle.Flag(Lifecycle.State.DEPRECATED, "use something else"));
+                new Lifecycle.Flag(LifecycleMark.DEPRECATED, "use something else"));
         assertThat(deprecate.audited).containsExactly(AuditActions.LIFECYCLE_DEPRECATED + " left-pad@1.3.0");
 
         FormatDrive.Call echo = call("npm", new FormatDrive.Call("PUT", "/npm/left-pad", packument(
@@ -160,14 +161,14 @@ class ClientLifecycleCommandsTest {
     @Test
     void npm_deprecate_never_turns_a_yank_into_a_deprecation() throws IOException {
         held("npm/left-pad/tarballs/left-pad-1.3.0.tgz");
-        Lifecycle.mark(store, "left-pad", "1.3.0", new Lifecycle.Flag(Lifecycle.State.YANKED, ""));
+        Lifecycle.mark(store, "left-pad", "1.3.0", new Lifecycle.Flag(LifecycleMark.YANKED, ""));
 
         FormatDrive.Call deprecate = call("npm", new FormatDrive.Call("PUT", "/npm/left-pad", packument(
                 "This version has been yanked.")));
 
         assertThat(deprecate.status).isEqualTo(201);
         assertThat(Lifecycle.read(store, "left-pad", "1.3.0")).get().extracting(Lifecycle.Flag::state)
-                .isEqualTo(Lifecycle.State.YANKED);
+                .isEqualTo(LifecycleMark.YANKED);
         assertThat(deprecate.audited).isEmpty();
     }
 

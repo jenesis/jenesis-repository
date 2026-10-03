@@ -3,6 +3,7 @@ package build.jenesis.repository.format.winget;
 import module java.base;
 import module tools.jackson.databind;
 
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.format.ExportTarget;
@@ -90,10 +91,10 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         return "winget";
     }
 
-    /** A yank surfaces in the metadata this format's clients read, so one is accepted here. */
+    /** The marks this format's clients see, each by its own word. */
     @Override
-    public boolean surfacesYank() {
-        return true;
+    public Map<LifecycleMark, String> lifecycleMarks() {
+        return LifecycleMark.shown(LifecycleMark.YANKED);
     }
 
     @Override

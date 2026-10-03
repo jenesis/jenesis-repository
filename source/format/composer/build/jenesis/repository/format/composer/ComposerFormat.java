@@ -3,6 +3,7 @@ package build.jenesis.repository.format.composer;
 import module java.base;
 import module tools.jackson.databind;
 
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.blobs.RequestBase;
 import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
@@ -88,10 +89,10 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
         return "composer";
     }
 
-    /** A deprecation surfaces in the metadata this format's clients read, so one is accepted here. */
+    /** The marks this format's clients see, each by its own word. */
     @Override
-    public boolean surfacesDeprecation() {
-        return true;
+    public Map<LifecycleMark, String> lifecycleMarks() {
+        return LifecycleMark.shown(LifecycleMark.DEPRECATED);
     }
 
     @Override

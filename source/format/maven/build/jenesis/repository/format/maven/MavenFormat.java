@@ -2,6 +2,7 @@ package build.jenesis.repository.format.maven;
 
 import module java.base;
 import module org.slf4j;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.format.ArtifactLayout;
@@ -43,17 +44,11 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         return "maven";
     }
 
-    /** A yank surfaces in the metadata this format's clients read, so one is accepted here. */
+    /** A yank shows, as Maven people say it: an unlisted version is left out of {@code maven-metadata.xml}, so ranges
+     *  and the newest-version lookups skip it while a build naming it exactly still gets it. */
     @Override
-    public boolean surfacesYank() {
-        return true;
-    }
-
-    /** A yanked Maven version is left out of {@code maven-metadata.xml}: ranges and the newest-version lookups skip it
-     *  while a build naming it exactly still gets it, which Maven people call unlisting. */
-    @Override
-    public String yankName() {
-        return "unlisted";
+    public Map<LifecycleMark, String> lifecycleMarks() {
+        return Map.of(LifecycleMark.YANKED, "unlisted");
     }
 
     /** Maven's paths keep their {@code /maven/} segment inside a repository ({@code /repository/<name>/maven/...}), so

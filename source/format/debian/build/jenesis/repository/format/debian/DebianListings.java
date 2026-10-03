@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.walk.BoundedChildren;
@@ -365,7 +366,7 @@ final class DebianListings {
         }
         String withoutEpoch = version.indexOf(':') < 0 ? version : version.substring(version.indexOf(':') + 1);
         return Lifecycle.read(store, name, withoutEpoch)
-                .filter(flag -> flag.state() == Lifecycle.State.YANKED)
+                .filter(flag -> flag.state() == LifecycleMark.YANKED)
                 .isPresent();
     }
 

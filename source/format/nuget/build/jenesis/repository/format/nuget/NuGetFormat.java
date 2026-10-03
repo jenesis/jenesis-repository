@@ -13,6 +13,7 @@ import build.jenesis.repository.blobs.ProxyLeg;
 import build.jenesis.repository.blobs.ProxyRelay;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.icon.IconResource;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.ArtifactSignatures;
@@ -52,23 +53,11 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         return "nuget";
     }
 
-    /** A deprecation surfaces in the metadata this format's clients read, so one is accepted here. */
+    /** A deprecation shows, and a yank as NuGet itself says it: an unlisted version is left out of search and
+     *  resolution and still installable by its exact version. */
     @Override
-    public boolean surfacesDeprecation() {
-        return true;
-    }
-
-    /** A yank surfaces in the metadata this format's clients read, so one is accepted here. */
-    @Override
-    public boolean surfacesYank() {
-        return true;
-    }
-
-    /** NuGet itself calls a version left out of search and resolution, and still installable by its exact version,
-     *  unlisted. */
-    @Override
-    public String yankName() {
-        return "unlisted";
+    public Map<LifecycleMark, String> lifecycleMarks() {
+        return Map.of(LifecycleMark.DEPRECATED, LifecycleMark.DEPRECATED.word(), LifecycleMark.YANKED, "unlisted");
     }
 
     /** A package's marks name its id in lower case, as every path of the feed does. */
@@ -559,8 +548,8 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
             exchange.respond(404);
             return;
         }
-        if (Lifecycle.read(store, id, version).filter(flag -> flag.state() == Lifecycle.State.YANKED).isEmpty()) {
-            Lifecycle.mark(exchange, store, id, version, new Lifecycle.Flag(Lifecycle.State.YANKED, ""));
+        if (Lifecycle.read(store, id, version).filter(flag -> flag.state() == LifecycleMark.YANKED).isEmpty()) {
+            Lifecycle.mark(exchange, store, id, version, new Lifecycle.Flag(LifecycleMark.YANKED, ""));
         }
         exchange.respond(204);
     }

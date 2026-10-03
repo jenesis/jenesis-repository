@@ -16,6 +16,7 @@ import build.jenesis.repository.blobs.ProxyLeg;
 import build.jenesis.repository.blobs.ProxyRelay;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -90,16 +91,10 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         return "cocoapods";
     }
 
-    /** A deprecation surfaces in the metadata this format's clients read, so one is accepted here. */
+    /** The marks this format's clients see, each by its own word. */
     @Override
-    public boolean surfacesDeprecation() {
-        return true;
-    }
-
-    /** A yank surfaces in the metadata this format's clients read, so one is accepted here. */
-    @Override
-    public boolean surfacesYank() {
-        return true;
+    public Map<LifecycleMark, String> lifecycleMarks() {
+        return LifecycleMark.shown(LifecycleMark.DEPRECATED, LifecycleMark.YANKED);
     }
 
     @Override
@@ -314,7 +309,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         // nothing else, so a YANKED mark instead drops the version from the shard listing. An unmarked podspec gets no
         // field the publisher did not write.
         Lifecycle.read(blobs.store(), name, version)
-                .filter(flag -> flag.state() == Lifecycle.State.DEPRECATED)
+                .filter(flag -> flag.state() == LifecycleMark.DEPRECATED)
                 .ifPresent(flag -> podspec.put("deprecated", true));
         exchange.setResponseHeader("Content-Type", "application/json");
         exchange.answer(MAPPER.writeValueAsBytes(podspec));

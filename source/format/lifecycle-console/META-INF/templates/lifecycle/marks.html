@@ -9,7 +9,7 @@
 
     <!--/* Only the marks this repository's clients see are explained and offered. */-->
     <p><small><th:block th:if="${deprecates}">A <strong>deprecated</strong> version still installs, and its client
-        warns whoever installs it. </th:block><th:block th:if="${yanks}">An <strong th:text="${yankName}">unlisted</strong> version
+        warns whoever installs it. </th:block><th:block th:if="${yanks}">An <strong th:text="${labels.get(yank)}">unlisted</strong> version
         stays for whoever names it exactly, and no new resolution picks it. </th:block>Each client sees the mark in its
         own metadata.</small></p>
 

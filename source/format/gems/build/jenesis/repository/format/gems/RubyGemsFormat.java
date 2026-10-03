@@ -19,6 +19,7 @@ import build.jenesis.repository.blobs.ProxyLeg;
 import build.jenesis.repository.blobs.ProxyRelay;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.icon.IconResource;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.ArtifactSignatures;
@@ -60,10 +61,10 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
         return "rubygems";
     }
 
-    /** A yank surfaces in the metadata this format's clients read, so one is accepted here. */
+    /** The marks this format's clients see, each by its own word. */
     @Override
-    public boolean surfacesYank() {
-        return true;
+    public Map<LifecycleMark, String> lifecycleMarks() {
+        return LifecycleMark.shown(LifecycleMark.YANKED);
     }
 
     @Override
@@ -319,12 +320,12 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
             exchange.respond(404, ("The version " + version + " does not exist.").getBytes(StandardCharsets.UTF_8));
             return;
         }
-        if (Lifecycle.read(store, name, held).filter(flag -> flag.state() == Lifecycle.State.YANKED).isPresent()) {
+        if (Lifecycle.read(store, name, held).filter(flag -> flag.state() == LifecycleMark.YANKED).isPresent()) {
             exchange.respond(422, ("The version " + version + " has already been yanked.")
                     .getBytes(StandardCharsets.UTF_8));
             return;
         }
-        Lifecycle.mark(exchange, store, name, held, new Lifecycle.Flag(Lifecycle.State.YANKED, ""));
+        Lifecycle.mark(exchange, store, name, held, new Lifecycle.Flag(LifecycleMark.YANKED, ""));
         exchange.respond(200, ("Successfully deleted gem: " + name + " (" + held + ")")
                 .getBytes(StandardCharsets.UTF_8));
     }
