@@ -5,6 +5,7 @@ import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ServableNames;
+import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -63,6 +64,10 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
             // exists, where blob() only reads the pointer, and Content-Type and Content-Length come from the store's
             // metadata, never by opening the blob.
             case "HEAD" -> {
+                if (path.endsWith("/")) {
+                    listing(path, store, exchange);
+                    return;
+                }
                 Optional<Publication.Located> located = publication.locate(path);
                 if (located.isEmpty()) {
                     exchange.respond(404);
@@ -129,7 +134,8 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
         return true;
     }
 
-    /** A directory page ({@code GET} on a trailing slash): the folder's stored listing, streamed as it is. A folder
+    /** A directory page ({@code GET} or {@code HEAD} on a trailing slash): the folder's stored listing, streamed as it
+     *  is. A folder
      *  with no servable child - none published, or all screened away - is a {@code 404}; the structural probe is paid
      *  only until the page exists. */
     private void listing(String path, ArtifactStore store, FormatExchange exchange) throws IOException {
@@ -149,17 +155,7 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
                 exchange.respond(404);   // every child screened away - 404, as before
                 return;
             }
-            String etag = '"' + page.header().sha256() + '"';
-            exchange.setResponseHeader("ETag", etag);
-            if (etag.equals(exchange.requestHeader("If-None-Match"))) {
-                exchange.respond(304);
-                return;
-            }
-            exchange.setResponseHeader("Content-Type", "text/html");
-            // Streamed: the document is the size of the folder.
-            try (OutputStream out = exchange.respond(200, page.header().size())) {
-                page.body().transferTo(out);
-            }
+            Listings.serve(exchange, page, "text/html");
         }
     }
 

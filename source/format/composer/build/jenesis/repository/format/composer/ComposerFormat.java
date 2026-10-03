@@ -3,6 +3,7 @@ package build.jenesis.repository.format.composer;
 import module java.base;
 import module tools.jackson.databind;
 
+import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.blobs.RequestBase;
 import build.jenesis.repository.blobs.BlobExport;
@@ -303,7 +304,7 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
                 exchange.respond(404);
                 return;
             }
-            respondListing(document, exchange, null);
+            Listings.serve(exchange, document, "application/json", ComposerListings.BASE, null);
         }
     }
 
@@ -353,40 +354,7 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
             return;
         }
         try (StoredListing.Served document = served.get()) {
-            respondListing(document, exchange, repoBase(repo, exchange));
-        }
-    }
-
-    /** Stream a stored listing as JSON; with a base, the stored placeholder is completed on the way out, so no
-     *  {@code Content-Length} is sent. The ETag is the document's digest folded with the base. */
-    private static void respondListing(StoredListing.Served document, FormatExchange exchange, String base)
-            throws IOException {
-        String etag = '"' + document.header().sha256() + (base == null ? "" : "-" + Integer.toHexString(base.hashCode()))
-                + '"';
-        exchange.setResponseHeader("ETag", etag);
-        if (etag.equals(exchange.requestHeader("If-None-Match"))) {
-            exchange.respond(304);
-            return;
-        }
-        exchange.setResponseHeader("Content-Type", "application/json");
-        if (exchange.method().equals("HEAD")) {
-            if (base == null) {
-                exchange.setResponseHeader("Content-Length", Long.toString(document.header().size()));
-            }
-            exchange.respond(200, -1L).close();
-            return;
-        }
-        if (base == null) {
-            // Streamed: the document is the size of what it lists.
-            try (OutputStream out = exchange.respond(200, document.header().size())) {
-                document.body().transferTo(out);
-            }
-        } else {
-            // Streamed with the rewrite folded in: a package's document is every version. The length changes, so it is
-            // not declared.
-            try (OutputStream out = exchange.respond(200, -1L)) {
-                document.copyTo(out, ComposerListings.BASE, base);
-            }
+            Listings.serve(exchange, document, "application/json", ComposerListings.BASE, repoBase(repo, exchange));
         }
     }
 

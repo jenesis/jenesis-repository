@@ -9,6 +9,7 @@ import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.blobs.Keys;
 import build.jenesis.repository.blobs.ProxyLeg;
 import build.jenesis.repository.blobs.ProxyRelay;
+import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.ExportTarget;
 import build.jenesis.repository.format.RepositoryExporter;
@@ -1078,22 +1079,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
             return;
         }
         try (StoredListing.Served document = served.get()) {
-            String etag = '"' + document.header().sha256() + "-" + Integer.toHexString(tarballBase.hashCode()) + '"';
-            exchange.setResponseHeader("ETag", etag);
-            if (etag.equals(exchange.requestHeader("If-None-Match"))) {
-                exchange.respond(304);
-                return;
-            }
-            exchange.setResponseHeader("Content-Type", "application/json");
-            if (exchange.method().equals("HEAD")) {
-                exchange.respond(200, -1L).close();
-                return;
-            }
-            // Streamed with the rewrite folded in: a package's document is every version of it. The length changes, so
-            // it is not declared.
-            try (OutputStream out = exchange.respond(200, -1L)) {
-                document.copyTo(out, NpmListings.BASE, tarballBase);
-            }
+            // Streamed with the tarball base folded in: a package's document is every version of it.
+            Listings.serve(exchange, document, "application/json", NpmListings.BASE, tarballBase);
         }
     }
 

@@ -2,6 +2,7 @@ package build.jenesis.repository.format.swift;
 
 import module java.base;
 
+import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.blobs.Blobs;
@@ -785,23 +786,8 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
 
     private static void respondDocument(FormatExchange exchange, StoredListing.Served served, String contentType)
             throws IOException {
-        String etag = '"' + served.header().sha256() + '"';
-        exchange.setResponseHeader("ETag", etag);
         exchange.setResponseHeader(CONTENT_VERSION, API_VERSION);
-        if (etag.equals(exchange.requestHeader("If-None-Match"))) {
-            exchange.respond(304);
-            return;
-        }
-        exchange.setResponseHeader("Content-Type", contentType);
-        if (exchange.method().equals("HEAD")) {
-            exchange.setResponseHeader("Content-Length", Long.toString(served.header().size()));
-            exchange.respond(200, -1L).close();
-            return;
-        }
-        // Streamed: the document is the size of what it lists.
-        try (OutputStream out = exchange.respond(200, served.header().size())) {
-            served.body().transferTo(out);
-        }
+        Listings.serve(exchange, served, contentType);
     }
 
     private static void respondBytes(FormatExchange exchange, byte[] body, String contentType) throws IOException {

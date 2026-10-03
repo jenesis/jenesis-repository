@@ -59,6 +59,14 @@ class RawFormatTest {
         assertThat(listing.responseHeader("Content-Type")).isEqualTo("text/html");
         assertThat(listing.responseText()).contains("file.bin");
 
+        // A folder answers HEAD as it answers GET, from the listing's header: the file branch it fell into before
+        // found no pointer for the folder and answered 404.
+        FakeExchange folderHead = new FakeExchange("HEAD", "/raw/dir/");
+        format.handle(folderHead, store);
+        assertThat(folderHead.status()).isEqualTo(200);
+        assertThat(folderHead.responseHeader("ETag")).isEqualTo(listing.responseHeader("ETag")).isNotNull();
+        assertThat(folderHead.responseBytes()).isEmpty();
+
         FakeExchange delete = new FakeExchange("DELETE", "/raw/dir/file.bin");
         format.handle(delete, store);
         assertThat(delete.status()).isEqualTo(204);

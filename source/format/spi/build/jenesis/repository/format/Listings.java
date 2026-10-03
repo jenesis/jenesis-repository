@@ -52,7 +52,28 @@ public final class Listings {
      */
     public static void serve(FormatExchange exchange, StoredListing.Served document, String contentType,
                              long length, Body body) throws IOException {
-        String etag = '"' + document.header().sha256() + '"';
+        serve(exchange, '"' + document.header().sha256() + '"', contentType, length, body);
+    }
+
+    /**
+     * The same answer for a listing that stores a placeholder for the base its links are served under, completed with
+     * {@code base} on the way out - a package document whose archive URLs name the host a client asked through. The
+     * validator folds the base into the stored digest, since one document answers differently under two bases, and no
+     * length is declared, since completing the placeholder changes it. A {@code null} base serves the document as
+     * stored.
+     */
+    public static void serve(FormatExchange exchange, StoredListing.Served document, String contentType,
+                             String placeholder, String base) throws IOException {
+        if (base == null) {
+            serve(exchange, document, contentType);
+            return;
+        }
+        serve(exchange, '"' + document.header().sha256() + "-" + Integer.toHexString(base.hashCode()) + '"',
+                contentType, -1L, out -> document.copyTo(out, placeholder, base));
+    }
+
+    private static void serve(FormatExchange exchange, String etag, String contentType, long length, Body body)
+            throws IOException {
         exchange.setResponseHeader("ETag", etag);
         if (etag.equals(exchange.requestHeader("If-None-Match"))) {
             exchange.respond(304);

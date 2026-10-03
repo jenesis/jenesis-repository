@@ -11,6 +11,7 @@ import build.jenesis.repository.blobs.Keys;
 import build.jenesis.repository.blobs.OutboundTargets;
 import build.jenesis.repository.blobs.ProxyLeg;
 import build.jenesis.repository.blobs.ProxyRelay;
+import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.format.LifecycleMark;
@@ -496,40 +497,7 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
             return;
         }
         try (StoredListing.Served document = served.get()) {
-            respondListing(document, exchange, null);
-        }
-    }
-
-    /** Stream a stored listing as JSON; with a base, the stored placeholder is completed on the way out, so no
-     *  {@code Content-Length} is sent. The ETag is the document's digest folded with the base. */
-    private static void respondListing(StoredListing.Served document, FormatExchange exchange, String base)
-            throws IOException {
-        String etag = '"' + document.header().sha256() + (base == null ? "" : "-" + Integer.toHexString(base.hashCode()))
-                + '"';
-        exchange.setResponseHeader("ETag", etag);
-        if (etag.equals(exchange.requestHeader("If-None-Match"))) {
-            exchange.respond(304);
-            return;
-        }
-        exchange.setResponseHeader("Content-Type", "application/json");
-        if (exchange.method().equals("HEAD")) {
-            if (base == null) {
-                exchange.setResponseHeader("Content-Length", Long.toString(document.header().size()));
-            }
-            exchange.respond(200, -1L).close();
-            return;
-        }
-        if (base == null) {
-            // Streamed: the document is the size of what it lists.
-            try (OutputStream out = exchange.respond(200, document.header().size())) {
-                document.body().transferTo(out);
-            }
-        } else {
-            // Streamed with the rewrite folded in: a package's document is every version of it. The length changes, so
-            // it is not declared.
-            try (OutputStream out = exchange.respond(200, -1L)) {
-                document.copyTo(out, NuGetListings.BASE, base);
-            }
+            Listings.serve(exchange, document, "application/json", NuGetListings.BASE, null);
         }
     }
 
@@ -636,7 +604,7 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
             return;
         }
         try (StoredListing.Served document = served.get()) {
-            respondListing(document, exchange, nuget);
+            Listings.serve(exchange, document, "application/json", NuGetListings.BASE, nuget);
         }
     }
 
@@ -1041,11 +1009,6 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         NodeList nodes = document.getElementsByTagName(tag);
         return nodes.getLength() == 0 ? null : nodes.item(0).getTextContent().trim();
     }
-
-
-
-
-
 
     /** The migration-import capability, delegated to {@link NuGetImporter}. */
     private final NuGetImporter importer = new NuGetImporter();
