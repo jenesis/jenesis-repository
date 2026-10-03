@@ -7,6 +7,7 @@ import build.jenesis.repository.store.PublishInterceptor;
 
 import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.blobs.PathKeyedBlobLayout;
 import build.jenesis.repository.format.ExportTarget;
 import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.blobs.Blobs;
@@ -42,7 +43,8 @@ import build.jenesis.repository.store.Publication;
  * for a bottle mirrored from homebrew-core the client falls back to the default domain and installs from upstream. A
  * hold is a statement about what this repository serves, not what a client ends up with.
  */
-public final class HomebrewFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, ArtifactSignatures, RepositoryExporter {
+public final class HomebrewFormat implements RepositoryFormat, ArtifactLayout, PathKeyedBlobLayout, ArtifactSignatures,
+        RepositoryExporter {
 
     /** The package-ecosystem name Homebrew coordinates report. */
     public static final String ECOSYSTEM = "Homebrew";
@@ -262,30 +264,6 @@ public final class HomebrewFormat implements RepositoryFormat, ArtifactLayout, B
             }
         }
         return keys;
-    }
-
-    /**
-     * {@inheritDoc}
-     *
-     * <p>This layout's pointer key is its served path without the leading slash, so the request-path describer is the
-     * parse, re-keyed to the pointer. It answers only when the description names a version: {@code describe} falls back
-     * to a coordinate-less descriptor for files beside an artifact, while a repair walking the blob root needs empty
-     * for those. {@code BlobLayoutCoordinateSeamTest} drives both halves over keys this layout wrote.
-     */
-    @Override
-    public Optional<ArtifactDescriptor> describePointer(String key) {
-        return describe("/" + key)
-                .filter(described -> described.coordinate() != null && described.version() != null)
-                .map(described -> described.withPath(key));
-    }
-
-    @Override
-    public List<String> servedPaths(String coordinate, String version, ArtifactStore store) throws IOException {
-        List<String> paths = new ArrayList<>();
-        for (String key : blobKeys(coordinate, version, store)) {
-            paths.add("/" + key);
-        }
-        return paths;
     }
 
     /** Each bottle of the version is put at its path, its attestations document after it. */

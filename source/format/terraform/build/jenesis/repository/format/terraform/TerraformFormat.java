@@ -5,6 +5,7 @@ import module java.base;
 import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.blobs.PathKeyedBlobLayout;
 import build.jenesis.repository.format.ExportTarget;
 import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.blobs.Blobs;
@@ -53,7 +54,7 @@ import build.jenesis.repository.format.Listings;
  * every format's prefix, so another module contributes it, and without it {@code terraform init} cannot find the
  * registry.
  */
-public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, RepositoryExporter,
+public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, PathKeyedBlobLayout, RepositoryExporter,
         RepositoryImporter, ProxyLeg {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -846,29 +847,6 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
             }
         }
         return keys;
-    }
-
-    /**
-     * {@inheritDoc}
-     *
-     * <p>The pointer key is the served path without its leading slash, so the request-path parse is reused and the
-     * description re-keyed to the pointer. Only when it names a version: {@code describe} falls back to a
-     * coordinate-less descriptor for indexes and checksums, which a repair walking the blob root must read as empty.
-     */
-    @Override
-    public Optional<ArtifactDescriptor> describePointer(String key) {
-        return describe("/" + key)
-                .filter(described -> described.coordinate() != null && described.version() != null)
-                .map(described -> described.withPath(key));
-    }
-
-    @Override
-    public List<String> servedPaths(String coordinate, String version, ArtifactStore store) throws IOException {
-        List<String> paths = new ArrayList<>();
-        for (String key : blobKeys(coordinate, version, store)) {
-            paths.add("/" + key);
-        }
-        return paths;
     }
 
     /** The version's module archive, or each of a provider version's platform zips, is put at its path; the

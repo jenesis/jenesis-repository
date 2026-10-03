@@ -5,6 +5,7 @@ import module java.base;
 import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.blobs.PathKeyedBlobLayout;
 import build.jenesis.repository.format.ExportTarget;
 import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.blobs.Blobs;
@@ -47,8 +48,8 @@ import build.jenesis.repository.format.Listings;
  * an RSA key pair, every archive carries a {@code .SIGN.RSA256.} member, and the public half is served at
  * {@code GET /apk/keys/jenesis.rsa.pub} for {@code /etc/apk/keys/} ({@link ApkSigner}).
  */
-public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, ArtifactSignatures, RepositoryExporter,
-        RepositoryImporter, ProxyLeg {
+public final class ApkFormat implements RepositoryFormat, ArtifactLayout, PathKeyedBlobLayout, ArtifactSignatures,
+        RepositoryExporter, RepositoryImporter, ProxyLeg {
 
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(ApkFormat.class);
 
@@ -545,29 +546,6 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, BlobLa
             }
         }
         return keys;
-    }
-
-    /**
-     * {@inheritDoc}
-     *
-     * <p>The pointer key is the served path without its leading slash, so the request-path parse is reused and the
-     * description re-keyed to the pointer. Only when it names a version: {@code describe} falls back to a
-     * coordinate-less descriptor for indexes and checksums, which a repair walking the blob root must read as empty.
-     */
-    @Override
-    public Optional<ArtifactDescriptor> describePointer(String key) {
-        return describe("/" + key)
-                .filter(described -> described.coordinate() != null && described.version() != null)
-                .map(described -> described.withPath(key));
-    }
-
-    @Override
-    public List<String> servedPaths(String coordinate, String version, ArtifactStore store) throws IOException {
-        List<String> paths = new ArrayList<>();
-        for (String key : blobKeys(coordinate, version, store)) {
-            paths.add("/" + key);
-        }
-        return paths;
     }
 
     /** Each {@code .apk} of the version is put at {@code <repo>/<arch>/<file>}; the target derives and signs its own

@@ -5,6 +5,7 @@ import module java.base;
 import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.blobs.PathKeyedBlobLayout;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.format.ArtifactSignatures;
@@ -50,7 +51,7 @@ import tools.jackson.databind.node.ObjectNode;
  * <p>A withheld release leaves the release list; a yanked one stays with the specification's {@code problem} object
  * (see {@link SwiftListings}).
  */
-public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, ArtifactSignatures,
+public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, PathKeyedBlobLayout, ArtifactSignatures,
         RepositoryExporter, RepositoryImporter, ProxyLeg {
 
     /** The archive signature's sidecar suffix under the archive key and path: {@code <version>.zip.sig}. */
@@ -858,30 +859,6 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Blob
             }
         }
         return keys;
-    }
-
-    /**
-     * {@inheritDoc}
-     *
-     * <p>This layout's pointer key is its served path without the leading slash, so the request-path describer is the
-     * parse, re-keyed to the pointer. It answers only when the description names a version: {@code describe} falls back
-     * to a coordinate-less descriptor for the documents beside an artifact, while a repair walking the blob root needs
-     * empty for those. {@code BlobLayoutCoordinateSeamTest} drives both halves over keys this layout wrote.
-     */
-    @Override
-    public Optional<ArtifactDescriptor> describePointer(String key) {
-        return describe("/" + key)
-                .filter(described -> described.coordinate() != null && described.version() != null)
-                .map(described -> described.withPath(key));
-    }
-
-    @Override
-    public List<String> servedPaths(String coordinate, String version, ArtifactStore store) throws IOException {
-        List<String> paths = new ArrayList<>();
-        for (String key : blobKeys(coordinate, version, store)) {
-            paths.add("/" + key);
-        }
-        return paths;
     }
 
     /** Each registry's release is published as a client publishes one: a multipart {@code PUT} to
