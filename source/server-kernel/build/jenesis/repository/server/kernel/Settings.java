@@ -195,9 +195,8 @@ public final class Settings {
                 throw new IllegalArgumentException("Setting '" + key + "' cannot be set for a repository");
             }
         }
-        StoredSettings.write(StoredSettings.repository(root, tenant, repository), values);
+        writeInto(StoredSettings.repository(root, tenant, repository), values);
         repositorySnapshots.remove(tenant + "/" + repository);
-        epoch.bump();
     }
 
     /** Every stored override, sorted; a surface renders these over the file defaults it already knows. */
@@ -245,33 +244,19 @@ public final class Settings {
         return values;
     }
 
-    /** Compare-and-set values into a store's owning module documents (the deployment root for a global write, a
-     *  tenant's scope for a per-tenant one), re-reading and retrying a lost race so a concurrent change to another key
-     *  is never clobbered. Does not refresh a snapshot - the caller reloads the affected view. */
+    /** Compare-and-set values into a store's owning module documents - the deployment root, a tenant's scope, a
+     *  repository's or a project's - re-reading and retrying a lost race so a concurrent change to another key is never
+     *  clobbered, every scope through this one path. Does not refresh a snapshot - the caller reloads the affected
+     *  view. */
     private void writeInto(ArtifactStore store, Map<String, String> values) throws IOException {
         // Encrypt (or refuse) every SECRET value up front, before any store read/write, so a refusal persists nothing
-        // and a stored SECRET is always an enc:v1: envelope, never plaintext.
-        Map<String, Map<String, String>> byModule = new TreeMap<>();
+        // and a stored SECRET is always an enc:v1: envelope, never plaintext - at whichever scope it is set.
+        Map<String, String> sealed = new LinkedHashMap<>();
         for (Map.Entry<String, String> entry : values.entrySet()) {
             String value = entry.getValue();
-            byModule.computeIfAbsent(SettingsDocuments.moduleOf(entry.getKey()), _ -> new LinkedHashMap<>())
-                    .put(entry.getKey(), value == null || value.isBlank() ? "" : forStore(entry.getKey(), value.trim()));
+            sealed.put(entry.getKey(), value == null || value.isBlank() ? "" : forStore(entry.getKey(), value.trim()));
         }
-        for (Map.Entry<String, Map<String, String>> module : byModule.entrySet()) {
-            Retries.update(store, SettingsDocuments.document(module.getKey()), current -> {
-                Map<String, String> stored = current
-                        .map(versioned -> SettingsDocuments.parse(versioned.content()))
-                        .orElseGet(LinkedHashMap::new);
-                module.getValue().forEach((key, value) -> {
-                    if (value.isEmpty()) {
-                        stored.remove(key);
-                    } else {
-                        stored.put(key, value);
-                    }
-                });
-                return SettingsDocuments.serialize(stored);
-            });
-        }
+        StoredSettings.write(store, sealed);
         epoch.bump();
     }
 
@@ -315,8 +300,7 @@ public final class Settings {
                 throw new IllegalArgumentException("Setting '" + key + "' cannot be set for a project");
             }
         }
-        StoredSettings.write(StoredSettings.project(root, tenant, project), values);
-        epoch.bump();
+        writeInto(StoredSettings.project(root, tenant, project), values);
     }
 
     /** Every stored settings document, module name to that module's stored overrides, read straight from the store -
