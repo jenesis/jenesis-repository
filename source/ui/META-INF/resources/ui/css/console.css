@@ -56,6 +56,8 @@
     --app-status-pass-fg: #1b4332;
     --app-status-warn-bg: #fff3cd;
     --app-status-warn-fg: #664d03;
+    --app-status-high-bg: #ffe5d0;
+    --app-status-high-fg: #8a3b00;
     --app-status-danger-bg: #f8d7da;
     --app-status-danger-fg: #842029;
     --app-status-info-bg: #cfe2ff;
@@ -83,6 +85,8 @@
     --app-status-pass-fg: #a8e6bf;
     --app-status-warn-bg: #3d3210;
     --app-status-warn-fg: #ffe08a;
+    --app-status-high-bg: #3d2410;
+    --app-status-high-fg: #ffbe8a;
     --app-status-danger-bg: #3d1418;
     --app-status-danger-fg: #f5a7ae;
     --app-status-info-bg: #10243f;
@@ -95,6 +99,8 @@
         --app-status-pass-fg: #a8e6bf;
         --app-status-warn-bg: #3d3210;
         --app-status-warn-fg: #ffe08a;
+        --app-status-high-bg: #3d2410;
+        --app-status-high-fg: #ffbe8a;
         --app-status-danger-bg: #3d1418;
         --app-status-danger-fg: #f5a7ae;
         --app-status-info-bg: #10243f;
@@ -1064,6 +1070,13 @@ main .app-steps button.app-quiet:hover {
 .app-badge--danger { background: var(--app-status-danger-bg); color: var(--app-status-danger-fg); }
 .app-badge--info { background: var(--app-status-info-bg); color: var(--app-status-info-fg); }
 .app-badge--muted { background: var(--app-status-muted-bg); color: var(--app-status-muted-fg); }
+/* A severity, coloured from the most urgent down: critical as danger, high in its own orange, medium and a posture
+   warning as a warning, a posture hint as information, and low, none and unknown muted. */
+.app-severity--critical { background: var(--app-status-danger-bg); color: var(--app-status-danger-fg); }
+.app-severity--high { background: var(--app-status-high-bg); color: var(--app-status-high-fg); }
+.app-severity--medium,
+.app-severity--warn { background: var(--app-status-warn-bg); color: var(--app-status-warn-fg); }
+.app-severity--info { background: var(--app-status-info-bg); color: var(--app-status-info-fg); }
 
 /* ---- Icons ------------------------------------------------------------------------------------------------ */
 /* Masks painted with currentColor, attached to a badge's kind so two badges meaning one thing look alike on every

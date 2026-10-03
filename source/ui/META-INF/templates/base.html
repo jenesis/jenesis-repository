@@ -230,6 +230,13 @@
     </th:block>
 </p>
 
+<!--/* severity(value): a severity as every screen shows it - its band in words rather than the enum's capitals, in a
+     badge coloured by how urgent it is (.app-severity-- in console.css). Takes a vulnerability band (CRITICAL, HIGH,
+     MEDIUM, LOW, NONE, UNKNOWN) or a posture severity (CRITICAL, WARN, INFO), as an enum or a string. */-->
+<span th:fragment="severity(value)" th:with="band=${value == null} ? 'UNKNOWN' : ${#strings.toUpperCase('' + value)}"
+      class="app-badge" th:classappend="|app-severity--${#strings.toLowerCase(band)}|"
+      th:text="${band == 'WARN'} ? 'Warning' : ${#strings.capitalize(#strings.toLowerCase(band))}">Critical</span>
+
 <!--/* The two views of the installed modules - one card per module, or grouped by the contract each implements -
      reached as one screen, so the navigation does not list the same inventory twice under two names. */-->
 <nav th:fragment="moduleViews(current)" class="app-views" aria-label="Views of the modules">

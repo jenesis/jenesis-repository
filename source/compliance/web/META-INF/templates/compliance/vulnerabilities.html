@@ -95,7 +95,7 @@
                                 th:if="${artifact.ecosystem() == null}" th:text="${artifact.coordinate()}">coordinate:version</code></td>
                         <td><code th:text="${advisory.id()}">ADVISORY-1</code></td>
                         <td>
-                            <span th:text="${advisory.severity()}">CRITICAL</span>
+                            <span th:replace="~{base :: severity(${advisory.severity()})}">Critical</span>
                             <span th:if="${advisory.malicious()}" class="app-badge app-badge--danger">malicious</span>
                         </td>
                         <td>

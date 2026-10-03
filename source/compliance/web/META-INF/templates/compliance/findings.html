@@ -57,7 +57,7 @@
                     <select name="severity">
                         <option value="" th:selected="${severity == ''}">any</option>
                         <option th:each="entry : ${ {'CRITICAL','HIGH','MEDIUM','LOW','NONE'} }" th:value="${entry}"
-                                th:text="${entry}" th:selected="${entry == severity}">CRITICAL</option>
+                                th:text="${#strings.capitalize(#strings.toLowerCase(entry))}" th:selected="${entry == severity}">Critical</option>
                     </select>
                 </label>
                 <button th:replace="~{base :: secondaryButton('Filter')}">Filter</button>
@@ -113,7 +113,7 @@
                     </td>
                     <td th:text="${row.category()}">advisory</td>
                     <td>
-                        <span th:text="${row.severity()}">CRITICAL</span>
+                        <span th:replace="~{base :: severity(${row.severity()})}">Critical</span>
                         <span th:if="${row.kind() == 'malware'}" class="app-badge app-badge--danger">malicious</span>
                     </td>
                     <td>

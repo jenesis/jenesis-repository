@@ -17,13 +17,15 @@
         <strong>deployment-wide</strong> ones, which apply to every tenant and are the operator's. Another tenant's
         advisories are never shown here, and are not in the counts.</small></p>
 
+    <!--/* The count is coloured by the worst advisory it holds, as each advisory's own severity is. */-->
     <p>Advisories: <strong class="app-badge"
-            th:classappend="${posture.count() == 0} ? 'app-badge--pass' : 'app-badge--danger'"
+            th:classappend="${posture.count() == 0} ? 'app-badge--pass' : (${posture.critical() > 0} ? 'app-severity--critical'
+                    : (${posture.warn() > 0} ? 'app-severity--warn' : 'app-severity--info'))"
             th:text="${posture.count()}">0</strong>
         <span th:if="${posture.count() > 0}"><small>
             <span th:text="${posture.critical()} + ' critical'">0 critical</span>,
-            <span th:text="${posture.warn()} + ' warn'">0 warn</span>,
-            <span th:text="${posture.info()} + ' info'">0 info</span>
+            <span th:text="${posture.warn()} + (${posture.warn() == 1} ? ' warning' : ' warnings')">0 warnings</span>,
+            <span th:text="${posture.info()} + (${posture.info() == 1} ? ' hint' : ' hints')">0 hints</span>
         </small></span>
     </p>
 
@@ -66,9 +68,7 @@
                 <div class="module-badges">
                     <span th:if="${multiTenant}" class="app-badge"
                           title="Raised against this tenant's own settings; other tenants are unaffected">tenant</span>
-                    <span class="app-badge" th:text="${advisory.severity().name()}"
-                          th:classappend="${advisory.severity().name() == 'CRITICAL'} ? 'app-badge--danger'
-                                          : (${advisory.severity().name() == 'WARN'} ? 'app-badge--warn' : '')">WARN</span>
+                    <span th:replace="~{base :: severity(${advisory.severity()})}">Warning</span>
                 </div>
             </div>
             <p><small th:text="${advisory.why()}">Why this configuration is unsafe.</small></p>
@@ -97,9 +97,7 @@
                 </div>
                 <div class="module-badges">
                     <span class="app-badge" title="A property of the whole deployment; it applies to every tenant">deployment</span>
-                    <span class="app-badge" th:text="${advisory.severity().name()}"
-                          th:classappend="${advisory.severity().name() == 'CRITICAL'} ? 'app-badge--danger'
-                                          : (${advisory.severity().name() == 'WARN'} ? 'app-badge--warn' : '')">WARN</span>
+                    <span th:replace="~{base :: severity(${advisory.severity()})}">Warning</span>
                 </div>
             </div>
             <p><small th:text="${advisory.why()}">Why this configuration is unsafe.</small></p>
