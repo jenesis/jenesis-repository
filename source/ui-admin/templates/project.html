@@ -34,7 +34,7 @@
     <p th:if="${project.stats.known()}">
         <span th:text="${project.entryCount}">0</span> entries ·
         <span th:text="${@format.bytes(project.totalBytes)}">0 B</span> on disk
-        <small>as of <span th:text="${instants.display(project.stats.countedAt())}">time</span></small>
+        <small>as of <span><time th:replace="~{base :: time(${project.stats.countedAt()})}">time</time></span></small>
     </p>
     <p th:unless="${project.stats.known()}"><small>The entries have not been counted yet.</small></p>
     <th:block th:if="${project.stats.counting()}">

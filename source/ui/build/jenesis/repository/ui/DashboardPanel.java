@@ -12,11 +12,13 @@ import module java.base;
  * @param caption    what the figure counts ({@code repositories}), or empty
  * @param tone       whether the figure asks for attention
  * @param lines      a few further figures, each with its own link or none
- * @param note       how current the panel is, or why it says nothing ({@code as of 12:03}), or empty
+ * @param note       what else to say of the panel's figures - a count under way, or why the last one failed - or empty
+ * @param asOf       when the figures were counted, which the page shows in the reader's timezone, or empty where they
+ *                   are read as the page is
  * @param refreshing whether a count behind the panel is under way, so the dashboard asks again shortly
  */
 public record DashboardPanel(String title, String href, String figure, String caption, Tone tone, List<Line> lines,
-                             String note, boolean refreshing) {
+                             String note, Optional<Instant> asOf, boolean refreshing) {
 
     /** How many lines a panel shows; a longer list belongs on the screen it opens. */
     public static final int LINES = 5;
@@ -29,11 +31,12 @@ public record DashboardPanel(String title, String href, String figure, String ca
         tone = tone == null ? Tone.NEUTRAL : tone;
         lines = List.copyOf(lines.subList(0, Math.min(lines.size(), LINES)));
         note = note == null ? "" : note;
+        asOf = asOf == null ? Optional.empty() : asOf;
     }
 
     /** A panel of one figure and its lines, current as it is read. */
     public DashboardPanel(String title, String href, String figure, String caption, Tone tone, List<Line> lines) {
-        this(title, href, figure, caption, tone, lines, "", false);
+        this(title, href, figure, caption, tone, lines, "", Optional.empty(), false);
     }
 
     /** Whether the panel has something to say: a figure, a line, or a verdict - all clear, or attention - in its

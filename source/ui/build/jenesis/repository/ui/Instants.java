@@ -4,9 +4,9 @@ import module java.base;
 
 /**
  * How a console screen shows an instant: to the second, in UTC, and saying so, rather than {@link Instant}'s nanosecond
- * {@code toString}. Screens reach it as the {@code instants} model attribute. The console's script rewrites every time
- * in this form into the reader's own timezone, so this form is what a page says without a script, and the one shape
- * the script looks for.
+ * {@code toString}. Screens reach it as the {@code instants} model attribute and draw a time through the
+ * {@code base :: time} fragment - a {@code <time>} element carrying {@link #iso} as its {@code datetime}, which the
+ * console's script shows in the reader's own timezone. This form is what the element says without a script.
  */
 public final class Instants {
 
@@ -28,11 +28,24 @@ public final class Instants {
         if (value instanceof Instant instant) {
             return FORMAT.format(instant);
         }
-        String text = value.toString();
+        return instant(value).map(FORMAT::format).orElseGet(value::toString);
+    }
+
+    /** {@code value} as a machine reads it - ISO-8601 to the second, in UTC - where it is an instant, or {@code null}
+     *  where it is not, which leaves a {@code <time>} element without the {@code datetime} a script would convert. */
+    public String iso(Object value) {
+        return value == null ? null
+                : instant(value).map(at -> at.truncatedTo(ChronoUnit.SECONDS).toString()).orElse(null);
+    }
+
+    private static Optional<Instant> instant(Object value) {
+        if (value instanceof Instant instant) {
+            return Optional.of(instant);
+        }
         try {
-            return FORMAT.format(Instant.parse(text));
+            return Optional.of(Instant.parse(value.toString()));
         } catch (DateTimeParseException _) {
-            return text;
+            return Optional.empty();
         }
     }
 }

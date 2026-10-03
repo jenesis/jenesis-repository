@@ -59,15 +59,16 @@ public class ReviewDashboard extends TenantScope implements DashboardContributor
                 .map(report -> "The last count failed: " + report.failure()).orElse("");
         if (finished.isEmpty()) {
             return List.of(new DashboardPanel("Held for review", "/ui/repositories", "", "",
-                    DashboardPanel.Tone.NEUTRAL, List.of(), counting ? "Counting…" : failed, counting));
+                    DashboardPanel.Tone.NEUTRAL, List.of(), counting ? "Counting…" : failed, Optional.empty(),
+                    counting));
         }
         List<Row> all = finished.get().rows().stream().map(Row::parse).toList();
         // The first row is the tenant's totals, the rest its repositories, most held first.
         Row totals = all.getFirst();
         List<Row> rows = all.subList(1, all.size());
-        String asOf = "As of " + DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm 'UTC'", Locale.ROOT)
-                .withZone(ZoneOffset.UTC).format(finished.get().finishedAt())
-                + (counting ? ", recounting…" : "") + (failed.isEmpty() ? "" : ". " + failed);
+        Optional<Instant> asOf = Optional.of(finished.get().finishedAt());
+        String note = String.join(" ", Stream.of(counting ? "Recounting…" : "", failed)
+                .filter(said -> !said.isEmpty()).toList());
         int held = totals.held();
         boolean heldCapped = totals.capped();
         List<DashboardPanel.Line> holding = rows.stream().filter(row -> row.held() > 0)
@@ -86,12 +87,12 @@ public class ReviewDashboard extends TenantScope implements DashboardContributor
         panels.add(new DashboardPanel("Held for review", first(holding), held == 0 ? "" : count(held, heldCapped),
                 held == 0 ? "Nothing waits for a decision"
                         : held == 1 && !heldCapped ? "version waits for a decision" : "versions wait for a decision",
-                held > 0 ? DashboardPanel.Tone.ATTENTION : DashboardPanel.Tone.CLEAR, holding, asOf, counting));
+                held > 0 ? DashboardPanel.Tone.ATTENTION : DashboardPanel.Tone.CLEAR, holding, note, asOf, counting));
         if (totals.scanned()) {
             panels.add(new DashboardPanel("Vulnerabilities", first(ranked), vulnerable == 0 ? "" : count(vulnerable,
                     false), vulnerable == 0 ? "No version has a known vulnerability"
                     : vulnerable == 1 ? "version has a known vulnerability" : "versions have known vulnerabilities",
-                    vulnerable > 0 ? DashboardPanel.Tone.ATTENTION : DashboardPanel.Tone.CLEAR, ranked, asOf,
+                    vulnerable > 0 ? DashboardPanel.Tone.ATTENTION : DashboardPanel.Tone.CLEAR, ranked, note, asOf,
                     counting));
         }
         return panels;

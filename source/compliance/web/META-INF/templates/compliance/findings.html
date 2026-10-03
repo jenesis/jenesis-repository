@@ -22,7 +22,7 @@
             <a th:href="@{'/ui/repositories/' + ${repo} + '/ai-review'}">AI review queue</a>
             lists the code-audit candidates awaiting that decision.</small></p>
         <p><small th:if="${panel.lastScanned() != null}">Last scanned against the advisory feeds:
-            <span th:text="${instants.display(panel.lastScanned())}">-</span></small>
+            <span><time th:replace="~{base :: time(${panel.lastScanned()})}">-</time></span></small>
             <small th:if="${panel.lastScanned() == null}">Never scanned against the advisory feeds - rows shown come
             from publish-time screening and reviews only.</small></p>
 
@@ -122,7 +122,8 @@
                         <small th:each="label : ${row.labels()}" th:text="${label}">ai/applicability: n/a</small>
                     </td>
                     <td th:text="${row.fixed() == '' ? '—' : row.fixed()}">2.17.1</td>
-                    <td><small th:text="${instants.display(row.firstSeen())} + ' &rarr; ' + ${instants.display(row.lastSeen())}">first &rarr; last</small></td>
+                    <td><small><time th:replace="~{base :: time(${row.firstSeen()})}">first</time> &rarr; <time
+                            th:replace="~{base :: time(${row.lastSeen()})}">last</time></small></td>
                     <td>
                         <!--/* Only an AI-produced row takes a decision; the decision is a label on the
                              still-present row - reversible, never a removal. */-->

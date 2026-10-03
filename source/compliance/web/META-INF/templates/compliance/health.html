@@ -22,7 +22,7 @@
              path (re-probe the live source, persist, re-stamp); without the write role the button is not offered, but
              the last-scan time still is. */-->
         <p><small th:if="${report.lastScanned() != null}">Health last scanned against the maintainer-health source:
-            <span th:text="${instants.display(report.lastScanned())}">-</span></small>
+            <span><time th:replace="~{base :: time(${report.lastScanned()})}">-</time></span></small>
             <small th:if="${report.lastScanned() == null}">Never scanned for maintainer-health - any health shown comes
             from publish-time screening only.</small></p>
         <!--/* Running and idle read the same way here as on the vulnerability panel: the pass is started, not

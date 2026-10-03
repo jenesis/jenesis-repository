@@ -1259,44 +1259,33 @@
 /*
  * Times in the reader's own timezone.
  *
- * The server writes every instant one way, to the second in UTC and saying so ("2026-10-02 12:00:00 UTC", or to the
- * minute where a screen says "as of"), because it cannot know where its reader is. This rewrites each such time in
- * the page - on load and in whatever a refresh swaps in - into the browser's timezone, keeping the UTC original as
- * the element's title. Without a script the UTC form stays, which is still correct.
+ * The server draws every instant as a <time> element whose datetime is the instant and whose text is that instant to
+ * the second in UTC, because it cannot know where its reader is. This shows each such time - on load and in whatever a
+ * refresh swaps in - in the browser's timezone, keeping the UTC text as the element's title. Without a script the UTC
+ * text stands, which is still correct.
  */
 (function () {
     'use strict';
 
-    var UTC = /(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})(?::(\d{2}))? UTC/g;
-
-    function local(match, year, month, day, hour, minute, second) {
-        var at = new Date(Date.UTC(+year, +month - 1, +day, +hour, +minute, second ? +second : 0));
-        var options = {year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'};
-        if (second) {
-            options.second = '2-digit';
-        }
-        return at.toLocaleString(undefined, options);
-    }
+    var OPTIONS = {year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+        second: '2-digit'};
 
     function convert(root) {
-        if (!root || !document.createTreeWalker) {
+        if (!root || !root.querySelectorAll) {
             return;
         }
-        var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-        var found = [];
-        while (walker.nextNode()) {
-            UTC.lastIndex = 0;
-            if (UTC.test(walker.currentNode.nodeValue)) {
-                found.push(walker.currentNode);
-            }
+        var times = Array.prototype.slice.call(root.querySelectorAll('time[datetime]'));
+        if (root.matches && root.matches('time[datetime]')) {
+            times.push(root);
         }
-        found.forEach(function (node) {
-            var original = node.nodeValue;
-            node.nodeValue = original.replace(UTC, local);
-            var parent = node.parentNode;
-            if (parent && parent.nodeType === 1 && !parent.title) {
-                parent.title = original.trim();
+        times.forEach(function (time) {
+            var at = new Date(time.getAttribute('datetime'));
+            if (isNaN(at.getTime()) || time.hasAttribute('data-local')) {
+                return;
             }
+            time.title = time.textContent.trim();
+            time.textContent = at.toLocaleString(undefined, OPTIONS);
+            time.setAttribute('data-local', '');
         });
     }
 

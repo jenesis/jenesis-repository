@@ -237,6 +237,12 @@
     <a th:href="@{/ui/settings/modules/contracts}" th:attr="aria-current=${current == 'contract'} ? 'page' : null">By contract</a>
 </nav>
 
+<!--/* time: an instant as a screen shows it, to the second in UTC, in a <time> element whose datetime the console's
+     script shows in the reader's own timezone, keeping the UTC text as its title. Without a script the UTC text stands.
+     A value that is not an instant is shown as it is, with no datetime to convert. */-->
+<time th:fragment="time(value)" th:datetime="${instants.iso(value)}" th:text="${instants.display(value)}">2026-10-02
+    12:00:00 UTC</time>
+
 <!--/* Empty / loading / error state: one consistent treatment, never a blank screen. */-->
 <div th:fragment="empty(message)" class="app-empty" role="status">
     <div class="app-empty__icon" aria-hidden="true">∅</div>

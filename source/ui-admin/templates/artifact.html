@@ -43,12 +43,12 @@
             </tr>
             <tr th:if="${!detail.published.isEmpty()}">
                 <th scope="row">Published</th>
-                <td th:text="${instants.display(detail.published)}">2026-06-01T00:00:00Z</td>
+                <td><time th:replace="~{base :: time(${detail.published})}">2026-06-01T00:00:00Z</time></td>
             </tr>
             <tr th:if="${downloadsTracked && !detail.published.isEmpty()}">
                 <th scope="row">Downloads</th>
                 <td><span th:text="${detail.downloads}">7</span>
-                    <small th:if="${!detail.lastDownloaded.isEmpty()}" th:text="'last ' + ${instants.display(detail.lastDownloaded)}">last 2026-06-05T12:00:00Z</small>
+                    <small th:if="${!detail.lastDownloaded.isEmpty()}">last <time th:replace="~{base :: time(${detail.lastDownloaded})}">2026-06-05 12:00:00 UTC</time></small>
                     <small th:if="${!downloadsLag.isEmpty()}" th:text="'(up to ' + ${downloadsLag} + ' behind)'">(up to 6 hours behind)</small></td>
             </tr>
             <tr th:if="${detail.present}">
@@ -84,7 +84,7 @@
             </tr>
             <tr>
                 <th scope="row">When</th>
-                <td th:text="${instants.display(detail.quarantine.when)}">2026-06-01T00:00:00Z</td>
+                <td><time th:replace="~{base :: time(${detail.quarantine.when})}">2026-06-01T00:00:00Z</time></td>
             </tr>
             </tbody>
         </table>
@@ -123,7 +123,7 @@
                         <strong th:if="${v.current}" th:text="${v.version}" aria-current="true">1.0</strong>
                         <span th:unless="${v.current}" th:text="${v.version}">0.9</span>
                     </td>
-                    <td><small th:text="${instants.display(v.published)}">2026-06-01T00:00:00Z</small></td>
+                    <td><small><time th:replace="~{base :: time(${v.published})}">2026-06-01T00:00:00Z</time></small></td>
                     <td><div class="app-actions">
                         <span th:if="${v.pinned}">yes</span>
                         <form th:if="${isEditor and !detail.ecosystem.isEmpty() and !detail.coordinate.isEmpty()}"
@@ -140,7 +140,7 @@
                     </div></td>
                     <td th:if="${downloadsTracked}">
                         <span th:text="${v.downloads}">7</span>
-                        <small th:if="${!v.lastDownloaded.isEmpty()}" th:text="'last ' + ${instants.display(v.lastDownloaded)}">last 2026-06-05T12:00:00Z</small>
+                        <small th:if="${!v.lastDownloaded.isEmpty()}">last <time th:replace="~{base :: time(${v.lastDownloaded})}">2026-06-05 12:00:00 UTC</time></small>
                     </td>
                 </tr>
                 </tbody>
@@ -249,7 +249,7 @@
                             <br th:if="${!o.target.isEmpty()}"><small th:if="${!o.target.isEmpty()}"><a th:href="${o.target}" th:text="${o.target}">upstream url</a></small>
                         </th:block>
                     </td>
-                    <td><small th:text="${instants.display(o.at)}">2026-06-01 00:00:00 UTC</small></td>
+                    <td><small><time th:replace="~{base :: time(${o.at})}">2026-06-01 00:00:00 UTC</time></small></td>
                     <!--/* Abbreviated like a commit hash, the whole digest on hover: a 64-character column is what pushed the
                          table out of its card. */-->
                     <td><code th:if="${!o.sha256.isEmpty()}" th:title="${o.sha256}"
@@ -260,7 +260,7 @@
                     <td>
                         <th:block th:if="${o.fallback()}">
                             <span th:text="${o.serves}">12</span>
-                            <small th:if="${!o.lastServed.isEmpty()}" th:text="'(last ' + ${instants.display(o.lastServed)} + ')'">(last &hellip;)</small>
+                            <small th:if="${!o.lastServed.isEmpty()}">(last <time th:replace="~{base :: time(${o.lastServed})}">2026-06-05 12:00:00 UTC</time>)</small>
                         </th:block>
                     </td>
                 </tr>

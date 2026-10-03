@@ -24,7 +24,7 @@
             <tbody>
             <tr>
                 <th scope="row" th:text="${detail.cached} ? 'Cached' : 'Published'">Published</th>
-                <td><span th:text="${instants.display(detail.published)}">2026-06-01T00:00:00Z</span>
+                <td><span><time th:replace="~{base :: time(${detail.published})}">2026-06-01T00:00:00Z</time></span>
                     <small th:if="${detail.cached}">from <code th:text="${detail.upstream} ?: 'an upstream'">https://repo1.maven.org/maven2/</code></small></td>
             </tr>
             <tr>
@@ -61,7 +61,7 @@
             <tr th:if="${downloadsTracked}">
                 <th scope="row">Downloads</th>
                 <td><span th:text="${detail.downloads}">7</span>
-                    <small th:if="${!detail.lastDownloaded.isEmpty()}" th:text="'last ' + ${instants.display(detail.lastDownloaded)}">last 2026-06-05T12:00:00Z</small>
+                    <small th:if="${!detail.lastDownloaded.isEmpty()}">last <time th:replace="~{base :: time(${detail.lastDownloaded})}">2026-06-05 12:00:00 UTC</time></small>
                     <small th:if="${!downloadsLag.isEmpty()}" th:text="'(up to ' + ${downloadsLag} + ' behind)'">(up to 6 hours behind)</small></td>
             </tr>
             <tr th:if="${capabilities.findings()}">

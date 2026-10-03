@@ -102,12 +102,16 @@ public final class ConsoleLayout {
     /** A link into the browse tree, drawn as a small folder beside a heading, taking the address and what it opens. */
     public static final String FOLDER_LINK = "folderLink";
 
+    /** An instant, as every screen shows one: a {@code <time>} element the console's script shows in the reader's
+     *  timezone, taking the instant (or its ISO-8601 text). */
+    public static final String TIME = "time";
+
     /** Every fragment an extending console may build on. */
     public static final Set<String> FRAGMENTS = Set.of(
             PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, EMPTY_ACTION, ALERT, HEAD_CONTENTS, PRIMARY_BUTTON, SECONDARY_BUTTON,
             CAUTION_BUTTON, DANGER_BUTTON, DELETE_BUTTON, PHRASE_BUTTON, SHELL, SIGN_IN_SHELL, MESSAGES, SUBSECTION_ERROR,
             BROWSE_ROWS, BROWSE_UP, RUNNING, REPOSITORY_HEADER, REPOSITORY_OVERVIEW_HEADER, REPOSITORY_IDENTITY,
-            MODULE_VIEWS, FOLDER_LINK);
+            MODULE_VIEWS, FOLDER_LINK, TIME);
 
     private ConsoleLayout() {
         throw new UnsupportedOperationException();

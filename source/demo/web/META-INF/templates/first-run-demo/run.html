@@ -28,9 +28,8 @@
         </th:block>
 
         <p><small>Confirmed by <strong th:text="${run.actor()}">admin</strong>, started
-            <span th:text="${instants.display(run.started())}">2026-10-02 12:00:00 UTC</span><th:block
-                    th:if="${run.finished() != null}">, finished <span
-                    th:text="${instants.display(run.finished())}">2026-10-02 12:01:00 UTC</span></th:block>.</small></p>
+            <span><time th:replace="~{base :: time(${run.started()})}">2026-10-02 12:00:00 UTC</time></span><th:block
+                    th:if="${run.finished() != null}">, finished <span><time th:replace="~{base :: time(${run.finished()})}">2026-10-02 12:01:00 UTC</time></span></th:block>.</small></p>
 
         <p th:unless="${run.running()}"><strong th:text="${summary}">3 repositories created.</strong></p>
 

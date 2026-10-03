@@ -26,6 +26,7 @@ public final class AdminConsoleLayout implements ConsoleLayout.Extension {
                 ConsoleLayout.DANGER_BUTTON, ConsoleLayout.DELETE_BUTTON, ConsoleLayout.PHRASE_BUTTON,
                 ConsoleLayout.BROWSE_ROWS, ConsoleLayout.BROWSE_UP, ConsoleLayout.FOLDER_LINK,
                 ConsoleLayout.RUNNING,
-                ConsoleLayout.REPOSITORY_HEADER, ConsoleLayout.REPOSITORY_OVERVIEW_HEADER, ConsoleLayout.MODULE_VIEWS);
+                ConsoleLayout.REPOSITORY_HEADER, ConsoleLayout.REPOSITORY_OVERVIEW_HEADER, ConsoleLayout.MODULE_VIEWS,
+                ConsoleLayout.TIME);
     }
 }

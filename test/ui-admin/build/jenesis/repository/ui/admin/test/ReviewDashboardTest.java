@@ -60,7 +60,9 @@ class ReviewDashboardTest {
         assertThat(held.lines()).containsExactly(
                 new DashboardPanel.Line("libs", "2 versions", "/ui/repositories/libs/quarantine"),
                 new DashboardPanel.Line("tools", "1 version", "/ui/repositories/tools/quarantine"));
-        assertThat(held.note()).startsWith("As of ");
+        assertThat(held.asOf()).as("it says when the figures were counted, for the page to show in local time")
+                .isPresent();
+        assertThat(held.note()).as("and nothing else, with no count running and none failed").isEmpty();
         assertThat(StoredReport.inFlight(space, "dashboard-review")).isFalse();
     }
 

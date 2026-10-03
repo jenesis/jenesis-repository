@@ -33,7 +33,7 @@
                 </td>
                 <td><span class="app-badge app-badge--danger" th:text="${@format.verdict(f.verdict)}">Reject</span></td>
                 <td><small th:text="${#strings.listJoin(f.reasons, '; ')}">reason</small></td>
-                <td><small th:text="${instants.display(f.when)}">when</small></td>
+                <td><small><time th:replace="~{base :: time(${f.when})}">when</time></small></td>
             </tr>
             </tbody>
         </table>

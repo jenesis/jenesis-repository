@@ -22,7 +22,7 @@
         <p class="setting-values">
             <span>next run: <strong th:text="${e.next.isPresent() ? e.next.get() : 'never (switched off)'}">when</strong></span>
             <span th:if="${e.run.isPresent()}">last run on this node: finished
-                <span th:text="${instants.display(e.run.get().finished)}">when</span>, took
+                <span><time th:replace="~{base :: time(${e.run.get().finished})}">when</time></span>, took
                 <span th:text="${e.run.get().duration}">how long</span>,
                 <span th:text="${e.run.get().reads}">0</span> read and
                 <span th:text="${e.run.get().writes}">0</span> write operations,

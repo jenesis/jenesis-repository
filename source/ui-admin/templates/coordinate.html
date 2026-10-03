@@ -60,7 +60,7 @@
                                 th:text="${v.version}">1.0.0</code></a>
                         <small th:unless="${v.served}">(withheld)</small>
                     </td>
-                    <td class="app-list__date"><small th:text="${instants.display(v.published)}">2026-06-01T00:00:00Z</small>
+                    <td class="app-list__date"><small><time th:replace="~{base :: time(${v.published})}">2026-06-01T00:00:00Z</time></small>
                         <span th:if="${v.cached}" class="app-badge">cached</span></td>
                     <!--/* Pinned where the versions are listed: an editor pins or lifts it on the row itself. */-->
                     <td><div class="app-actions">
@@ -78,7 +78,7 @@
                     </div></td>
                     <td th:if="${downloadsTracked}">
                         <span th:text="${v.downloads}">7</span>
-                        <small th:if="${!v.lastDownloaded.isEmpty()}" th:text="'last ' + ${instants.display(v.lastDownloaded)}">last 2026-06-05T12:00:00Z</small>
+                        <small th:if="${!v.lastDownloaded.isEmpty()}">last <time th:replace="~{base :: time(${v.lastDownloaded})}">2026-06-05 12:00:00 UTC</time></small>
                     </td>
                     <td th:if="${capabilities.findings()}"><th:block
                             th:replace="~{fragments :: findingsState(${v.findings}, @{'/ui/repositories/' + ${repo} + '/findings'(coordinate=${detail.coordinate + ':' + v.version})})}"></th:block></td>

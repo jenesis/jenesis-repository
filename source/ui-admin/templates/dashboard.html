@@ -27,8 +27,9 @@
                             th:unless="${l.href() != null}" th:text="${l.value()}">3</span></dd>
                 </th:block>
             </dl>
-            <p class="app-dashboard__note" th:unless="${p.note().isEmpty()}"><small th:text="${p.note()}">As of
-                12:03</small></p>
+            <p class="app-dashboard__note" th:if="${p.asOf().isPresent() or !p.note().isEmpty()}"><small><th:block
+                    th:if="${p.asOf().isPresent()}">As of <time th:replace="~{base :: time(${p.asOf().get()})}">12:03</time>.
+                </th:block><th:block th:text="${p.note()}">Recounting…</th:block></small></p>
         </article>
         <th:block th:if="${panels.isEmpty() and !refreshing}">
             <div th:replace="~{base :: empty('Nothing to show yet.')}"></div>

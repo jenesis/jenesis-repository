@@ -28,18 +28,20 @@
     </article>
 
     <article th:if="${inventory.running()}">
-        <p th:replace="~{base :: running(|A count is running, started ${instants.display(inventory.startedAt())}.|)}"></p>
+        <p th:replace="~{base :: running('A count is running.')}"></p>
+        <p><small>Started <time th:replace="~{base :: time(${inventory.startedAt()})}">time</time>.</small></p>
     </article>
 
     <article th:if="${inventory.state().name() == 'FAILED'}">
-        <p th:replace="~{base :: alert(|The last count, started ${instants.display(inventory.startedAt())}, failed: ${inventory.failure()}|, 'danger')}"></p>
+        <p th:replace="~{base :: alert(|The last count failed: ${inventory.failure()}|, 'danger')}"></p>
+        <p><small>It started <time th:replace="~{base :: time(${inventory.startedAt()})}">time</time>.</small></p>
     </article>
 
     <!--/* The finished count: this one, or while a new count runs or after one failed, the last that finished. */-->
     <th:block th:if="${inventory.shown() != null}" th:with="counted=${inventory.shown()}">
         <h2>
             <span th:text="|${counted.versions()} version(s) counted|">0 version(s) counted</span>
-            <small>(as of <span th:text="${instants.display(counted.asOf())}">time</span>)</small>
+            <small>(as of <span><time th:replace="~{base :: time(${counted.asOf()})}">time</time></span>)</small>
         </h2>
         <p th:if="${inventory.state().name() != 'DONE'}"><small>The last finished count, shown until the new one
             lands.</small></p>
