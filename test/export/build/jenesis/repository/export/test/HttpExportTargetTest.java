@@ -3,7 +3,8 @@ package build.jenesis.repository.export.test;
 import module java.base;
 import module jdk.httpserver;
 import module org.junit.jupiter.api;
-import build.jenesis.repository.export.HttpExportTarget;
+import build.jenesis.repository.export.http.HttpExportTarget;
+import build.jenesis.repository.export.http.HttpPush;
 import build.jenesis.repository.format.ExportTarget;
 import build.jenesis.repository.format.ExportTarget.Credential;
 import build.jenesis.repository.format.ExportTarget.Request;
@@ -39,7 +40,7 @@ class HttpExportTargetTest {
                     exchange.sendResponseHeaders(302, -1);
                 }
                 case "/target/large" -> {
-                    byte[] body = new byte[4 * HttpExportTarget.RESPONSE_CAP];
+                    byte[] body = new byte[4 * HttpPush.RESPONSE_CAP];
                     Arrays.fill(body, (byte) 'x');
                     exchange.sendResponseHeaders(400, body.length);
                     exchange.getResponseBody().write(body);
@@ -119,7 +120,7 @@ class HttpExportTargetTest {
     void an_answer_is_kept_only_up_to_the_cap() throws IOException {
         ExportTarget.Response response = target(Optional.empty()).send(put("large"));
         assertThat(response.ok()).isFalse();
-        assertThat(response.body()).hasSize(HttpExportTarget.RESPONSE_CAP);
+        assertThat(response.body()).hasSize(HttpPush.RESPONSE_CAP);
     }
 
     @Test

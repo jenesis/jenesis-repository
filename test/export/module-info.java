@@ -13,6 +13,7 @@
  */
 open module build.jenesis.repository.export.test {
     requires build.jenesis.repository.export;
+    requires build.jenesis.repository.export.http;
     requires build.jenesis.repository.export.web;
     requires build.jenesis.repository.web.testkit;
     requires build.jenesis.repository.format.raw;

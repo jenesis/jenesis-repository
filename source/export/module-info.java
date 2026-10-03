@@ -12,7 +12,7 @@
  * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.export {
-    requires build.jenesis.repository.net.http;
+    requires build.jenesis.repository.export.http;
     exports build.jenesis.repository.export;
     requires build.jenesis.repository.server.kernel;
     requires build.jenesis.repository.server;
@@ -21,7 +21,6 @@ open module build.jenesis.repository.export {
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.importer;
     requires build.jenesis.repository.scope;
-    requires java.net.http;
     requires jakarta.servlet;
     requires tools.jackson.databind;
     requires spring.beans;

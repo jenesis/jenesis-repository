@@ -1,6 +1,7 @@
 package build.jenesis.repository.export;
 
 import module java.base;
+import build.jenesis.repository.export.http.HttpExportTarget;
 import build.jenesis.repository.format.ExportTarget;
 import build.jenesis.repository.importer.ImportScreen;
 import build.jenesis.repository.scope.Scopes;
