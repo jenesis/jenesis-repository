@@ -2,6 +2,8 @@ package build.jenesis.repository.compliance.inventory;
 
 import module java.base;
 import module org.slf4j;
+import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.cleanup.Release;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.ComplianceSettings;
@@ -161,6 +163,12 @@ public final class LicenseDerivation {
         @Override
         public UnaryOperator<String> settings() {
             return ComplianceSettings.lookup(store);
+        }
+
+        /** The coordinate the claiming format gives the path in this repository. */
+        @Override
+        public Optional<ArtifactDescriptor> described(String path) {
+            return BlobLayout.claimed(path, store);
         }
 
         @Override

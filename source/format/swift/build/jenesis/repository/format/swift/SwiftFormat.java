@@ -797,19 +797,30 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Path
             return Optional.of(ArtifactDescriptor.at(ECOSYSTEM, path));   // an archive's signature: material, not a release
         }
         if (segments.length == 4 && segments[3].endsWith(".zip")) {
-            return Optional.of(new ArtifactDescriptor(ECOSYSTEM, segments[1] + "." + segments[2],
-                    segments[3].substring(0, segments[3].length() - ".zip".length()),
-                    path, "application/zip", false, null, -1L));
+            String version = segments[3].substring(0, segments[3].length() - ".zip".length());
+            return Optional.of(names(segments, version)
+                    ? new ArtifactDescriptor(ECOSYSTEM, segments[1] + "." + segments[2], version,
+                            path, "application/zip", false, null, -1L)
+                    : ArtifactDescriptor.at(ECOSYSTEM, path));
         }
         if (segments.length == 4 && !segments[3].isEmpty()) {
             // The release path - which a publish PUTs and the release document is read from - describes that version,
             // and the descriptor's path names the archive it releases.
             String version = strip(segments[3]);
-            return Optional.of(new ArtifactDescriptor(ECOSYSTEM, segments[1] + "." + segments[2], version,
-                    PREFIX + segments[0] + "/" + segments[1] + "/" + segments[2] + "/" + version + ".zip",
-                    "application/zip", false, null, -1L));
+            return Optional.of(names(segments, version)
+                    ? new ArtifactDescriptor(ECOSYSTEM, segments[1] + "." + segments[2], version,
+                            PREFIX + segments[0] + "/" + segments[1] + "/" + segments[2] + "/" + version + ".zip",
+                            "application/zip", false, null, -1L)
+                    : ArtifactDescriptor.at(ECOSYSTEM, path));
         }
         return Optional.of(ArtifactDescriptor.at(ECOSYSTEM, path));
+    }
+
+    /** Whether a path's repository, scope, name and version are each a segment this format stores: an empty scope or
+     *  a traversal names no release, so the path is described without a coordinate and nothing is judged under one. */
+    private static boolean names(String[] segments, String version) {
+        return !Keys.unsafe(segments[0]) && !Keys.unsafe(segments[1]) && !Keys.unsafe(segments[2])
+                && !Keys.unsafe(version);
     }
 
     @Override

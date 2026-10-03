@@ -248,48 +248,7 @@ final class InventoryBrowse {
     /** The format-neutral {@link ArtifactDescriptor} the owning format's {@link ArtifactLayout} maps a request path
      *  to - see {@link StoreRepositoryInventory#describe}. */
     Optional<ArtifactDescriptor> describe(String path) {
-        for (RepositoryFormat format : StoreRepositoryInventory.formats()) {
-            if (!format.handles(path)) {
-                continue;
-            }
-            // A dual-layout format resolves its publish/-namespace path through ArtifactLayout and its
-            // blobs-namespace served path through BlobLayout; a pure blobs-namespace format (npm/PyPI/NuGet/
-            // RubyGems/Debian/Go) resolves only through BlobLayout. Consult both so a blobs-namespace served
-            // path resolves to its coordinate too - the seam the release path (clearVersionWithholds), the
-            // licenses/findings sidecars and reconcile need to reach a hold on those formats.
-            if (format instanceof ArtifactLayout layout) {
-                // The repository-scoped overload: this store is the repository the path was addressed to, and a
-                // layout configured per repository resolves no coordinate without it.
-                Optional<ArtifactDescriptor> described = layout.describe(path, store);
-                if (described.isPresent()) {
-                    return described;
-                }
-            }
-            if (format instanceof BlobLayout layout) {
-                Optional<ArtifactDescriptor> described = layout.describe(path);
-                if (described.isPresent()) {
-                    return described;
-                }
-            }
-        }
-        // Fallback for a capability-only BlobLayout provider whose handles() is false: the OCI inventory layout must
-        // never claim a /v2/ path in FormatDispatcher (that would steal live serving from the real, proxy-capable OCI
-        // format in unspecified ServiceLoader order), yet the inventory must still resolve /v2/<name>/manifests/<ref> to
-        // its ("oci", name, ref) coordinate so the describe-dependent seams (HoldLifecycle release/discard/clearVersion-
-        // Withholds, HoldReleaseObserver laundering guard, the record(path) published row) reach an OCI hold. Consult
-        // every non-handling BlobLayout after the handles-gated pass, accepting only a descriptor whose ecosystem the
-        // layout itself owns - so a lax parser cannot mis-describe a foreign path, and only the OCI layout matches a
-        // /v2/ path.
-        for (RepositoryFormat format : StoreRepositoryInventory.formats()) {
-            if (format.handles(path) || !(format instanceof BlobLayout layout)) {
-                continue;
-            }
-            Optional<ArtifactDescriptor> described = layout.describe(path);
-            if (described.isPresent() && layout.ecosystem().equals(described.get().ecosystem())) {
-                return described;
-            }
-        }
-        return Optional.empty();
+        return BlobLayout.claimed(path, store);
     }
 
     /** The request-path folder a coordinate version occupies - see {@link StoreRepositoryInventory#locate}. */

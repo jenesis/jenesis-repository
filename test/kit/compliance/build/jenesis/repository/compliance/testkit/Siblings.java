@@ -3,6 +3,7 @@ package build.jenesis.repository.compliance.testkit;
 import module java.base;
 import build.jenesis.repository.compliance.QualityInspector;
 import build.jenesis.repository.store.PublishInterceptor;
+import build.jenesis.repository.store.ArtifactDescriptor;
 
 /**
  * A {@link QualityInspector.Lookup} over a fixed set of already-published siblings - the lookup a fixture supplies
@@ -78,5 +79,15 @@ public final class Siblings implements QualityInspector.Lookup {
                     ? new Bounded(Arrays.copyOf(read, limit), true)
                     : new Bounded(read, false));
         }
+    }
+
+    @Override
+    public UnaryOperator<String> settings() {
+        return QualityInspector.Lookup.NONE.settings();
+    }
+
+    @Override
+    public Optional<ArtifactDescriptor> described(String path) throws IOException {
+        return QualityInspector.Lookup.NONE.described(path);
     }
 }

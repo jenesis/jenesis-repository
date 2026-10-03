@@ -243,6 +243,62 @@ public interface BlobLayout extends BlobRoots {
         return Optional.empty();
     }
 
+    /**
+     * The coordinate the installed format claiming request path {@code path} gives it - through its
+     * {@link ArtifactLayout} or its blobs-namespace layout, whichever describes the path - or empty when no installed
+     * format describes it. The one rule every reader resolves a path's coordinate by: the inventory's browse, a
+     * screen handing an inspector the coordinate it screens, an inspection with no repository behind it.
+     *
+     * @param store the repository the path was addressed to, which a layout configured per repository needs; or
+     *              {@code null} where there is none, when such a layout describes nothing.
+     */
+    static Optional<ArtifactDescriptor> claimed(String path, ArtifactStore store) {
+        List<RepositoryFormat> installed = RepositoryFormat.installed();
+        for (RepositoryFormat format : installed) {
+            if (!format.handles(path)) {
+                continue;
+            }
+            // A dual-layout format resolves its publish/-namespace path through ArtifactLayout and its
+            // blobs-namespace served path through BlobLayout; a pure blobs-namespace format (npm/PyPI/NuGet/
+            // RubyGems/Debian/Go) resolves only through BlobLayout. Consult both so a blobs-namespace served
+            // path resolves to its coordinate too - the seam the release path (clearVersionWithholds), the
+            // licenses/findings sidecars and reconcile need to reach a hold on those formats.
+            if (format instanceof ArtifactLayout layout) {
+                // The repository-scoped overload where there is a repository: a layout configured per repository
+                // resolves no coordinate without it.
+                Optional<ArtifactDescriptor> described = store == null
+                        ? layout.describe(path) : layout.describe(path, store);
+                if (described.isPresent()) {
+                    return described;
+                }
+            }
+            if (format instanceof BlobLayout layout) {
+                Optional<ArtifactDescriptor> described = layout.describe(path);
+                if (described.isPresent()) {
+                    return described;
+                }
+            }
+        }
+        // Fallback for a capability-only BlobLayout provider whose handles() is false: the OCI inventory layout must
+        // never claim a /v2/ path in FormatDispatcher (that would steal live serving from the real, proxy-capable OCI
+        // format in unspecified ServiceLoader order), yet the inventory must still resolve /v2/<name>/manifests/<ref> to
+        // its ("oci", name, ref) coordinate so the describe-dependent seams (HoldLifecycle release/discard/clearVersion-
+        // Withholds, HoldReleaseObserver laundering guard, the record(path) published row) reach an OCI hold. Consult
+        // every non-handling BlobLayout after the handles-gated pass, accepting only a descriptor whose ecosystem the
+        // layout itself owns - so a lax parser cannot mis-describe a foreign path, and only the OCI layout matches a
+        // /v2/ path.
+        for (RepositoryFormat format : installed) {
+            if (format.handles(path) || !(format instanceof BlobLayout layout)) {
+                continue;
+            }
+            Optional<ArtifactDescriptor> described = layout.describe(path);
+            if (described.isPresent() && layout.ecosystem().equals(described.get().ecosystem())) {
+                return described;
+            }
+        }
+        return Optional.empty();
+    }
+
     /** The served request paths one coordinate version currently occupies in this format's blobs namespace - the
      *  inverse of {@link #describe}, so a retroactive hold can retract a whole blobs-namespace release from serving
      *  (a {@code /quarantine<servedPath>} review handle per path) exactly as {@code ArtifactLayout.paths} does for a

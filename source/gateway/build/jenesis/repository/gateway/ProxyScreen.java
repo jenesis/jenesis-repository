@@ -1,5 +1,6 @@
 package build.jenesis.repository.gateway;
 
+import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.compliance.ComplianceSettings;
 import module java.base;
 import module org.slf4j;
@@ -628,6 +629,12 @@ public final class ProxyScreen {
         @Override
         public UnaryOperator<String> settings() {
             return ComplianceSettings.lookup(store);
+        }
+
+        /** The coordinate the claiming format gives the path in this repository. */
+        @Override
+        public Optional<ArtifactDescriptor> described(String path) {
+            return BlobLayout.claimed(path, store);
         }
 
         @Override

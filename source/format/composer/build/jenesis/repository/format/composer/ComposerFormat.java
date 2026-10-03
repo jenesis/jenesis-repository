@@ -202,12 +202,17 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
         }
     }
 
+    /** Whether a path under a repository is the publish coordinate {@code <vendor>/<package>/<version>}: {@code p2}
+     *  and {@code dists} are read-route names, not vendors, so a metadata document is never a version. */
+    private static boolean publishShape(String[] parts) {
+        return parts.length == 3 && !parts[0].equals("p2") && !parts[0].equals("dists");
+    }
+
     /** Stream a package upload into the store while reading only its {@code composer.json}, then record the download
      *  pointer and its stanza. */
     private void publish(String repo, String sub, FormatExchange exchange, ArtifactStore store) throws IOException {
-        // The publish coordinate is <vendor>/<package>/<version>; p2/ and dists/ are read-route names, not vendors.
         String[] parts = sub.split("/", -1);
-        if (parts.length != 3 || parts[0].equals("p2") || parts[0].equals("dists")) {
+        if (!publishShape(parts)) {
             exchange.respond(404);
             return;
         }
@@ -567,7 +572,7 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
             // The publish path <vendor>/<name>/<version> is where the gate links a review pointer when it holds one, so
             // a release's cross-alias guard asks for it; the dist path carries the same coordinate.
             String[] pushed = sub.split("/", -1);
-            if (pushed.length == 3 && ArtifactLayout.addressable(pushed[0], pushed[1], pushed[2])) {
+            if (publishShape(pushed) && ArtifactLayout.addressable(pushed[0], pushed[1], pushed[2])) {
                 return Optional.of(new ArtifactDescriptor(ECOSYSTEM, pushed[0] + "/" + pushed[1], pushed[2], path,
                         "application/zip", isDev(pushed[2]), null, -1L));
             }

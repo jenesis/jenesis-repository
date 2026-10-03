@@ -3,7 +3,9 @@ package build.jenesis.repository.format.contract.ecosystem.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import module org.junit.jupiter.params;
+import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.testkit.ContractExchange;
+import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.StoredCounter;
@@ -120,6 +122,19 @@ class SwiftReleaseTest {
                 .isEqualTo(Base64.getEncoder().encodeToString("a signature".getBytes(StandardCharsets.UTF_8)));
         assertThat(publish(store, form(archive, "// swift-tools-version:5.9\n", "a signature")).status())
                 .as("the identical form converges").isEqualTo(201);
+    }
+
+    /** A path whose scope is empty, or whose name walks out of its folder, names no release: it is described without
+     *  a coordinate, so nothing is judged or held under one the format would never have stored. */
+    @Test
+    void a_path_with_an_empty_scope_or_a_traversal_describes_no_release() {
+        ArtifactLayout layout = (ArtifactLayout) new SwiftFormatFixture().serving();
+
+        assertThat(layout.describe("/swift/registry//widget/1.0.0.zip").orElseThrow().coordinate()).isNull();
+        assertThat(layout.describe("/swift/registry/contract/../1.0.0").orElseThrow().coordinate()).isNull();
+        assertThat(layout.describe(RELEASE + ".zip").orElseThrow())
+                .extracting(ArtifactDescriptor::coordinate, ArtifactDescriptor::version)
+                .containsExactly("contract.widget", "1.0.0");
     }
 
     /** A signed form: the archive, the manifest and the signature as their own parts. */

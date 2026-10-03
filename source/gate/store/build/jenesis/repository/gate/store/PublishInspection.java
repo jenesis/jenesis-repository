@@ -291,6 +291,12 @@ public final class PublishInspection {
                 return ComplianceSettings.lookup(content.store());
             }
 
+            /** The coordinate the claiming format gives the path in this repository. */
+            @Override
+            public Optional<ArtifactDescriptor> described(String path) {
+                return BlobLayout.claimed(path, content.store());
+            }
+
             @Override
             public Optional<byte[]> fetch(String path) throws IOException {
                 // The whole-document read, delegated: it carries the publication seam's LARGEST_SIBLING ceiling and

@@ -8,6 +8,7 @@
  * @jenesis.signature signature-repository.properties
  */
 module build.jenesis.repository.compliance.inventory {
+    requires build.jenesis.repository.blobs;
     requires build.jenesis.repository.cleanup;
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.inventory;

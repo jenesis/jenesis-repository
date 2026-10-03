@@ -25,7 +25,9 @@
 module build.jenesis.repository.compliance {
     requires build.jenesis.repository.scope;
     requires build.jenesis.repository.settings;
-    requires build.jenesis.repository.store;
+    requires transitive build.jenesis.repository.store;
+    // The coordinate a format gives a screened path is resolved by the blobs module's one rule for it.
+    requires build.jenesis.repository.blobs;
     // A SignatureScheme reads ArtifactSignatures.Evidence and answers over its Signed: the format contract is
     // part of this SPI's surface, so an implementor sees it through this module. Transitive for that reason alone.
     requires transitive build.jenesis.repository.format;

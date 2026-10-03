@@ -1,6 +1,8 @@
 package build.jenesis.repository.compliance;
 
 import module java.base;
+import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.Limits;
 
 /**
@@ -491,6 +493,11 @@ public interface QualityInspector {
             return delegate.settings();
         }
 
+        @Override
+        public Optional<ArtifactDescriptor> described(String path) throws IOException {
+            return delegate.described(path);
+        }
+
         /** Whether any bounded sibling read stopped at its limit during this inspection. */
         boolean truncated() {
             return truncated;
@@ -657,6 +664,16 @@ public interface QualityInspector {
             public Optional<Bounded> fetchBounded(String path, int limit) {
                 return Optional.empty();
             }
+
+            @Override
+            public UnaryOperator<String> settings() {
+                return ComplianceSettings.lookup(null);
+            }
+
+            @Override
+            public Optional<ArtifactDescriptor> described(String path) {
+                return BlobLayout.claimed(path, null);
+            }
         };
 
         /** {@link #NONE} as a method, matching the {@code none()} convention the rest of this SPI's absence sentinels
@@ -684,18 +701,37 @@ public interface QualityInspector {
                 public UnaryOperator<String> settings() {
                     return settings;
                 }
+
+                @Override
+                public Optional<ArtifactDescriptor> described(String path) {
+                    return BlobLayout.claimed(path, null);
+                }
             };
         }
 
         /**
          * The deployment's settings this inspection resolves its dials through - what the store under inspection
          * carries ({@link ComplianceSettings#lookup}), so an inspector reads the value an operator set at runtime and
-         * the same one the screen judging the artifact reads. The default is the boot environment, which is what a
-         * lookup with no store behind it has; a lookup over a store answers that store's, and a lookup decorating
-         * another answers its delegate's.
+         * the same one the screen judging the artifact reads. A lookup with no store behind it answers the boot
+         * environment ({@code ComplianceSettings.lookup(null)}), a lookup over a store that store's, and a lookup
+         * decorating another its delegate's.
          */
-        default UnaryOperator<String> settings() {
-            return ComplianceSettings.lookup(null);
+        UnaryOperator<String> settings();
+
+        /**
+         * The coordinate the format claiming {@code path} gives it, in the repository this inspection reads from - or
+         * empty when no installed format describes the path. An inspector screens an artifact under this coordinate
+         * rather than parsing the path itself, so the screen and the format that serves the artifact cannot disagree
+         * about which version it is; an empty answer means the path is none of a format's versioned artifacts.
+         * A lookup over a store resolves it through {@link BlobLayout#claimed} with that store, one with no store
+         * behind it with none.
+         */
+        Optional<ArtifactDescriptor> described(String path) throws IOException;
+
+        /** {@link #described} where it names a version - a coordinate and a version both - and empty otherwise: the
+         *  coordinate an inspector screens a versioned artifact under. */
+        default Optional<ArtifactDescriptor> versioned(String path) throws IOException {
+            return described(path).filter(artifact -> artifact.coordinate() != null && artifact.version() != null);
         }
 
         /**

@@ -3,6 +3,7 @@ package build.jenesis.repository.compliance.oci;
 import module java.base;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.Maintainer;
 import build.jenesis.repository.compliance.ManifestSubjectBuilder;
@@ -39,8 +40,6 @@ public final class OciQualityInspector implements QualityInspector {
 
     private static final String PREFIX = "/v2/";
 
-    private static final String MANIFESTS = "/manifests/";
-
     /** The OCI image spec's licence annotation - an SPDX expression, declared by the publisher. */
     private static final String LICENSES = "org.opencontainers.image.licenses";
 
@@ -69,45 +68,30 @@ public final class OciQualityInspector implements QualityInspector {
     }
 
     @Override
-    public List<ComplianceGate.Subject> inspect(String path, byte[] content, Lookup lookup) {
-        return subjects(path, content);
+    public List<ComplianceGate.Subject> inspect(String path, byte[] content, Lookup lookup) throws IOException {
+        return subjects(lookup.versioned(path), content);
     }
 
     @Override
-    public List<ComplianceGate.Subject> inspectArtifact(String path, byte[] content, Lookup lookup) {
-        return subjects(path, content);
+    public List<ComplianceGate.Subject> inspectArtifact(String path, byte[] content, Lookup lookup)
+            throws IOException {
+        return subjects(lookup.versioned(path), content);
     }
 
     /**
-     * The compliance subject for a manifest path, or an empty list for anything else under {@code /v2/} - a blob, an
-     * upload session, the version probe, a tag listing - which names no single image version.
+     * The compliance subject for a manifest, under the image and reference the registry's layout gives its path, or
+     * an empty list for anything else under {@code /v2/} - a blob, an upload session, the version probe, a tag
+     * listing - which names no single image version.
      */
-    private static List<ComplianceGate.Subject> subjects(String path, byte[] content) {
-        String rest = path.substring(PREFIX.length());
-        int manifests = rest.indexOf(MANIFESTS);
-        if (manifests < 0) {
-            return List.of();
-        }
-        String name = rest.substring(0, manifests);
-        String reference = rest.substring(manifests + MANIFESTS.length());
-        if (name.isEmpty() || reference.isEmpty() || reference.indexOf('/') >= 0) {
-            return List.of();
-        }
-        // A repository name is a path of segments (library/nginx, an org's nested namespace), so it is guarded
-        // segment by segment; an unsafe one is not a value the registry would have stored or served.
-        for (String segment : name.split("/", -1)) {
-            if (ManifestSubjectBuilder.unsafeSegment(segment)) {
-                return List.of();
-            }
-        }
-        if (ManifestSubjectBuilder.unsafeSegment(reference)) {
+    private static List<ComplianceGate.Subject> subjects(Optional<ArtifactDescriptor> described, byte[] content) {
+        if (described.isEmpty()) {
             return List.of();
         }
         return ManifestSubjectBuilder.of(ECOSYSTEM)
                 .licenses(licences(content))
                 .about(annotation(content, DESCRIPTION), List.of(),
                         Maintainer.person(annotation(content, AUTHORS)).map(Maintainer::name).stream().toList())
-                .subject(name, reference);
+                .subject(described.get().coordinate(), described.get().version());
     }
 
     /** One annotation of the manifest as its publisher wrote it, or {@code null} where it carries none or does not

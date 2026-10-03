@@ -11,6 +11,9 @@
  */
 module build.jenesis.repository.compliance.oci {
     requires build.jenesis.repository.compliance;
+    // The format's layout names the coordinate the gate hands this inspector, so it is on every graph the
+    // inspector is on: without it a path would be screened under no coordinate at all.
+    requires build.jenesis.repository.format.oci.inventory;
     requires tools.jackson.databind;
     exports build.jenesis.repository.compliance.oci;
     provides build.jenesis.repository.compliance.QualityInspector

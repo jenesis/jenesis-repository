@@ -46,7 +46,7 @@ class ManifestAboutTest {
     }
 
     @Test
-    void an_image_manifest_gives_its_description_and_authors_annotations() {
+    void an_image_manifest_gives_its_description_and_authors_annotations() throws IOException {
         String manifest = """
                 {"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json",
                  "annotations":{"org.opencontainers.image.description":"A tiny web server.",

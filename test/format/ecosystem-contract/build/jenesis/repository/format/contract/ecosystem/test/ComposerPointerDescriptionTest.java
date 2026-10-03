@@ -50,6 +50,18 @@ class ComposerPointerDescriptionTest {
     }
 
     @Test
+    void a_metadata_document_is_no_version_while_a_publish_path_is() {
+        // p2 and dists are read-route names, not vendors: a package's p2 document has three segments too.
+        assertThat(COMPOSER.describe("/composer/packagist/p2/acme/widget.json")).isEmpty();
+        assertThat(COMPOSER.describe("/composer/packagist/dists/acme/widget")).isEmpty();
+        assertThat(COMPOSER.describe("/composer/packagist/acme/widget/1.2.3"))
+                .hasValueSatisfying(named -> {
+                    assertThat(named.coordinate()).isEqualTo("acme/widget");
+                    assertThat(named.version()).isEqualTo("1.2.3");
+                });
+    }
+
+    @Test
     void a_traversal_shaped_key_is_not_claimed() {
         assertThat(describe("composer/packagist/index/../../secret/1.0.0")).isEmpty();
         assertThat(describe("composer/packagist/index/acme/widget/..")).isEmpty();
