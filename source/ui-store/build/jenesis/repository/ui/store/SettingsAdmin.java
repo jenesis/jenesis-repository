@@ -177,10 +177,9 @@ public class SettingsAdmin {
     private SettingView view(Setting setting, String effective, String baseline, boolean overridden,
                              Optional<PinnedSettings.Pin> pin, String module) {
         return new SettingView(setting.key(), setting.group(), setting.label(), setting.description(),
-                setting.kind().name(), setting.choices(), effective, baseline, overridden, setting.live(),
+                setting.kind().name(), setting.options(), effective, baseline, overridden, setting.live(),
                 highImpact(setting), pin.isPresent(), pin.map(PinnedSettings.Pin::source).orElse(""), module,
-                setting.tier() == Setting.Tier.ADVANCED, setting.editedAs().name(),
-                setting.choices().stream().map(setting::choice).toList());
+                setting.tier() == Setting.Tier.ADVANCED, setting.editedAs().name());
     }
 
     /** The JPMS module a key is attributed to - the contributor that declares it, or {@link SettingsDocuments#NEUTRAL}
@@ -861,24 +860,27 @@ public class SettingsAdmin {
      *  override, live, high-impact and pin state, contributing module and tier. The helpers keep the template free of
      *  logic. */
     public record SettingView(String key, String group, String label, String description,
-                              String kind, List<String> choices, String value, String defaultValue,
+                              String kind, List<Setting.Choice> named, String value, String defaultValue,
                               boolean overridden, boolean live, boolean highImpact,
-                              boolean pinned, String pinnedBy, String module, boolean advanced, String form,
-                              List<Setting.Choice> named) {
+                              boolean pinned, String pinnedBy, String module, boolean advanced, String form) {
 
         /** What an empty value reads as - nothing is set, and nothing applies: "none (default)" beside a default. */
         public static final String NOTHING = "none";
 
         public SettingView {
-            choices = List.copyOf(choices);
+            named = List.copyOf(named);
             form = form == null ? Setting.Form.LINE.name() : form;
-            named = named == null ? List.of() : List.copyOf(named);
+        }
+
+        /** The values the setting may take, or suggests, as the store spells them. */
+        public List<String> choices() {
+            return named.stream().map(Setting.Choice::value).toList();
         }
 
         /** The name and short description a choice reads as, as the setting names it or from its value. */
         public Setting.Choice choiceOf(String option) {
             return named.stream().filter(choice -> choice.value().equals(option)).findFirst()
-                    .orElseGet(() -> new Setting.Choice(option, Setting.Choice.nameOf(option), ""));
+                    .orElseGet(() -> Setting.Choice.of(option));
         }
 
         /** What the value in force does, as its choice describes it - "Hold for review: ...", the long form a field
@@ -905,7 +907,7 @@ public class SettingsAdmin {
 
         /** The fixed options a drop-down offers: the catalogued choices, or true/false for a switch. */
         public List<String> options() {
-            return control() == SettingControl.SWITCH ? List.of("true", "false") : choices;
+            return control() == SettingControl.SWITCH ? List.of("true", "false") : choices();
         }
 
         public boolean secret() {

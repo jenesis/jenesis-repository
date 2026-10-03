@@ -12,7 +12,6 @@ import build.jenesis.repository.scope.Scopes;
  */
 public final class CoreSettingsContributor implements SettingsContributor {
 
-    private static final List<String> VERDICTS = List.of("ALLOW", "QUARANTINE", "REJECT");
     private static final List<String> SEVERITIES = List.of("NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL");
 
     @Override
@@ -27,22 +26,22 @@ public final class CoreSettingsContributor implements SettingsContributor {
                                 + "certain signal than a severity score, so it should not refuse less than the "
                                 + "vulnerability and deny-list dimensions do. It can refuse the package or hold it for "
                                 + "review instead.",
-                        Setting.Kind.CHOICE, VERDICTS, CoreDefaults.MALWARE_ACTION, true).essential()
-                                .named(Setting.Choice.VERDICTS),
+                        Setting.Choice.VERDICTS, CoreDefaults.MALWARE_ACTION, true).essential()
+                                ,
                 new Setting("vulnerability-action", "Compliance", "Vulnerability action",
                         "Verdict for an artifact whose advisories reach the threshold above. Refusing the publish "
                                 + "stores nothing; holding it for review stores the bytes and withholds them until a "
                                 + "reviewer releases or discards them.",
-                        Setting.Kind.CHOICE, VERDICTS, CoreDefaults.VULNERABILITY_ACTION, true).essential()
-                                .named(Setting.Choice.VERDICTS),
+                        Setting.Choice.VERDICTS, CoreDefaults.VULNERABILITY_ACTION, true).essential()
+                                ,
                 new Setting("deny-list", "Compliance", "Deny list",
                         "Comma-separated coordinates an operator forbids; always refused.",
                         Setting.Kind.STRING, "", true).standard(),
                 new Setting("deny-list-action", "Compliance", "Deny list action",
                         "Verdict for a coordinate the deny list names. Refusing it is the secure floor; holding such "
                                 + "coordinates for review is the alternative.",
-                        Setting.Kind.CHOICE, VERDICTS, CoreDefaults.DENY_LIST_ACTION, true).standard()
-                                .named(Setting.Choice.VERDICTS),
+                        Setting.Choice.VERDICTS, CoreDefaults.DENY_LIST_ACTION, true).standard()
+                                ,
                 new Setting("proxy-enabled", "Proxy", "Pull-through proxy",
                         "Proxy reads that miss locally from the upstreams, caching and bridging them.",
                         Setting.Kind.BOOLEAN, CoreDefaults.PROXY_ENABLED, true).standard(),

@@ -35,7 +35,7 @@ public final class AttestationSettingsContributor implements SettingsContributor
                                 + "it for review, refusing admission outright, or admitting it, which still runs the "
                                 + "dimension and simply raises nothing. To stop checking, clear the trust anchor or "
                                 + "switch the module off.",
-                        Setting.Kind.CHOICE, List.of("ALLOW", "QUARANTINE", "REJECT"), "QUARANTINE", true,
-                        Setting.Scope.TENANT).standard().named(Setting.Choice.VERDICTS));
+                        Setting.Choice.VERDICTS, "QUARANTINE", true,
+                        Setting.Scope.TENANT).standard());
     }
 }

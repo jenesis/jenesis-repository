@@ -140,35 +140,31 @@ public final class SignatureSettingsContributor implements SettingsContributor {
                                 + "after signing, or the signature was made for different content. Of the signature "
                                 + "outcomes, this is the only one that is evidence of something actively wrong. It can "
                                 + "be refused, held for review, or let through with the finding recorded.",
-                        Setting.Kind.CHOICE, List.of("ALLOW", "QUARANTINE", "REJECT"),
-                                SignaturePolicy.INVALID_DEFAULT, true,
-                        Setting.Scope.TENANT).standard().named(Setting.Choice.VERDICTS),
+                        Setting.Choice.VERDICTS, SignaturePolicy.INVALID_DEFAULT, true,
+                        Setting.Scope.TENANT).standard(),
                 new Setting(SignaturePolicy.UNTRUSTED, "Compliance", "Untrusted-signer action",
                         "Verdict for a well-formed signature by a signer this deployment has no reason to believe - no "
                                 + "key for it, or a key not admitted for that namespace. It is the common outcome the "
                                 + "day enforcement is switched on, and a decision waiting on a human rather than "
                                 + "something known to be wrong, which is what holding it for review is for.",
-                        Setting.Kind.CHOICE, List.of("ALLOW", "QUARANTINE", "REJECT"),
-                                SignaturePolicy.UNTRUSTED_DEFAULT, true,
-                        Setting.Scope.TENANT).standard().named(Setting.Choice.VERDICTS),
+                        Setting.Choice.VERDICTS, SignaturePolicy.UNTRUSTED_DEFAULT, true,
+                        Setting.Scope.TENANT).standard(),
                 new Setting(SignaturePolicy.CHANGED, "Compliance", "Signer-changed action",
                         "Verdict for a coordinate signed by a different signer than its earlier versions carried. A "
                                 + "legitimate key rotation and a compromised account look identical here, and only a "
                                 + "person can tell them apart, which makes holding it for review the fitting answer "
                                 + "rather than refusing it. This is the case a single global keyring cannot see, "
                                 + "because the signature is perfectly valid.",
-                        Setting.Kind.CHOICE, List.of("ALLOW", "QUARANTINE", "REJECT"),
-                                SignaturePolicy.CHANGED_DEFAULT, true,
-                        Setting.Scope.TENANT).standard().named(Setting.Choice.VERDICTS),
+                        Setting.Choice.VERDICTS, SignaturePolicy.CHANGED_DEFAULT, true,
+                        Setting.Scope.TENANT).standard(),
                 new Setting(SignaturePolicy.MISSING, "Compliance", "Missing-signature action",
                         "Verdict for an artifact carrying no signature where its format expects one. At screen time "
                                 + "this is often not yet a fact: a publish is several requests and the signature may "
                                 + "still be in flight, so holding on it sends every properly signed release through "
                                 + "the review queue. A deployment that requires every artifact to arrive signed holds "
                                 + "or refuses it. The proxy path has a dial of its own.",
-                        Setting.Kind.CHOICE, List.of("ALLOW", "QUARANTINE", "REJECT"),
-                                SignaturePolicy.MISSING_DEFAULT, true,
-                        Setting.Scope.TENANT).standard().named(Setting.Choice.VERDICTS),
+                        Setting.Choice.VERDICTS, SignaturePolicy.MISSING_DEFAULT, true,
+                        Setting.Scope.TENANT).standard(),
                 new Setting(SignaturePolicy.MISSING_PROXY, "Compliance", "Missing-signature action on the proxy path",
                         "Verdict for a proxied artifact carrying no signature where its format expects one, whatever "
                                 + "the publish-path dial says. An upstream carries artifacts published long before its "
@@ -176,9 +172,8 @@ public final class SignatureSettingsContributor implements SettingsContributor {
                                 + "proxy. The signatures an upstream publishes beside an artifact are fetched before "
                                 + "the screen decides, so a deployment mirroring a registry that signs everything can "
                                 + "hold or refuse it.",
-                        Setting.Kind.CHOICE, List.of("ALLOW", "QUARANTINE", "REJECT"),
-                                SignaturePolicy.MISSING_PROXY_DEFAULT, true,
-                        Setting.Scope.TENANT).advanced().named(Setting.Choice.VERDICTS),
+                        Setting.Choice.VERDICTS, SignaturePolicy.MISSING_PROXY_DEFAULT, true,
+                        Setting.Scope.TENANT).advanced(),
                 new Setting(SignaturePolicy.QUALITY_FLOOR, "Compliance", "Signature quality floor",
                         "The grade below which a signature raises a finding; with no floor, quality is reported and "
                                 + "never gated. The grade is arithmetic over the signature packet and the key "
@@ -190,8 +185,7 @@ public final class SignatureSettingsContributor implements SettingsContributor {
                         "What a signature below the quality floor does. A weak signature is still a signature, and an "
                                 + "operator raising a floor is usually asking to be told rather than to be refused: "
                                 + "allowing it reports it, while holding or refusing it makes the floor a gate.",
-                        Setting.Kind.CHOICE, List.of("ALLOW", "QUARANTINE", "REJECT"),
-                                SignaturePolicy.QUALITY_ACTION_DEFAULT, true,
-                        Setting.Scope.TENANT).advanced().named(Setting.Choice.VERDICTS));
+                        Setting.Choice.VERDICTS, SignaturePolicy.QUALITY_ACTION_DEFAULT, true,
+                        Setting.Scope.TENANT).advanced());
     }
 }

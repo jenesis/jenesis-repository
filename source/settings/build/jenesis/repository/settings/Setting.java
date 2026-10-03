@@ -12,47 +12,32 @@ import build.jenesis.repository.store.Durations;
  * unless the setting is {@link #localOnly() local}, which has no wider default. A module describes its settings
  * through a {@link SettingsContributor}, so they surface wherever settings do (console, API, CLI, wizards).
  *
- * <p>{@code enablement} marks the one setting of a module that gates whether its provider does anything; the modules
- * console pairs it with the module's toggle. A contributor sets it with {@link #gate()}.
- *
- * <p>{@code tier} ({@link Tier}) is {@code null} from every constructor and declared with {@link #essential()},
- * {@link #standard()} or {@link #advanced()}; the catalogue census refuses an undecided setting, since a default would
- * decide for every contributor that forgot.
- *
- * <p>{@code localOnly} marks a repository or project setting with no wider default, such as a repository's routing:
- * a deployment-wide default routing would point every repository at one upstream. {@code operatorOnly} marks a setting
- * only the deployment's operator may set, at any level.
+ * <p>How a setting is declared beyond its value is its {@link Traits}, each set by one method: {@link #gate()},
+ * {@link #essential()}, {@link #standard()} or {@link #advanced()}, {@link #local()}, {@link #operator()} and
+ * {@link #form(Form)}. A {@link Kind#CHOICE} setting declares its {@link Choice choices} once, with what each reads as.
  */
 public record Setting(String key, String group, String label, String description,
-                      Kind kind, List<String> choices, String defaultValue, boolean live, Scope scope,
-                      boolean enablement, Tier tier, boolean localOnly, boolean operatorOnly, Form form,
-                      List<Choice> named) {
+                      Kind kind, List<Choice> options, String defaultValue, boolean live, Scope scope, Traits traits) {
 
     /** The word a {@link Kind#DURATION_OR_NONE} setting takes to switch its rule off, rather than inherit a wider
      *  level's value - which is what leaving it unset means. */
     public static final String NONE = Durations.NONE;
 
     public Setting {
-        choices = List.copyOf(choices);
-        named = named == null ? List.of() : List.copyOf(named);
-        for (Choice choice : named) {
-            if (!choices.contains(choice.value())) {
-                throw new IllegalArgumentException("Setting '" + key + "' names the choice '" + choice.value()
-                        + "', which is not one of its values " + choices);
-            }
-        }
+        options = List.copyOf(options);
         scope = scope == null ? Scope.GLOBAL : scope;
-        if (localOnly && scope != Scope.REPOSITORY && scope != Scope.PROJECT) {
+        traits = traits == null ? Traits.UNDECIDED : traits;
+        if (traits.localOnly() && scope != Scope.REPOSITORY && scope != Scope.PROJECT) {
             throw new IllegalArgumentException("Setting '" + key + "' is " + scope + "-scoped, so it cannot be local: "
                     + "only a repository or project setting has a wider default to go without");
         }
     }
 
-    /** A setting at an explicit {@link Scope} that is not its module's enablement gate (the common case). */
+    /** A setting at an explicit {@link Scope} whose choices, if any, read as their values. */
     public Setting(String key, String group, String label, String description,
                    Kind kind, List<String> choices, String defaultValue, boolean live, Scope scope) {
-        this(key, group, label, description, kind, choices, defaultValue, live, scope, false, null, false, false,
-                null, List.of());
+        this(key, group, label, description, kind, choices.stream().map(Choice::of).toList(), defaultValue, live,
+                scope, Traits.UNDECIDED);
     }
 
     /** A choice-carrying setting, deployment-wide by default. */
@@ -61,10 +46,65 @@ public record Setting(String key, String group, String label, String description
         this(key, group, label, description, kind, choices, defaultValue, live, Scope.GLOBAL);
     }
 
+    /** A {@link Kind#CHOICE} setting at an explicit {@link Scope}, its choices declared once with what each reads as. */
+    public Setting(String key, String group, String label, String description,
+                   List<Choice> choices, String defaultValue, boolean live, Scope scope) {
+        this(key, group, label, description, Kind.CHOICE, choices, defaultValue, live, scope, Traits.UNDECIDED);
+    }
+
+    /** A {@link Kind#CHOICE} setting, deployment-wide, its choices declared once with what each reads as. */
+    public Setting(String key, String group, String label, String description,
+                   List<Choice> choices, String defaultValue, boolean live) {
+        this(key, group, label, description, choices, defaultValue, live, Scope.GLOBAL);
+    }
+
+    /**
+     * How a setting is declared beyond its value: whether it is its module's enablement gate (the one setting a modules
+     * console pairs with the module's toggle), its {@link Tier} ({@code null} until declared, which the catalogue
+     * census refuses, since a default would decide for every contributor that forgot), whether it is a repository or
+     * project setting with no wider default ({@code localOnly}, such as a repository's routing: a deployment-wide
+     * default routing would point every repository at one upstream), whether only the deployment's operator may set
+     * it, and the {@link Form} a form edits it as.
+     */
+    public record Traits(boolean enablement, Tier tier, boolean localOnly, boolean operatorOnly, Form form) {
+
+        /** Nothing declared: no gate, no tier yet, inherited, anyone may set it, one line. */
+        public static final Traits UNDECIDED = new Traits(false, null, false, false, Form.LINE);
+
+        public Traits {
+            form = form == null ? Form.LINE : form;
+        }
+    }
+
+    /** Whether this is its module's enablement gate - see {@link Traits}. */
+    public boolean enablement() {
+        return traits.enablement();
+    }
+
+    /** The tier the setting is declared at, {@code null} while undeclared - see {@link Traits}. */
+    public Tier tier() {
+        return traits.tier();
+    }
+
+    /** Whether the setting has no wider default - see {@link Traits}. */
+    public boolean localOnly() {
+        return traits.localOnly();
+    }
+
+    /** Whether only the deployment's operator may set the setting - see {@link Traits}. */
+    public boolean operatorOnly() {
+        return traits.operatorOnly();
+    }
+
+    /** The values the setting may take, or suggests where its kind is not {@link Kind#CHOICE}, as the API, the
+     *  command line and the store spell them. */
+    public List<String> choices() {
+        return options.stream().map(Choice::value).toList();
+    }
+
     /** A copy of this setting marked as its module's enablement gate. */
     public Setting gate() {
-        return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, true, tier,
-                localOnly, operatorOnly, form, named);
+        return with(new Traits(true, tier(), localOnly(), operatorOnly(), editedAs()));
     }
 
     /** This setting, declared one the wizard of its scope asks - see {@link Tier#ESSENTIAL}. */
@@ -82,33 +122,44 @@ public record Setting(String key, String group, String label, String description
         return tiered(Tier.ADVANCED);
     }
 
-    /** This repository or project setting, declared one with no wider default - see {@link #localOnly}. */
+    /** This repository or project setting, declared one with no wider default - see {@link Traits}. */
     public Setting local() {
-        return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, enablement, tier,
-                true, operatorOnly, form, named);
+        return with(new Traits(enablement(), tier(), true, operatorOnly(), editedAs()));
     }
 
-    /** This setting, declared one only the deployment's operator may set - see {@link #operatorOnly}. */
+    /** This setting, declared one only the deployment's operator may set - see {@link Traits}. */
     public Setting operator() {
-        return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, enablement, tier,
-                localOnly, true, form, named);
+        return with(new Traits(enablement(), tier(), localOnly(), true, editedAs()));
     }
 
     private Setting tiered(Tier decided) {
-        return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, enablement,
-                decided, localOnly, operatorOnly, form, named);
+        return with(new Traits(enablement(), decided, localOnly(), operatorOnly(), editedAs()));
     }
 
     /** This setting, declared one a form edits as {@code shaped} rather than as one line of text - see {@link Form}. */
     public Setting form(Form shaped) {
-        return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, enablement, tier,
-                localOnly, operatorOnly, shaped, named);
+        return with(new Traits(enablement(), tier(), localOnly(), operatorOnly(), shaped));
     }
 
-    /** This setting, its choices given the names and short descriptions a person reads - see {@link Choice}. */
+    /** This setting, the values it suggests given the names and short descriptions a person reads, for a kind whose
+     *  choices suggest rather than limit - see {@link Form#VALUES}. A {@link Kind#CHOICE} setting declares its named
+     *  choices where it is made. */
     public Setting named(List<Choice> given) {
-        return new Setting(key, group, label, description, kind, choices, defaultValue, live, scope, enablement, tier,
-                localOnly, operatorOnly, form, given);
+        Map<String, Choice> byValue = new HashMap<>();
+        for (Choice choice : given) {
+            if (!choices().contains(choice.value())) {
+                throw new IllegalArgumentException("Setting '" + key + "' names the choice '" + choice.value()
+                        + "', which is not one of its values " + choices());
+            }
+            byValue.put(choice.value(), choice);
+        }
+        return new Setting(key, group, label, description, kind,
+                options.stream().map(option -> byValue.getOrDefault(option.value(), option)).toList(), defaultValue,
+                live, scope, traits);
+    }
+
+    private Setting with(Traits declared) {
+        return new Setting(key, group, label, description, kind, options, defaultValue, live, scope, declared);
     }
 
     /**
@@ -132,6 +183,11 @@ public record Setting(String key, String group, String label, String description
             description = description == null ? "" : description;
         }
 
+        /** A choice that reads as its value, named from it ({@link #nameOf}). */
+        public static Choice of(String value) {
+            return new Choice(value, nameOf(value), "");
+        }
+
         /** A value as words: a constant in capitals or words joined by hyphens or underscores reads as a sentence-cased
          *  phrase ({@code QUARANTINE} as "Quarantine", {@code not-found} as "Not found"); any other value - a name,
          *  a URL - reads as it is. */
@@ -149,13 +205,13 @@ public record Setting(String key, String group, String label, String description
 
     /** The name and description {@code value} reads as: as named, else named from the value itself. */
     public Choice choice(String value) {
-        return named.stream().filter(choice -> choice.value().equals(value)).findFirst()
-                .orElseGet(() -> new Choice(value, Choice.nameOf(value), ""));
+        return options.stream().filter(choice -> choice.value().equals(value)).findFirst()
+                .orElseGet(() -> Choice.of(value));
     }
 
     /** How a form edits this setting's value: as declared, else a single line. */
     public Form editedAs() {
-        return form == null ? Form.LINE : form;
+        return traits.form();
     }
 
     /**
@@ -176,7 +232,7 @@ public record Setting(String key, String group, String label, String description
         LINES,
 
         /** Several values on one line, separated by commas, which a form shows as one removable entry each and adds to
-         *  from the setting's {@link #choices() choices} - the values it knows, named as {@link #named() named}. For a
+         *  from the setting's {@link #choices() choices} - the values it knows, named as {@link Setting#named(List) named}. For a
          *  kind other than {@link Kind#CHOICE} the choices suggest rather than limit: a value they do not list is
          *  entered as it is. */
         VALUES,
@@ -213,7 +269,7 @@ public record Setting(String key, String group, String label, String description
      * settings of its own scope.
      */
     public boolean settableAt(Scope level) {
-        return settable(scope, localOnly, level);
+        return settable(scope, localOnly(), level);
     }
 
     /** {@link #settableAt} for a setting of {@code scope}, also applied to undeclared keys by
@@ -259,7 +315,7 @@ public record Setting(String key, String group, String label, String description
     /** Whether a value parses for this setting's kind, so even a restart-only setting cannot be stored with a value
      *  that would fail to bind at boot. */
     public boolean parses(String value) {
-        return kind.parses(value, choices);
+        return kind.parses(value, choices());
     }
 
     /** The value kinds a setting can carry; each knows how to validate an entered value. {@link #SECRET} and
