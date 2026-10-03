@@ -3,12 +3,13 @@
  * {@code /debian/...} - {@code .deb} uploads ({@code PUT /debian/<suite>/pool/<component>/<file>.deb}), the stored
  * {@code Packages} and {@code Release} indexes, pool downloads, and pull-through of an upstream apt repository. The
  * {@code ar} archive and its {@code control.tar} are read with Commons Compress, with {@code org.tukaani.xz} for
- * {@code .xz} and {@code com.github.luben.zstd_jni} for {@code .zst}. A hosted {@code Release} is OpenPGP-signed with
+ * {@code .xz} and aircompressor's pure-Java zstd for {@code .zst}. A hosted {@code Release} is OpenPGP-signed with
  * Bouncy Castle when a key is provisioned.
  *
  * @jenesis.release 25
  *
  * @jenesis.alias org.bouncycastle.pg org.bouncycastle/bcpg-jdk18on
+ * @jenesis.alias aircompressor io.airlift/aircompressor-v3
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
  */
@@ -23,7 +24,7 @@ module build.jenesis.repository.format.debian {
     requires org.bouncycastle.pg;
     requires org.tukaani.xz;
     requires org.apache.commons.compress;
-    requires com.github.luben.zstd_jni;
+    requires aircompressor;
     // The keyring's store key and cache namespace, which a verifier must spell as the format does; agreeing on a key is
     // not access to the implementation, so the export is unqualified.
     exports build.jenesis.repository.format.debian.keys;

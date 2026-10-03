@@ -9,6 +9,7 @@
  * the repository's own scoped store, committed by compare-and-set; without this module no index is published.
  *
  * @jenesis.release 25
+ * @jenesis.alias aircompressor io.airlift/aircompressor-v3
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
  */
@@ -21,7 +22,7 @@ module build.jenesis.repository.index {
     requires build.jenesis.repository.settings;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.walk;
-    requires com.github.luben.zstd_jni;
+    requires aircompressor;
     exports build.jenesis.repository.index;
     provides build.jenesis.repository.maintenance.MaintenanceTaskProvider
             with build.jenesis.repository.index.PublishedIndexTaskProvider;

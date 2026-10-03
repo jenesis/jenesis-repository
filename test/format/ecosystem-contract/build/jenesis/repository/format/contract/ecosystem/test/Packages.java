@@ -6,7 +6,7 @@ import org.apache.commons.compress.archivers.ar.ArArchiveOutputStream;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream;
-import org.apache.commons.compress.compressors.zstandard.ZstdCompressorOutputStream;
+import io.airlift.compress.v3.zstd.ZstdOutputStream;
 
 /**
  * The genuine wire bodies the fixtures publish through their formats' own write paths - an npm publish
@@ -466,7 +466,7 @@ final class Packages {
     static byte[] conda(String name, String version, String build, String variant) throws IOException {
         String stem = name + "-" + version + "-" + build;
         ByteArrayOutputStream info = new ByteArrayOutputStream();
-        try (ZstdCompressorOutputStream zstd = new ZstdCompressorOutputStream(info)) {
+        try (ZstdOutputStream zstd = new ZstdOutputStream(info)) {
             zstd.write(tar(Map.of("info/index.json",
                     condaIndex(name, version, build).getBytes(StandardCharsets.UTF_8))));
         }

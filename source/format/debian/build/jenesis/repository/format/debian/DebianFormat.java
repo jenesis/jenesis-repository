@@ -3,6 +3,7 @@ package build.jenesis.repository.format.debian;
 import module java.base;
 import module org.apache.commons.compress;
 
+import io.airlift.compress.v3.zstd.ZstdInputStream;
 import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.format.debian.keys.DebianKeyring;
@@ -975,7 +976,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         return switch (name) {
             case "control.tar.gz" -> new GzipCompressorInputStream(member);
             case "control.tar.xz" -> new XZCompressorInputStream(member);
-            case "control.tar.zst" -> new ZstdCompressorInputStream(member);
+            case "control.tar.zst" -> new ZstdInputStream(member);
             case "control.tar" -> member;
             default -> null;
         };

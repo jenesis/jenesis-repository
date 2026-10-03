@@ -4,6 +4,7 @@ import module java.base;
 import module org.apache.commons.compress;
 import module tools.jackson.databind;
 
+import io.airlift.compress.v3.zstd.ZstdInputStream;
 import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.blobs.BlobExport;
@@ -314,7 +315,7 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         for (ZipEntry entry = zip.getNextEntry(); entry != null; entry = zip.getNextEntry()) {
             String name = entry.getName();
             if (name.startsWith("info-") && (name.endsWith(".tar.zst") || name.endsWith(".tar.zstd"))) {
-                return ArchiveWalk.walk(new ZstdCompressorInputStream(zip), CondaFormat::indexFromTar).orNull();
+                return ArchiveWalk.walk(new ZstdInputStream(zip), CondaFormat::indexFromTar).orNull();
             }
             if (name.startsWith("info-") && name.endsWith(".tar")) {
                 return ArchiveWalk.walk(zip, CondaFormat::indexFromTar).orNull();

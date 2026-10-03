@@ -6,6 +6,7 @@
  * ecosystem. It proxies an upstream channel and imports a {@code conda} channel through its own publish path.
  *
  * @jenesis.release 25
+ * @jenesis.alias aircompressor io.airlift/aircompressor-v3
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
  */
@@ -17,7 +18,7 @@ module build.jenesis.repository.format.conda {
     requires build.jenesis.repository.blobs;
     requires org.slf4j;
     requires org.apache.commons.compress;
-    requires com.github.luben.zstd_jni;
+    requires aircompressor;
     requires tools.jackson.databind;
     exports build.jenesis.repository.format.conda;
     provides build.jenesis.repository.format.RepositoryFormat

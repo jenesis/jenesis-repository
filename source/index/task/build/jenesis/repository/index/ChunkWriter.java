@@ -13,7 +13,6 @@ final class ChunkWriter {
     private final PublishedIndex index;
     private final long maxChunkBytes;
     private final int frameBudget;
-    private final int level;
     private final List<IndexDescriptor.Chunk> written = new ArrayList<>();
 
     private SeekableIndex.Writer writer;
@@ -22,16 +21,15 @@ final class ChunkWriter {
     private Instant min;
     private Instant max;
 
-    ChunkWriter(PublishedIndex index, long maxChunkBytes, int frameBudget, int level) {
+    ChunkWriter(PublishedIndex index, long maxChunkBytes, int frameBudget) {
         this.index = index;
         this.maxChunkBytes = Math.max(1, maxChunkBytes);
         this.frameBudget = frameBudget;
-        this.level = level;
         reset();
     }
 
     private void reset() {
-        writer = new SeekableIndex.Writer(frameBudget, level);
+        writer = new SeekableIndex.Writer(frameBudget);
         uncompressed = 0;
         records = 0;
         min = null;

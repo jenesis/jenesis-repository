@@ -48,6 +48,7 @@
  * @jenesis.test build.jenesis.repository.format.conda
  * @jenesis.test build.jenesis.repository.format.huggingface
  * @jenesis.test build.jenesis.repository.format.oci.inventory
+ * @jenesis.alias aircompressor io.airlift/aircompressor-v3
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
  */
@@ -93,6 +94,7 @@ open module build.jenesis.repository.format.contract.ecosystem.test {
     // The ar/tar containers a .deb and a .gem really are, written with the same library the formats read them with;
     // the zip and gzip shapes come from java.base.
     requires org.apache.commons.compress;
+    requires aircompressor;
 
     requires org.junit.jupiter;
     requires org.assertj.core;

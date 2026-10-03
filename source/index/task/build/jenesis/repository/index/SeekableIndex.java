@@ -1,7 +1,8 @@
 package build.jenesis.repository.index;
 
 import module java.base;
-import com.github.luben.zstd.Zstd;
+import io.airlift.compress.v3.zstd.ZstdJavaCompressor;
+import io.airlift.compress.v3.zstd.ZstdJavaDecompressor;
 
 /**
  * The published index chunk format: a sequence of <strong>independent Zstandard frames</strong>, each compressing one
@@ -9,6 +10,8 @@ import com.github.luben.zstd.Zstd;
  * skippable frame (footer magic {@code 0x8F92EAB1}). Every frame is self-contained, so a consumer decompresses any one
  * from its known offset without reading the chunk from the start; the table gives each frame's sizes, so the reference
  * {@code zstd_seekable} tooling reads these chunks too. The library compresses; this class lays out the fixed framing.
+ * The compressor is pure Java: a native one is unpacked into the temporary directory and loaded from there, which a
+ * node whose {@code /tmp} is mounted {@code noexec} refuses, and the frames are a few kilobytes each.
  */
 public final class SeekableIndex {
 
@@ -37,14 +40,12 @@ public final class SeekableIndex {
     public static final class Writer {
 
         private final int frameBudget;
-        private final int level;
         private final ByteArrayOutputStream frames = new ByteArrayOutputStream();
         private final List<Frame> table = new ArrayList<>();
         private final ByteArrayOutputStream block = new ByteArrayOutputStream();
 
-        public Writer(int frameBudget, int level) {
+        public Writer(int frameBudget) {
             this.frameBudget = Math.max(1, frameBudget);
-            this.level = level;
         }
 
         /** Append one NDJSON record line, sealing a frame once the pending block reaches the budget. */
@@ -60,7 +61,10 @@ public final class SeekableIndex {
                 return;
             }
             byte[] raw = block.toByteArray();
-            byte[] compressed = Zstd.compress(raw, level);
+            ZstdJavaCompressor compressor = new ZstdJavaCompressor();
+            byte[] buffer = new byte[compressor.maxCompressedLength(raw.length)];
+            byte[] compressed = Arrays.copyOf(buffer,
+                    compressor.compress(raw, 0, raw.length, buffer, 0, buffer.length));
             frames.writeBytes(compressed);
             table.add(new Frame(compressed.length, raw.length));
             block.reset();
@@ -136,8 +140,10 @@ public final class SeekableIndex {
             offset += table.get(earlier).compressedSize();
         }
         Frame frame = table.get(index);
-        byte[] compressed = Arrays.copyOfRange(chunk, (int) offset, (int) (offset + frame.compressedSize()));
-        return Zstd.decompress(compressed, (int) frame.decompressedSize());
+        byte[] decompressed = new byte[(int) frame.decompressedSize()];
+        int length = new ZstdJavaDecompressor().decompress(chunk, (int) offset, (int) frame.compressedSize(),
+                decompressed, 0, decompressed.length);
+        return length == decompressed.length ? decompressed : Arrays.copyOf(decompressed, length);
     }
 
     /** Every NDJSON record line the chunk holds, decoded frame by frame. */

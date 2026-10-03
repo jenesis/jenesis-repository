@@ -31,9 +31,6 @@ import build.jenesis.repository.walk.Traversal;
  */
 public final class PublishedIndexTask implements MaintenanceTask {
 
-    /** Zstandard level; 3 is the library default - fast, and the records are tiny and repetitive. */
-    static final int LEVEL = 3;
-
     /** Target uncompressed bytes per frame; capped to the chunk maximum so a small maximum still rotates. */
     static final int FRAME_TARGET = 32 * 1024;
 
@@ -101,7 +98,7 @@ public final class PublishedIndexTask implements MaintenanceTask {
                 || retraction.isPresent();
         long cutoff = System.currentTimeMillis();
         int frameBudget = (int) Math.max(64, Math.min(FRAME_TARGET, maxChunkBytes));
-        ChunkWriter writer = new ChunkWriter(index, maxChunkBytes, frameBudget, LEVEL);
+        ChunkWriter writer = new ChunkWriter(index, maxChunkBytes, frameBudget);
         IndexDescriptor.Cursor watermark = descriptor.watermark();
         Progress progress = new Progress(watermark);
         List<DirtyIndexFeed.Entry> marked = List.of();
