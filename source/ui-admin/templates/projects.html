@@ -41,8 +41,8 @@
                         <br th:unless="${p.description.isEmpty()}"><small th:unless="${p.description.isEmpty()}"
                             th:text="${p.description}">description</small></td>
                     <td th:text="${p.type == null} ? 'not yet typed' : ${p.type}">gradle</td>
-                    <td class="app-list__num" th:text="${p.stats.known()} ? ${p.entryCount} : '?'">0</td>
-                    <td class="app-list__num" th:text="${p.stats.known()} ? ${@format.bytes(p.totalBytes)} : '?'">0 B</td>
+                    <td class="app-list__num" th:text="${p.stats.known()} ? ${p.entryCount} : ''">0</td>
+                    <td class="app-list__num" th:text="${p.stats.known()} ? ${@format.bytes(p.totalBytes)} : ''">0 B</td>
                     <td><small th:if="${p.stats.counting()}"
                                th:text="${p.stats.lastAction() == 'delete'} ? 'being deleted…' : 'counting…'">counting&hellip;</small>
                         <small th:if="${!p.stats.counting() and p.stats.known()}"><time th:replace="~{base :: time(${p.stats.countedAt()})}">time</time></small>

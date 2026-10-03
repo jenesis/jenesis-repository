@@ -51,11 +51,12 @@ public class DomainConfig {
     // order, and two auditTrail beans would stop the context.
 
     @Bean
-    public CacheService cacheService(@Qualifier("cacheTenantStorage") CacheStorage cacheTenantStorage,
+    public CacheService cacheService(@Qualifier("cacheRootStorage") CacheStorage cacheRootStorage,
                                      AuditTrail audit, CurrentTenant currentTenant, ConsoleActor actor,
                                      SettingsAdmin settingsAdmin) {
-        // Cached build output lives in the cache's own segment of the store, not at the deployment root.
-        return new CacheService(cacheTenantStorage, audit, currentTenant, actor, settingsAdmin);
+        // Cached build output lives in the cache's own segment of the store, not at the deployment root; the service
+        // scopes it to the selected tenant on each call, so a pass it starts keeps the tenant past the request.
+        return new CacheService(cacheRootStorage, audit, currentTenant, actor, settingsAdmin);
     }
 
     @Bean

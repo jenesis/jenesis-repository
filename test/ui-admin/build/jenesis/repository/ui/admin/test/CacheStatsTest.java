@@ -22,20 +22,45 @@ class CacheStatsTest {
     @TempDir
     private Path cacheRoot;
 
+    /** The cache root the service is given, and the tenant's part of it the projects live in. */
+    private CacheStorage root;
     private CacheStorage storage;
     private CacheService service;
 
     @BeforeEach
     void setUp() throws IOException {
-        storage = CacheStorages.filesystem(cacheRoot);
+        root = CacheStorages.filesystem(cacheRoot);
+        storage = root.scope("acme");
         storage.createProject("libs", "gradle", "");
-        service = new CacheService(storage, AuditTrail.none(), () -> "acme", () -> "octo", settings());
+        service = new CacheService(root, AuditTrail.none(), () -> "acme", () -> "octo", settings());
     }
 
     /** The projects' settings, over the store the cache keeps them in. */
     private SettingsAdmin settings() {
         return new SettingsAdmin(ArtifactStoreProvider.resolve("filesystem",
                 key -> "jenrepo.filesystem.root".equals(key) ? cacheRoot.toString() : null));
+    }
+
+    @Test
+    void a_pass_keeps_the_tenant_its_request_selected_after_the_request_is_gone() throws Exception {
+        // The console selects the tenant from the request's session, which a pass running on a thread of its own has
+        // none of: the pass must carry the tenant's cache it was started over, not ask for the tenant again.
+        AtomicReference<String> selected = new AtomicReference<>("acme");
+        List<Runnable> held = new ArrayList<>();
+        CacheService console = new CacheService(root, AuditTrail.none(), selected::get, () -> "octo", settings(),
+                (name, pass) -> held.add(pass));
+        storage.store(new CacheStorage.Entry("libs", "aa", "01"),
+                new ByteArrayInputStream("abc".getBytes(StandardCharsets.UTF_8)));
+
+        assertThat(console.recount("libs")).isTrue();
+        selected.set(null);
+        held.forEach(Runnable::run);
+        selected.set("acme");
+
+        assertThat(console.stats("libs")).satisfies(stats -> {
+            assertThat(stats.counting()).as("the pass finished").isFalse();
+            assertThat(stats.entryCount()).isEqualTo(1);
+        });
     }
 
     @Test
@@ -115,7 +140,7 @@ class CacheStatsTest {
         storage.store(new CacheStorage.Entry("libs", "aa", "01"),
                 new ByteArrayInputStream("abc".getBytes(StandardCharsets.UTF_8)));
         storage.createProject("keep", "gradle", "");
-        CacheService deleting = new CacheService(storage, AuditTrail.none(), () -> "acme", () -> "octo",
+        CacheService deleting = new CacheService(root, AuditTrail.none(), () -> "acme", () -> "octo",
                 settings(), CacheService.Passes.CALLING_THREAD);
 
         assertThat(deleting.deleteProject("libs")).isTrue();
@@ -129,7 +154,7 @@ class CacheStatsTest {
     @Test
     void a_deletion_is_refused_while_a_pass_runs() throws Exception {
         CountDownLatch release = new CountDownLatch(1);
-        CacheService held = new CacheService(storage, AuditTrail.none(), () -> "acme", () -> "octo",
+        CacheService held = new CacheService(root, AuditTrail.none(), () -> "acme", () -> "octo",
                 settings(), (name, pass) -> Thread.ofVirtual().name(name).start(() -> {
                     try {
                         release.await();

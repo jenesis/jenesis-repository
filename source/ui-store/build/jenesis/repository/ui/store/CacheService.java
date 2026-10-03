@@ -20,7 +20,8 @@ import build.jenesis.repository.walk.Traversal;
  */
 public class CacheService {
 
-    private final CacheStorage storage;
+    /** The deployment's cache root; every call scopes it to the selected tenant ({@link #storage()}). */
+    private final CacheStorage root;
     private final AuditTrail audit;
     private final CurrentTenant current;
     private final ConsoleActor actor;
@@ -44,20 +45,39 @@ public class CacheService {
         Passes CALLING_THREAD = (name, pass) -> pass.run();
     }
 
-    public CacheService(CacheStorage storage, AuditTrail audit, CurrentTenant current, ConsoleActor actor,
+    public CacheService(CacheStorage root, AuditTrail audit, CurrentTenant current, ConsoleActor actor,
                         SettingsAdmin settings) {
-        this(storage, audit, current, actor, settings, Passes.BACKGROUND);
+        this(root, audit, current, actor, settings, Passes.BACKGROUND);
     }
 
-    /** {@code settings} reads and writes a project's settings, the policy a sweep started here applies. */
-    public CacheService(CacheStorage storage, AuditTrail audit, CurrentTenant current, ConsoleActor actor,
+    /** {@code root} is the deployment's cache, scoped to the tenant {@code current} names on every call;
+     *  {@code settings} reads and writes a project's settings, the policy a sweep started here applies. */
+    public CacheService(CacheStorage root, AuditTrail audit, CurrentTenant current, ConsoleActor actor,
                         SettingsAdmin settings, Passes passes) {
         this.settings = settings;
         this.passes = passes;
-        this.storage = storage;
+        this.root = root;
         this.audit = audit;
         this.current = current;
         this.actor = actor;
+    }
+
+    /** The selected tenant's cache, resolved now: a pass takes it with it, since the tenant is the request's and the
+     *  pass outlives the request. */
+    private CacheStorage storage() {
+        String tenant = current.name();
+        if (tenant == null) {
+            throw new IllegalStateException("No tenant selected.");
+        }
+        return root.scope(tenant);
+    }
+
+    /** What a background pass does to the project, over the tenant's cache the request resolved; {@code null} for a
+     *  pass that only counts. */
+    @FunctionalInterface
+    private interface Work {
+
+        Eviction.Result run(CacheStorage scoped) throws Exception;
     }
 
     /** Records a privileged cache mutation under the selected tenant, attributed to the member; best-effort. */
@@ -102,7 +122,7 @@ public class CacheService {
 
     /** The stored stats of a project - a point read, {@link Stats#unknown()} before any pass has run. */
     public Stats stats(String name) {
-        Properties stored = storage.readConfig(name, STATS_FILE);
+        Properties stored = storage().readConfig(name, STATS_FILE);
         String at = stored.getProperty("counted-at", "");
         boolean running = Boolean.parseBoolean(stored.getProperty("running", "false"));
         return new Stats(Long.parseLong(stored.getProperty("entries", "0")),
@@ -114,19 +134,20 @@ public class CacheService {
     /** Count the project's entries in the background and store the figure; whether a pass was started. */
     public boolean recount(String name) throws IOException {
         requireProject(name);
-        return pass(name, "count", () -> null);
+        return pass(name, "count", _ -> null);
     }
 
     /** Run {@code action} in the background, then count what it left, and store both; refuses to start while a
      *  pass younger than {@link #STALE_PASS} is running. */
-    private boolean pass(String name, String action, Callable<Eviction.Result> work) throws IOException {
-        if (!begin(name, action)) {
+    private boolean pass(String name, String action, Work work) throws IOException {
+        CacheStorage storage = storage();
+        if (!begin(storage, name, action)) {
             return false;
         }
         passes.start("cache-" + action + "-" + name, () -> {
             String outcome;
             try {
-                Eviction.Result result = work.call();
+                Eviction.Result result = work.run(storage);
                 outcome = result == null ? "counted"
                         : "deleted " + result.entriesDeleted() + " entries, freed " + result.bytesFreed() + " bytes";
             } catch (Exception failure) {
@@ -151,7 +172,7 @@ public class CacheService {
 
     /** Marks the project running {@code action} unless a pass younger than {@link #STALE_PASS} is; compare-and-set on
      *  the stats file, so of two nodes one starts. */
-    private boolean begin(String name, String action) throws IOException {
+    private static boolean begin(CacheStorage storage, String name, String action) throws IOException {
         String path = name + "/" + STATS_FILE;
         for (int tries = 0; tries < Retries.COMPARE_AND_SET; tries++) {
             Object version = storage.fileVersion(path);
@@ -181,7 +202,8 @@ public class CacheService {
      */
     public boolean deleteProject(String name) throws IOException {
         requireProject(name);
-        if (!begin(name, "delete")) {
+        CacheStorage storage = storage();
+        if (!begin(storage, name, "delete")) {
             return false;
         }
         audit("cache.project.delete", name);
@@ -214,7 +236,7 @@ public class CacheService {
         List<String> names = new ArrayList<>();
         String cursor = null;
         while (true) {
-            Traversal.Result page = storage.projects(cursor, CacheStorage.PAGE, names::add);
+            Traversal.Result page = storage().projects(cursor, CacheStorage.PAGE, names::add);
             if (page.exhausted()) {
                 break;
             }
@@ -236,7 +258,7 @@ public class CacheService {
         for (String name : names) {
             UnaryOperator<String> config = unchecked(() -> configs.of(name));
             Stats stats = stats(name);                      // the stored figure, never a sweep per row
-            Optional<CacheStorage.Project> record = storage.project(name);
+            Optional<CacheStorage.Project> record = storage().project(name);
             summaries.add(new ProjectSummary(name, record.map(CacheStorage.Project::type).orElse(null),
                     record.map(CacheStorage.Project::description).orElse(""), stats.entryCount(), stats.totalBytes(),
                     orEmpty(config.apply(ProjectPolicy.SIZE)), orEmpty(config.apply(ProjectPolicy.TTL)), stats));
@@ -248,7 +270,7 @@ public class CacheService {
         requireProject(name);
         UnaryOperator<String> config = unchecked(() -> settings.projectConfig(current.name(), name));
         Stats stats = stats(name);
-        Optional<CacheStorage.Project> record = storage.project(name);
+        Optional<CacheStorage.Project> record = storage().project(name);
         return new ProjectDetail(name, record.map(CacheStorage.Project::type).orElse(null),
                 record.map(CacheStorage.Project::description).orElse(""), orEmpty(config.apply(ProjectPolicy.SIZE)),
                 ProjectPolicy.lru(config.apply(ProjectPolicy.LRU)), orEmpty(config.apply(ProjectPolicy.TTL)),
@@ -299,13 +321,13 @@ public class CacheService {
         if (!refused.isEmpty()) {
             throw new IllegalArgumentException(String.join(" ", refused.values()));
         }
-        if (storage.projectExists(validated)) {
+        if (storage().projectExists(validated)) {
             throw new IllegalArgumentException("Project already exists: " + name);
         }
         if (!values.isEmpty()) {
             settings.saveProject(current.name(), validated, values);
         }
-        storage.createProject(validated, type, line);
+        storage().createProject(validated, type, line);
     }
 
     /** What refuses {@code type} for a new project, empty when it names a build tool this deployment serves. */
@@ -325,10 +347,10 @@ public class CacheService {
     public boolean describeProject(String name, String description) throws IOException {
         requireProject(name);
         String line = RepositoryDocument.description(description);
-        if (storage.project(name).map(CacheStorage.Project::description).orElse("").equals(line)) {
+        if (storage().project(name).map(CacheStorage.Project::description).orElse("").equals(line)) {
             return false;
         }
-        storage.describeProject(name, line);
+        storage().describeProject(name, line);
         audit("cache.project.describe", name);
         return true;
     }
@@ -340,7 +362,7 @@ public class CacheService {
         }
         try {
             String validated = validateName(name);
-            return storage.projectExists(validated) ? Optional.of("Project '" + validated + "' exists already.")
+            return storage().projectExists(validated) ? Optional.of("Project '" + validated + "' exists already.")
                     : Optional.empty();
         } catch (IllegalArgumentException refused) {
             return Optional.of(refused.getMessage());
@@ -364,31 +386,33 @@ public class CacheService {
     public boolean enforceSizeCap(String name) throws IOException {
         requireProject(name);
         audit("cache.evict.size", name);
-        return pass(name, "size cap", () -> enforceSizeCapNow(name));
+        ProjectPolicy policy = policy(name);
+        return pass(name, "size cap", storage -> Eviction.enforceSizeCap(storage, name, policy.size(), policy.lru()));
     }
 
     public boolean expireTtl(String name) throws IOException {
         requireProject(name);
         audit("cache.evict.ttl", name);
-        return pass(name, "expire stale", () -> expireTtlNow(name));
+        Duration ttl = policy(name).ttl();
+        return pass(name, "expire stale", storage -> Eviction.expireTtl(storage, name, ttl));
     }
 
     public boolean clearAll(String name) throws IOException {
         requireProject(name);
         audit("cache.evict.clear", name);
-        return pass(name, "clear", () -> clearAllNow(name));
+        return pass(name, "clear", storage -> Eviction.clearAll(storage, name));
     }
 
     /** The sweeps themselves - what the background passes run, and the test seam. */
     public Eviction.Result enforceSizeCapNow(String name) {
         requireProject(name);
         ProjectPolicy policy = policy(name);
-        return Eviction.enforceSizeCap(storage, name, policy.size(), policy.lru());
+        return Eviction.enforceSizeCap(storage(), name, policy.size(), policy.lru());
     }
 
     public Eviction.Result expireTtlNow(String name) {
         requireProject(name);
-        return Eviction.expireTtl(storage, name, policy(name).ttl());
+        return Eviction.expireTtl(storage(), name, policy(name).ttl());
     }
 
     /** The policy a sweep started here applies: the project's effective settings, parsed as the cache parses them. */
@@ -398,11 +422,11 @@ public class CacheService {
 
     public Eviction.Result clearAllNow(String name) {
         requireProject(name);
-        return Eviction.clearAll(storage, name);
+        return Eviction.clearAll(storage(), name);
     }
 
     private void requireProject(String name) {
-        if (!storage.projectExists(validateName(name))) {
+        if (!storage().projectExists(validateName(name))) {
             throw new IllegalArgumentException("No such project: " + name);
         }
     }

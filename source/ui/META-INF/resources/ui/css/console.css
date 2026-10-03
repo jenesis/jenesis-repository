@@ -1488,11 +1488,19 @@ main button.app-switch__reset {
     justify-content: space-between;
     gap: 1rem;
 }
+/* The name and what it means take the line's free space and the badges keep its end, however long the text runs; they
+   share a line down to a narrow screen, where the badges wrap under the text and still sit at the end. */
+.module-head > :first-child {
+    flex: 1 1 20rem;
+    min-width: 0;
+}
 .module-badges {
     display: flex;
+    flex: none;
     flex-wrap: wrap;
     align-items: center;
     gap: .4rem;
+    margin-left: auto;
 }
 .module-settings {
     margin: .4rem 0 0;

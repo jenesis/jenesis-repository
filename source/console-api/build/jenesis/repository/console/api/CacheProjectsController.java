@@ -57,9 +57,8 @@ public class CacheProjectsController {
      * The cache's segment of the store is wired by the console node, so a repository-only composition lacks it; it is
      * resolved lazily so that composition answers {@code 501} rather than failing to boot.
      *
-     * <p>It is the <b>root</b> storage, scoped per request by the tenant the routing answers. The console's
-     * request-scoped {@code cacheTenantStorage} takes its tenant from the session, which a headless call lacks and
-     * which would name the session's tenant rather than the request's.
+     * <p>It is the <b>root</b> storage, scoped per request by the tenant the routing answers - the request's, never a
+     * browser session's, which a headless call lacks.
      */
     public CacheProjectsController(@Qualifier("cacheRootStorage") ObjectProvider<CacheStorage> storage,
                                    AuditTrail audit,
@@ -291,6 +290,6 @@ public class CacheProjectsController {
         // request's.
         SettingsAdmin settings = new SettingsAdmin(root, editor, List::of, audit, () -> tenant, () -> actor,
                 _ -> null);
-        return new CacheService(cache.scope(tenant), audit, () -> tenant, () -> actor, settings, passes);
+        return new CacheService(cache, audit, () -> tenant, () -> actor, settings, passes);
     }
 }
