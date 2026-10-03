@@ -53,6 +53,30 @@ public final class Durations {
         }
     }
 
+    /** The words a duration dial takes for its mechanism switched off: {@code 0}, {@code off} and {@code false}. */
+    public static final Set<String> OFF = Set.of("0", "off", "false");
+
+    /**
+     * A duration dial's value as the deployment set it: {@code fallback} when unset or blank, {@link Duration#ZERO}
+     * for a word in {@link #OFF}, and otherwise {@link #parse}. A value that is none of these is refused naming
+     * {@code key} and the forms it takes, never read as the default the operator did not choose.
+     */
+    public static Duration dial(String value, String key, Duration fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        String trimmed = value.trim();
+        if (OFF.contains(trimmed.toLowerCase(Locale.ROOT))) {
+            return Duration.ZERO;
+        }
+        try {
+            return parse(trimmed);
+        } catch (IllegalArgumentException unparseable) {
+            throw new IllegalArgumentException(key + "=" + value + " is not a duration; accepted: 0 or off, an "
+                    + "ISO-8601 duration (PT5M, PT30S) or a suffixed one (500ms, 30s, 5m, 6h, 1d)", unparseable);
+        }
+    }
+
     /** Whether {@link #parse} would accept {@code value} - the validator's question, asked without the throw. */
     public static boolean parses(String value) {
         try {

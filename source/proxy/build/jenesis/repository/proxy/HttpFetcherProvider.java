@@ -4,6 +4,7 @@ import module java.base;
 import build.jenesis.repository.format.FetcherProvider;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.store.Durations;
+import build.jenesis.repository.store.Features;
 
 /**
  * Discovers the HTTP upstream fetcher, composed with the proxy's caches: index revalidation always on (it never serves
@@ -31,13 +32,6 @@ public final class HttpFetcherProvider implements FetcherProvider {
     /** The negative-cache window: a minute when unset, none for {@code 0} or {@code off}, else a duration in the
      *  deployment's grammar ({@code PT90S}, {@code 90s}, {@code 5m}). */
     private static Duration missTtl(String value) {
-        if (value == null || value.isBlank()) {
-            return Duration.ofSeconds(60);
-        }
-        String trimmed = value.trim();
-        if (trimmed.equals("0") || trimmed.equalsIgnoreCase("off")) {
-            return Duration.ZERO;
-        }
-        return Durations.parse(trimmed);
+        return Durations.dial(value, Features.key("proxy-miss-ttl"), Duration.ofSeconds(60));
     }
 }

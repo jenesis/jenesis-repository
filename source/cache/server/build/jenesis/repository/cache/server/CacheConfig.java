@@ -51,7 +51,7 @@ public class CacheConfig {
     @Bean(destroyMethod = "stop")
     public Cache cache(CacheProperties properties, Authorization authorization, KeyUsageTracker keyUsageTracker,
                        Environment environment, MeterRegistry registry, ArtifactStore artifactStore) {
-        Duration reaper = interval(properties.getReaper());
+        Duration reaper = interval(properties.getReaper(), "jenrepo.cache.reaper");
         int minFreePercent = (int) Math.clamp(properties.getMinFreePercent(), 0, 100);
         String bootstrapKey = properties.getKey();
         String defaultTenant = properties.getDefaultTenant();
@@ -66,7 +66,7 @@ public class CacheConfig {
                 minFreePercent, properties.getDefaultProject(), properties.isProjectRequired(),
                 bootstrapKey, defaultTenant, registry);
         cache.usageTracker(keyUsageTracker);
-        Duration touchInterval = interval(properties.getTouchInterval());
+        Duration touchInterval = interval(properties.getTouchInterval(), "jenrepo.cache.touch-interval");
         cache.touchInterval(touchInterval);
         // A project's policy is trusted for the same window as the credential a request is authorised against.
         Duration policyInterval = StoreCache.configuredTtl();
@@ -88,12 +88,10 @@ public class CacheConfig {
         return cache;
     }
 
-    private static Duration interval(String value) {
-        if (value == null || value.isBlank() || value.equals("0") || value.equalsIgnoreCase("off")) {
-            return null;
-        }
-        Duration duration = Durations.parse(value);
-        return duration.isZero() || duration.isNegative() ? null : duration;
+    /** A cache dial's interval, or {@code null} for none: unset, off, or not positive. */
+    private static Duration interval(String value, String key) {
+        Duration interval = Durations.dial(value, key, null);
+        return interval == null || interval.isZero() || interval.isNegative() ? null : interval;
     }
 
 }

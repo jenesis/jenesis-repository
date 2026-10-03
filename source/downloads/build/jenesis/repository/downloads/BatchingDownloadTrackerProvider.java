@@ -26,13 +26,8 @@ public final class BatchingDownloadTrackerProvider implements DownloadTrackerPro
 
     /** The dial's value: absent is the shipped default, {@code 0} or {@code off} is a flush on every drain. */
     static Duration flushInterval(String value) {
-        if (value == null || value.isBlank()) {
-            return BatchingDownloadTracker.DEFAULT_FLUSH_INTERVAL;
-        }
-        String trimmed = value.trim();
-        if (trimmed.equals("0") || trimmed.equalsIgnoreCase("off")) {
-            return null;
-        }
-        return Durations.parse(trimmed);
+        Duration interval = Durations.dial(value, Features.key("download-flush-interval"),
+                BatchingDownloadTracker.DEFAULT_FLUSH_INTERVAL);
+        return interval.isZero() ? null : interval;
     }
 }

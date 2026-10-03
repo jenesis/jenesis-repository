@@ -243,19 +243,7 @@ public final class RebuildScheduler implements AutoCloseable, ObservabilitySourc
      * meanings; this dial <em>is</em> the toggle, and has no other.
      */
     public static Duration interval(String value) {
-        if (value == null || value.isBlank()) {
-            return DEFAULT_INTERVAL;
-        }
-        String text = value.trim();
-        if (text.equalsIgnoreCase("off") || text.equals("0") || text.equalsIgnoreCase("false")) {
-            return Duration.ZERO;
-        }
-        try {
-            return Durations.parse(text);
-        } catch (IllegalArgumentException unparseable) {
-            throw new IllegalArgumentException(INTERVAL + " must be a duration (PT6H, 6h, 30m, 1d) or 'off', not '"
-                    + value + "'", unparseable);
-        }
+        return Durations.dial(value, INTERVAL, DEFAULT_INTERVAL);
     }
 
     @Override

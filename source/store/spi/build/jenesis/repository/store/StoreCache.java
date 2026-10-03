@@ -113,42 +113,16 @@ public final class StoreCache {
         return ttl(Features.settings().apply(TTL_SETTING));
     }
 
-    /** {@code setting} as a duration: {@code 0} is off, an ISO-8601 duration or a suffixed one ({@code 500ms},
-     *  {@code 30s}, {@code 5m}, {@code 1h}) is itself, empty is {@link #DEFAULT_TTL}, anything else is refused. */
+    /** {@code setting} as a duration: {@code 0} or {@code off} is off, a duration in the deployment's one grammar is
+     *  itself, empty is {@link #DEFAULT_TTL}, anything else is refused. */
     public static Duration ttl(String setting) {
         return duration(setting, TTL_SETTING, DEFAULT_TTL);
     }
 
-    /** {@code setting} as a duration in the forms {@link #ttl} accepts, empty as {@code fallback}, anything else
-     *  refused naming {@code key} - the one parser the cache ttls share. */
+    /** {@code setting} as a cache ttl naming {@code key}: {@link Durations#dial}, so {@code 0} or {@code off} is a
+     *  cache switched off - the one reading the cache ttls share. */
     static Duration duration(String setting, String key, Duration fallback) {
-        if (setting == null || setting.isBlank()) {
-            return fallback;
-        }
-        String value = setting.trim();
-        if (value.equals("0")) {
-            return Duration.ZERO;
-        }
-        try {
-            if (value.startsWith("P") || value.startsWith("p")) {
-                return Duration.parse(value.toUpperCase(Locale.ROOT));
-            }
-            Matcher suffixed = Pattern.compile("(\\d+)\\s*(ms|s|m|h|d)").matcher(value);
-            if (suffixed.matches()) {
-                long amount = Long.parseLong(suffixed.group(1));
-                return switch (suffixed.group(2)) {
-                    case "ms" -> Duration.ofMillis(amount);
-                    case "s" -> Duration.ofSeconds(amount);
-                    case "m" -> Duration.ofMinutes(amount);
-                    case "h" -> Duration.ofHours(amount);
-                    default -> Duration.ofDays(amount);
-                };
-            }
-        } catch (DateTimeParseException | NumberFormatException _) {
-            // fall through to the refusal below
-        }
-        throw new IllegalArgumentException(Features.key(key) + "=" + setting + " is not a duration; accepted: "
-                + "0 (off), an ISO-8601 duration (PT5M, PT30S) or a suffixed one (500ms, 30s, 5m, 1h)");
+        return Durations.dial(setting, Features.key(key), fallback);
     }
 
     public String name() {
