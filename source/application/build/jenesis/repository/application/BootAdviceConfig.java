@@ -42,8 +42,8 @@ public class BootAdviceConfig {
         if (advice.hasGuidance()) {
             // One line naming the dials; their descriptions are on the setup guide and on /api/config.
             LOGGER.info("FIRST-RUN HARDENING: this deployment has no runtime configuration yet. Authorization is on "
-                    + "and the gate refuses CRITICAL findings; the advisory feeds are off until switched on. The "
-                    + "console's setup guide (/ui/setup) walks through the settings that still need a "
+                    + "and the gate holds CRITICAL findings for review; the advisory feeds are off until switched on. "
+                    + "The console's setup guide (/ui/setup) walks through the settings that still need a "
                     + "deployment-specific answer: {}. This notice stops once you configure anything.",
                     advice.dimensions().stream().map(FirstRunHardening.Step::key)
                             .collect(Collectors.joining(", ")));
