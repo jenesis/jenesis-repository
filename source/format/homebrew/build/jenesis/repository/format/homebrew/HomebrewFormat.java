@@ -15,6 +15,7 @@ import build.jenesis.repository.blobs.Keys;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
@@ -44,7 +45,15 @@ import build.jenesis.repository.store.Publication;
  * hold is a statement about what this repository serves, not what a client ends up with.
  */
 public final class HomebrewFormat implements RepositoryFormat, ArtifactLayout, PathKeyedBlobLayout, ArtifactSignatures,
-        RepositoryExporter {
+        RepositoryExporter, RepositoryImporter.Delegating {
+
+    /** The migration-import capability, delegated to {@link HomebrewImporter}. */
+    private final HomebrewImporter importer = new HomebrewImporter();
+
+    @Override
+    public RepositoryImporter importer() {
+        return importer;
+    }
 
     /** The package-ecosystem name Homebrew coordinates report. */
     public static final String ECOSYSTEM = "Homebrew";

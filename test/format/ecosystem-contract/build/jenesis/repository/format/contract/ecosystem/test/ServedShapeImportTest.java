@@ -9,6 +9,7 @@ import build.jenesis.repository.format.cocoapods.CocoaPodsImporter;
 import build.jenesis.repository.format.composer.ComposerImporter;
 import build.jenesis.repository.format.conda.CondaImporter;
 import build.jenesis.repository.format.helm.HelmImporter;
+import build.jenesis.repository.format.homebrew.HomebrewImporter;
 import build.jenesis.repository.format.ivy.IvyImporter;
 import build.jenesis.repository.format.rpm.RpmImporter;
 import build.jenesis.repository.store.ArtifactDescriptor;
@@ -19,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * A format whose served paths name a repository of their own - an RPM repository, a conda channel, a Composer, Cargo,
  * Helm or CocoaPods registry - imports a path of that shape into the repository it names, so another deployment's
  * listing, which names each file where it is served, is laid out where the source served it rather than collapsed
- * into the importer's one default. Ivy, whose paths name no repository, lays a file out where it was served.
+ * into the importer's one default. Ivy and Homebrew lay a file out where it was served.
  */
 class ServedShapeImportTest {
 
@@ -31,7 +32,8 @@ class ServedShapeImportTest {
                 Arguments.of(new CargoImporter(), "cargo", "crates/api/v1/crates/acme-demo/1.0.0/download"),
                 Arguments.of(new HelmImporter(), "helm", "charts/charts/demo-1.0.0.tgz"),
                 Arguments.of(new CocoaPodsImporter(), "cocoapods", "pods/pods/Alamofire/5.6.4/Alamofire.zip"),
-                Arguments.of(new IvyImporter(), "ivy", "com.acme.ivy/widget/1.0/widget-1.0.jar"));
+                Arguments.of(new IvyImporter(), "ivy", "com.acme.ivy/widget/1.0/widget-1.0.jar"),
+                Arguments.of(new HomebrewImporter(), "homebrew", "bottles/hello-2.12.3.x86_64_linux.bottle.tar.gz"));
     }
 
     @ParameterizedTest(name = "{1}")

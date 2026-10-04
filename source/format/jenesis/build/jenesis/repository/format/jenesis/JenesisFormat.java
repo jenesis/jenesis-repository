@@ -8,6 +8,7 @@ import build.jenesis.repository.store.ServedAliases;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.format.ExportTarget;
@@ -24,7 +25,8 @@ import build.jenesis.repository.format.PublishedExport;
  * The coordinate is the module name; the versioned pointer {@code /module/<name>/<version>/<file>} carries the version,
  * the latest pointer {@code /module/<name>/<name>.jar} none - the two shapes {@link ModuleViewPublisher} links.
  */
-public final class JenesisFormat implements RepositoryFormat, ArtifactLayout, RepositoryExporter {
+public final class JenesisFormat implements RepositoryFormat, ArtifactLayout, RepositoryExporter,
+        RepositoryImporter.Delegating {
 
     /** The ecosystem name the descriptor carries, distinct from {@link #name()} "jenesis", the routing id; every
      *  consumer of a Jenesis module reports it. */
@@ -38,6 +40,14 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout, Re
     @Override
     public boolean handles(String path) {
         return path.startsWith(JavaLayout.MODULE_ROUTE) || path.startsWith("/artifact/");
+    }
+
+    /** The migration-import capability, delegated to {@link JenesisImporter}. */
+    private final JenesisImporter importer = new JenesisImporter();
+
+    @Override
+    public RepositoryImporter importer() {
+        return importer;
     }
 
     /** Its routes - {@code /module/...} and {@code /artifact/...} - sit at the root of the repository. */
@@ -162,21 +172,23 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout, Re
      */
     private static void put(FormatExchange exchange, Publication publication, ArtifactStore store)
             throws IOException {
-        String path = exchange.path();
+        exchange.respond(publish(exchange.path(), exchange.requestStream(), publication, store));
+    }
+
+    /** {@link #put}'s layout, answering the status a {@code PUT} of {@code content} to {@code path} is given. */
+    static int publish(String path, InputStream content, Publication publication, ArtifactStore store)
+            throws IOException {
         if (!path.startsWith(JavaLayout.MODULE_ROUTE)) {
-            exchange.respond(405);
-            return;
+            return 405;
         }
         String[] segments = path.substring(JavaLayout.MODULE_ROUTE.length()).split("/", -1);
         if (segments.length == 2 && segments[1].equals(segments[0] + ".jar")) {
-            exchange.respond(405);
-            return;
+            return 405;
         }
         if (segments.length != 3 || !ArtifactLayout.addressable(segments) || !moduleFile(segments[0], segments[2])) {
-            exchange.respond(400);
-            return;
+            return 400;
         }
-        Publication.Blob blob = publication.stored(exchange.requestStream());
+        Publication.Blob blob = publication.stored(content);
         publication.link(path, blob.hash(), blob.size());
         if (segments[2].equals(segments[0] + ".jar")) {
             String latest = JavaLayout.latestModule(segments[0]);
@@ -185,7 +197,7 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout, Re
                 ServedAliases.reassign(store, path, latest);
             }
         }
-        exchange.respond(201);
+        return 201;
     }
 
     /** Whether {@code file} is a jar of the module {@code name}: its own, or one classified {@code -<classifier>}. */

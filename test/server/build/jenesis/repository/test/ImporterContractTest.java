@@ -3,7 +3,6 @@ package build.jenesis.repository.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.contract.testkit.ContractCensus;
-import build.jenesis.repository.contract.testkit.ContractCensus.Exemption;
 import build.jenesis.repository.contract.testkit.ContractCensus.Provider;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
@@ -23,12 +22,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * {@code ServiceLoader.load(RepositoryFormat.class)} filtered to the import capability - so the test works through the
  * SPI alone and needs no per-importer wiring.
  *
- * <p>Core ships three importers of two shapes: {@link #COORDINATE Maven} is coordinate+versioned (its parsed
- * version is a traversal-free store segment, and a leading-slash H2 path resolves identically); {@code raw} returns a
- * descriptor for <em>every</em> asset (it is the un-inspected catch-all, so it never declines) and {@code oci} returns
- * {@code Optional.empty()} for {@code importTarget} by design (OCI owns its own manifest screening choke point). The two
- * special shapes are asserted directly; the shared {@link ContractCensus} ratchet then confirms every statically
- * declared format provider is runtime-visible and has importer coverage or a reason-bearing exemption.
+ * <p>Core ships four importers of three shapes: {@link #COORDINATE Maven and Jenesis} are coordinate+versioned (the
+ * parsed version is a traversal-free store segment, and a leading-slash H2 path resolves identically); {@code raw}
+ * returns a descriptor for <em>every</em> asset (it is the un-inspected catch-all, so it never declines) and
+ * {@code oci} returns {@code Optional.empty()} for {@code importTarget} by design (OCI owns its own manifest screening
+ * choke point). The two special shapes are asserted directly; the shared {@link ContractCensus} ratchet then confirms every
+ * statically declared format provider is runtime-visible and has importer coverage or a reason-bearing exemption.
  *
  * <p>The traversal row below is the one property every importer runs, over the format kit's shared
  * {@link TraversalVectors} list rather than over per-importer shapes. The <em>read</em> half of a migration - what an
@@ -38,14 +37,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class ImporterContractTest {
 
-    private static final String JENREPO_FORMAT =
-            "build.jenesis.repository.format.jenesis.JenesisFormat";
-
     record Case(String format, String deepPath, String nonDistributionPath) {
     }
 
     private static final List<Case> COORDINATE = List.of(
-            new Case("maven", "org/example/lib/1.0/lib-1.0.jar", "org/example/lib/maven-metadata.xml"));
+            new Case("maven", "org/example/lib/1.0/lib-1.0.jar", "org/example/lib/maven-metadata.xml"),
+            new Case("jenesis", "module/org.example.lib/1.0/org.example.lib.jar",
+                    "artifact/org.example/lib/1.0/lib-1.0.jar"));
 
     private static List<RepositoryImporter> discovered() {
         return discoveredFormats().stream()
@@ -200,8 +198,7 @@ class ImporterContractTest {
                 ContractCensus.declaredProviders(RepositoryFormat.class),
                 runtime,
                 fixtures,
-                List.of(new Exemption(JENREPO_FORMAT,
-                        "the Jenesis module layout does not implement the migration-import capability")));
+                List.of());
     }
 
     private static Path repositoryRoot() {
