@@ -178,22 +178,6 @@ class BlobLayoutCoordinateSeamTest {
     }
 
     /**
-     * The backwards direction, over every fixtured format at once: a pointer this layout wrote for a published
-     * coordinate must describe back to <em>that</em> coordinate, or not be claimed at all.
-     *
-     * <p>{@link BlobLayout#describePointer} is what rebuilds a release's {@code published} section when the accept path
-     * lost it - the section a retroactive advisory or licence sweep enumerates by. It defaults to empty, and empty here
-     * is a pass: a format that has not implemented it is simply not repaired, which is exactly as repairable as it
-     * was before the seam existed. What must never happen is the other outcome. A layout that answers the
-     * <em>wrong</em> coordinate writes a row against a release that was never published, and retention then ages
-     * artifacts by it - so the property is stated as "answer nothing, or answer correctly", and it grows teeth for
-     * each format on the day that format implements the clause rather than needing a test written with it.
-     *
-     * <p>It is deliberately driven off {@code blobKeys}: those are the keys this layout really wrote for the seeded
-     * version, so the round trip is over the format's own output rather than over a key this test invented and might
-     * have spelled in a shape the format never produces.
-     */
-    /**
      * A layout may not answer {@link BlobLayout#describePointer} unless this suite can round-trip it.
      *
      * <p>The round trip below is the check that keeps the clause honest, and it only reaches the layouts that have
@@ -240,6 +224,22 @@ class BlobLayoutCoordinateSeamTest {
                 .isEmpty();
     }
 
+    /**
+     * The backwards direction, over every fixtured format at once: a pointer this layout wrote for a published
+     * coordinate must describe back to <em>that</em> coordinate, or not be claimed at all.
+     *
+     * <p>{@link BlobLayout#describePointer} is what rebuilds a release's {@code published} section when the accept path
+     * lost it - the section a retroactive advisory or licence sweep enumerates by. It defaults to empty, and empty here
+     * is a pass: a format that has not implemented it is simply not repaired. What must never happen is the other
+     * outcome. A layout that answers the
+     * <em>wrong</em> coordinate writes a row against a release that was never published, and retention then ages
+     * artifacts by it - so the property is stated as "answer nothing, or answer correctly", and it grows teeth for
+     * each format on the day that format implements the clause rather than needing a test written with it.
+     *
+     * <p>It is deliberately driven off {@code blobKeys}: those are the keys this layout really wrote for the seeded
+     * version, so the round trip is over the format's own output rather than over a key this test invented and might
+     * have spelled in a shape the format never produces.
+     */
     @Test
     void a_pointer_a_layout_wrote_describes_back_to_the_coordinate_it_wrote_it_for() throws IOException {
         List<String> claimed = new ArrayList<>();

@@ -305,9 +305,6 @@ class StoreMetadataTest {
         }
     }
 
-    /** A store wrapper that, on the first CAS write to a target key, first commits a competing section underneath -
-     *  so the caller's token goes stale and its write conflicts exactly once, exercising the re-read-and-retry
-     *  convergence. */
     /** A store whose conditional write takes a while, so concurrent writers of one document queue behind it, and
      *  which counts the conditional writes it was asked for. */
     private static final class SlowWritingStore extends DelegatingStore {
@@ -334,6 +331,9 @@ class StoreMetadataTest {
         }
     }
 
+    /** A store wrapper that, on the first CAS write to a target key, first commits a competing section underneath -
+     *  so the caller's token goes stale and its write conflicts exactly once, exercising the re-read-and-retry
+     *  convergence. */
     private static final class RaceInjectingStore extends DelegatingStore {
 
         private final String targetKey;

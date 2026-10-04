@@ -68,11 +68,11 @@ class QuarantineLogTest {
 
     @Test
     void two_distinct_paths_withheld_in_the_same_millisecond_each_keep_their_own_row() throws IOException {
-        // Regression guard (7d9140f): the event object was named "<millis>-<hashCode(path)>", so two DISTINCT paths
-        // withheld in the same millisecond whose 32-bit String hashCodes collided overwrote each other's audit row.
-        // These two paths are distinct but share a hashCode (the classic "Aa"/"BB" equal-hash pair, same length,
-        // differing only in that adjacent pair), so under the old naming they mapped to one object and one survived;
-        // the SHA-256 path digest keeps them apart. The instant is fixed, so both names share the same millis prefix.
+        // An event object named "<millis>-<hashCode(path)>" would let two DISTINCT paths withheld in the same
+        // millisecond whose 32-bit String hashCodes collide overwrite each other's audit row. These two paths are
+        // distinct but share a hashCode (the classic "Aa"/"BB" equal-hash pair, same length, differing only in that
+        // adjacent pair), so under that naming they would map to one object and one would survive; the SHA-256 path
+        // digest keeps them apart. The instant is fixed, so both names share the same millis prefix.
         QuarantineLog log = new QuarantineLog(store);
         String a = "/maven/org/x/1.0/x-Aa.jar";
         String b = "/maven/org/x/1.0/x-BB.jar";

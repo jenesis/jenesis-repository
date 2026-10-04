@@ -519,18 +519,14 @@ class SearchIndexTest {
         };
     }
 
-    /** The coordinates one full page of {@code query} matches, or {@code null} when this repository has no usable
-     *  index yet - which the SPI now says with an empty {@link Optional} rather than a {@code null} list.
-     *  Every assertion below is about the rows, so the page is unwrapped here once. */
     /**
      * A search that finds its index due for a refresh answers from the generation it already holds while the new one
      * loads, rather than waiting for the load to finish.
      *
-     * <p>The refresh was {@code synchronized} and ran ON the request that found the window expired, and loading a
-     * changed generation fetches every segment file it names from the store - so that request waited for the whole
-     * download and every other search queued on the monitor behind it, while a good generation sat in memory. Over a
-     * directory that is milliseconds; over an object store it is the index's size in round trips, and it was the
-     * Azurite search timeout the fleet's search-claim scenario had been filing under the emulator's throughput.
+     * <p>Loading a changed generation fetches every segment file it names from the store, so a refresh run ON the
+     * request that found the window expired, under a monitor, would make that request wait for the whole download and
+     * every other search queue behind it, while a good generation sits in memory. Over a directory that is
+     * milliseconds; over an object store it is the index's size in round trips.
      *
      * <p>Every other test here builds a fresh reader per query, so each takes the FIRST-load path and none exercises a
      * refresh with a generation already held. This one reuses one reader across two generations and holds the second
@@ -591,11 +587,13 @@ class SearchIndexTest {
                 .contains("@angular/core:17.1.0");
     }
 
+    /** The coordinates one full page of {@code query} matches, or {@code null} when this repository has no usable
+     *  index yet, which the SPI says with an empty {@link Optional}.
+     *  Every assertion below is about the rows, so the page is unwrapped here once. */
     private static List<String> hits(SearchQuery query, String text) throws IOException {
         return query.search(text, null, SearchQuery.MAX_PAGE)
                 .map(page -> page.hits().stream().map(SearchQuery.Hit::display).toList()).orElse(null);
     }
-
 
     /** The generation a committed manifest names. Read rather than matched, so the assertion can be an ordering. */
     private static int generationOf(String manifest) {

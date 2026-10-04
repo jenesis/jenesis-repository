@@ -100,9 +100,8 @@ class OidcExchangeTest {
      * is the product behaving exactly as designed, reported against a test asserting something else.
      *
      * <p>So the round-trip moves here, where it is what it actually is: fixture setup, and legitimately retryable
-     * because a slow local stub is not a claim about the product. The retry <em>backs off</em>, which it did not
-     * originally: three immediate tries meet the same saturation that caused the timeout, so they recovered about
-     * as often as one did. Afterwards the decoder is cached for the issuer
+     * because a slow local stub is not a claim about the product. The retry <em>backs off</em>: three immediate tries
+     * meet the same saturation that caused the timeout, so they recover about as often as one does. Afterwards the decoder is cached for the issuer
      * and every assertion below runs against a warm one, so none of them can time out on discovery at all. This is
      * structural rather than a mitigation - it removes the dependency instead of making it less likely.
      *

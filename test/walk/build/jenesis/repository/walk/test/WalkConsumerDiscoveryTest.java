@@ -13,7 +13,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * jenrepo.<name>} feature convention: nothing set means enabled, only an explicit {@code false} disables.
  * The {@link DiscoverableWalkConsumer} registered by this test module stands in for a shipped consumer, and the
  * {@link FeatureGatedWalkConsumer} for one that repairs a feature which is off unless configured: its own toggle is
- * unset, so the old rule would have enumerated it, and its {@link WalkConsumer#enabled()} says the feature is off.
+ * unset, so a rule reading the toggle alone would enumerate it, and its {@link WalkConsumer#enabled()} says the
+ * feature is off.
  */
 class WalkConsumerDiscoveryTest {
 

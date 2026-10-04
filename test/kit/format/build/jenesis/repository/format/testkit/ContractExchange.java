@@ -104,7 +104,6 @@ public final class ContractExchange implements DetachedExchange {
         this.requestBody = requestBody;
     }
 
-    /** A bodiless request ({@code GET}, {@code HEAD}, {@code DELETE}). */
     /**
      * Serve this exchange as though the connection carried {@code scheme}.
      *
@@ -124,6 +123,7 @@ public final class ContractExchange implements DetachedExchange {
         return scheme;
     }
 
+    /** A bodiless request ({@code GET}, {@code HEAD}, {@code DELETE}). */
     public static ContractExchange of(String method, String path) {
         return new ContractExchange(method, path, Map.of(), Map.of(), _ -> null, InputStream::nullInputStream);
     }

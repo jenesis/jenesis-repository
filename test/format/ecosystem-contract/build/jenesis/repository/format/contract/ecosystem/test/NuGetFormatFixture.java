@@ -66,6 +66,7 @@ final class NuGetFormatFixture implements EcosystemFormatFixture {
                 + "publishPackage() and runs the same two properties through PackagedArtifactContract.");
     }
 
+    /** Push one version through the format's own bare-body publish endpoint and hand back the exact bytes uploaded. */
     @Override
     public Optional<Packaged> publishPackage(ArtifactStore store) throws IOException {
         byte[] artifact = push(store, "1.0.0");
@@ -199,7 +200,6 @@ final class NuGetFormatFixture implements EcosystemFormatFixture {
         return FLAT + ID + "/" + version + "/" + nupkg(version);
     }
 
-    /** Push one version through the format's own bare-body publish endpoint and hand back the exact bytes uploaded. */
     /** {@code dotnet nuget push}'s own shape: the package as the file part of a multipart form, where
      *  {@link #publishPackage} sends it bare. */
     @Override

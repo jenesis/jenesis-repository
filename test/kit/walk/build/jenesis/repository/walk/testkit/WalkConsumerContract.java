@@ -509,12 +509,12 @@ public final class WalkConsumerContract {
         return worker;
     }
 
-    /** The consumer under test, wrapped so the kit can see what it was handed and arm the crash off that count. The
-     *  wrapper never changes what the delegate observes: it forwards first and arms afterwards. */
     /** A cursor commit the walk began: the cursor it carried and how many deliveries preceded it. */
     private record Checkpoint(String cursor, int deliveries) {
     }
 
+    /** The consumer under test, wrapped so the kit can see what it was handed and arm the crash off that count. The
+     *  wrapper never changes what the delegate observes: it forwards first and arms afterwards. */
     private static final class Instrumented implements WalkConsumer {
 
         private final WalkConsumer delegate;
@@ -789,8 +789,6 @@ public final class WalkConsumerContract {
 
     // --- helpers -----------------------------------------------------------------------------------------------
 
-    /** Keys under any of this fixture's pointer roots - what {@code RebuildPass} reads to build a delivery, and so
-     *  where a "the store went away mid-enumeration" fault belongs. */
     /** A key under any root of any family the fixture listens on - what the crash points fault the read of. */
     private static Predicate<String> pointers(WalkConsumerFixture fixture) {
         List<String> roots = fixture.familyRoots().values().stream().flatMap(List::stream).distinct().toList();
@@ -965,8 +963,6 @@ public final class WalkConsumerContract {
         }
     }
 
-    /** Every stored key, found through the shared descent primitive rather than a hand-rolled walk - so a consumer
-     *  that planted a deep key cannot overflow the check meant to catch it. */
     /**
      * The hint a self-feeding consumer's author needs when the delivery count does not match.
      *
@@ -986,6 +982,8 @@ public final class WalkConsumerContract {
                 + "stable (see WalkConsumerFixture.Corpus)";
     }
 
+    /** Every stored key, found through the shared descent primitive rather than a hand-rolled walk - so a consumer
+     *  that planted a deep key cannot overflow the check meant to catch it. */
     private static List<String> keys(ArtifactStore store) throws IOException {
         List<String> keys = new ArrayList<>();
         for (String top : store.list("")) {

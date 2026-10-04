@@ -981,14 +981,6 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
                 .getBytes(StandardCharsets.UTF_8));
     }
 
-    /**
-     * Proxy a {@code /v2/} manifest or blob miss to the upstream registry (Docker Hub by default). Blobs and
-     * manifests are immutable by digest, so they are stored exactly as a push would and re-served locally; a
-     * manifest by tag also records the tag pointer. Authentication follows the Distribution token flow: a
-     * {@code 401} carries a {@code Bearer} challenge, the realm is exchanged for a token, and the fetch is retried.
-     * The client {@code Accept} is forwarded so the upstream returns the right manifest media type (and image
-     * index for multi-arch, whose per-architecture manifests are then proxied by digest in turn).
-     */
     /** A manifest asked for by tag is resolved upstream again once the node forgets a tag relayed from there, so the
      *  proxy leg is asked whatever is held; by digest, an image is the upstream's or this repository's alone. */
     @Override
@@ -998,6 +990,14 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         return manifests >= 0 && !path.substring(manifests + "/manifests/".length()).startsWith("sha256:");
     }
 
+    /**
+     * Proxy a {@code /v2/} manifest or blob miss to the upstream registry (Docker Hub by default). Blobs and
+     * manifests are immutable by digest, so they are stored exactly as a push would and re-served locally; a
+     * manifest by tag also records the tag pointer. Authentication follows the Distribution token flow: a
+     * {@code 401} carries a {@code Bearer} challenge, the realm is exchanged for a token, and the fetch is retried.
+     * The client {@code Accept} is forwarded so the upstream returns the right manifest media type (and image
+     * index for multi-arch, whose per-architecture manifests are then proxied by digest in turn).
+     */
     @Override
     public boolean proxy(FormatExchange exchange, ArtifactStore store, URI upstream, ProxyFormat.Fetcher fetcher)
             throws IOException {

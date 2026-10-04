@@ -27,8 +27,8 @@ class DebianSignatureStreamingTest {
     @Test
     void a_deb_larger_than_the_array_limit_verifies_streamed() throws IOException {
         OpenPgpSigner.KeyMaterial key = OpenPgpSigner.generate("Uploader <u@example.com>", Duration.ofDays(365));
-        // A data.tar member past Integer.MAX_VALUE: the old verify concatenated every member (data.tar included) into a
-        // ByteArrayOutputStream, which cannot hold this many bytes - so a completing VALID must have streamed instead.
+        // A data.tar member past Integer.MAX_VALUE: a verify that concatenated every member (data.tar included) into a
+        // ByteArrayOutputStream could not hold this many bytes - so a completing VALID must have streamed.
         long dataSize = (1L << 31) + (1L << 20);   // 2 GiB + 1 MiB, comfortably past the array limit and even-length
 
         // Sign the concatenation of the non-signature members (debian-binary ++ control ++ data), streamed so the

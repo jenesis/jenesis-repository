@@ -98,8 +98,8 @@ class GcClaimRaceTest {
                 claimed[0] = true;
             } else if (op == FaultInjectingStore.Op.EXISTS && ("blobs/" + hash).equals(key) && claimed[0]
                     && refused[0] == null) {
-                // Between the claim and the delete: the old guard's re-read had passed here, and the publish's
-                // clear and pointer landed unseen before the blob went.
+                // Between the claim and the delete: a guard that re-read before the claim has passed here, and the
+                // publish's clear and pointer land unseen before the blob goes.
                 try {
                     new Publication(store).link(PATH, hash);
                     refused[0] = new IOException("the publish was not refused");

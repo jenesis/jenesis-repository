@@ -210,12 +210,11 @@ public enum Mutant {
      * The same artifact one delivery over, which is how a blind-append surface grows a row it should have upserted
      * onto the one already there.
      *
-     * <p>It moves <b>both</b> halves of the identity, and that is the whole point. Moving only the path made this
-     * mutant invisible to every fixture in the population, from two directions at once: a surface keyed on the
-     * served pointer tree skipped the variant because a path nobody published is not in that tree, and a surface
-     * keyed on the neutral ecosystem/coordinate/version triple upserted it away because the triple had not moved.
-     * The mutant landed in the gap between the two families rather than in either of them, and four fixtures
-     * carried exclusions saying they could not see it.
+     * <p>It moves <b>both</b> halves of the identity, and that is the whole point. Moving only the path would make
+     * this mutant invisible to every fixture in the population, from two directions at once: a surface keyed on the
+     * served pointer tree skips the variant because a path nobody published is not in that tree, and a surface keyed
+     * on the neutral ecosystem/coordinate/version triple upserts it away because the triple has not moved. Such a
+     * mutant lands in the gap between the two families rather than in either of them.
      *
      * <p>The version is what moves, not the coordinate: a coordinate-keyed surface must see a distinct row, and a
      * new <em>version</em> of a known coordinate is the shape those surfaces are built to record. Inventing a

@@ -58,7 +58,6 @@ final class Packages {
                 .getBytes(StandardCharsets.UTF_8);
     }
 
-    /** The unscoped half of an npm package name - the token the tarball filename is built from. */
     /**
      * One Helm chart: a gzipped tar whose {@code <name>/Chart.yaml} is written first, so the coordinate the publish
      * reads sits inside the prefix the inspector is bounded to. The licence rides in the Artifact Hub annotation,
@@ -96,6 +95,7 @@ final class Packages {
         out.closeArchiveEntry();
     }
 
+    /** The unscoped half of an npm package name - the token the tarball filename is built from. */
     static String shortName(String name) {
         return name.contains("/") ? name.substring(name.indexOf('/') + 1) : name;
     }
@@ -588,7 +588,6 @@ final class Packages {
     static String sha1Hex(byte[] content) {
         return HexFormat.of().formatHex(digest("SHA-1").digest(content));
     }
-
 
     static MessageDigest digest(String algorithm) {
         try {

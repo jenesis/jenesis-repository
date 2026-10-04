@@ -604,15 +604,13 @@ public final class ComplianceGate {
     }
 
     /**
-     * One reason the gate did not simply allow: the verdict it warrants, a human-readable explanation, where the
-     * component it concerns sits on the build graph (so a reachable finding can be ranked above a merely-scored one),
-     * and - for a dimension whose retroactive sweep also holds - the {@link Hold hold kind} the finding warrants and
-     * the subjects it names, so a publish-time hold leaves the same {@code holds/<kind>} record the sweep would.
-     */
-    /**
-     * One dimension's say about a subject. {@code rule} is what the dimension holds or refuses for, in an operator's
-     * words - the deny list, a vulnerability, a licence - and the gate stamps it from the dimension that raised the
-     * finding, so a dimension never names it twice; {@code null} on a finding no gate has stamped.
+     * One dimension's say about a subject: the verdict it warrants, a human-readable explanation, where the component
+     * it concerns sits on the build graph (so a reachable finding can be ranked above a merely-scored one), for a
+     * dimension whose retroactive sweep also holds the {@link Hold hold kind} the finding warrants and the subjects it
+     * names - so a publish-time hold leaves the same {@code holds/<kind>} record the sweep would - and the
+     * {@code rule} it holds or refuses for, in an operator's words: the deny list, a vulnerability, a licence. The gate
+     * stamps the rule from the dimension that raised the finding, so a dimension never names it twice; it is
+     * {@code null} on a finding no gate has stamped.
      */
     public record Finding(Verdict verdict, String detail, Reachability reachability, Hold hold, String rule) {
 

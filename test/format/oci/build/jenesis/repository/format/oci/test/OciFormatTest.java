@@ -738,24 +738,11 @@ class OciFormatTest {
     }
 
     /**
-     * A migrated registry's tag lists are built by the repair pass, not by whoever asks first.
-     *
-     * <p>{@code OciImporter} lays a source registry out directly - a tag becomes an
-     * {@code oci/<name>/tags/<tag>} pointer with no push through this format - so after an import every pointer
-     * exists and no tag list does. The repair pass regenerates listings that <em>exist</em>, so it had nothing to
-     * claim, and the first {@code tags/list} generated the document inline: 35 seconds at 200,000 tags, on a
-     * request thread, once per image.
-     *
-     * <p>This seeds exactly that state - a pointer with no listing - and asserts the pass creates it. The
-     * assertion that it is <b>absent beforehand</b> is what makes the test bite: without it the pass would appear
-     * to work simply because the read materialises what it finds missing, which is the defect.
-     */
-    /**
      * A read that races a migration must not leave the tag list short.
      *
-     * <p>The sequence is the one an operator meets and no unit test had: the walk lays a tag out directly, a
-     * consumer asks for {@code tags/list} <em>while it is still running</em> and generates the document inline
-     * from what exists so far, and the walk then lays out the rest. The document now exists and is wrong.
+     * <p>The sequence is the one an operator meets: the walk lays a tag out directly, a consumer asks for
+     * {@code tags/list} <em>while it is still running</em> and generates the document inline from what exists so far,
+     * and the walk then lays out the rest. The document then exists and is wrong.
      *
      * <p>That is why the import regenerates rather than creating what is missing. Create-if-absent probes the
      * header, finds one, and leaves the short list in place - which is a wrong answer served to a client, not
@@ -792,6 +779,19 @@ class OciFormatTest {
                 .contains("1.0").contains("2.0");
     }
 
+    /**
+     * A migrated registry's tag lists are built by the repair pass, not by whoever asks first.
+     *
+     * <p>{@code OciImporter} lays a source registry out directly - a tag becomes an
+     * {@code oci/<name>/tags/<tag>} pointer with no push through this format - so after an import every pointer
+     * exists and no tag list does. A repair pass that regenerated only listings that <em>exist</em> would have
+     * nothing to claim, and the first {@code tags/list} would generate the document inline: 35 seconds at 200,000
+     * tags, on a request thread, once per image.
+     *
+     * <p>This seeds exactly that state - a pointer with no listing - and asserts the pass creates it. The
+     * assertion that it is <b>absent beforehand</b> is what makes the test bite: without it the pass would appear
+     * to work simply because the read materialises what it finds missing, which is the defect.
+     */
     @Test
     void the_repair_pass_creates_a_tag_list_a_migration_left_absent() throws IOException {
         // As an import lays it out: the manifest by digest, its type sidecar, and the tag pointer - no push.

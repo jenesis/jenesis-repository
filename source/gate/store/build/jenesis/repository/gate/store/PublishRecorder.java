@@ -93,7 +93,7 @@ final class PublishRecorder {
         recordAdvisoryFindings(store, artifact, inspected);
         // Persist the publish-time maintainer-health for the just-accepted coordinate, the health sibling of
         // the advisory persistence above - so a coordinate published after the last health sweep already
-        // carries its health in the durable ledger the gate now reads, and admission of a later version of the
+        // carries its health in the durable ledger the gate reads, and admission of a later version of the
         // same coordinate scores off a populated ledger rather than the not-yet-swept fallback.
         recordHealth(store, artifact, inspected);
         // Continuity is learned from what actually landed: every signature that verified by a trusted signer
@@ -334,7 +334,7 @@ final class PublishRecorder {
      * source - the same instance the scheduled sweep probes, so its {@code FeedCache} may already carry the answer -
      * and record it into the durable {@link HealthLedger} keyed by the coordinate (version-independent), exactly as the
      * {@code HealthScanTask} writes it. This closes the between-sweeps window: a coordinate published AFTER the last
-     * health sweep already carries its health in the ledger the gate now reads, so admission of a LATER version of the
+     * health sweep already carries its health in the ledger the gate reads, so admission of a LATER version of the
      * same coordinate scores off a populated ledger rather than the not-yet-swept fallback. Held to ACCEPT, where the
      * coordinate is recorded as published and the sweep will revisit it. A coordinate the source scores nothing is
      * left unrecorded (unknown, not healthy), and one whose ledger already holds the health the probe answers is left

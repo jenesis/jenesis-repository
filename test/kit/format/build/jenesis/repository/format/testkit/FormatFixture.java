@@ -219,8 +219,6 @@ public interface FormatFixture {
         }
     }
 
-    /** The contract properties this format's protocol does not have, each mapped to the reason and to where the
-     *  property <em>is</em> proven instead. Empty by default: an exclusion is a deliberate, reviewable statement. */
     /**
      * What inbound publisher signatures this format's artifacts carry, or the reason they carry none.
      *
@@ -266,6 +264,8 @@ public interface FormatFixture {
         }
     }
 
+    /** The contract properties this format's protocol does not have, each mapped to the reason and to where the
+     *  property <em>is</em> proven instead. Empty by default: an exclusion is a deliberate, reviewable statement. */
     default Map<FormatContract.Property, String> unsupported() {
         return Map.of();
     }

@@ -160,9 +160,9 @@ class UsageTrackerObservabilityTest {
         tracker.start();
         try {
             tracker.record("acme", hash, "10.0.0.1");
-            // Bounded by reads, not by a clock: the old ten-second deadline expired silently, so a machine too busy
-            // to let the worker run reported the credential's count as 0 and the assertion below read as "the worker
-            // flushed nothing" - the tracker's verdict - for what was really a wait that never happened.
+            // Bounded by reads, not by a clock: a deadline expires silently, so a machine too busy to let the worker
+            // run would report the credential's count as 0 and the assertion below would read as "the worker flushed
+            // nothing" - the tracker's verdict - for what was really a wait that never happened.
             for (int read = 0; read < FLUSHES
                     && authorization.credential("acme", hash).orElseThrow().useCount() < 1L; read++) {
                 Thread.sleep(5);

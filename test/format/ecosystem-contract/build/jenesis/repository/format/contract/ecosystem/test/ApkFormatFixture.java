@@ -164,8 +164,6 @@ final class ApkFormatFixture implements EcosystemFormatFixture {
                         + "REQUEST_PATH_TRAVERSAL_REFUSED");
     }
 
-    /** This entry serves the repository; a pull-through against an upstream Alpine mirror is a separate change, so
-     *  these three rows have no subject rather than a failing one. */
     /** An upstream whose index answers without listing the package, the one case a fill streams unverified - which
      *  is what lets an arbitrary body stand in for a package here. */
     @Override

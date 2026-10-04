@@ -272,7 +272,7 @@ public interface RepositoryFormat extends IconContributor {
      * edge (the {@link build.jenesis.repository.store.Publication}-driven write path, the downstream deploy edge)
      * stores and runs the discovered {@link build.jenesis.repository.store.PublishInterceptor} chain over a claimed
      * {@code PUT}/{@code POST}/{@code PATCH} body <em>before</em> {@link #handle} sees it, then restreams the accepted
-     * blob into {@link #handle}, whose job is now pure layout - lay the bytes out in this format's namespace, no
+     * blob into {@link #handle}, whose job is then pure layout - lay the bytes out in this format's namespace, no
      * screening of its own. {@code false} means the format owns its whole screening choreography and the edge
      * dispatches its writes unscreened, because no request body it receives is the artifact: either the protocol splits
      * one artifact across many requests - OCI's {@code /v2/} blob-upload sessions and manifest, screened at the
@@ -418,7 +418,6 @@ public interface RepositoryFormat extends IconContributor {
     static List<RepositoryFormat> installed(UnaryOperator<String> config) {
         return FormatDiscovery.installed(config);
     }
-
 
     /** The installed format of the given {@link #name() name} - the lookup for a neutral consumer (an importer
      *  walking a format's upstream index, say) that must find one format by name. Empty when no module on the path

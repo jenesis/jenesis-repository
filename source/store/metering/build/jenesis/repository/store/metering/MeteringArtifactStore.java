@@ -154,14 +154,14 @@ public final class MeteringArtifactStore extends ForwardingArtifactStore {
         return timed("writeVersioned", key, () -> delegate.writeVersioned(key, content, expected));
     }
 
-    /** Forwarded like {@link #page}, and because the default derives the page from names alone and drops the sizes and
-     *  ages the store contract's decorator leg holds. */
     /** An emptiness probe is a page of one, and is metered as the page it is. */
     @Override
     public boolean isEmpty(String prefix) throws IOException {
         return timed("page", prefix, () -> delegate.isEmpty(prefix));
     }
 
+    /** Forwarded like {@link #page}, and because the default derives the page from names alone and drops the sizes and
+     *  ages the store contract's decorator leg holds. */
     @Override
     public void pageListed(String prefix, String startAfter, int limit, Consumer<Listed> consumer) {
         timedRuntime("pageListed", prefix, () -> {

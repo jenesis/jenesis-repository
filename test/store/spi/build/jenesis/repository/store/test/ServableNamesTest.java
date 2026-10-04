@@ -483,9 +483,9 @@ class ServableNamesTest {
     }
 
     @Test
-    void a_normal_folder_wider_than_the_old_cap_but_within_the_raised_cap_still_discloses() throws IOException {
-        // The control: a folder wider than the old 32 cap but within the raised bound, with NO withheld leaf, is
-        // probed in full and still discloses - the raise does not wrongly hide a legitimately large version folder.
+    void a_normal_folder_wider_than_32_leaves_but_within_the_bound_still_discloses() throws IOException {
+        // The control: a folder of 40 leaves, within the bound, with NO withheld leaf, is probed in full and still
+        // discloses - the bound does not wrongly hide a legitimately large version folder.
         MapStore store = new MapStore();
         for (int leaf = 0; leaf < 40; leaf++) {
             store.pointer(String.format("publish/maven/g/a/2/leaf-%03d.jar", leaf), HASH_A);
@@ -512,7 +512,6 @@ class ServableNamesTest {
         assertThat(names.disclosableVersionFolder("/maven/g/a/9"))
                 .as("a folder wider than the raised probe bound is screened (fail-closed past the cap)").isFalse();
     }
-
 
     @Test
     void a_folder_wider_than_the_cap_is_rejected_without_being_materialised() throws IOException {
@@ -597,7 +596,6 @@ class ServableNamesTest {
         public Object identity() {
             return this;   // a standalone fake IS its own subspace
         }
-
 
         final Map<String, byte[]> objects = new LinkedHashMap<>();
 

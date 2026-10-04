@@ -132,7 +132,6 @@ class PublicationHookCensusTest {
                         .contains(implementation));
     }
 
-
     /** The hooks the PRODUCT ships: every declared observer except the ones a test module contributes. */
     private static List<Provider> shipped() {
         return ContractCensus.declaredProviders(PublicationObserver.class,
@@ -298,38 +297,6 @@ class PublicationHookCensusTest {
 
     // --- the falsification declaration ---------------------------------------------------------------------
 
-    /**
-     * Which arranged commit choreography falsifies each clause that is about {@link Publication} rather than about a
-     * hook. This map answers the finding it was built to close: twenty of the
-     * kit's forty-six clauses are the choreography's, the fixture's hook is a bystander in them, and until now
-     * <b>the falsification leg proved things about implementations and said nothing about the choreography they plug
-     * into</b> - which is where several of this plan's crash-window claims live.
-     *
-     * <p>Nineteen of the twenty now carry a {@link ChoreographyMutant}, and
-     * {@link #every_choreography_clause_is_falsified_by_the_arrangement_it_names()} runs each pairing and requires the
-     * check to say otherwise. Read {@link ChoreographyMutant}'s own documentation for what that proves and what it
-     * does not: the arrangement produces the observable a mutated {@code Publication} would produce, which makes the
-     * check demonstrably discriminating on the clause, but it is a faithful simulation of the defect rather than the
-     * defect itself. {@code Publication} is {@code final} on purpose and stays that way - the argument is in its
-     * javadoc, where a reader who wonders why they cannot substitute it meets it.
-     */
-
-    /**
-     * The contract properties nothing this kit can substitute falsifies - <b>one</b>, and it is the one
-     * where there is no observable to arrange because nothing the kit hands {@code Publication} is ever invoked.
-     *
-     * <p>The clause is about {@link Publication}'s own commit choreography, {@code Publication} is a {@code final}
-     * core class the kit constructs and cannot substitute, and {@link ChoreographyMutant} arranges the hooks the kit
-     * <em>does</em> control so the choreography produces the observable a mutated {@code Publication} would. This one
-     * it cannot reach: the crash lands before the chain runs at all, so there is no hook call to arrange and what the
-     * window leaves is the store's and {@code Publication}'s alone.
-     */
-
-    /**
-     * The (hook, property) pairs where the property IS falsifiable in general but this hook's own shape puts the
-     * mutation out of reach - the honest edge of the leg's per-fixture coverage, and a shorter list than it looks
-     * because the three interceptor archetypes deliberately divide the clauses between them.
-     */
     /** Why the kit's recording clauses cannot move the search index's observer: they publish the kit's
      *  coordinate-less descriptor, and this hook marks only a publish that names a coordinate. */
     private static final String SEARCH_SEES_NO_KIT_PUBLISH = "these clauses publish the kit's coordinate-less "
@@ -337,6 +304,11 @@ class PublicationHookCensusTest {
             + "checksum or a generated sidecar - so its surface cannot move here and no mutation can be seen; "
             + "CoordinateKeyedObserverTest drives it with a coordinate instead.";
 
+    /**
+     * The (hook, property) pairs where the property IS falsifiable in general but this hook's own shape puts the
+     * mutation out of reach - the honest edge of the leg's per-fixture coverage, and a shorter list than it looks
+     * because the three interceptor archetypes deliberately divide the clauses between them.
+     */
     private static final Map<String, String> NOT_THIS_HOOKS_TO_FALSIFY = merged(Map.ofEntries(
             Map.entry("kit-recording-screen / A_LATER_VERDICT_RETRACTS_WITHOUT_A_POINTER_REWRITE",
                     "this screen votes at publish time and has no read side, so the check drives the kit's own withholding "

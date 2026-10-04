@@ -91,7 +91,7 @@ class WideLevelWalkTest {
         // The screened browse page is bounded everywhere except its container predicate, which was
         // `!store.list(child).isEmpty()` - a whole-namespace listing to answer an emptiness question, run once per
         // ROW of the page. Browsing the coordinate's parent draws one folder row for `lib`, whose version level holds
-        // more children than this store will hand back as one list: the old predicate is refused by name here, the
+        // more children than this store will hand back as one list: that predicate is refused by name here, the
         // one-child probe is not.
         StoreRepositoryInventory.ChildPage page =
                 inventory().children("/test/grp", 100, build.jenesis.repository.store.ServableNames.Policy.HIDE_WITHHELD);

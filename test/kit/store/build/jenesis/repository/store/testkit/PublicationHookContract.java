@@ -33,8 +33,8 @@ import build.jenesis.repository.store.testkit.PublicationHookFixture.Role;
  * module provides a hook without one.
  *
  * <p><b>Crash claims follow the commit protocol.</b> Each {@link CrashPoint} is injected with the shared
- * {@link FaultInjectingStore} - armed on the <em>screen</em> path, which nothing had ever done, so the window between
- * {@link PublishInterceptor#committed} and the commit point was until now untested - and every crash check re-derives
+ * {@link FaultInjectingStore} - armed on the <em>screen</em> path too, so the window between
+ * {@link PublishInterceptor#committed} and the commit point is driven - and every crash check re-derives
  * from durable state that the crash landed where it says. A point that stopped biting fails rather than passing
  * vacuously.
  *
@@ -144,9 +144,8 @@ public final class PublicationHookContract {
         THE_CONTENT_VIEW_RESTREAMS_THE_BLOB_UNDER_TWO_DIFFERENT_BOUNDS(Role.PUBLISH_INTERCEPTOR),
         /** Clause 6, in both directions. {@code Content.store()} and the stores handed to {@code committed} and
          *  {@code withheld} are the one doubly-scoped view the publication routed through - <em>and</em> the screen's
-         *  own derived rows land inside it, never one scope up. The second half was added when this check drove
-         *  a real screen under a real scope and read only the kit's probe, so a screen recording its verdict against
-         *  the deployment root passed the whole kit. */
+         *  own derived rows land inside it, never one scope up - a check that read only the kit's probe would pass a
+         *  screen recording its verdict against the deployment root. */
         THE_VERDICT_LEGS_RECEIVE_THE_PUBLICATIONS_OWN_SCOPED_STORE(Role.PUBLISH_INTERCEPTOR),
         /** Clause 7, the headline. A throwing {@code assess} fails the publish and links no pointer of any kind. */
         A_THROWING_ASSESS_FAILS_THE_PUBLISH_WITH_NO_POINTER_LINKED(Role.PUBLISH_INTERCEPTOR),

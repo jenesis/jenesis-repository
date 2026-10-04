@@ -78,20 +78,6 @@ class SearchIncrementalTest {
     // ---- the tests ----------------------------------------------------------------------------------------------
 
     /**
-     * A path-addressed artifact - a raw upload, with no coordinate to be indexed under - reaches the index through
-     * the same incremental sweep, under its served path.
-     *
-     * <p>It could not before: the observer returned early for any descriptor carrying no coordinate, so the only
-     * way {@code /api/search} could find one was to walk the published tree live on every request, up to twenty
-     * thousand names examined and up to four store reads under each. That is nothing over a directory and minutes
-     * over an object store, and it is what made a search on an Azurite-backed node outlive a sixty-second client
-     * timeout while the node was healthy and its index idle.
-     *
-     * <p>The display is the request path itself, which is what search has always returned for these and what a
-     * caller fetches one by. Its leading {@code /} is what tells the two document kinds apart at a screening
-     * surface: a request path always begins with one and a {@code coordinate:version} display never does.
-     */
-    /**
      * A search expression matches as a prefix of the whole display, so a namespace can be listed by typing it.
      *
      * <p>The analysed half of the query matches token prefixes anywhere in a coordinate, which finds an artifact
@@ -125,6 +111,18 @@ class SearchIncrementalTest {
                 .containsExactly("org.other:acme-thing:3.0");
     }
 
+    /**
+     * A path-addressed artifact - a raw upload, with no coordinate to be indexed under - reaches the index through
+     * the same incremental sweep, under its served path.
+     *
+     * <p>An observer that returned early for any descriptor carrying no coordinate would leave {@code /api/search}
+     * finding one only by walking the published tree live on every request, up to twenty thousand names examined and
+     * up to four store reads under each - nothing over a directory and minutes over an object store, long enough for a
+     * search on a healthy node with an idle index to outlive a client's timeout.
+     *
+     * <p>The display is the request path itself, which is what a caller fetches one by. Its leading {@code /} is what tells the two document kinds apart at a screening
+     * surface: a request path always begins with one and a {@code coordinate:version} display never does.
+     */
     @Test
     void a_path_addressed_artifact_is_indexed_under_its_served_path() throws IOException {
         ArtifactStore store = store("default", "raw");
@@ -457,6 +455,5 @@ class SearchIncrementalTest {
         return query.search(text, null, SearchQuery.MAX_PAGE)
                 .map(page -> page.hits().stream().map(SearchQuery.Hit::display).toList()).orElse(null);
     }
-
 
 }

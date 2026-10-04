@@ -354,26 +354,22 @@ public final class StoreContract {
     }
 
     private static void keyTraversalRejected(ArtifactStore store) throws Exception {
-        // This check found a real three-way divergence, which is why it exists. Before the screen landed in
-        // ArtifactStore.key, one `store.write("kit/../escape", ...)` did three different things: the filesystem
-        // silently NORMALISED it and stored the body one level up, at a key the caller never named; Azure stored it
-        // LITERALLY at the traversal-shaped key; and S3/GCS answered a transport IOException from the object store's
-        // own key screen. No backend suite tested a traversal-shaped key on the write path, so nothing saw it. The
-        // screen sits at the one choke point every backend already calls, before any I/O, so all four now refuse the
-        // same publish the same way and a store migration cannot relocate or lose an object.
-        // The backslash rows are the same divergence one alphabet over, and they are here because the screen once read
-        // only '/': "kit\..\escape" carries no '/'-delimited traversal segment at all, so it passed the screen
-        // and reached the backends - where a Windows-hosted filesystem store resolves it as a REAL traversal and lands
+        // Without a screen at ArtifactStore.key, one `store.write("kit/../escape", ...)` does three different things:
+        // the filesystem silently NORMALISES it and stores the body one level up, at a key the caller never named;
+        // Azure stores it LITERALLY at the traversal-shaped key; and S3/GCS answer a transport IOException from the
+        // object store's own key screen. The screen sits at the one choke point every backend already calls, before
+        // any I/O, so all four refuse the same publish the same way and a store migration cannot relocate or lose an
+        // object.
+        // The backslash rows are the same divergence one alphabet over: "kit\..\escape" carries no '/'-delimited
+        // traversal segment at all, and a Windows-hosted filesystem store resolves it as a REAL traversal and lands
         // the body a level up, while S3, GCS and Azure store it as one literal key with a backslash in the name. The
         // bare "kit\escape" row is the same fact without the traversal: one key, two placements, so a store migration
         // would relocate it. Both are refused at the shared screen, so all four backends stay interchangeable.
-        // The control-character rows are the third alphabet of the same divergence, and the last one the store
-        // screened nowhere - not in traversalFree, not in key, not in segment - while this product's own request
-        // guard had refused them since it was written. A NUL truncates the key at the first C API that handles it, so
-        // a key screened whole is acted on in part and the four backends need not even agree on which object was
-        // meant; a CR or LF forges a line in every log record and generated listing the key later reaches, so a
-        // coordinate can write rows that read as the server's own. Refused at the shared screen, before any I/O, so
-        // no backend has to have an opinion.
+        // The control-character rows are the third alphabet of the same divergence. A NUL truncates the key at the
+        // first C API that handles it, so a key screened whole is acted on in part and the four backends need not
+        // even agree on which object was meant; a CR or LF forges a line in every log record and generated listing the
+        // key later reaches, so a coordinate can write rows that read as the server's own. Refused at the shared
+        // screen, before any I/O, so no backend has to have an opinion.
         for (String key : new String[]{"kit/../escape", "../escape", "kit/./here", "..", ".",
                 "kit\\..\\escape", "..\\escape", "kit\\.\\here", "kit\\escape", "\\",
                 "kit/esc\u0000ape", "kit/esc\nape", "kit/esc\rape", "kit/esc\tape", "\u0000",

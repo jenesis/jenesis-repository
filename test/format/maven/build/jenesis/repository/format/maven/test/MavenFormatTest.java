@@ -121,7 +121,7 @@ class MavenFormatTest {
     /**
      * A checksum or a signature beside a file is no file of the version: it is described with no coordinate, so its
      * upload writes nothing to the version's document, moves no row of the release feed, raises no event and counts
-     * no download - where each of a signed deploy's two dozen sidecars used to do all four.
+     * no download - a signed deploy uploads two dozen of them.
      */
     @Test
     void a_sidecar_is_described_without_the_coordinate_of_the_file_it_describes() {
