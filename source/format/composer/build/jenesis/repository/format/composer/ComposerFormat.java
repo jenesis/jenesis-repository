@@ -708,7 +708,11 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
      */
     @Override
     public Stream<ProxyFormat.Coordinate> enumerate(ProxyFormat.Fetcher fetcher, URI upstream) throws IOException {
+        // Under the registry the index is rooted at, as its dists are served - the shape ComposerImporter keeps the
+        // registry of.
+        Optional<String> registry = ProxyFormat.repository(upstream);
         return ComposerEnumeration.enumerate(fetcher, upstream, false)
-                .map(entry -> new ProxyFormat.Coordinate(entry.getKey(), entry.getValue()));
+                .map(entry -> new ProxyFormat.Coordinate(registry.map(name -> name + "/dists/" + entry.getKey())
+                        .orElse(entry.getKey()), entry.getValue()));
     }
 }

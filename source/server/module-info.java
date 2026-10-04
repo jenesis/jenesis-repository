@@ -43,6 +43,9 @@ open module build.jenesis.repository.server {
     requires build.jenesis.repository.audit;
     requires build.jenesis.repository.failure;
     requires build.jenesis.repository.walk;
+    requires build.jenesis.repository.inventory;
+    requires build.jenesis.repository.blobs;
+    requires build.jenesis.repository.cleanup;
     requires build.jenesis.repository.importer;
     requires build.jenesis.repository.posture;
     requires build.jenesis.repository.settings;

@@ -840,7 +840,11 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
      */
     @Override
     public Stream<ProxyFormat.Coordinate> enumerate(ProxyFormat.Fetcher fetcher, URI upstream) throws IOException {
+        // Under the repository the index is rooted at, by filename - the shape RpmImporter keeps the repository of.
+        Optional<String> repository = ProxyFormat.repository(upstream);
         return RpmEnumeration.enumerate(fetcher, upstream, false)
-                .map(entry -> new ProxyFormat.Coordinate(entry.getKey(), entry.getValue()));
+                .map(entry -> new ProxyFormat.Coordinate(repository
+                        .map(name -> name + "/" + entry.getKey().substring(entry.getKey().lastIndexOf('/') + 1))
+                        .orElse(entry.getKey()), entry.getValue()));
     }
 }

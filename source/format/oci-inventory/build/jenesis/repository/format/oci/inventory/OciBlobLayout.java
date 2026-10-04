@@ -4,6 +4,7 @@ import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.blobs.BlobRoots;
+import build.jenesis.repository.blobs.ComposedLayout;
 import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -63,7 +64,7 @@ import build.jenesis.repository.store.ServableNames;
  * degrades where the collector refuses, because under-enforcing a hold is safe while under-reporting to a deleter
  * destroys bytes.
  */
-public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
+public final class OciBlobLayout implements RepositoryFormat, ComposedLayout {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(OciBlobLayout.class);
 
@@ -232,6 +233,37 @@ public final class OciBlobLayout implements RepositoryFormat, BlobLayout {
             return List.of();
         }
         return List.of("/v2/" + coordinate + "/manifests/" + version);
+    }
+
+    /** An image is its manifest and everything {@link #blobHashes} says it references: the plain blobs - config and
+     *  layers - first, by digest, then the platform manifests an index names, by digest, and the manifest by its tag
+     *  last. A referenced digest is a manifest when the format recorded its media type ({@code oci/.types/<hex>}),
+     *  which it does for every manifest it accepts. Degraded to the manifest alone where the references cannot be
+     *  read, as {@link #blobHashes} is. */
+    @Override
+    public List<String> contents(String coordinate, String version, ArtifactStore store) throws IOException {
+        List<String> served = servedPaths(coordinate, version, store);
+        Optional<String> root = manifestHex(coordinate, version, store);
+        if (served.isEmpty() || root.isEmpty()) {
+            return List.of();
+        }
+        List<String> blobs = new ArrayList<>();
+        List<String> manifests = new ArrayList<>();
+        for (String hex : blobHashes(coordinate, version, store)) {
+            if (hex.equals(root.get())) {
+                continue;
+            }
+            if (store.exists("oci/.types/" + hex)) {
+                // Discovered top-down, so a nested index's children are named after it: reversed, they come first.
+                manifests.addFirst("/v2/" + coordinate + "/manifests/sha256:" + hex);
+            } else {
+                blobs.add("/v2/" + coordinate + "/blobs/sha256:" + hex);
+            }
+        }
+        List<String> contents = new ArrayList<>(blobs);
+        contents.addAll(manifests);
+        contents.addAll(served);
+        return List.copyOf(contents);
     }
 
     /** The coordinate a manifest request path carries: {@code /v2/<name>/manifests/<ref>} maps to

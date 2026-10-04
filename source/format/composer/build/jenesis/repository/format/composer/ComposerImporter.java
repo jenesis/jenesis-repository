@@ -2,6 +2,7 @@ package build.jenesis.repository.format.composer;
 
 import module java.base;
 import build.jenesis.repository.blobs.ReplayExchange;
+import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
@@ -13,13 +14,15 @@ import build.jenesis.repository.store.ArtifactStore;
  * version never contains {@code /}.
  *
  * <p>Each archive is replayed as the format's own {@code PUT}, so it streams into the store, and the format refuses an
- * archive whose {@code composer.json} name disagrees with the path. All packages land in one
- * {@code /composer/composer/...} registry, their declared {@code require} and {@code license} carried into the
+ * archive whose {@code composer.json} name disagrees with the path. A path of this format's own served shape,
+ * {@code <registry>/dists/<vendor>/<package>/<version>.zip} - another deployment's listing, or an index walked at a
+ * registry's root ({@link ProxyFormat#repository}) - keeps its registry; every other package lands in one
+ * {@code /composer/composer/...} registry. Their declared {@code require} and {@code license} are carried into the
  * metadata.
  */
 public final class ComposerImporter implements RepositoryImporter {
 
-    /** The single registry migrated packages land in. */
+    /** The registry a package lands in when its path names none. */
     private static final String REPO = "composer";
 
     private static final String ZIP = ".zip";
@@ -46,7 +49,8 @@ public final class ComposerImporter implements RepositoryImporter {
         String file = segments[segments.length - 1];
         String pkg = segments[segments.length - 2];
         String vendor = segments[segments.length - 3];
-        return new ComposerFormat().describe("/composer/" + REPO + "/dists/" + vendor + "/" + pkg + "/" + file);
+        return new ComposerFormat().describe("/composer/" + registry(segments) + "/dists/" + vendor + "/" + pkg + "/"
+                + file);
     }
 
     @Override
@@ -70,8 +74,13 @@ public final class ComposerImporter implements RepositoryImporter {
         if (version.isEmpty()) {
             return;
         }
-        new ComposerFormat().handle(
-                new ReplayExchange("/composer/" + REPO + "/" + vendor + "/" + pkg + "/" + version, content), store);
+        new ComposerFormat().handle(new ReplayExchange(
+                "/composer/" + registry(segments) + "/" + vendor + "/" + pkg + "/" + version, content), store);
+    }
+
+    /** The registry a path of the served shape names, else the single one migrated packages land in. */
+    private static String registry(String[] segments) {
+        return segments.length == 5 && segments[1].equals("dists") ? segments[0] : REPO;
     }
 
 }

@@ -52,7 +52,7 @@ class AssetCatalogTest {
         RepositoryFormat raw = new RawishFormat();
         Function<String, Optional<RepositoryFormat>> owner = path ->
                 Stream.of(maven, raw).filter(format -> format.handles(path)).findFirst();
-        catalog = new AssetCatalog(store, owner);
+        catalog = new AssetCatalog(store, owner, List.of());
     }
 
     @Test
@@ -88,7 +88,7 @@ class AssetCatalogTest {
         assertThat(first.assets()).extracting(AssetCatalog.Asset::path).containsExactly(
                 "/maven/com/acme/app/1.0/app-1.0.pom",
                 "/maven/com/acme/app/2.0/app-2.0.pom");
-        assertThat(first.cursor()).isEqualTo("maven/com/acme/app/2.0/app-2.0.pom");
+        assertThat(first.cursor()).isEqualTo("p:maven/com/acme/app/2.0/app-2.0.pom");
 
         AssetCatalog.Page second = catalog.page(first.cursor(), 2);
         assertThat(second.assets()).extracting(AssetCatalog.Asset::path)

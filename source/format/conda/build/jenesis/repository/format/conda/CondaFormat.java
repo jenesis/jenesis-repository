@@ -721,7 +721,10 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
      */
     @Override
     public Stream<ProxyFormat.Coordinate> enumerate(ProxyFormat.Fetcher fetcher, URI upstream) throws IOException {
+        // Under the channel the index is rooted at - the shape CondaImporter keeps the channel of.
+        Optional<String> channel = ProxyFormat.repository(upstream);
         return CondaEnumeration.enumerate(fetcher, upstream)
-                .map(entry -> new ProxyFormat.Coordinate(entry.getKey(), entry.getValue()));
+                .map(entry -> new ProxyFormat.Coordinate(channel.map(name -> name + "/" + entry.getKey())
+                        .orElse(entry.getKey()), entry.getValue()));
     }
 }

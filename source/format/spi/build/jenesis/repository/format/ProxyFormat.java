@@ -183,6 +183,22 @@ public interface ProxyFormat {
         return Stream.empty();
     }
 
+    /**
+     * The repository an index rooted at {@code upstream} is the index of, for a format whose layout names one - an RPM
+     * repository, a conda channel, a Composer registry - and whose index does not: the last segment of the upstream's
+     * path, which is where every manager, this product included, roots such an index. Empty for an upstream at its
+     * host's root, or one whose last segment is not a name a layout can hold. A walk of such a format reports its
+     * paths under it, so the import lays them out in a repository of the same name.
+     */
+    static Optional<String> repository(URI upstream) {
+        String path = upstream.getPath() == null ? "" : upstream.getPath();
+        while (path.endsWith("/")) {
+            path = path.substring(0, path.length() - 1);
+        }
+        String last = path.substring(path.lastIndexOf('/') + 1);
+        return last.isEmpty() || !ArtifactLayout.addressable(last) ? Optional.empty() : Optional.of(last);
+    }
+
     /** One enumerated artifact: the layout {@code path} it occupies under this format (no leading slash, the shape
      *  the format's {@link RepositoryImporter} accepts), the upstream {@code url} its bytes download from, and the
      *  request {@code headers} that download needs (the {@code Accept} an OCI manifest is negotiated with, say) -

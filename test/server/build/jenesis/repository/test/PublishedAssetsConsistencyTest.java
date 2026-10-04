@@ -53,7 +53,7 @@ class PublishedAssetsConsistencyTest {
         RepositoryFormat raw = new RawishFormat();
         Function<String, Optional<RepositoryFormat>> owner = path ->
                 Stream.of(maven, raw).filter(format -> format.handles(path)).findFirst();
-        catalog = new AssetCatalog(store, owner);
+        catalog = new AssetCatalog(store, owner, List.of());
         assets = new PublishedAssets(store);
     }
 

@@ -114,6 +114,33 @@ class OciBlobLayoutTest {
                 .noneSatisfy(event -> assertThat(event.getFormattedMessage()).contains("manifest-only"));
     }
 
+    @Test
+    void an_image_is_made_of_its_blobs_then_its_platform_manifests_then_its_tag() throws IOException {
+        ArtifactStore store = store();
+        String name = "library/multi";
+        String config = store.writeBlob(new ByteArrayInputStream("{}".getBytes(StandardCharsets.UTF_8)));
+        String layer = store.writeBlob(new ByteArrayInputStream("a layer".getBytes(StandardCharsets.UTF_8)));
+        String platform = manifest(store, "{\"config\":{\"digest\":\"sha256:" + config + "\"},\"layers\":[{\"digest\":"
+                + "\"sha256:" + layer + "\"}]}", "application/vnd.oci.image.manifest.v1+json");
+        String index = manifest(store, "{\"manifests\":[{\"digest\":\"sha256:" + platform + "\"}]}",
+                "application/vnd.oci.image.index.v1+json");
+        store.writeVersioned("oci/" + name + "/tags/1.0", ("sha256:" + index).getBytes(StandardCharsets.UTF_8), null);
+
+        assertThat(layout.contents(name, "1.0", store)).containsExactly(
+                "/v2/" + name + "/blobs/sha256:" + config,
+                "/v2/" + name + "/blobs/sha256:" + layer,
+                "/v2/" + name + "/manifests/sha256:" + platform,
+                "/v2/" + name + "/manifests/1.0");
+        assertThat(layout.contents(name, "2.0", store)).as("a tag nothing is pushed to").isEmpty();
+    }
+
+    /** A manifest as the format accepts one: its blob, and the media type it records beside it. */
+    private static String manifest(ArtifactStore store, String json, String mediaType) throws IOException {
+        String hex = store.writeBlob(new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
+        store.write("oci/.types/" + hex, new ByteArrayInputStream(mediaType.getBytes(StandardCharsets.UTF_8)));
+        return hex;
+    }
+
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve("filesystem",
                 key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);

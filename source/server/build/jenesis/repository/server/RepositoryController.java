@@ -500,7 +500,8 @@ public class RepositoryController {
      * import connectors, so a jenesis instance can be walked by another tool (or another jenesis) and getting your
      * data out is never an afterthought. {@code GET /api/assets?repo=<name>&cursor=<token>&limit=<n>} returns a
      * flat, stably-ordered slice of the repository's published assets: each entry's {@code path}, {@code size} and
-     * {@code sha256} come straight from the {@link build.jenesis.repository.store.Publication publication pointer}
+     * {@code sha256} come straight from the {@link build.jenesis.repository.store.Publication publication pointer},
+     * or for a format keeping its own key space from the pointer its layout serves the path from ({@link AssetCatalog})
      * (no blob is ever opened - read-first) and its {@code format}/{@code ecosystem}/{@code coordinate}/
      * {@code version} from the owning format's layout, and {@code served} is the URL path it is served at -
      * {@code /repository/<tenant>/<repository>} and the path within the repository. The opaque {@code cursor} in the
@@ -546,7 +547,14 @@ public class RepositoryController {
         String mount = RepositoryDocument.read(store)
                 .flatMap(document -> RepositoryType.of(document.format(), dispatcher.formats()))
                 .map(RepositoryType::mount).orElse("");
-        AssetCatalog.Page page = new AssetCatalog(store, dispatcher::owner).page(after, pageSize(request.getParameter("limit")));
+        AssetCatalog.Page page;
+        try {
+            page = new AssetCatalog(store, dispatcher::owner, dispatcher.formats())
+                    .page(after, pageSize(request.getParameter("limit")));
+        } catch (IllegalArgumentException _) {
+            respond(response, 400, "malformed cursor");
+            return;
+        }
         List<Map<String, Object>> assets = new ArrayList<>();
         for (AssetCatalog.Asset asset : page.assets()) {
             Map<String, Object> entry = new LinkedHashMap<>();

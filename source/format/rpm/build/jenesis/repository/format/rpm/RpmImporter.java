@@ -2,6 +2,7 @@ package build.jenesis.repository.format.rpm;
 
 import module java.base;
 import build.jenesis.repository.blobs.ReplayExchange;
+import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
@@ -9,8 +10,10 @@ import build.jenesis.repository.store.ArtifactStore;
 /**
  * Imports an RPM/yum repository from an incumbent manager. A {@code .rpm} is self-describing, so it is replayed as a
  * push through {@link RpmFormat#handle}, which streams the body into the content-addressed store and reads only the
- * header. A yum layout has no standard sub-directory convention and the filename is the NEVRA the repodata keys on, so
- * a package migrates to {@code /rpm/rpm/<file>.rpm} under a single repository.
+ * header. A path of this format's own served shape, {@code <repository>/<file>.rpm} - another deployment's listing, or
+ * an index walked at a repository's root ({@link ProxyFormat#repository}) - keeps its repository. Any other yum layout
+ * has no standard sub-directory convention and the filename is the NEVRA the repodata keys on, so such a package
+ * migrates to {@code /rpm/rpm/<file>.rpm} under a single repository.
  */
 public final class RpmImporter implements RepositoryImporter {
 
@@ -40,11 +43,11 @@ public final class RpmImporter implements RepositoryImporter {
         new RpmFormat().handle(new ReplayExchange(publishPath(relative), content), store);
     }
 
-    /** The path a source {@code .rpm} migrates to: the single {@code rpm} repository, by filename, so the
-     *  {@code <location href>} matches where it is served. */
+    /** The path a source {@code .rpm} migrates to: the repository a path of the served shape names, else the single
+     *  {@code rpm} repository, by filename, so the {@code <location href>} matches where it is served. */
     private static String publishPath(String path) {
-        int slash = path.lastIndexOf('/');
-        return "/rpm/rpm/" + (slash < 0 ? path : path.substring(slash + 1));
+        String[] segments = path.split("/");
+        return segments.length == 2 ? "/rpm/" + path : "/rpm/rpm/" + segments[segments.length - 1];
     }
 
 }
