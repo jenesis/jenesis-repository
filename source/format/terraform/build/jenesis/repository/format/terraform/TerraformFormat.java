@@ -31,6 +31,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 import build.jenesis.repository.format.Listings;
 
@@ -181,23 +182,19 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
             return;
         }
         String base = base(exchange, repo) + "/providers/" + namespace + "/" + type + "/" + version;
-        StringBuilder document = new StringBuilder("{\"protocols\":[\"5.0\"],\"os\":")
-                .append(MAPPER.writeValueAsString(os)).append(",\"arch\":").append(MAPPER.writeValueAsString(arch))
-                .append(",\"filename\":").append(MAPPER.writeValueAsString(file))
-                .append(",\"download_url\":").append(MAPPER.writeValueAsString(base + "/" + file))
-                .append(",\"shasums_url\":").append(MAPPER.writeValueAsString(base + "/SHA256SUMS"))
-                .append(",\"shasums_signature_url\":").append(MAPPER.writeValueAsString(base + "/SHA256SUMS.sig"))
-                .append(",\"shasum\":").append(MAPPER.writeValueAsString(located.get().hash()))
-                .append(",\"signing_keys\":{\"gpg_public_keys\":[");
+        ObjectNode document = MAPPER.createObjectNode();
+        document.putArray("protocols").add("5.0");
+        document.put("os", os).put("arch", arch).put("filename", file).put("download_url", base + "/" + file)
+                .put("shasums_url", base + "/SHA256SUMS").put("shasums_signature_url", base + "/SHA256SUMS.sig")
+                .put("shasum", located.get().hash());
+        ArrayNode keyring = document.putObject("signing_keys").putArray("gpg_public_keys");
         Optional<byte[]> publicKey = keys(blobs).publicKeyring();
         if (publicKey.isPresent()) {
-            document.append("{\"key_id\":").append(MAPPER.writeValueAsString(keys(blobs).keyId().orElse("")))
-                    .append(",\"ascii_armor\":")
-                    .append(MAPPER.writeValueAsString(new String(publicKey.get(), StandardCharsets.UTF_8)))
-                    .append(",\"trust_signature\":\"\",\"source\":\"Jenesis\",\"source_url\":\"\"}");
+            keyring.addObject().put("key_id", keys(blobs).keyId().orElse(""))
+                    .put("ascii_armor", new String(publicKey.get(), StandardCharsets.UTF_8))
+                    .put("trust_signature", "").put("source", "Jenesis").put("source_url", "");
         }
-        document.append("]}}");
-        respondJson(exchange, document.toString().getBytes(StandardCharsets.UTF_8));
+        respondJson(exchange, MAPPER.writeValueAsBytes(document));
     }
 
     private void artifact(FormatExchange exchange, Blobs blobs, String repo, String[] path) throws IOException {
