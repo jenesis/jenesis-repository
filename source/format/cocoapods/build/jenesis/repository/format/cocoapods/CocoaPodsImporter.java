@@ -12,12 +12,14 @@ import build.jenesis.repository.store.ArtifactStore;
  * segments, the shape this format serves an archive at, so an export re-imports; a version never contains {@code /}.
  *
  * <p>Each archive is replayed as the format's own {@code PUT}, so it streams into the store, and the format refuses one
- * whose podspec disagrees with the path. All pods land in one {@code /cocoapods/cocoapods/...} registry, their declared
- * dependencies and licence carried into the regenerated podspec.
+ * whose podspec disagrees with the path. A path of this format's own served shape,
+ * {@code <registry>/pods/<name>/<version>/<file>.zip} - another deployment's listing - keeps its registry; every other
+ * pod lands in one {@code /cocoapods/cocoapods/...} registry. Declared dependencies and the licence are carried into
+ * the regenerated podspec.
  */
 public final class CocoaPodsImporter implements RepositoryImporter {
 
-    /** The single registry migrated pods land in. */
+    /** The registry a pod lands in when its path names none. */
     private static final String REPO = "cocoapods";
 
     private static final String ZIP = ".zip";
@@ -45,7 +47,7 @@ public final class CocoaPodsImporter implements RepositoryImporter {
         String version = segments[segments.length - 2];
         String name = segments[segments.length - 3];
         return new CocoaPodsFormat().describe(
-                "/cocoapods/" + REPO + "/pods/" + name + "/" + version + "/" + file);
+                "/cocoapods/" + registry(segments) + "/pods/" + name + "/" + version + "/" + file);
     }
 
     @Override
@@ -68,7 +70,12 @@ public final class CocoaPodsImporter implements RepositoryImporter {
             return;
         }
         new CocoaPodsFormat().handle(
-                new ReplayExchange("/cocoapods/" + REPO + "/" + name + "/" + version, content), store);
+                new ReplayExchange("/cocoapods/" + registry(segments) + "/" + name + "/" + version, content), store);
+    }
+
+    /** The registry a path of the served shape names, else the single one migrated pods land in. */
+    private static String registry(String[] segments) {
+        return segments.length == 5 && segments[1].equals("pods") ? segments[0] : REPO;
     }
 
 }

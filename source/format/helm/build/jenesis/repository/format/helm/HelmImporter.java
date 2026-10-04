@@ -10,8 +10,9 @@ import build.jenesis.repository.store.ArtifactStore;
  * Imports a classic Helm chart repository, replaying each {@code .tgz} through {@link HelmFormat}'s own
  * {@code PUT charts/<name>-<version>.tgz} path so an exported repository round-trips. Only the archives migrate:
  * {@code index.yaml} is derived, so importing one would overwrite a maintained document. The coordinate is read from
- * {@code Chart.yaml} by the publish, which also refuses an archive whose metadata disagrees with the file name. All
- * charts land in one {@code /helm/helm/...} repository.
+ * {@code Chart.yaml} by the publish, which also refuses an archive whose metadata disagrees with the file name. A path
+ * of this format's own served shape, {@code <repository>/charts/<file>.tgz} - another deployment's listing - keeps its
+ * repository; every other chart lands in one {@code /helm/helm/...} repository.
  */
 public final class HelmImporter implements RepositoryImporter {
 
@@ -40,7 +41,9 @@ public final class HelmImporter implements RepositoryImporter {
             return Optional.empty();
         }
         // The coordinate is left to the publish, which reads Chart.yaml and judges this path against it.
-        return Optional.of(ArtifactDescriptor.at(HelmFormat.ECOSYSTEM, "/helm/" + REPO + "/charts/" + file));
+        String[] segments = relative.split("/");
+        String repository = segments.length == 3 && segments[1].equals("charts") ? segments[0] : REPO;
+        return Optional.of(ArtifactDescriptor.at(HelmFormat.ECOSYSTEM, "/helm/" + repository + "/charts/" + file));
     }
 
     @Override
