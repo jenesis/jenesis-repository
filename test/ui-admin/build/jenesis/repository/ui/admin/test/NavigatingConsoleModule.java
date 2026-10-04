@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.ui.ConsoleModuleProvider;
 import build.jenesis.repository.ui.NavEntry;
+import build.jenesis.repository.ui.VersionDocument;
 
 /**
  * A console module contributing one link at each access floor and in two groups, so the nav rule has something to
@@ -45,5 +46,11 @@ public final class NavigatingConsoleModule implements ConsoleModuleProvider {
                 new NavEntry("Admins", "/admins", NavEntry.Access.ADMIN, NavEntry.Group.OPERATIONS),
                 new NavEntry("Operators", "/operators", NavEntry.Access.SUPERADMIN, NavEntry.Group.OPERATIONS),
                 new NavEntry("Settings", "/module-settings", NavEntry.Access.ADMIN, NavEntry.Group.SETTINGS));
+    }
+
+    /** One document about every version, for the version page to link. */
+    @Override
+    public List<VersionDocument> versionDocuments() {
+        return List.of(new VersionDocument("Navigation notes", "/notes"));
     }
 }

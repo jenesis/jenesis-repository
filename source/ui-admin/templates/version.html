@@ -56,6 +56,13 @@
                     <small th:if="${!detail.lastDownloaded.isEmpty()}">last <time th:replace="~{base :: time(${detail.lastDownloaded})}">2026-06-05 12:00:00 UTC</time></small>
                     <small th:if="${!downloadsLag.isEmpty()}" th:text="'(up to ' + ${downloadsLag} + ' behind)'">(up to 6 hours behind)</small></td>
             </tr>
+            <tr th:unless="${versionDocuments.isEmpty()}">
+                <th scope="row">Bill of materials</th>
+                <td><ul class="app-reasons">
+                    <li th:each="document : ${versionDocuments}"><a th:href="@{'/ui/repositories/' + ${repo} + ${document.path()}(ecosystem=${detail.ecosystem},coordinate=${detail.coordinate},version=${detail.version})}"
+                            th:text="${document.label()}" download>CycloneDX JSON</a></li>
+                </ul></td>
+            </tr>
             <tr th:if="${capabilities.findings()}">
                 <th scope="row">Findings</th>
                 <td><th:block th:replace="~{fragments :: findingsState(${detail.findings}, @{'/ui/repositories/' + ${repo} + '/findings'(coordinate=${detail.coordinate + ':' + detail.version})})}"></th:block></td>

@@ -9,6 +9,7 @@ import build.jenesis.repository.failure.Failures;
 import build.jenesis.repository.store.ReadOnlyException;
 import build.jenesis.repository.ui.PrincipalNameResolver;
 import build.jenesis.repository.ui.NavEntry;
+import build.jenesis.repository.ui.VersionDocument;
 import build.jenesis.repository.ui.NavEntry.Access;
 import build.jenesis.repository.ui.NavEntry.Group;
 import build.jenesis.repository.ui.ConsoleScreen;
@@ -189,6 +190,12 @@ public class GlobalControllerAdvice {
     @ModelAttribute("scopeWord")
     public String scopeWord() {
         return tenancy.multi() ? "tenant" : "deployment";
+    }
+
+    /** The documents installed console modules serve about a version, which a version's page links. */
+    @ModelAttribute("versionDocuments")
+    public List<VersionDocument> versionDocuments() {
+        return capabilities.versionDocuments();
     }
 
     /**

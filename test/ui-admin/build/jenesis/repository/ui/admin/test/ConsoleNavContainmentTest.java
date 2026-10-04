@@ -4,6 +4,7 @@ import module org.junit.jupiter.api;
 import module java.base;
 
 import build.jenesis.repository.ui.ConsoleModuleProvider;
+import build.jenesis.repository.ui.VersionDocument;
 import build.jenesis.repository.ui.admin.web.CapabilityService;
 import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.StandardEnvironment;
@@ -97,6 +98,13 @@ class ConsoleNavContainmentTest {
      * <p>Switching off the one module on this path that contributes links is what makes the assertion bite: resolve
      * from installed and the four links are all still here.
      */
+    @Test
+    void a_console_module_s_version_documents_are_offered_on_every_version_page() {
+        assertThat(new CapabilityService(new StandardEnvironment()).versionDocuments())
+                .as("the installed module's document, for the version page to link")
+                .contains(new VersionDocument("Navigation notes", "/notes"));
+    }
+
     @Test
     void a_switched_off_console_module_contributes_no_nav_link() {
         StandardEnvironment switchedOff = new StandardEnvironment();

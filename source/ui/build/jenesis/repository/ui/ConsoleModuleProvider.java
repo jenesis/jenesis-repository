@@ -75,6 +75,11 @@ public interface ConsoleModuleProvider extends IconContributor {
         return repositoryPages();
     }
 
+    /** The documents this module serves about every version, which a version's page links while it is installed. */
+    default List<VersionDocument> versionDocuments() {
+        return List.of();
+    }
+
     /**
      * Every installed console module, whatever its configuration, name-sorted, through {@link Providers#all}, which
      * refuses a duplicate name or class.

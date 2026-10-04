@@ -19,6 +19,7 @@ import build.jenesis.repository.staging.StagingProvider;
 import build.jenesis.repository.ui.ConsoleModuleProvider;
 import build.jenesis.repository.ui.NavEntry;
 import build.jenesis.repository.ui.RepositoryPage;
+import build.jenesis.repository.ui.VersionDocument;
 import build.jenesis.repository.upstream.UpstreamCredentialSourceProvider;
 import build.jenesis.repository.store.Features;
 import org.springframework.core.env.Environment;
@@ -207,6 +208,11 @@ public class CapabilityService {
         return pageModules.stream().flatMap(module -> module.repositoryPages(type).stream())
                 .filter(page -> page.requires().isEmpty() || named.containsKey(page.requires()))
                 .toList();
+    }
+
+    /** The documents the imported console modules serve about every version, in module order. */
+    public List<VersionDocument> versionDocuments() {
+        return pageModules.stream().flatMap(module -> module.versionDocuments().stream()).toList();
     }
 
     /** Whether the capability a page {@code requires} is present; the empty requirement always is. */
