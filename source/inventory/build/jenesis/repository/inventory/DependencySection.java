@@ -20,6 +20,11 @@ import tools.jackson.databind.node.ObjectNode;
  * the version's declarations are their union in path order, so a Maven POM's dependencies survive the jar that
  * follows it. The {@code data} payload is {@code {"declared":[{"coordinate":<coordinate>,"requirement":<requirement>},
  * ...], "files":{<path>:{"declared":[...]}}}}, neutral as a signal.
+ *
+ * <p>Not yet in CycloneDX's vocabulary, which the sections describing a version converge on (see
+ * {@link build.jenesis.repository.metadata.MetadataDocument}): a dependency is named by the format's own spelling of
+ * its coordinate, where CycloneDX identifies a component by its package URL. Recording the package URL beside the
+ * coordinate is what remains; the requirement already is CycloneDX's version or range, as declared.
  */
 public final class DependencySection {
 

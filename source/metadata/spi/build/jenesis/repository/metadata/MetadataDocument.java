@@ -20,6 +20,19 @@ import module org.slf4j;
  *
  * <p>Immutable; {@link #mutate} returns a new document. Writers of different sections conflict only on the store's CAS
  * token and converge on retry; writers of the same section keep that section owner's merge semantics.
+ *
+ * <h2>A bill of materials is rendered from it, not stored as it</h2>
+ * The document stays a set of sections, each with its owner, its merge and its schema number, rather than taking a
+ * standard's shape. Most of it is the repository's own state about a version - when it was published or cached, its
+ * downloads, its verdict, findings, signatures and provenance - which a bill of materials has no field for, and the
+ * section isolation above is what lets concurrent writers and nodes of different versions share one document.
+ *
+ * <p>The goal is that the sections describing what a version <em>is</em> - its licences, its dependencies, what its
+ * manifest says about it and its files - speak CycloneDX's vocabulary, so a bill of materials renders from them field
+ * for field and the standard holds wherever a client reads one: a licence as an SPDX identifier, or a name and a URL;
+ * a version identified by its package URL; a dependency as a component reference with the version or range declared.
+ * The repository's own facts reach a rendered document, where they reach it at all, as properties under a
+ * {@code jenrepo:} prefix. Where a section does not yet speak that vocabulary, its codec says what remains.
  */
 public final class MetadataDocument {
 

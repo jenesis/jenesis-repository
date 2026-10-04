@@ -18,6 +18,11 @@ import build.jenesis.repository.metadata.Signal;
  * {@code {"declared":[{"name":..,"url":..}]}} - a stable, order-independent shape - so the search-index sweep and the
  * rollup identity join a release to its declared licenses without re-parsing an artifact. All methods are pure; a
  * mutation returns a fresh {@link Section} and never touches its argument.
+ *
+ * <p>Not yet in CycloneDX's vocabulary, which the sections describing a version converge on (see
+ * {@link build.jenesis.repository.metadata.MetadataDocument}): a declaration is a name and a URL, where CycloneDX
+ * states a licence the SPDX list knows by its identifier, and an expression whole. Recording the identifier beside the
+ * name when the declaration is one is what remains.
  */
 public final class LicenseSection {
 
