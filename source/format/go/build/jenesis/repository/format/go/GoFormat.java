@@ -7,6 +7,7 @@ import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.blobs.HostedMarker;
 import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.blobs.ComposedLayout;
 import build.jenesis.repository.format.ExportTarget;
 import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.blobs.Blobs;
@@ -66,7 +67,7 @@ import build.jenesis.repository.format.Semver;
  *       is served whole for the same reason.</li>
  * </ol>
  */
-public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, RepositoryImporter.Delegating,
+public final class GoFormat implements RepositoryFormat, ProxyLeg, ComposedLayout, RepositoryImporter.Delegating,
         RepositoryExporter {
 
     @Override
@@ -108,7 +109,7 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
         String coordinate = rest.substring(0, marker);
         String file = rest.substring(marker + "/@v/".length());
         String version = null;
-        for (String suffix : List.of(".info", ".mod", ".zip")) {
+        for (String suffix : VERSION_FILES) {
             if (file.endsWith(suffix)) {
                 version = file.substring(0, file.length() - suffix.length());
                 break;
@@ -131,7 +132,7 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
         }
         List<String> keys = new ArrayList<>();
         String base = "go/" + coordinate + "/@v/" + version;
-        for (String suffix : List.of(".info", ".mod", ".zip")) {
+        for (String suffix : VERSION_FILES) {
             if (store.readVersioned(base + suffix).isPresent()) {
                 keys.add(base + suffix);
             }
@@ -154,12 +155,29 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
      *  as {@link #blobKeys} keys it. The {@code .info}/{@code .mod} and the version queries name no archive and stay
      *  empty. A {@code -} in the version marks a prerelease, a pseudo-version included, as {@link Semver#compare} ranks
      *  it. */
-    /** A module archive is served from the key its path names. */
+    /** A version's {@code .info}, {@code .mod} and {@code .zip} are each served from the key their path names. */
     @Override
     public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
-        return describedVersion(requestPath).isEmpty() ? Optional.empty()
-                : BlobLayout.stored(requestPath.substring(1), store);
+        int dot = requestPath.lastIndexOf('.');
+        String suffix = dot < 0 ? "" : requestPath.substring(dot);
+        if (!VERSION_FILES.contains(suffix) || describedVersion(requestPath.substring(0, dot) + ".zip").isEmpty()) {
+            return Optional.empty();
+        }
+        return BlobLayout.stored(requestPath.substring(1), store);
     }
+
+    /** A module version is its {@code .info}, {@code .mod} and {@code .zip}, the archive last: the trio a go command is
+     *  served, of which the archive alone is a download. */
+    @Override
+    public List<String> contents(String coordinate, String version, ArtifactStore store) throws IOException {
+        if (servedPaths(coordinate, version, store).isEmpty()) {
+            return List.of();
+        }
+        return blobKeys(coordinate, version, store).stream().map(key -> "/" + key).toList();
+    }
+
+    /** The files of a module version, in the order a version is laid down. */
+    private static final List<String> VERSION_FILES = List.of(".info", ".mod", ".zip");
 
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {

@@ -10,6 +10,7 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
@@ -53,7 +54,7 @@ import build.jenesis.repository.format.PublishedExport;
  * {@link ArtifactLayout#paths(String, String, ArtifactStore)}, so this format needs no configuration document.
  */
 public final class IvyFormat implements RepositoryFormat, ArtifactLayout, ArtifactSignatures.Delegating, RepositoryExporter,
-        ProxyLeg {
+        ProxyLeg, RepositoryImporter.Delegating {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(IvyFormat.class);
 
@@ -121,6 +122,14 @@ public final class IvyFormat implements RepositoryFormat, ArtifactLayout, Artifa
     @Override
     public boolean handles(String path) {
         return path.startsWith(PREFIX);
+    }
+
+    /** The migration-import capability, delegated to {@link IvyImporter}. */
+    private final IvyImporter importer = new IvyImporter();
+
+    @Override
+    public RepositoryImporter importer() {
+        return importer;
     }
 
     @Override
