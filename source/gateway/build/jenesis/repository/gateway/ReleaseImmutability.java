@@ -10,6 +10,7 @@ import build.jenesis.repository.metadata.Section;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
+import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.server.kernel.LiveConfig;
 
 /**
@@ -189,8 +190,17 @@ public final class ReleaseImmutability {
      * <p>Restricted to {@link ArtifactLayout} on purpose: the deliberately-mutable hosted stores stay exempt -
      * {@code raw} declares no layout at all, and OCI's tag space resolves only through a {@code BlobLayout}, so a tag
      * re-push stays mutable.
+     *
+     * <p>A checksum beside a file is as fixed as that file: it is the client's own, served as uploaded and never
+     * derived, so one replaced beside a released file would contradict the bytes it was published against. It
+     * describes to no coordinate, so it is asked about the file it describes. A signature stays replaceable, since
+     * signing the same bytes again gives another signature.
      */
     static boolean immutableReleaseArtifact(RepositoryFormat plugin, String path) {
+        Optional<String> described = ServableNames.checksumOf(path);
+        if (described.isPresent()) {
+            return immutableReleaseArtifact(plugin, described.get());
+        }
         if (plugin instanceof ArtifactLayout layout && places(layout, path)) {
             return HardenedScreen.immutableCoordinate(path);
         }

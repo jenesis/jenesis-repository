@@ -104,6 +104,10 @@ public final class ServableNames {
      *  or a request path into a key, means exactly this prefix. */
     public static final String PUBLISHED = "publish";
 
+    /** The sidecar suffixes that name a checksum: the client's digest of the file beside it, which signing it again
+     *  would not change, unlike a signature, which carries the moment it was made. */
+    private static final List<String> CHECKSUM_SUFFIXES = List.of(".md5", ".sha1", ".sha256", ".sha512");
+
     /** The checksum and signature suffixes that make a served path a SIDECAR of the artifact beside it - a document
      *  whose whole content is a statement about another path's bytes. Owned here beside {@link #PUBLISHED} because
      *  the two are the same kind of fact: a convention about served paths that every surface must read the same way.
@@ -120,8 +124,8 @@ public final class ServableNames {
      *  forget. A Sigstore bundle is a sidecar for the same reason as a signature: {@code x.jar.sigstore.json} carries
      *  the digest of {@code x.jar} and the identity that signed it, which is everything a hold means to withhold; so
      *  is a registry's attestations document kept beside the artifact it attests. */
-    private static final List<String> SIDECAR_SUFFIXES =
-            List.of(".md5", ".sha1", ".sha256", ".sha512", ".asc", ".sig", ".sigstore.json", ".attestations.json");
+    private static final List<String> SIDECAR_SUFFIXES = Stream.concat(CHECKSUM_SUFFIXES.stream(),
+            Stream.of(".asc", ".sig", ".sigstore.json", ".attestations.json")).toList();
 
     /**
      * The path a sidecar describes - a checksum or a signature, a document whose whole content is a statement about
@@ -133,6 +137,12 @@ public final class ServableNames {
         return Optional.ofNullable(subject(requestPath));
     }
 
+    /** The path a checksum describes, or empty when {@code requestPath} is no checksum: a {@link #sidecarOf sidecar}
+     *  whose content is a digest rather than a signature. */
+    public static Optional<String> checksumOf(String requestPath) {
+        return Optional.ofNullable(stripped(requestPath, CHECKSUM_SUFFIXES));
+    }
+
     /** Whether {@code requestPath} is a sidecar ({@link #sidecarOf}). */
     public static boolean sidecar(String requestPath) {
         return subject(requestPath) != null;
@@ -142,7 +152,12 @@ public final class ServableNames {
      *  recurses: {@code x.jar.sha1.md5} names {@code x.jar.sha1}, whose own hold is then read directly, so a chain of
      *  sidecars terminates in one step per read rather than walking. */
     private static String subject(String requestPath) {
-        for (String suffix : SIDECAR_SUFFIXES) {
+        return stripped(requestPath, SIDECAR_SUFFIXES);
+    }
+
+    /** {@code requestPath} without the one of {@code suffixes} it ends with, or {@code null} when it ends with none. */
+    private static String stripped(String requestPath, List<String> suffixes) {
+        for (String suffix : suffixes) {
             if (requestPath.length() > suffix.length() && requestPath.endsWith(suffix)) {
                 return requestPath.substring(0, requestPath.length() - suffix.length());
             }

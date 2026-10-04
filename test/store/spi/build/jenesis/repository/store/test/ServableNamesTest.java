@@ -110,6 +110,15 @@ class ServableNamesTest {
     }
 
     @Test
+    void a_checksum_names_the_file_it_describes_and_a_signature_is_a_sidecar_but_no_checksum() {
+        assertThat(ServableNames.checksumOf("/maven/g/a/1/a-1.jar.sha1")).contains("/maven/g/a/1/a-1.jar");
+        assertThat(ServableNames.checksumOf("/maven/g/a/1/a-1.jar.sha512")).contains("/maven/g/a/1/a-1.jar");
+        assertThat(ServableNames.checksumOf("/maven/g/a/1/a-1.jar.asc")).as("a signature").isEmpty();
+        assertThat(ServableNames.sidecarOf("/maven/g/a/1/a-1.jar.asc")).contains("/maven/g/a/1/a-1.jar");
+        assertThat(ServableNames.checksumOf("/maven/g/a/1/a-1.jar")).isEmpty();
+    }
+
+    @Test
     void a_sidecar_is_held_by_a_marker_on_its_subject_too_not_only_by_the_chain() throws IOException {
         // The retroactive half: a KEV sweep marks the CONTENT of a published jar. The sidecar's own bytes carry no
         // marker - the marker is content-addressed and the checksum is different content - so without the subject
