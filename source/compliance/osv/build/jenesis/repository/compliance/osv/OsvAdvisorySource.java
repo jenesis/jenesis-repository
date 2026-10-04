@@ -85,11 +85,14 @@ public final class OsvAdvisorySource implements AdvisorySource {
 
     @Override
     public List<Advisory> advisories(String ecosystem, String coordinate, String version) {
+        if (!OsvQuery.covers(ecosystem)) {
+            return List.of();
+        }
         return cache.get(key(ecosystem, coordinate, version));
     }
 
     /** The cache key: the three coordinates joined by spaces, so it reads well in the cache's failure. A coordinate
-     *  and a version never contain one and an ecosystem may ("Hugging Face"), so the key reads back from its end. */
+     *  and a version never contain one, so the key reads back from its end. */
     private static String key(String ecosystem, String coordinate, String version) {
         return ecosystem + " " + coordinate + " " + version;
     }

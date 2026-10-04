@@ -46,17 +46,15 @@ class OsvAdvisorySourceTest {
     }
 
     @Test
-    void an_ecosystem_whose_name_holds_a_space_is_asked_for_whole() {
-        StringBuilder seen = new StringBuilder();
+    void an_ecosystem_osv_does_not_publish_is_never_asked() {
+        // OSV refuses a query naming an ecosystem outside its schema with a 400, which failing closed would turn into
+        // an outage on every coordinate of it - a whole scan lost to one module view.
         OsvAdvisorySource source = new OsvAdvisorySource(body -> {
-            seen.append(body);
-            return "{\"vulns\":[]}";
+            throw new AssertionError("asked " + body);
         });
-        source.advisories("Hugging Face", "acme/model", "1.0");
-        assertThat(seen.toString())
-                .contains("\"ecosystem\":\"Hugging Face\"")
-                .contains("\"name\":\"acme/model\"")
-                .contains("\"version\":\"1.0\"");
+        for (String ecosystem : List.of("Hugging Face", "conda", "CocoaPods", "RPM", "Jenesis")) {
+            assertThat(source.advisories(ecosystem, "acme/model", "1.0")).as(ecosystem).isEmpty();
+        }
     }
 
     @Test

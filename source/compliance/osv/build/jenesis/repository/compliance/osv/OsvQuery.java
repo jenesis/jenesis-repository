@@ -18,17 +18,39 @@ public final class OsvQuery {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    /** The product's ecosystem names OSV spells otherwise. OSV answers only its schema's ecosystems, and a query in
-     *  another spelling gets nothing, which would read as "no advisory". Conan is OSV's {@code ConanCenter}; every
-     *  other declared name is OSV's own or one OSV does not publish. */
-    private static final Map<String, String> OSV_NAMES = Map.of(Ecosystems.CONAN, "ConanCenter");
+    /** The product's ecosystem names OSV publishes, each in OSV's spelling: Conan's recipes are OSV's
+     *  {@code ConanCenter}, the rest its own names. OSV refuses a query naming an ecosystem outside its schema with a
+     *  {@code 400}, which a source failing closed would read as an outage on every coordinate of it, so a name not
+     *  listed - CocoaPods, conda, RPM, Hugging Face and the formats no vulnerability database names - is never asked. */
+    private static final Map<String, String> OSV_NAMES = Map.ofEntries(
+            Map.entry(Ecosystems.MAVEN, "Maven"),
+            Map.entry(Ecosystems.NPM, "npm"),
+            Map.entry(Ecosystems.PYPI, "PyPI"),
+            Map.entry(Ecosystems.GO, "Go"),
+            Map.entry(Ecosystems.NUGET, "NuGet"),
+            Map.entry(Ecosystems.RUBYGEMS, "RubyGems"),
+            Map.entry(Ecosystems.CRATES_IO, "crates.io"),
+            Map.entry(Ecosystems.PACKAGIST, "Packagist"),
+            Map.entry(Ecosystems.CONAN, "ConanCenter"),
+            Map.entry(Ecosystems.DEBIAN, "Debian"),
+            Map.entry("Alpine", "Alpine"));
 
     private OsvQuery() {
     }
 
+    /** Whether OSV publishes {@code ecosystem}, so a query of it is answered rather than refused. A source answers
+     *  no advisories for an ecosystem it does not cover. */
+    public static boolean covers(String ecosystem) {
+        return OSV_NAMES.containsKey(ecosystem);
+    }
+
     /** The name OSV knows the product's {@code ecosystem} by, which is the one a query carries. */
-    public static String name(String ecosystem) {
-        return OSV_NAMES.getOrDefault(ecosystem, ecosystem);
+    private static String name(String ecosystem) {
+        String name = OSV_NAMES.get(ecosystem);
+        if (name == null) {
+            throw new IllegalArgumentException("OSV publishes no ecosystem named " + ecosystem);
+        }
+        return name;
     }
 
     /** One page's request to {@code query} for {@code coordinate} at {@code version}, with the cursor token OSV handed

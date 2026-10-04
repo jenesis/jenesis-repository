@@ -62,6 +62,17 @@ class OpenSsfMaliciousSourceTest {
         assertThat(seen.toString()).contains("\"ecosystem\":\"ConanCenter\"");
     }
 
+    /** OSV refuses a query naming an ecosystem outside its schema with a {@code 400}, which this source, failing
+     *  closed, would raise for every coordinate of it. */
+    @Test
+    void an_ecosystem_osv_does_not_publish_is_never_asked() {
+        OpenSsfMaliciousSource source = new OpenSsfMaliciousSource(body -> {
+            throw new AssertionError("asked " + body);
+        });
+        assertThat(source.advisories("conda", "numpy", "1.0")).isEmpty();
+        assertThat(source.advisories("Jenesis", "org.acme.widget", "1.0")).isEmpty();
+    }
+
     @Test
     void the_reviewers_severity_word_maps_to_a_band() {
         String response = """

@@ -82,6 +82,9 @@ public final class OpenSsfMaliciousSource implements AdvisorySource {
 
     @Override
     public List<Advisory> advisories(String ecosystem, String coordinate, String version) {
+        if (!OsvQuery.covers(ecosystem)) {
+            return List.of();
+        }
         String key = ecosystem + '|' + coordinate + '|' + version;
         try {
             List<Advisory> advisories = client.fetch(OsvQuery.request(query, ecosystem, coordinate, version, null),
