@@ -9,7 +9,7 @@ import build.jenesis.repository.format.ProxyFormat;
  * Walks a yum/dnf repository rooted at an upstream: {@code repodata/repomd.xml} names the {@code primary} index, whose
  * {@code <location href>} entries are streamed one {@code <package>} at a time, since a mirror's primary runs to
  * hundreds of megabytes (gzip is unwrapped by suffix). Each entry pairs the repo-relative location {@link RpmImporter}
- * accepts with its download URL. Callers drive it directly. {@code repomd.xml} is read eagerly, so a repository without
+ * accepts with its download URL. {@code repomd.xml} is read eagerly, so a repository without
  * one fails up front; the primary streams lazily, failures surfacing as {@link UncheckedIOException}. XML is parsed
  * with DTDs and external entities disabled.
  */

@@ -36,6 +36,8 @@ open module build.jenesis.repository.gateway.contract.test {
     requires build.jenesis.repository.audit;
     requires build.jenesis.repository.format.debian;
     requires build.jenesis.repository.format.composer;
+    requires build.jenesis.repository.format.rpm;
+    requires build.jenesis.repository.format.conda;
     requires build.jenesis.repository.format.cocoapods;
     requires build.jenesis.repository.format.huggingface;
     requires build.jenesis.repository.format.signing;

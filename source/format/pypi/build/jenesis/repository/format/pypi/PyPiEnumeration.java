@@ -8,7 +8,7 @@ import build.jenesis.repository.format.ProxyFormat;
  * Walks a PEP 503 simple index rooted at an upstream: the root {@code simple/} project list, then each project's page,
  * each file link resolved against its page (files usually live on another host) with its {@code #sha256} fragment
  * dropped. Each entry pairs the {@code <project>/<filename>} path {@link PyPiImporter} accepts with the file's download
- * URL, for any index speaking PEP 503. Callers drive it directly. The root list is read eagerly, so an index-less
+ * URL, for any index speaking PEP 503. The root list is read eagerly, so an index-less
  * source fails up front; project pages are read lazily, failures surfacing as {@link UncheckedIOException}.
  */
 public final class PyPiEnumeration {

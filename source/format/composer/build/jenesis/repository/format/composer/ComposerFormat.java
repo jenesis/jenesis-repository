@@ -700,4 +700,15 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
         }
         return BlobExport.put(repository, pairs, target);
     }
+
+    /**
+     * Every artifact the upstream rooted at {@code upstream} publishes, walked through its own index by
+     * {@link ComposerEnumeration}: what an import from that index lays out. A link off the upstream's own origin must be
+     * {@code https} and public: an import screens the source's host before it starts, and trusts nothing beyond it.
+     */
+    @Override
+    public Stream<ProxyFormat.Coordinate> enumerate(ProxyFormat.Fetcher fetcher, URI upstream) throws IOException {
+        return ComposerEnumeration.enumerate(fetcher, upstream, false)
+                .map(entry -> new ProxyFormat.Coordinate(entry.getKey(), entry.getValue()));
+    }
 }

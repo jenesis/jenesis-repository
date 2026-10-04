@@ -1028,4 +1028,15 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
                 new ExportTarget.Request("PUT", PUSH, headers, ExportTarget.Body.of(form.length(), form::open)),
                 Optional.of("v3-flatcontainer/" + id + "/" + version + "/" + file), hash)), target);
     }
+
+    /**
+     * Every artifact the upstream rooted at {@code upstream} publishes, walked through its own index by
+     * {@link NuGetEnumeration}: what an import from that index lays out. A link off the upstream's own origin must be
+     * {@code https} and public: an import screens the source's host before it starts, and trusts nothing beyond it.
+     */
+    @Override
+    public Stream<ProxyFormat.Coordinate> enumerate(ProxyFormat.Fetcher fetcher, URI upstream) throws IOException {
+        return NuGetEnumeration.enumerate(fetcher, upstream, false)
+                .map(entry -> new ProxyFormat.Coordinate(entry.getKey(), entry.getValue()));
+    }
 }

@@ -714,4 +714,14 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
         return BlobExport.put(repository, pairs, target);
     }
+
+    /**
+     * Every artifact the upstream rooted at {@code upstream} publishes, walked through its own index by
+     * {@link CondaEnumeration}: what an import from that index lays out.
+     */
+    @Override
+    public Stream<ProxyFormat.Coordinate> enumerate(ProxyFormat.Fetcher fetcher, URI upstream) throws IOException {
+        return CondaEnumeration.enumerate(fetcher, upstream)
+                .map(entry -> new ProxyFormat.Coordinate(entry.getKey(), entry.getValue()));
+    }
 }

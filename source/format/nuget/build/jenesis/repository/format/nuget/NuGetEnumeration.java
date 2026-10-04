@@ -10,7 +10,7 @@ import build.jenesis.repository.format.ProxyFormat;
  * catalog where one is advertised or from the search service otherwise, and each id's flat-container {@code index.json}
  * names the versions that exist, so an id whose package was deleted or unlisted contributes nothing. Each entry pairs
  * the lowercase {@code <id>/<version>/<id>.<version>.nupkg} path {@link NuGetImporter} accepts with its download URL.
- * Callers drive it directly. The service index is read eagerly, so one advertising neither a catalog nor a search
+ * The service index is read eagerly, so one advertising neither a catalog nor a search
  * service fails up front; pages and version lists read lazily, failures surfacing as {@link UncheckedIOException}.
  */
 public final class NuGetEnumeration {

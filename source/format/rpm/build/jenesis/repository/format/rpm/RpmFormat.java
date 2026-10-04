@@ -832,4 +832,15 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
             throws IOException {
         return BlobExport.put(repository, mount(), blobKeys(coordinate, version, repository), target);
     }
+
+    /**
+     * Every artifact the upstream rooted at {@code upstream} publishes, walked through its own index by
+     * {@link RpmEnumeration}: what an import from that index lays out. A link off the upstream's own origin must be
+     * {@code https} and public: an import screens the source's host before it starts, and trusts nothing beyond it.
+     */
+    @Override
+    public Stream<ProxyFormat.Coordinate> enumerate(ProxyFormat.Fetcher fetcher, URI upstream) throws IOException {
+        return RpmEnumeration.enumerate(fetcher, upstream, false)
+                .map(entry -> new ProxyFormat.Coordinate(entry.getKey(), entry.getValue()));
+    }
 }
