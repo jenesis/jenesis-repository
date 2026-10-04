@@ -60,6 +60,26 @@ public final class ArtifactSbom {
         return graph(artifact, true);
     }
 
+    /** Whether {@code name} is a bill of materials published as a file of its own - a Maven {@code -cyclonedx.json}
+     *  attachment, a {@code .cdx.json}, an {@code .spdx.json} - rather than an artifact one might be embedded in. */
+    public static boolean isDocument(String name) {
+        String lower = name.toLowerCase(Locale.ROOT);
+        return lower.endsWith("cyclonedx.json") || lower.endsWith("cyclonedx.xml") || lower.endsWith(".cdx.json")
+                || lower.endsWith(".cdx.xml") || lower.endsWith(".spdx.json");
+    }
+
+    /** The dependency graph a bill of materials published as a file of its own declares, read up to
+     *  {@link CycloneDxParser#MAX_DOCUMENT} and parsed as the format it carries; empty for one past that bound or one
+     *  that declares nothing. The caller owns and closes {@code document}. */
+    public static Optional<DependencyGraph> document(InputStream document) throws IOException {
+        byte[] read = document.readNBytes(CycloneDxParser.MAX_DOCUMENT + 1);
+        if (read.length > CycloneDxParser.MAX_DOCUMENT) {
+            return Optional.empty();
+        }
+        DependencyGraph graph = parse(read);
+        return graph.isEmpty() ? Optional.empty() : Optional.of(graph);
+    }
+
     private static Optional<DependencyGraph> graph(InputStream artifact, boolean strict) throws IOException {
         // A non-jar blob has no local-header signature, so the manifest is null and the loop ends at once; only a
         // truncated or reset read of a signature-bearing stream throws, and that propagates.

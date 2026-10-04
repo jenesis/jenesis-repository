@@ -142,6 +142,17 @@ class ArtifactSbomTest {
 
     /** A jar declaring {@code Sbom-Location} (when {@code withSbom}), with one highly-compressible ("deflate bomb")
      *  entry per element of {@code prefixInflatedBytes} written before the SBOM entry. */
+    @Test
+    void a_bill_of_materials_published_as_a_file_of_its_own_is_read_as_one() throws IOException {
+        assertThat(ArtifactSbom.isDocument("lib-1.0-cyclonedx.json")).isTrue();
+        assertThat(ArtifactSbom.isDocument("lib-1.0.spdx.json")).isTrue();
+        assertThat(ArtifactSbom.isDocument("lib-1.0.jar")).as("an artifact, which may embed one").isFalse();
+        assertThat(ArtifactSbom.document(new ByteArrayInputStream(BOM.getBytes(StandardCharsets.UTF_8))))
+                .as("the document's graph").get().satisfies(graph -> assertThat(graph.isEmpty()).isFalse());
+        assertThat(ArtifactSbom.document(new ByteArrayInputStream("{}".getBytes(StandardCharsets.UTF_8))))
+                .as("a document declaring nothing").isEmpty();
+    }
+
     private static byte[] jar(List<Long> prefixInflatedBytes, boolean withSbom) throws IOException {
         Manifest manifest = new Manifest();
         manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
