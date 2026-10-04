@@ -16,8 +16,6 @@ import build.jenesis.repository.compliance.QualityInspector;
  *   <li>{@code /gatetest/clean/...}    - a subject with nothing to gate, which the gate admits;
  *   <li>{@code /gatetest/deny/...}     - the deny-listed coordinate {@code com.deny:pkg};
  *   <li>{@code /gatetest/malicious/...}- the coordinate {@code com.mal:stealer} a malicious-package advisory flags;
- *   <li>{@code /gatetest/pulls/...}    - the clean {@code org.clean:lib}, whose build graph reaches {@code com.mal:stealer}
- *       through {@code com.dep:mid}: what a version pulls in rather than what it is;
  *   <li>{@code /gatetest/empty/...}    - a CLAIMED artifact that parsed cleanly and declares nothing (empty ⇒ clean);
  *   <li>{@code /gatetest/contentonly/...} - a CLAIMED artifact yielding only a CONTENT-SCAN subject (a detected
  *       secret), the shape an embedded-secret scan, an attestation or a signature produces: it carries no licensable
@@ -73,12 +71,6 @@ public final class GateTestInspector implements QualityInspector {
             case "clean" -> List.of(subject("org.clean:lib"));
             case "deny" -> List.of(subject("com.deny:pkg"));
             case "malicious" -> List.of(subject("com.mal:stealer"));
-            case "pulls" -> List.of(
-                    new ComplianceGate.Subject("test", "org.clean:lib", "1.0", List.of(),
-                            ComplianceGate.Reachability.root("org.clean:lib")),
-                    new ComplianceGate.Subject("test", "com.mal:stealer", "1.0", List.of(),
-                            ComplianceGate.Reachability.onBuildGraph(2,
-                                    List.of("org.clean:lib", "com.dep:mid", "com.mal:stealer"))));
             // a coordinate the request path does NOT carry, stamped with the ecosystem GateEndpointTestFormat
             // owns - the shape of a format whose coordinate lives inside the artifact and whose push endpoint is one
             // path every push shares.

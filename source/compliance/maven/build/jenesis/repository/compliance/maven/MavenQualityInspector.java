@@ -9,11 +9,9 @@ import build.jenesis.repository.compliance.BoundedBodyReader;
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
 import build.jenesis.repository.compliance.ComplianceGate;
-import build.jenesis.repository.compliance.IncompleteScreenException;
 import build.jenesis.repository.compliance.Maintainer;
 import build.jenesis.repository.compliance.ManifestSubjectBuilder;
 import build.jenesis.repository.compliance.QualityInspector;
-import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.dependency.ArtifactSbom;
 import build.jenesis.repository.dependency.CycloneDxParser;
 import build.jenesis.repository.dependency.DependencyComponent;
@@ -49,11 +47,10 @@ import build.jenesis.repository.xml.Xml;
  * SBOM read is optional: absent, over the bound, past a prefix, or unparsable, it declares nothing and the next source
  * answers. None fails a publish.
  *
- * <h2>The closure: declared first, resolved second</h2>
- * For a POM the closure is read hermetically from the sibling CycloneDX attachment when one is stored, which lists
- * every component with its purl, version and licences. Only otherwise is it resolved over the network
- * ({@link ClosureResolution}), the SPI's one read-purity exception, through the repository an operator named and within
- * a bound. An unresolved closure yields no transitive subjects rather than blocking the publish, and is counted.
+ * <h2>The closure, where the publisher declared it</h2>
+ * For a POM the closure is read from the sibling CycloneDX attachment when one is stored, which lists every component
+ * with its purl, version and licences. Nothing is resolved: what a version pulls in is screened when a build fetches
+ * it, each dependency through the repository it is resolved from, where the gate holds a vulnerable one on the fetch.
  *
  * <h2>Gradle Module Metadata ({@code .module})</h2>
  * Gradle publishes a JSON descriptor beside the POM, which Gradle consumers prefer. It is claimed so it is screened
@@ -157,17 +154,8 @@ public final class MavenQualityInspector implements QualityInspector {
         List<ComplianceGate.Subject> subjects = new ArrayList<>(inspectArtifact(path, content, lookup));
         String[] coordinate = coordinate(path);
         if (!subjects.isEmpty() && coordinate != null && path.endsWith(".pom")) {
-            Optional<DependencyGraph> declared = siblingSbom(path, coordinate, lookup);
-            List<ComplianceGate.Subject> sbom = declared.map(MavenQualityInspector::declaredClosure).orElse(List.of());
-            if (!sbom.isEmpty()) {
-                subjects.addAll(sbom);
-                return subjects;
-            }
-            ClosureResolution.Resolved resolved = ClosureResolution.graph(path, content, coordinate, lookup);
-            resolved.graph().map(MavenQualityInspector::declaredClosure).ifPresent(subjects::addAll);
-            if (resolved.incomplete().isPresent() && resolved.verdict() != Verdict.ALLOW) {
-                throw new IncompleteScreenException(resolved.incomplete().get(), resolved.verdict(), subjects);
-            }
+            siblingSbom(path, coordinate, lookup).map(MavenQualityInspector::declaredClosure)
+                    .ifPresent(subjects::addAll);
         }
         return subjects;
     }

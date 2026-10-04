@@ -4,7 +4,6 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ComplianceGate;
-import build.jenesis.repository.compliance.MaliciousPackagePolicy;
 import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.compliance.VulnerabilityPolicy;
@@ -87,49 +86,6 @@ class VersionReviewTest {
                 .as("a republish of the held file itself is the screen's own to judge, not held for its version")
                 .doesNotContain("Version held");
     }
-
-    @Test
-    void a_file_held_for_what_its_version_pulls_in_holds_the_files_of_it_already_served() throws IOException {
-        String jar = JAR;
-        String pom = "/gatetest/pulls/vuln/lib-1.0.pom";
-        assertThat(publishObserved(jar)).as("the jar, published first, which the gate finds nothing against")
-                .isEqualTo(PublishInterceptor.Disposition.ACCEPT);
-        assertThat(store.readVersioned(Publication.quarantineKey(jar))).as("and is held by nothing").isEmpty();
-
-        assertThat(screen(pom, PULLED_IN)).as("the POM, whose build graph reaches a malicious package")
-                .isEqualTo(PublishInterceptor.Disposition.QUARANTINE);
-
-        assertThat(store.readVersioned(Publication.quarantineKey(jar))).as("the jar is held beside it").isPresent();
-        assertThat(HeldSubjects.paths(store, ECOSYSTEM, COORD, VERSION)).contains(jar);
-        assertThat(new QuarantineLog(store).latest(jar)).get().satisfies(event ->
-                assertThat(event.rules()).as("held for its version").containsExactly("Version held"));
-    }
-
-    @Test
-    void a_file_held_for_what_it_is_itself_leaves_the_files_of_it_already_served() throws IOException {
-        String jar = JAR;
-        assertThat(publishObserved(jar)).isEqualTo(PublishInterceptor.Disposition.ACCEPT);
-
-        assertThat(screen("/gatetest/malicious/own/lib-1.0.pom", PULLED_IN))
-                .as("a file the gate holds for its own finding").isEqualTo(PublishInterceptor.Disposition.QUARANTINE);
-
-        assertThat(store.readVersioned(Publication.quarantineKey(jar)))
-                .as("whose own evidence - a signature yet to arrive, say - releases it alone").isEmpty();
-    }
-
-    /** Screen {@code path} of the version through {@code gate}, as an upload is screened. */
-    private PublishInterceptor.Disposition screen(String path, ComplianceGate gate) throws IOException {
-        Publication publication = new Publication(store, List.of(new ComplianceScreen(() -> gate)));
-        return publication.screen(new ArtifactDescriptor(ECOSYSTEM, COORD, VERSION, path, null, false, null, -1L),
-                new ByteArrayInputStream("declares".getBytes(StandardCharsets.UTF_8))).disposition();
-    }
-
-    /** Holds what the malicious-package advisory flags, wherever on the build graph it sits. */
-    private static final ComplianceGate PULLED_IN = new ComplianceGate(
-            new VulnerabilityPolicy(Severity.HIGH, Verdict.REJECT),
-            AdvisorySource.of(Map.of("com.mal:stealer",
-                    List.of(new AdvisorySource.Advisory("MAL-2026-0001", Severity.NONE, true)))))
-            .malicious(new MaliciousPackagePolicy().action(Verdict.QUARANTINE));
 
     /** Publish {@code path} through the screen as a deployment wires it, observing as well as intercepting: an
      *  accepted upload is laid out and its observers told, as the dispatch does. Answers the screen's disposition. */

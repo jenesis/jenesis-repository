@@ -13,14 +13,10 @@ import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.server.kernel.SettingsEditor;
 import build.jenesis.repository.compliance.ComplianceSources;
-import build.jenesis.repository.compliance.ProxiedUpstreams;
-import build.jenesis.repository.definitions.RepositoryDefinition;
 import build.jenesis.repository.compliance.SignalContext;
 import build.jenesis.repository.compliance.Vex;
 import build.jenesis.repository.compliance.VexProvider;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.RepositoryDocument;
-import build.jenesis.repository.store.StoreCache;
 import build.jenesis.repository.store.StoreBindings;
 import org.springframework.beans.factory.ObjectProvider;
 import build.jenesis.repository.gateway.LiveDefinitions;
@@ -116,55 +112,6 @@ public class SignalsConfig {
     @Bean
     public StoreBindings complianceSettingsStoreBindings(ObjectProvider<LiveConfig> liveConfig) {
         return ComplianceSettings.bindings(() -> liveConfig.getObject().settings(PublishTenant.current()));
-    }
-
-    /**
-     * Binds the upstreams the publishing tenant's repositories of each format proxy to the store, so a publish follows
-     * what it pulls in through the places this deployment already fetches from. Resolved through providers because
-     * both are built over this store.
-     */
-    @Bean
-    public StoreBindings proxiedUpstreamsStoreBindings(ObjectProvider<LiveDefinitions> definitions,
-                                                       ObjectProvider<Repositories> repositories,
-                                                       RepositoryProperties properties) {
-        return ProxiedUpstreams.bindings(format -> {
-            String tenant = PublishTenant.current();
-            return proxied(definitions.getObject(), repositories.getObject(),
-                    tenant == null || tenant.isBlank() ? properties.getDefaultTenant() : tenant, format);
-        });
-    }
-
-    /** The upstream URLs {@code tenant}'s repositories of {@code format} fall back to: its repositories listed through
-     *  the node's cache, each one's definition the live one and its format its cached document - so a publish pays no
-     *  store read for them in the steady state. A listing that cannot be read answers what was found before it. */
-    private static List<URI> proxied(LiveDefinitions definitions, Repositories repositories, String tenant,
-                                     String format) {
-        List<URI> upstreams = new ArrayList<>();
-        if (tenant == null || !Repositories.valid(tenant)) {
-            return upstreams;
-        }
-        ArtifactStore root = repositories.root();
-        try {
-            for (String repository : StoreCache.of("repositories", root, StoreCache.configuredTtl()).list(tenant)) {
-                if (!Repositories.valid(repository)) {
-                    continue;
-                }
-                RepositoryDefinition definition = definitions.definition(tenant, repository);
-                if (definition == null || !RepositoryDocument.cached(root, tenant, repository)
-                        .map(document -> document.format().equals(format)).orElse(false)) {
-                    continue;
-                }
-                for (RepositoryDefinition.Fallback fallback : definition.fallbacks()) {
-                    if (fallback.source() instanceof RepositoryDefinition.Source.Upstream upstream
-                            && !upstreams.contains(upstream.url())) {
-                        upstreams.add(upstream.url());
-                    }
-                }
-            }
-        } catch (IOException | RuntimeException unreadable) {
-            // What was found so far: a publish follows fewer places, and says so when what it needed was not among them.
-        }
-        return upstreams;
     }
 
 }
