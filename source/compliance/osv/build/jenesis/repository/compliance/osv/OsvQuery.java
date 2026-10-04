@@ -33,7 +33,8 @@ public final class OsvQuery {
             Map.entry(Ecosystems.PACKAGIST, "Packagist"),
             Map.entry(Ecosystems.CONAN, "ConanCenter"),
             Map.entry(Ecosystems.DEBIAN, "Debian"),
-            Map.entry("Alpine", "Alpine"));
+            Map.entry("Alpine", "Alpine"),
+            Map.entry("Homebrew", "Homebrew"));
 
     private OsvQuery() {
     }
