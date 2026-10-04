@@ -7,6 +7,7 @@ import module tools.jackson.databind;
 import io.airlift.compress.v3.zstd.ZstdInputStream;
 import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.Listings;
+import build.jenesis.repository.blobs.VersionFiles;
 import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.format.ExportTarget;
@@ -145,24 +146,21 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
     private static List<Coordinate> keptPackages(String coordinate, String version, ArtifactStore store)
             throws IOException {
         List<Coordinate> kept = new ArrayList<>();
+        // The files the version's record lists answer without a scan; a version recorded before it listed them is
+        // scanned. A listed package whose pointer is gone was evicted, and is passed over.
+        Optional<List<String>> listed = VersionFiles.installed().listed(store, ECOSYSTEM, coordinate, version);
+        if (listed.isPresent()) {
+            for (String key : listed.get()) {
+                String[] parts = key.split("/", -1);
+                if (parts.length == 5 && parts[0].equals("conda") && parts[3].equals("pkgs") && isPackage(parts[4])
+                        && store.readVersioned(key).isPresent()) {
+                    kept.add(new Coordinate(parts[1], parts[2], parts[4]));
+                }
+            }
+            return kept;
+        }
         for (String repo : store.list("conda")) {
             for (String subdir : store.list("conda/" + repo)) {
-                if (!store.isEmpty("conda/" + repo + "/" + subdir + "/by")) {
-                    // The reverse index a publish writes answers without a scan; a subdir without one is scanned until
-                    // the rebuild pass has written it.
-                    for (String file : store.list("conda/" + repo + "/" + subdir + "/by/" + coordinate + "/"
-                            + version)) {
-                        if (!isPackage(file)) {
-                            continue;
-                        }
-                        if (store.readVersioned(packageKey(repo, subdir, file)).isPresent()) {
-                            kept.add(new Coordinate(repo, subdir, file));
-                        } else {
-                            store.delete(reverseKey(repo, subdir, coordinate, version, file));   // evicted: stale note
-                        }
-                    }
-                    continue;
-                }
                 PKGS.scan(store, "conda/" + repo + "/" + subdir + "/pkgs", file -> {
                     if (!isPackage(file)) {
                         return;
@@ -271,6 +269,12 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         try {
             // A package file never changes under its name, since a lock file pins its sha256: the first bytes stay,
             // decided at the pointer's compare-and-set, and a second upload is answered as anaconda.org does.
+            if (pathCoordinate != null) {
+                // The version's record lists the package before its pointer is linked, so no linked package is
+                // missing from the list an eviction deletes by.
+                VersionFiles.installed().record(store, ECOSYSTEM, pathCoordinate[0], pathCoordinate[1],
+                        packageKey(repo, subdir, file));
+            }
             blobs.linkRelease(packageKey(repo, subdir, file), hash, -1L);
         } catch (Publication.RepublishConflict taken) {
             exchange.respond(409, ("Conflict: the file " + subdir + "/" + file + " already exists")
@@ -279,19 +283,11 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
         byte[] indexed = MAPPER.writeValueAsBytes(record);
         blobs.write(indexKey(repo, subdir, file), indexed);
-        if (pathCoordinate != null) {
-            // The reverse index from a coordinate to its package keys.
-            blobs.note(reverseKey(repo, subdir, pathCoordinate[0], pathCoordinate[1], file), file);
-        }
         // The repodata is maintained on the publish: the record joins it if servable, re-deriving the .bz2 twin.
         new CondaListings(blobs).published(repo, subdir, file, indexed);
         exchange.respond(201);
     }
 
-    /** {@code conda/<repo>/<subdir>/by/<name>/<version>/<file>}: the reverse index a publish writes. */
-    static String reverseKey(String repo, String subdir, String name, String version, String file) {
-        return "conda/" + repo + "/" + subdir + "/by/" + name + "/" + version + "/" + file;
-    }
 
     /** Read {@code info/index.json} from a stored package, decompressing only as far as it: a {@code .conda} is a zip
      *  whose {@code info-*.tar.zst} member is a Zstandard tar, a {@code .tar.bz2} a bzip2 tar. The zip walk and the

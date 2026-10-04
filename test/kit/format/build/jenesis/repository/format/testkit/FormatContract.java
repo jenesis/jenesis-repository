@@ -5,6 +5,7 @@ import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.metadata.MetadataKey;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Known;
@@ -367,6 +368,11 @@ public final class FormatContract {
         // fails here, and it fails wherever the escape landed rather than only where the check thought to look.
         List<String> escaped = new ArrayList<>();
         walk(store, "", key -> {
+            // A version's own document lists the files a publish records for it, under the metadata root every format
+            // shares rather than one of this format's namespaces.
+            if (key.startsWith(MetadataKey.PREFIX + "/")) {
+                return;
+            }
             // A format's stored listings live under the shared listing/ space, keyed by the format's own names -
             // the same names its blob namespaces carry - so a probe that lands there landed inside the format.
             String owned = key.startsWith(StoredListing.ROOT) ? key.substring(StoredListing.ROOT.length()) : key;

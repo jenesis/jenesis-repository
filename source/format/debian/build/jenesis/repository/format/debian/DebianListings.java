@@ -80,11 +80,6 @@ final class DebianListings {
         return "debian/" + suite + "/index/" + component + "/" + architecture + "/" + file;
     }
 
-    /** The reverse index a push writes: {@code debian/<suite>/by/<package>/<version>/<file>} naming the pool key. */
-    static String reverseKey(String suite, String coordinate, String version, String file) {
-        return "debian/" + suite + "/by/" + coordinate + "/" + version + "/" + file;
-    }
-
     static String fileOf(String stanza) {
         String filename = field(stanza, "Filename");
         if (filename == null) {

@@ -10,6 +10,7 @@ import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.format.signing.OpenPgpSigner;
 import build.jenesis.repository.format.signing.SigningKeys;
 import java.time.Duration;
+import build.jenesis.repository.blobs.VersionFiles;
 import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.format.ExportTarget;
@@ -159,15 +160,13 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         }
         String base = "rpm/" + repo;
         List<String> keys = new ArrayList<>();
-        if (!store.isEmpty(base + REPODATA + "by")) {
-            // The reverse index a publish writes answers without a walk; a repository without one is walked until the
-            // rebuild pass has written it.
-            for (String encoded : store.list(base + REPODATA + "by/" + name + "/" + version)) {
-                String key = base + "/" + URLDecoder.decode(encoded, StandardCharsets.UTF_8);
+        // The files the version's record lists answer without a walk; a version recorded before it listed them is
+        // walked. A listed file whose pointer is gone was evicted, and is passed over.
+        Optional<List<String>> listed = VersionFiles.installed().listed(store, ECOSYSTEM, coordinate, version);
+        if (listed.isPresent()) {
+            for (String key : listed.get()) {
                 if (store.readVersioned(key).isPresent()) {
                     keys.add(key);
-                } else {
-                    store.delete(base + REPODATA + "by/" + name + "/" + version + "/" + encoded);   // evicted: stale note
                 }
             }
             return keys;
@@ -369,6 +368,12 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         // Blobs.link retries the compare-and-set and clears any gc/condemned marker on a byte-identical blob, so a
         // republish is not collected after its 201.
         Blobs blobs = new Blobs(store);
+        if (nevra != null) {
+            // The version's record lists the package before its pointer is linked, so no linked package is missing
+            // from the list an eviction deletes by.
+            VersionFiles.installed().record(store, ECOSYSTEM, repo + "/" + nevra[0],
+                    nevra[1] + "-" + nevra[2] + "." + nevra[3], "rpm/" + rest);
+        }
         try {
             blobs.linkRelease("rpm/" + rest, hash, size);
         } catch (Publication.RepublishConflict taken) {
@@ -377,11 +382,6 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         }
         byte[] stanza = primaryPackage(pkg, hash, size, location).getBytes(StandardCharsets.UTF_8);
         blobs.write(indexKey(repo, location), stanza);
-        if (nevra != null) {
-            // The reverse index a coordinate's pool keys are found through without walking the pool.
-            blobs.note(RpmListings.reverseKey(repo, nevra[0], nevra[1] + "-" + nevra[2] + "." + nevra[3], location),
-                    location);
-        }
         if (!store.exists("rpm/" + repo + REPODATA + "hosted")) {
             store.write("rpm/" + repo + REPODATA + "hosted", new ByteArrayInputStream(new byte[0]));
         }

@@ -31,6 +31,7 @@ module build.jenesis.repository.blobs {
     // module contributes only the wrapper around them, once for every leg.
     requires build.jenesis.repository.settings;
     exports build.jenesis.repository.blobs;
+    uses build.jenesis.repository.blobs.VersionFiles;
     provides build.jenesis.repository.settings.SettingsContributor
             with build.jenesis.repository.blobs.ProxyArtifactSettingsContributor;
 }

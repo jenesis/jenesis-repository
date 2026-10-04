@@ -131,12 +131,6 @@ final class RpmListings {
         return "rpm/" + repo + "/repodata/" + name;
     }
 
-    /** The reverse index a publish writes: {@code rpm/<repo>/repodata/by/<name>/<version>/<encoded location>}. */
-    static String reverseKey(String repo, String name, String version, String location) {
-        return "rpm/" + repo + "/repodata/by/" + name + "/" + version + "/"
-                + URLEncoder.encode(location, StandardCharsets.UTF_8);
-    }
-
     /** The entry id of a stanza: its {@code location} href, URL-encoded the way the stanza's own key is. */
     static String locationOf(String stanza) {
         int at = stanza.indexOf("<location");

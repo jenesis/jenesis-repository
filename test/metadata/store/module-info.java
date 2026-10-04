@@ -14,6 +14,7 @@
 open module build.jenesis.repository.metadata.store.test {
     requires build.jenesis.repository.metadata;
     requires build.jenesis.repository.metadata.store;
+    requires build.jenesis.repository.blobs;
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.maintenance;
     requires build.jenesis.repository.store;

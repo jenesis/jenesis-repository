@@ -7,6 +7,7 @@ import module org.slf4j;
 
 import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.Listings;
+import build.jenesis.repository.blobs.VersionFiles;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.blobs.Keys;
@@ -90,13 +91,13 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         String project = normalize(coordinate);
         String dir = "pypi/" + project + "/files";
         List<String> keys = new ArrayList<>();
-        if (!store.isEmpty("pypi/" + project + "/by")) {
-            // The reverse index an upload writes answers without a scan; a project without one is scanned.
-            for (String file : store.list(reverseKey(project, version, ""))) {
-                if (store.readVersioned(dir + "/" + file).isPresent()) {
-                    keys.add(dir + "/" + file);
-                } else {
-                    store.delete(reverseKey(project, version, file));   // evicted: the note is stale
+        // The files the version's record lists answer without a scan; a version recorded before it listed them is
+        // scanned. A listed file whose pointer is gone was evicted, and is passed over.
+        Optional<List<String>> listed = VersionFiles.installed().listed(store, ecosystem(), coordinate, version);
+        if (listed.isPresent()) {
+            for (String key : listed.get()) {
+                if (store.readVersioned(key).isPresent()) {
+                    keys.add(key);
                 }
             }
             return keys;
@@ -122,11 +123,6 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         }
         return describe("/pypi/simple/" + parts[1] + "/" + parts[3])
                 .filter(described -> described.coordinate() != null && described.version() != null);
-    }
-
-    /** {@code pypi/<project>/by/<version>/<file>}: the reverse index an upload writes for a file it can version. */
-    static String reverseKey(String project, String version, String file) {
-        return "pypi/" + project + "/by/" + version + (file.isEmpty() ? "" : "/" + file);
     }
 
     /** One project's distribution files, a flat container. It feeds {@code blobKeys} and {@code servedPaths}, where a
@@ -588,14 +584,17 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
                         return Publication.Visibility
                                 // The serving pointer, in this format's namespace rather than publish/, so a Serving
                                 // step.
-                                .through((hash, size, _) -> blobs.linkRelease(fileKey(project, filename), hash, size))
+                                // The version's record lists the file before its pointer is linked, so no linked file
+                                // is missing from the list an eviction deletes by.
+                                .through((_, _, target) -> recordFile(target, project, filename))
+                                .andThrough((hash, size, _) -> blobs.linkRelease(fileKey(project, filename), hash,
+                                        size))
                                 // Attestations are kept before the page links them, so no client reads a link whose
                                 // provenance is to come.
                                 .andThrough((_, _, _) -> storeAttestations(blobs, project, filename, form.attestations))
                                 // The per-project hosted marker switches on the local index; a pull-through proxy never
                                 // writes it, so its index falls through to the upstream's.
                                 .andThrough((_, _, target) -> markHosted(target, hostedKey(project)))
-                                .andThrough((_, _, _) -> reverseIndex(blobs, project, filename))
                                 // The Simple pages are maintained on the upload.
                                 .andThrough((_, _, _) -> new PyPiListings(blobs).refresh(project, filename));
                     });
@@ -641,10 +640,10 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         }
         Withheld.mark(store, hash, new PyPiFormat().describe("/pypi/simple/" + project + "/" + filename)
                 .orElse(ArtifactDescriptor.at("PyPI", "/pypi/simple/" + project + "/" + filename)));
+        recordFile(store, project, filename);
         blobs.linkRelease(fileKey(project, filename), hash, -1L);
         storeAttestations(blobs, project, filename, form.attestations);
         markHosted(store, hostedKey(project));
-        reverseIndex(blobs, project, filename);
         new PyPiListings(blobs).refresh(project, filename);   // held: the stored pages keep it out
     }
 
@@ -660,11 +659,12 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
                 + "file cannot be replaced; upload it under a new version.").getBytes(StandardCharsets.UTF_8);
     }
 
-    /** Write the file's reverse-index entry, so its version's keys are found without scanning the project. */
-    private static void reverseIndex(Blobs blobs, String project, String filename) throws IOException {
+    /** List the file in its version's record, so its version's keys are found without scanning the project. */
+    private static void recordFile(ArtifactStore store, String project, String filename) throws IOException {
         Optional<ArtifactDescriptor> described = new PyPiFormat().describe("/pypi/simple/" + project + "/" + filename);
         if (described.isPresent() && described.get().version() != null && !Keys.unsafe(described.get().version())) {
-            blobs.note(reverseKey(project, described.get().version(), filename), filename);
+            VersionFiles.installed().record(store, described.get().ecosystem(), described.get().coordinate(),
+                    described.get().version(), fileKey(project, filename));
         }
     }
 

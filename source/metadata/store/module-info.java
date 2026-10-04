@@ -15,6 +15,8 @@
  */
 module build.jenesis.repository.metadata.store {
     requires build.jenesis.repository.metadata;
+    requires build.jenesis.repository.blobs;
+    requires tools.jackson.databind;
     requires build.jenesis.repository.maintenance;
     requires build.jenesis.repository.observation;
     requires build.jenesis.repository.store;
@@ -22,6 +24,8 @@ module build.jenesis.repository.metadata.store {
     exports build.jenesis.repository.metadata.store;
     provides build.jenesis.repository.metadata.MetadataProvider
             with build.jenesis.repository.metadata.store.StoreMetadataProvider;
+    provides build.jenesis.repository.blobs.VersionFiles
+            with build.jenesis.repository.metadata.store.StoreVersionFiles;
     provides build.jenesis.repository.maintenance.StorageNamespace
             with build.jenesis.repository.metadata.store.MetadataStorageNamespace;
     provides build.jenesis.repository.observation.ObservabilitySource

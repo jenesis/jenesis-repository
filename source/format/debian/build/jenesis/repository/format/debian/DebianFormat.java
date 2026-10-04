@@ -9,6 +9,7 @@ import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.format.debian.keys.DebianKeyring;
 import build.jenesis.repository.format.signing.OpenPgpSigner;
 import build.jenesis.repository.format.signing.SigningKeys;
+import build.jenesis.repository.blobs.VersionFiles;
 import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.format.ExportTarget;
@@ -245,27 +246,20 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         }
         String fileVersion = stripEpoch(version);
         List<String> keys = new ArrayList<>();
-        SUITES.scan(store, "debian", suite -> {
-            // The reverse index a push writes answers without a walk; a suite without one is walked until the rebuild
-            // pass has written it.
-            if (store.isEmpty("debian/" + suite + "/by")) {
-                collectDebs(store, "debian/" + suite + "/pool", coordinate, fileVersion, keys);
-                return;
-            }
-            for (String file : store.list("debian/" + suite + "/by/" + coordinate + "/" + fileVersion)) {
-                String note = DebianListings.reverseKey(suite, coordinate, fileVersion, file);
-                Optional<ArtifactStore.Versioned> pool = store.readVersioned(note);
-                if (pool.isEmpty()) {
-                    continue;
-                }
-                String key = "debian/" + new String(pool.get().content(), StandardCharsets.UTF_8).trim();
+        // The files the version's record lists - under the filename's epoch-less version, as describe() names it -
+        // answer without a walk; a version recorded before it listed them is walked. A listed file whose pointer is
+        // gone was evicted, and is passed over.
+        Optional<List<String>> listed = VersionFiles.installed().listed(store, ecosystem(), coordinate, fileVersion);
+        if (listed.isPresent()) {
+            for (String key : listed.get()) {
                 if (store.readVersioned(key).isPresent()) {
                     keys.add(key);
-                } else {
-                    store.delete(note);   // evicted: the note is stale
                 }
             }
-        });
+            return keys;
+        }
+        SUITES.scan(store, "debian", suite -> collectDebs(store, "debian/" + suite + "/pool", coordinate, fileVersion,
+                keys));
         return keys;
     }
 
@@ -594,11 +588,13 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         // The filename's package is the coordinate the edge screens, and the stanza's Package comes from the control.
         // They must agree, or a package screened under one name would be served under another.
         String pathPackage = null;
+        String pathVersion = null;
         if (file.endsWith(".deb")) {
             String[] nameParts = file.substring(0, file.length() - ".deb".length()).split("_");
             if (nameParts.length == 3 && !nameParts[0].isEmpty()
                     && !nameParts[1].isEmpty() && Character.isDigit(nameParts[1].charAt(0))) {
                 pathPackage = nameParts[0];
+                pathVersion = nameParts[1];
             }
         }
         String declaredPackage = DebianListings.field(control, "Package");
@@ -609,6 +605,11 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         long size = store.size("blobs/" + hash);
         String[] md5sha1 = digests(blobs, hash);
         // Blobs.link clears any gc/condemned marker on a blob a collector judged unreferenced.
+        if (pathPackage != null) {
+            // The version's record lists the file before its pointer is linked, so no linked file is missing from the
+            // list an eviction deletes by.
+            VersionFiles.installed().record(store, ecosystem(), pathPackage, pathVersion, "debian/" + rest);
+        }
         try {
             blobs.linkRelease("debian/" + rest, hash, -1L);
         } catch (Publication.RepublishConflict taken) {
@@ -623,11 +624,6 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
                 + "SHA256: " + hash + "\n";
         blobs.write(DebianListings.stanzaKey(suite, component, architecture, file),
                 stanza.getBytes(StandardCharsets.UTF_8));
-        if (pathPackage != null) {
-            // The reverse index from a coordinate to its pool keys, by the filename's epoch-less version.
-            String[] nameParts = file.substring(0, file.length() - ".deb".length()).split("_");
-            blobs.note(DebianListings.reverseKey(suite, pathPackage, nameParts[1], file), rest);
-        }
         // The served index is maintained here, on the push: the stanza joins its Packages document if servable, which
         // re-derives Packages.gz and the suite's Release family.
         listings(blobs).published(suite, component, architecture, file, stanza);

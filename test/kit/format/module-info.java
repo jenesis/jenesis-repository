@@ -29,5 +29,6 @@
  */
 module build.jenesis.repository.format.testkit {
     requires transitive build.jenesis.repository.format;
+    requires build.jenesis.repository.metadata;
     exports build.jenesis.repository.format.testkit;
 }
