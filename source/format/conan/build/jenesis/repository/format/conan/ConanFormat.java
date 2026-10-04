@@ -4,6 +4,7 @@ import module java.base;
 import module tools.jackson.databind;
 
 import build.jenesis.repository.format.Listings;
+import build.jenesis.repository.blobs.HostedMarker;
 import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.format.ExportTarget;
@@ -458,7 +459,7 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
                 indexed(revBase, filename, blobs);
                 // The per-registry hosted marker switches on the local index; a proxy registry never writes it, so its
                 // index reads fall through to the upstream's.
-                markHosted(store, hostedKey(repo));
+                HostedMarker.mark(store, hostedKey(repo));
                 exchange.respond(201);
             }
             case "GET", "HEAD" -> {
@@ -482,8 +483,6 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         Retries.update(store, key, _ -> Long.toString(System.currentTimeMillis()).getBytes(StandardCharsets.UTF_8));
     }
 
-    private static final byte[] HOSTED = "1".getBytes(StandardCharsets.UTF_8);
-
     /** A registry's hosted marker, beside the {@code r/} recipe tree, so no listing surfaces it. */
     private static String hostedKey(String repo) {
         return "conan/" + repo + "/hosted";
@@ -493,13 +492,6 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
      *  relay the upstream's. */
     private static boolean hosted(String repo, ArtifactStore store) throws IOException {
         return store.readVersioned(hostedKey(repo)).isPresent();
-    }
-
-    /** Stamp the hosted marker once, by compare-and-set against absence; a lost race means a peer set it. */
-    private static void markHosted(ArtifactStore store, String key) throws IOException {
-        if (store.readVersioned(key).isEmpty()) {
-            store.writeVersioned(key, HOSTED, null);
-        }
     }
 
     @Override

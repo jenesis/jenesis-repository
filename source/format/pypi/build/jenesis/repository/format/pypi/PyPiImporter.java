@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.pypi;
 
 import module java.base;
+import build.jenesis.repository.blobs.HostedMarker;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.store.ArtifactDescriptor;
@@ -47,7 +48,7 @@ public final class PyPiImporter implements RepositoryImporter {
         }
         new Blobs(store).write("pypi/" + project + "/files/" + filename, content);
         // An import is a hosted publish, so the project's hosted marker is stamped.
-        PyPiFormat.markHosted(store, PyPiFormat.hostedKey(project));
+        HostedMarker.mark(store, PyPiFormat.hostedKey(project));
     }
 
     /** The project name of a distribution filename: the text before the first hyphen that begins the version. */

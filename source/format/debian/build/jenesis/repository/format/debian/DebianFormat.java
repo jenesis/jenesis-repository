@@ -421,7 +421,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         for (String suite : suites) {
             // The suite is a publish path segment that may hold < > " &, so it is escaped in both the href and the
             // text, or it would be stored cross-site scripting on this page.
-            String escaped = htmlEscape(suite);
+            String escaped = Listings.html(suite);
             page.append("<a href=\"").append(escaped).append("/\">").append(escaped).append("/</a>");
         }
         exchange.setResponseHeader("Content-Type", "text/html");
@@ -442,12 +442,6 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
             }
             return RESERVED_INDEX_FIELDS.contains(line.substring(0, colon).trim().toLowerCase(Locale.ROOT));
         });
-    }
-
-    /** HTML-escape a value for an attribute or element text. */
-    private static String htmlEscape(String value) {
-        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                .replace("\"", "&quot;").replace("'", "&#39;");
     }
 
     /** Provisioning the signing key and naming the signers the repository trusts are its operator's acts, not
@@ -985,7 +979,6 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
             default -> null;
         };
     }
-
 
     // The control tar is attacker-supplied: the walk to ./control is bounded by ArchiveWalk.largestWalk() and the entry
     // by ArchiveInflation.largestEntry() (RepositoryFormat clause 15). Both are needed, since bounding only the entry

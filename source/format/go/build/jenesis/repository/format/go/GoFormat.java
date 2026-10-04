@@ -4,6 +4,7 @@ import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.Listings;
+import build.jenesis.repository.blobs.HostedMarker;
 import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.format.ExportTarget;
@@ -240,7 +241,7 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
             }
             // The per-module hosted marker switches on local version discovery; a pull-through proxy never writes it,
             // so its discovery falls through to the upstream's list.
-            markHosted(store, hostedKey(modulePath));
+            HostedMarker.mark(store, hostedKey(modulePath));
             // The @v/list (and @latest) are maintained on the publish.
             int dot = file.lastIndexOf('.');
             if (dot > 0) {
@@ -498,8 +499,6 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
         exchange.respond(200, buffer.toByteArray());
     }
 
-    private static final byte[] HOSTED = "1".getBytes(StandardCharsets.UTF_8);
-
     /** Whether a module path has a segment unsafe for a blob key - empty, {@code .}/{@code ..}, or a backslash or
      *  control character, as {@link Keys#unsafe} judges a single segment - so a hostile path is a clean 400. A
      *  backslash in the whole request path is already a 404 by the shared request screen. */
@@ -524,13 +523,6 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
         return blobs.exists(hostedKey(modulePath));
     }
 
-    /** Stamp the hosted marker once, by compare-and-set against absence; a lost race means a peer set it. */
-    static void markHosted(ArtifactStore store, String key) throws IOException {
-        if (store.readVersioned(key).isEmpty()) {
-            store.writeVersioned(key, HOSTED, null);
-        }
-    }
-
     /** Whether the module's {@code @v} container holds any version, by an {@code .info} in the raw container rather
      *  than the screened list, so a hosted module whose versions are all held answers an empty list. Walked through the
      *  bounded children primitive at its default width - a thousand names, a request-path bound - so a module whose
@@ -545,7 +537,6 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
         return any[0];
     }
 
-
     private static String contentType(String file) {
         if (file.endsWith(".info")) {
             return "application/json";
@@ -555,11 +546,6 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
         }
         return "text/plain";
     }
-
-
-
-
-
 
     /** The migration-import capability, delegated to {@link GoImporter}. */
     private final GoImporter importer = new GoImporter();

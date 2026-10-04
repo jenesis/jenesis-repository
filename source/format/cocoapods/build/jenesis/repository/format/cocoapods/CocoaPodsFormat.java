@@ -634,24 +634,13 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
 
     /** The number of {@code /} separators in a zip entry name (its directory depth). */
     private static int depth(String name) {
-        int depth = 0;
-        for (int i = 0; i < name.length(); i++) {
-            if (name.charAt(i) == '/') {
-                depth++;
-            }
-        }
-        return depth;
+        return (int) name.chars().filter(c -> c == '/').count();
     }
 
     /** The CDN shard of a pod: the first three hex characters of {@code MD5(name)}, the CDN's own bucketing. */
     static String[] shard(String name) {
-        try {
-            String hex = HexFormat.of().formatHex(
-                    MessageDigest.getInstance("MD5").digest(name.getBytes(StandardCharsets.UTF_8)));
-            return new String[]{hex.substring(0, 1), hex.substring(1, 2), hex.substring(2, 3)};
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("MD5 is a required JDK algorithm", e);
-        }
+        String hex = Checksums.hex("MD5", name.getBytes(StandardCharsets.UTF_8));
+        return new String[]{hex.substring(0, 1), hex.substring(1, 2), hex.substring(2, 3)};
     }
 
     /** Whether a value is one lower-case hex character, a valid shard segment. */

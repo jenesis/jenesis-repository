@@ -4,6 +4,7 @@ import module java.base;
 import module java.xml;
 import module tools.jackson.databind;
 
+import build.jenesis.repository.blobs.HostedMarker;
 import build.jenesis.repository.blobs.RequestBase;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.blobs.Blobs;
@@ -353,7 +354,7 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
                             // The hosted marker switches on the local version index; a pull-through proxy never writes
                             // it, so its index falls through to the upstream's list. Written after the pointer, never
                             // ahead of the bytes it would list.
-                            .andThrough((_, _, target) -> markHosted(target, HOSTED_KEY))
+                            .andThrough((_, _, target) -> HostedMarker.mark(target, HOSTED_KEY))
                             // The version list, registration index and search record are maintained on the push.
                             .andThrough((_, _, _) -> new NuGetListings(blobs).refresh(id, version))
                             // The observers are notified with the package's own coordinate and download path.
@@ -449,7 +450,7 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
                 "application/octet-stream", version.contains("-"), null, -1L));
         blobs.linkRelease(nupkgKey(id, version), hash, -1L);
         parsed.write(blobs);
-        markHosted(store, HOSTED_KEY);
+        HostedMarker.mark(store, HOSTED_KEY);
         new NuGetListings(blobs).refresh(id, version);   // held: the stored documents keep it out
         publication.link("/quarantine" + flatContainerPath(id, version), hash);
         publication.unpublish("/quarantine" + endpoint);
@@ -464,19 +465,11 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
     /** The deployment-wide hosted-publish marker; a NuGet id cannot start with {@code .}, and {@link #search} skips
      *  it. */
     private static final String HOSTED_KEY = "nuget/.hosted";
-    private static final byte[] HOSTED = "1".getBytes(StandardCharsets.UTF_8);
 
     /** Whether this repository has taken a hosted push. The version-index gate keys on it, so a proxy repository's
      *  index misses locally and the upstream's full version list is relayed. */
     private static boolean hosted(Blobs blobs) throws IOException {
         return blobs.exists(HOSTED_KEY);
-    }
-
-    /** Stamp the hosted marker once, by compare-and-set against absence; a lost race means a peer set it. */
-    private static void markHosted(ArtifactStore store, String key) throws IOException {
-        if (store.readVersioned(key).isEmpty()) {
-            store.writeVersioned(key, HOSTED, null);
-        }
     }
 
     private static String dependenciesKey(String id, String version) {

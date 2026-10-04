@@ -3,6 +3,9 @@ package build.jenesis.repository.inventory;
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
 
+import static build.jenesis.repository.inventory.StoreRepositoryInventory.encode;
+import static build.jenesis.repository.inventory.StoreRepositoryInventory.decode;
+
 /**
  * The single owner of the durable {@code overrides/<kind>/<eco>/<coord>/<ver>} key space - the marker a human's
  * release of a hold writes, saying "this kind's finding on this stored version has been cleared, do not re-hold it".
@@ -72,13 +75,5 @@ public final class OverrideRecords {
 
     /** One parsed {@code overrides/} row: which kind cleared which coordinate version. */
     public record Row(String kind, String ecosystem, String coordinate, String version) {
-    }
-
-    private static String encode(String segment) {
-        return URLEncoder.encode(segment, StandardCharsets.UTF_8);
-    }
-
-    private static String decode(String segment) {
-        return URLDecoder.decode(segment, StandardCharsets.UTF_8);
     }
 }

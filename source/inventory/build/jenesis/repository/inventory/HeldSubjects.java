@@ -8,6 +8,8 @@ import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.walk.Traversal;
 
+import static build.jenesis.repository.inventory.StoreRepositoryInventory.encode;
+
 /**
  * The single owner of the durable {@code subjects/} key space: <b>what a held request path is a path to</b>, written
  * where the hold is placed and reclaimed with it: the format-independent path &rarr; (ecosystem, coordinate, version)
@@ -321,9 +323,4 @@ public final class HeldSubjects {
     private static void writeVersioned(ArtifactStore store, String key, byte[] value) throws IOException {
         Retries.update(store, key, _ -> value);
     }
-
-    private static String encode(String segment) {
-        return URLEncoder.encode(segment, StandardCharsets.UTF_8);
-    }
-
 }

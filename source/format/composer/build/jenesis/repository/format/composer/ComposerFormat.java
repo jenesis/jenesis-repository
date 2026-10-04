@@ -626,13 +626,7 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
 
     /** The number of {@code /} separators in a zip entry name (its directory depth). */
     private static int depth(String name) {
-        int depth = 0;
-        for (int i = 0; i < name.length(); i++) {
-            if (name.charAt(i) == '/') {
-                depth++;
-            }
-        }
-        return depth;
+        return (int) name.chars().filter(c -> c == '/').count();
     }
 
     /** Whether a version is a dev version ({@code dev-<branch>} or an {@code -dev} suffix), served from the

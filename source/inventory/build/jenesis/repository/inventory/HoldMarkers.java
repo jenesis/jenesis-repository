@@ -5,6 +5,8 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.walk.Traversal;
 
+import static build.jenesis.repository.inventory.StoreRepositoryInventory.encode;
+
 /**
  * The single owner of the durable {@code holds/<kind>/<eco>/<coord>/<ver>} key space, read <em>by coordinate</em> -
  * the half of the hold question that needs no installed format at all.
@@ -115,9 +117,5 @@ public final class HoldMarkers {
             }
         }
         return false;
-    }
-
-    private static String encode(String segment) {
-        return URLEncoder.encode(segment, StandardCharsets.UTF_8);
     }
 }

@@ -174,8 +174,9 @@ final class SwiftListings {
             String detail = flag.get().message() == null || flag.get().message().isBlank()
                     ? "this release was removed from the registry"
                     : flag.get().message();
-            return Optional.of(("{\"problem\":{\"status\":410,\"title\":\"Gone\",\"detail\":"
-                    + MAPPER.writeValueAsString(detail) + "}}").getBytes(StandardCharsets.UTF_8));
+            ObjectNode gone = MAPPER.createObjectNode();
+            gone.putObject("problem").put("status", 410).put("title", "Gone").put("detail", detail);
+            return Optional.of(MAPPER.writeValueAsBytes(gone));
         }
         return Optional.of("{}".getBytes(StandardCharsets.UTF_8));
     }

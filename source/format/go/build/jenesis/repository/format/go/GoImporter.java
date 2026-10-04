@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.go;
 
 import module java.base;
+import build.jenesis.repository.blobs.HostedMarker;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.store.ArtifactDescriptor;
@@ -43,6 +44,6 @@ public final class GoImporter implements RepositoryImporter {
         }
         new Blobs(store).write("go/" + relative, content);
         // An import is a hosted publish, so the module's hosted marker is stamped.
-        GoFormat.markHosted(store, GoFormat.hostedKey(relative.substring(0, at)));
+        HostedMarker.mark(store, GoFormat.hostedKey(relative.substring(0, at)));
     }
 }

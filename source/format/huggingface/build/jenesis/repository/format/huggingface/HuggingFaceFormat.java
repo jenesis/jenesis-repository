@@ -4,6 +4,7 @@ import module java.base;
 import module tools.jackson.databind;
 
 import build.jenesis.repository.format.Listings;
+import build.jenesis.repository.blobs.HostedMarker;
 import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.format.ExportTarget;
@@ -367,7 +368,7 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
                     resolve.filepath());
             // The per-registry hosted marker switches on the local API; a proxy registry never writes it, so its API
             // reads fall through to the upstream's.
-            markHosted(store, hostedKey(repo));
+            HostedMarker.mark(store, hostedKey(repo));
             exchange.respond(201);
             return;
         }
@@ -550,7 +551,6 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
             return buffer.toString(StandardCharsets.UTF_8).trim();
         }
     }
-
 
     @Override
     public Optional<URI> defaultUpstream() {
@@ -956,8 +956,6 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         Retries.update(store, key, _ -> Long.toString(System.currentTimeMillis()).getBytes(StandardCharsets.UTF_8));
     }
 
-    private static final byte[] HOSTED = "1".getBytes(StandardCharsets.UTF_8);
-
     /** A registry's hosted marker, beside the type trees, so no revision or file listing surfaces it. */
     private static String hostedKey(String repo) {
         return "hf/" + repo + "/hosted";
@@ -967,13 +965,6 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
      *  the upstream index and never answer from a proxy-cached commit. */
     private static boolean hosted(String repo, ArtifactStore store) throws IOException {
         return store.readVersioned(hostedKey(repo)).isPresent();
-    }
-
-    /** Stamp the hosted marker once, by compare-and-set against absence; a lost race means a peer set it. */
-    private static void markHosted(ArtifactStore store, String key) throws IOException {
-        if (store.readVersioned(key).isEmpty()) {
-            store.writeVersioned(key, HOSTED, null);
-        }
     }
 
     /** Read a revision's stored upload time, or {@code 0} when absent or unparseable. */

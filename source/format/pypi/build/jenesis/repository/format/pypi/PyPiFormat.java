@@ -7,6 +7,7 @@ import module org.slf4j;
 
 import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.Listings;
+import build.jenesis.repository.blobs.HostedMarker;
 import build.jenesis.repository.blobs.VersionFiles;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.blobs.Blobs;
@@ -130,7 +131,6 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
      *  pages) raises a {@link build.jenesis.repository.walk.TraversalException} rather than dropping keys. */
     private static final BoundedChildren DISTRIBUTIONS = BoundedChildren.bounded().entries(Integer.MAX_VALUE)
             .page(BoundedChildren.DRAIN_PAGE);
-
 
     /** The request paths this version's distributions serve at ({@code /pypi/simple/<project>/<file>}), where a
      *  retroactive hold links its {@code /quarantine} handles: the files {@link #blobKeys} names. */
@@ -594,7 +594,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
                                 .andThrough((_, _, _) -> storeAttestations(blobs, project, filename, form.attestations))
                                 // The per-project hosted marker switches on the local index; a pull-through proxy never
                                 // writes it, so its index falls through to the upstream's.
-                                .andThrough((_, _, target) -> markHosted(target, hostedKey(project)))
+                                .andThrough((_, _, target) -> HostedMarker.mark(target, hostedKey(project)))
                                 // The Simple pages are maintained on the upload.
                                 .andThrough((_, _, _) -> new PyPiListings(blobs).refresh(project, filename));
                     });
@@ -643,7 +643,7 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         recordFile(store, project, filename);
         blobs.linkRelease(fileKey(project, filename), hash, -1L);
         storeAttestations(blobs, project, filename, form.attestations);
-        markHosted(store, hostedKey(project));
+        HostedMarker.mark(store, hostedKey(project));
         new PyPiListings(blobs).refresh(project, filename);   // held: the stored pages keep it out
     }
 
@@ -734,7 +734,6 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
     private static final JsonMapper MAPPER = JsonMapper.builder().build();
 
     /** The hosted marker's bytes; only its presence gates. */
-    private static final byte[] HOSTED = "1".getBytes(StandardCharsets.UTF_8);
 
     /** The per-project hosted marker, beside {@code files}, so no listing surfaces it; {@link PyPiImporter} stamps it
      *  too, an import being a hosted publish. */
@@ -760,13 +759,6 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         }
         // No disclosable file: still listed when there are no files at all, a structural probe that discloses no name.
         return blobs.isEmpty("pypi/" + project + "/files");
-    }
-
-    /** Stamp a hosted marker once, by compare-and-set against absence; a lost race means a peer set it. */
-    static void markHosted(ArtifactStore store, String key) throws IOException {
-        if (store.readVersioned(key).isEmpty()) {
-            store.writeVersioned(key, HOSTED, null);
-        }
     }
 
     /** The stored attestations of a distribution: PEP 740's list, as the client sent it, under the file. */
