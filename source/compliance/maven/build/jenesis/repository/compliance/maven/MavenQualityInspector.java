@@ -427,7 +427,8 @@ public final class MavenQualityInspector implements QualityInspector {
                 return subjects;
             }
         }
-        return ClosureResolution.dependencies(path, pom, ECOSYSTEM, lookup.settings());
+        return ClosureResolution.graph(path, pom, coordinate, lookup).map(MavenQualityInspector::declaredClosure)
+                .orElse(List.of());
     }
 
     /** Every dependency the SBOM resolved, as gate subjects: its Maven coordinate and version, its own licences, and

@@ -1,81 +1,25 @@
 package build.jenesis.repository.compliance.maven;
 
 import module java.base;
-import build.jenesis.Resolver;
-import build.jenesis.maven.MavenDependencyKey;
-import build.jenesis.maven.MavenDependencyValue;
-import build.jenesis.maven.MavenResolver;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.dependency.DependencyComponent;
 import build.jenesis.repository.dependency.DependencyEdge;
 import build.jenesis.repository.dependency.DependencyGraph;
 
 /**
- * Build-graph reachability over a resolved Maven closure: for every resolved dependency, the shortest path from the
- * artifact to it, so a finding about a transitive dependency says whether, and how directly, the component is reachable
- * on the build graph. It reads the closure the gate already resolves, costing no extra resolution.
- *
- * <p>The graph comes from {@link MavenResolver.Closure#edges()}: a {@code null} parent marks a direct dependency (depth
- * one), every other edge is {@code parent -> child}. A closure resolves each coordinate to one version, so nodes match
- * on {@link MavenDependencyKey} and the resolved version is read back for the path. A breadth-first walk from the
- * direct dependencies gives each node's shortest depth and path; one the walk never reaches stays
- * {@link ComplianceGate.Reachability#UNKNOWN}.
+ * Build-graph reachability: for every dependency of an artifact's graph, the shortest path from the artifact to it, so a
+ * finding about a transitive dependency says whether, and how directly, the component is reachable on the build graph.
+ * The graph is a published CycloneDX document's, or the closure the gate resolved through the repository an operator
+ * named, expressed in the same shape; a breadth-first walk from the root gives each node's shortest depth and path, and
+ * one the walk never reaches stays {@link ComplianceGate.Reachability#UNKNOWN}.
  */
 public final class BuildGraphReachability {
 
     private BuildGraphReachability() {
     }
 
-    /** Maps every resolved dependency in the closure to where it sits on the build graph. */
-    public static Map<MavenDependencyKey, ComplianceGate.Reachability> of(MavenResolver.Closure closure, String prefix) {
-        Set<MavenDependencyKey> directs = new LinkedHashSet<>();
-        Map<MavenDependencyKey, List<MavenDependencyKey>> adjacency = new LinkedHashMap<>();
-        for (Resolver.Edge edge : closure.edges()) {
-            MavenDependencyKey child = keyOf(edge.coordinate(), prefix);
-            if (child == null) {
-                continue;
-            }
-            if (edge.parent() == null) {
-                directs.add(child);
-            } else {
-                MavenDependencyKey parent = keyOf(edge.parent(), prefix);
-                if (parent != null) {
-                    adjacency.computeIfAbsent(parent, _ -> new ArrayList<>()).add(child);
-                }
-            }
-        }
-        Map<MavenDependencyKey, Integer> depth = new LinkedHashMap<>();
-        Map<MavenDependencyKey, MavenDependencyKey> predecessor = new HashMap<>();
-        Deque<MavenDependencyKey> queue = new ArrayDeque<>();
-        for (MavenDependencyKey direct : directs) {
-            if (depth.putIfAbsent(direct, 1) == null) {
-                queue.add(direct);
-            }
-        }
-        while (!queue.isEmpty()) {
-            MavenDependencyKey node = queue.poll();
-            for (MavenDependencyKey next : adjacency.getOrDefault(node, List.of())) {
-                if (!depth.containsKey(next)) {
-                    depth.put(next, depth.get(node) + 1);
-                    predecessor.put(next, node);
-                    queue.add(next);
-                }
-            }
-        }
-        Map<MavenDependencyKey, ComplianceGate.Reachability> reachability = new LinkedHashMap<>();
-        closure.dependencies().forEach((key, value) -> {
-            Integer hops = depth.get(key);
-            reachability.put(key, hops == null
-                    ? ComplianceGate.Reachability.UNKNOWN
-                    : ComplianceGate.Reachability.onBuildGraph(hops, path(key, predecessor, closure.dependencies())));
-        });
-        return reachability;
-    }
-
-    /** The same signal from a declared graph - a CycloneDX document's {@code dependencies} - keyed by {@code bom-ref},
-     *  with the same breadth-first walk, so a resolved closure and a published SBOM give one reachability shape. An
-     *  unreached component stays absent; a BOM declaring no {@code dependencies} leaves every component
-     *  {@link ComplianceGate.Reachability#UNKNOWN}. */
+    /** Every dependency of {@code graph} keyed by its {@code bom-ref}, placed on the graph; an unreached component stays
+     *  absent, and a graph declaring no edges leaves every component {@link ComplianceGate.Reachability#UNKNOWN}. */
     public static Map<String, ComplianceGate.Reachability> of(DependencyGraph graph) {
         String rootRef = graph.rootRef();
         if (rootRef == null) {
@@ -126,8 +70,8 @@ public final class BuildGraphReachability {
         return List.copyOf(chain);
     }
 
-    /** A declared component's path label in the resolved walk's {@code group:artifact:version} shape, else its purl,
-     *  else the bare {@code bom-ref} of a component the document never described. */
+    /** A component's path label, {@code group:artifact:version}, else its purl, else the bare {@code bom-ref} of a
+     *  component the graph never described. */
     private static String label(DependencyComponent component, String ref) {
         if (component == null) {
             return ref;
@@ -137,32 +81,5 @@ public final class BuildGraphReachability {
                 || component.version() == null || component.version().isBlank()
                 ? component.coordinate()
                 : component.group().trim() + ":" + component.name().trim() + ":" + component.version().trim();
-    }
-
-    private static List<String> path(MavenDependencyKey node,
-                                     Map<MavenDependencyKey, MavenDependencyKey> predecessor,
-                                     SequencedMap<MavenDependencyKey, MavenDependencyValue> dependencies) {
-        Deque<String> chain = new ArrayDeque<>();
-        Set<MavenDependencyKey> guard = new HashSet<>();
-        for (MavenDependencyKey current = node; current != null && guard.add(current); current = predecessor.get(current)) {
-            chain.addFirst(label(current, dependencies));
-        }
-        return List.copyOf(chain);
-    }
-
-    private static String label(MavenDependencyKey key, SequencedMap<MavenDependencyKey, MavenDependencyValue> dependencies) {
-        MavenDependencyValue value = dependencies.get(key);
-        return key.groupId() + ":" + key.artifactId() + (value == null ? "" : ":" + value.version());
-    }
-
-    private static MavenDependencyKey keyOf(String coordinate, String prefix) {
-        try {
-            String suffix = prefix != null && coordinate.startsWith(prefix + "/")
-                    ? coordinate.substring(prefix.length() + 1)
-                    : coordinate;
-            return MavenDependencyKey.parse(suffix).key();
-        } catch (RuntimeException _) {
-            return null;
-        }
     }
 }

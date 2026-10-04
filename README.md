@@ -105,6 +105,9 @@ listed here with the reason. A refresh that moves one of these is reverted by ha
 
 - **`commons-fileupload` 1.5.** 1.6.0's module descriptor requires `servlet.api` and `portlet.api` without
   `static`, which its own POM marks provided, so a module-path boot layer fails on a module nothing carries.
+- **`plexus-interpolation` 1.28.** 1.29's module descriptor exports only its root package, while Maven 3.9's model
+  builder - on the class path beside Maven Resolver - reads `org.codehaus.plexus.interpolation.util`, which a
+  module-path boot layer then refuses it.
 - **WireMock 4.0.0-beta.38**, the whole `org.wiremock` family. The 4.x beta is used by decision; the stable line
   is 3.x, so a stable refresh would move back to it.
 
