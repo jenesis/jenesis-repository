@@ -775,8 +775,8 @@ main .app-filter-bar > button {
     white-space: nowrap;
 }
 .app-list__actions button {
-    padding: var(--app-space-1) var(--app-space-3);
-    font-size: var(--app-font-size-sm);
+    padding: 0.125rem var(--app-space-2);
+    font-size: var(--app-font-size-xs);
     line-height: 1.25;
 }
 .app-list__actions .app-actions__danger {

@@ -88,8 +88,7 @@
                 </thead>
                 <tbody>
                 <tr th:each="row : ${panel.rows()}">
-                    <td><a th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${row.ecosystem()},coordinate=${row.bareCoordinate()})}"><code
-                            th:text="${row.coordinate()}">coordinate:version</code></a></td>
+                    <td><th:block th:replace="~{base :: artifactLink(${row.coordinate()}, @{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${row.ecosystem()},coordinate=${row.bareCoordinate()})})}"></th:block></td>
                     <td>
                         <code th:text="${row.id()}">FINDING-1</code>
                         <span th:if="${row.supersededBy() != null}" class="app-badge"

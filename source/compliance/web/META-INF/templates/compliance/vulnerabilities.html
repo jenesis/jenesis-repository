@@ -78,57 +78,58 @@
             <table class="app-list">
                 <thead>
                 <tr>
-                    <th scope="col">Coordinate</th>
-                    <th scope="col">Advisory</th>
+                    <th scope="col">Version</th>
                     <th scope="col">Severity</th>
-                    <th scope="col">Reachability</th>
-                    <th scope="col">Applicability</th>
-                    <th scope="col" th:each="column : ${report.signals()}" th:text="${column.label()}">Signal</th>
-                    <th scope="col">Fix</th>
+                    <th scope="col">Advisories</th>
                 </tr>
                 </thead>
                 <tbody>
+                <!--/* Two rows a version, as every listing of artifacts has them: the version and what stands against
+                     it - its worst severity and how many advisories - then, across the table's whole width, each
+                     advisory with its own severity, what is known of its reach and its fix. */-->
                 <th:block th:each="artifact : ${report.vulnerable()}">
-                    <tr th:each="advisory : ${artifact.advisories()}">
-                        <td><a th:if="${artifact.ecosystem() != null}" th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${artifact.ecosystem()},coordinate=${artifact.bareCoordinate()})}"><code
-                                th:text="${artifact.coordinate()}">coordinate:version</code></a><code
-                                th:if="${artifact.ecosystem() == null}" th:text="${artifact.coordinate()}">coordinate:version</code></td>
-                        <td><code th:text="${advisory.id()}">ADVISORY-1</code></td>
-                        <td>
-                            <span th:replace="~{base :: severity(${advisory.severity()})}">Critical</span>
-                            <span th:if="${advisory.malicious()}" class="app-badge app-badge--danger">malicious</span>
-                        </td>
-                        <td>
-                            <span th:if="${advisory.reachability() == 'reachable'}"
-                                  class="app-badge app-badge--danger">reachable</span>
-                            <span th:if="${advisory.reachability() == 'not-reachable'}"
-                                  class="app-badge app-badge--muted">not reachable</span>
-                            <span th:if="${advisory.reachability() == 'unknown'}"
-                                  class="app-badge app-badge--warn">unknown</span>
-                            <span th:if="${advisory.reachability() == ''}">&mdash;</span>
-                            <!--/* The AI classifier's opinion renders beside the static verdict, never instead of
-                                 it - both labels, separately attributed: "static: unknown, AI: likely-reachable". */-->
-                            <span th:if="${advisory.aiReachability() == 'likely-reachable'}"
-                                  class="app-badge app-badge--danger">AI: likely reachable</span>
-                            <span th:if="${advisory.aiReachability() == 'likely-not-reachable'}"
-                                  class="app-badge app-badge--muted">AI: likely not reachable</span>
-                            <span th:if="${advisory.aiReachability() == 'unknown'}"
-                                  class="app-badge app-badge--warn">AI: unknown</span>
-                        </td>
-                        <td>
-                            <!--/* The applicability pass's opinion is a filter aid, separately attributed - the
-                                 finding stays present and gated exactly as before whatever it says. */-->
-                            <span th:if="${advisory.applicability() == 'applies'}"
-                                  class="app-badge app-badge--danger">AI: applies</span>
-                            <span th:if="${advisory.applicability() == 'not-applicable'}"
-                                  class="app-badge app-badge--muted">AI: not applicable</span>
-                            <span th:if="${advisory.applicability() == 'unknown'}"
-                                  class="app-badge app-badge--warn">AI: unknown</span>
-                            <span th:if="${advisory.applicability() == ''}">&mdash;</span>
-                        </td>
-                        <td th:each="cell : ${advisory.signals()}" th:text="${cell.value()}"></td>
-                        <td th:text="${advisory.fixed()} ?: 'no fix'">2.17.1</td>
-                    </tr>
+                <tr class="app-list__lead">
+                    <td><th:block th:replace="~{base :: artifactLink(${artifact.coordinate()}, ${artifact.ecosystem() == null}
+                            ? null : @{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${artifact.ecosystem()},coordinate=${artifact.bareCoordinate()})})}"></th:block></td>
+                    <td><span th:replace="~{base :: severity(${artifact.worst()})}">Critical</span></td>
+                    <td class="app-list__num"><small th:text="${artifact.advisories().size() == 1 ? '1 advisory'
+                            : artifact.advisories().size() + ' advisories'}">3 advisories</small></td>
+                </tr>
+                <tr class="app-list__detail">
+                    <td colspan="3">
+                        <ul class="app-reasons" aria-label="Advisories">
+                            <li th:each="advisory : ${artifact.advisories()}"><small><code
+                                    th:text="${advisory.id()}">ADVISORY-1</code>
+                                <span th:replace="~{base :: severity(${advisory.severity()})}">Critical</span>
+                                <span th:if="${advisory.malicious()}" class="app-badge app-badge--danger">malicious</span>
+                                <span th:if="${advisory.reachability() == 'reachable'}"
+                                      class="app-badge app-badge--danger">reachable</span>
+                                <span th:if="${advisory.reachability() == 'not-reachable'}"
+                                      class="app-badge app-badge--muted">not reachable</span>
+                                <span th:if="${advisory.reachability() == 'unknown'}"
+                                      class="app-badge app-badge--warn">reachability unknown</span>
+                                <!--/* The AI classifier's opinion beside the static verdict, never instead of it. */-->
+                                <span th:if="${advisory.aiReachability() == 'likely-reachable'}"
+                                      class="app-badge app-badge--danger">AI: likely reachable</span>
+                                <span th:if="${advisory.aiReachability() == 'likely-not-reachable'}"
+                                      class="app-badge app-badge--muted">AI: likely not reachable</span>
+                                <span th:if="${advisory.aiReachability() == 'unknown'}"
+                                      class="app-badge app-badge--warn">AI: reachability unknown</span>
+                                <!--/* The applicability pass's opinion is a filter aid, separately attributed - the
+                                     finding stays present and gated exactly as before whatever it says. */-->
+                                <span th:if="${advisory.applicability() == 'applies'}"
+                                      class="app-badge app-badge--danger">AI: applies</span>
+                                <span th:if="${advisory.applicability() == 'not-applicable'}"
+                                      class="app-badge app-badge--muted">AI: not applicable</span>
+                                <span th:if="${advisory.applicability() == 'unknown'}"
+                                      class="app-badge app-badge--warn">AI: applicability unknown</span>
+                                <th:block th:each="cell, i : ${advisory.signals()}"> &middot; <span
+                                        th:text="${report.signals()[i.index].label()} + ': ' + ${cell.value()}">EPSS: 0.9</span></th:block>
+                                &middot; <span th:text="${advisory.fixed() == null} ? 'no fix' : 'fixed in ' + ${advisory.fixed()}">fixed in 2.17.1</span>
+                            </small></li>
+                        </ul>
+                    </td>
+                </tr>
                 </th:block>
                 </tbody>
             </table>

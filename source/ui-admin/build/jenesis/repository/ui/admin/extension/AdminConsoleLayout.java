@@ -27,6 +27,6 @@ public final class AdminConsoleLayout implements ConsoleLayout.Extension {
                 ConsoleLayout.BROWSE_ROWS, ConsoleLayout.BROWSE_UP, ConsoleLayout.FOLDER_LINK,
                 ConsoleLayout.RUNNING,
                 ConsoleLayout.REPOSITORY_HEADER, ConsoleLayout.REPOSITORY_OVERVIEW_HEADER, ConsoleLayout.MODULE_VIEWS,
-                ConsoleLayout.TIME);
+                ConsoleLayout.TIME, ConsoleLayout.ARTIFACT_LINK);
     }
 }

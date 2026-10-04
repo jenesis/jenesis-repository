@@ -330,7 +330,7 @@ public class ComplianceReview extends TenantScope {
         for (QuarantineLog.Event refusal : new QuarantineLog(scope(repository)).refusals(limit)) {
             Optional<ArtifactDescriptor> placed = placed(inventory, refusal.path());
             refusals.add(new Refusal(refusal.when().toString(), refusal.path(), refusal.coordinate(),
-                    refusal.verdict().name(), refusal.reasons(),
+                    refusal.verdict().name(), refusal.reasons(), refusal.rules(),
                     placed.map(ArtifactDescriptor::ecosystem).orElse(null),
                     placed.map(ArtifactDescriptor::coordinate).orElse(null)));
         }
@@ -346,7 +346,7 @@ public class ComplianceReview extends TenantScope {
     /** One refusal as the console renders it: when, the coordinate refused, the verdict, and the reasons naming it;
      *  {@code ecosystem} and {@code bareCoordinate} as {@link QuarantineView} carries them. */
     public record Refusal(String when, String path, String coordinate, String verdict, List<String> reasons,
-                          String ecosystem, String bareCoordinate) {
+                          List<String> rules, String ecosystem, String bareCoordinate) {
 
         /** Whether the row names a coordinate the console can open. */
         public boolean placed() {

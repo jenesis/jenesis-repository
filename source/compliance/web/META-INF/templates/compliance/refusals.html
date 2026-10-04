@@ -18,23 +18,31 @@
         <table class="app-list">
             <thead>
             <tr>
-                <th scope="col">Coordinate</th>
-                <th scope="col">Verdict</th>
-                <th scope="col">Refusal</th>
+                <th scope="col">Version</th>
+                <th scope="col">Refused for</th>
                 <th scope="col">When</th>
             </tr>
             </thead>
             <tbody>
-            <tr th:each="f : ${refusals}">
-                <td>
-                    <a th:if="${f.placed()}" th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${f.ecosystem},coordinate=${f.bareCoordinate})}" th:text="${f.coordinate}">group:artifact:version</a>
-                    <span th:unless="${f.placed()}" th:text="${f.coordinate}">group:artifact:version</span><br>
-                    <small><code th:text="${f.path}">/path/...</code></small>
-                </td>
-                <td><span class="app-badge app-badge--danger" th:text="${@format.verdict(f.verdict)}">Reject</span></td>
-                <td><small th:text="${#strings.listJoin(f.reasons, '; ')}">reason</small></td>
-                <td><small><time th:replace="~{base :: time(${f.when})}">when</time></small></td>
+            <!--/* Two rows a refusal, as every listing of artifacts has them: the version and what it was refused for,
+                 then its reasons and the path it arrived at. */-->
+            <th:block th:each="f : ${refusals}">
+            <tr class="app-list__lead">
+                <td><th:block th:replace="~{base :: artifactLink(${f.coordinate}, ${f.placed()}
+                        ? @{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${f.ecosystem},coordinate=${f.bareCoordinate})} : null)}"></th:block></td>
+                <td><th:block th:each="rule : ${f.rules}"><span class="app-badge app-badge--danger"
+                        th:text="${rule}">Deny list</span> </th:block><small th:if="${f.rules.isEmpty()}">not recorded</small></td>
+                <td class="app-list__date"><small><time th:replace="~{base :: time(${f.when})}">when</time></small></td>
             </tr>
+            <tr class="app-list__detail">
+                <td colspan="3">
+                    <ul class="app-reasons" aria-label="Reasons">
+                        <li th:each="reason : ${f.reasons}"><small th:text="${reason}">reason</small></li>
+                        <li><small><code th:text="${f.path}">/path/...</code></small></li>
+                    </ul>
+                </td>
+            </tr>
+            </th:block>
             </tbody>
         </table>
     </figure>

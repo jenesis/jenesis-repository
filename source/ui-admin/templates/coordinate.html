@@ -57,8 +57,7 @@
                 <th:block th:each="v : ${detail.versions}">
                 <tr th:classappend="${v.served} ? '' : 'app-list__row--unserved'">
                     <td>
-                        <a th:href="@{/ui/repositories/{repo}/version(repo=${repo},ecosystem=${detail.ecosystem},coordinate=${detail.coordinate},version=${v.version})}"><code
-                                th:text="${v.version}">1.0.0</code></a>
+                        <th:block th:replace="~{base :: artifactLink(${v.version}, @{/ui/repositories/{repo}/version(repo=${repo},ecosystem=${detail.ecosystem},coordinate=${detail.coordinate},version=${v.version})})}"></th:block>
                         <small th:unless="${v.served}">(withheld)</small>
                     </td>
                     <td class="app-list__date"><small><time th:replace="~{base :: time(${v.published})}">2026-06-01T00:00:00Z</time></small>
@@ -79,6 +78,7 @@
                             : (v.paths.size() == 1 ? '1 file' : v.paths.size() + ' files')}">4 files</small></td>
                     <!--/* Any served version can be held for review by hand; a withheld one is already. */-->
                     <td th:if="${isEditor and repositoryPagePaths.contains('/quarantine')}" class="app-list__actions">
+                        <div class="app-actions">
                         <form th:if="${v.served and !v.paths.isEmpty()}" method="post"
                               th:action="@{/ui/repositories/{repo}/quarantine/hold(repo=${repo})}">
                             <input type="hidden" name="ecosystem" th:value="${detail.ecosystem}">
@@ -86,6 +86,7 @@
                             <input type="hidden" name="version" th:value="${v.version}">
                             <button th:replace="~{base :: cautionButton('Hold', |Hold ${detail.coordinate}:${v.version} for review? Every file of it stops serving until it is released.|)}">Hold</button>
                         </form>
+                        </div>
                     </td>
                 </tr>
                 </th:block>

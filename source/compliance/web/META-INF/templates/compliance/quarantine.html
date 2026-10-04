@@ -29,10 +29,8 @@
                      - the reasons it is held for, one to a line, and its files, each with any reason of its own. */-->
                 <th:block th:each="q : ${quarantine}">
                 <tr class="app-list__lead">
-                    <td>
-                        <a th:if="${q.placed()}" th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${q.ecosystem},coordinate=${q.bareCoordinate})}" th:text="${q.coordinate}">group:artifact:version</a>
-                        <span th:unless="${q.placed()}" th:text="${q.coordinate}">group:artifact:version</span>
-                    </td>
+                    <td><th:block th:replace="~{base :: artifactLink(${q.coordinate}, ${q.placed()}
+                            ? @{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${q.ecosystem},coordinate=${q.bareCoordinate})} : null)}"></th:block></td>
                     <!--/* What the version is held for, in an operator's words - the rules that decided each of its holds.
                            A hold kind no installed module answers to is drawn beside them as an orphaned finding source
                            is, so an operator releasing it knows nothing can hold it again for that kind. A hold recorded

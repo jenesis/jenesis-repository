@@ -237,6 +237,12 @@
       class="app-badge" th:classappend="|app-severity--${#strings.toLowerCase(band)}|"
       th:text="${band == 'WARN'} ? 'Warning' : ${#strings.capitalize(#strings.toLowerCase(band))}">Critical</span>
 
+<!--/* artifactLink: an artifact or a version as every list names it - its coordinate in code, linking to its page where
+     the console has one, and plain where it has none (a null href). Every listing of artifacts opens each row with it,
+     so a reader recognises a list of artifacts wherever it appears. */-->
+<th:block th:fragment="artifactLink(label, href)"><a th:if="${href != null}" th:href="${href}"><code
+        th:text="${label}">org.acme:lib:1.0</code></a><code th:if="${href == null}" th:text="${label}">org.acme:lib:1.0</code></th:block>
+
 <!--/* The two views of the installed modules - one card per module, or grouped by the contract each implements -
      reached as one screen, so the navigation does not list the same inventory twice under two names. */-->
 <nav th:fragment="moduleViews(current)" class="app-views" aria-label="Views of the modules">

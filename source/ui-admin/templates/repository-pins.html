@@ -7,17 +7,32 @@
     <div th:replace="~{fragments :: messages}"></div>
     <th:block th:replace="~{base :: repositoryHeader('Pins', 'in', null, null)}"></th:block>
     <p><small>A pinned version is never evicted, whatever the retention policy says.</small></p>
-    <ul th:unless="${pins.isEmpty()}">
-        <li th:each="pin : ${pins}"><div class="app-actions">
-            <code th:text="${pin.ecosystem()} + ':' + ${pin.coordinate()} + ':' + ${pin.version()}">ecosystem:coordinate:version</code>
-            <form th:if="${isEditor}" method="post" th:action="@{'/ui/repositories/' + ${repo} + '/pins/remove'}">
-                <input type="hidden" name="ecosystem" th:value="${pin.ecosystem()}">
-                <input type="hidden" name="coordinate" th:value="${pin.coordinate()}">
-                <input type="hidden" name="version" th:value="${pin.version()}">
-                <button th:replace="~{base :: cautionButton('Unpin', 'Lift this pin? The version becomes eligible for retention eviction.')}">Unpin</button>
-            </form>
-        </div></li>
-    </ul>
+    <figure th:unless="${pins.isEmpty()}">
+        <table class="app-list">
+            <thead>
+            <tr>
+                <th scope="col">Version</th>
+                <th scope="col">Ecosystem</th>
+                <th scope="col" th:if="${isEditor}"><span class="app-sr-only">Actions</span></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="pin : ${pins}">
+                <td><th:block th:replace="~{base :: artifactLink(${pin.coordinate() + ':' + pin.version()},
+                        @{/ui/repositories/{repo}/version(repo=${repo},ecosystem=${pin.ecosystem()},coordinate=${pin.coordinate()},version=${pin.version()})})}"></th:block></td>
+                <td><small th:text="${pin.ecosystem()}">Maven</small></td>
+                <td th:if="${isEditor}" class="app-list__actions"><div class="app-actions">
+                    <form method="post" th:action="@{'/ui/repositories/' + ${repo} + '/pins/remove'}">
+                        <input type="hidden" name="ecosystem" th:value="${pin.ecosystem()}">
+                        <input type="hidden" name="coordinate" th:value="${pin.coordinate()}">
+                        <input type="hidden" name="version" th:value="${pin.version()}">
+                        <button th:replace="~{base :: cautionButton('Unpin', 'Lift this pin? The version becomes eligible for retention eviction.')}">Unpin</button>
+                    </form>
+                </div></td>
+            </tr>
+            </tbody>
+        </table>
+    </figure>
     <th:block th:if="${pins.isEmpty()}">
         <div th:replace="~{base :: empty('No pins. A pinned version is never evicted by retention.')}"></div>
     </th:block>
