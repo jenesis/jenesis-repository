@@ -422,8 +422,8 @@ public class ComplianceReview extends TenantScope {
             HealthSource source = HealthSource.resolve(settings()::getProperty);
             if (source != HealthSource.none()) {
                 Set<String> probed = new HashSet<>();
-                // Streamed over the coordinate walk.
-                inventory(repository).coordinates(held -> {
+                // Streamed over everything the repository holds, its cached copies too, as the scheduled pass is.
+                inventory(repository).holdings(held -> {
                     if (!probed.add(held.ecosystem() + ' ' + held.coordinate())) {
                         return;                                 // health is version-independent: probe each coordinate once
                     }
@@ -539,7 +539,8 @@ public class ComplianceReview extends TenantScope {
         }
         int[] scanned = {0};
         int[] flagged = {0};
-        inventory(repository).coordinates(held -> {
+        // Everything the repository holds, as the scheduled scan reads it: a proxied copy is served to the same builds.
+        inventory(repository).holdings(held -> {
             scanned[0]++;
             if (AdvisoryFindings.record(ledger.get(), feeds, held.ecosystem(), held.coordinate(), held.version(),
                     "console-report", Instant.now())) {
