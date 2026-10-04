@@ -57,6 +57,21 @@ class QuarantineLogTest {
     }
 
     @Test
+    void a_reason_quoting_a_tools_output_reads_back_whole_with_the_rules_after_it() throws IOException {
+        QuarantineLog log = new QuarantineLog(store);
+        String path = "/oci/broken/manifests/1.0";
+        log.record(T1, path, "broken:1.0", Verdict.QUARANTINE,
+                List.of("the scan failed: exit status 1: 2026-10-04T06:22:31Z\tWARN\tdeprecated\n"
+                        + "2026-10-04T06:22:31Z\tFATAL\tunexpected EOF\n", "Pending scan"), List.of("Image scan"));
+
+        assertThat(log.latest(path)).get().satisfies(event -> {
+            assertThat(event.reasons()).containsExactly("the scan failed: exit status 1: 2026-10-04T06:22:31Z WARN "
+                    + "deprecated 2026-10-04T06:22:31Z FATAL unexpected EOF", "Pending scan");
+            assertThat(event.rules()).containsExactly("Image scan");
+        });
+    }
+
+    @Test
     void a_re_record_of_the_same_decision_is_idempotent() throws IOException {
         QuarantineLog log = new QuarantineLog(store);
         String path = "/npm/stealer/-/stealer-9.9.9.tgz";

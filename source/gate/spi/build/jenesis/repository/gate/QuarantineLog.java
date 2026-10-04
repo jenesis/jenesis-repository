@@ -49,6 +49,11 @@ public final class QuarantineLog {
     /** The reason-token separator in a serialized record. */
     private static final Pattern REASON_SEPARATOR = Pattern.compile(" \\| ");
 
+    /** What would end a record's field or its line: a reason quoting a tool's output - a scanner's log, say - carries
+     *  tabs and line breaks, and written as they are they would cut the record short, dropping the rest of its reasons
+     *  and every rule. */
+    private static final Pattern FIELD_BREAK = Pattern.compile("\\s*[\\t\\r\\n]\\s*");
+
     private final ArtifactStore store;
 
     public QuarantineLog(ArtifactStore store) {
@@ -297,8 +302,14 @@ public final class QuarantineLog {
 
     private static String serialize(Instant when, String path, String coordinate, Verdict verdict,
                                     List<String> reasons, List<String> rules) {
-        return String.join("\t", when.toString(), path, coordinate, verdict.name(), String.join(" | ", reasons),
-                String.join(" | ", rules));
+        return String.join("\t", when.toString(), path, coordinate, verdict.name(), field(reasons), field(rules));
+    }
+
+    /** The values joined into one field, each on one line: a tab or line break inside one reads as a space, and one
+     *  ending it as nothing. */
+    private static String field(List<String> values) {
+        return values.stream().map(value -> FIELD_BREAK.matcher(value).replaceAll(" ").strip())
+                .collect(Collectors.joining(" | "));
     }
 
     private static Optional<Event> parse(String line) {
