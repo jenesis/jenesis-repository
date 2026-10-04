@@ -631,6 +631,21 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
     }
 
+    /** A recipe or package file is served from the pointer the version's files pair with its path. */
+    @Override
+    public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
+        Optional<ArtifactDescriptor> described = describedVersion(requestPath);
+        if (described.isEmpty()) {
+            return Optional.empty();
+        }
+        for (ConanFile file : conanFiles(described.get().coordinate(), described.get().version(), store)) {
+            if (file.path().equals(requestPath)) {
+                return Optional.of(file.key());
+            }
+        }
+        return Optional.empty();
+    }
+
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith(PREFIX)) {

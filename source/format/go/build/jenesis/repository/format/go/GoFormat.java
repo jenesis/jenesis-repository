@@ -154,6 +154,13 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, BlobLayout, R
      *  as {@link #blobKeys} keys it. The {@code .info}/{@code .mod} and the version queries name no archive and stay
      *  empty. A {@code -} in the version marks a prerelease, a pseudo-version included, as {@link Semver#compare} ranks
      *  it. */
+    /** A module archive is served from the key its path names. */
+    @Override
+    public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
+        return describedVersion(requestPath).isEmpty() ? Optional.empty()
+                : BlobLayout.stored(requestPath.substring(1), store);
+    }
+
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith("/go/") || !path.endsWith(".zip")) {

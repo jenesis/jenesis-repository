@@ -52,6 +52,14 @@ public final class GateEndpointTestFormat implements RepositoryFormat, BlobLayou
         return List.of("gatetest");
     }
 
+    /** A version's artifact is served from the one key it is stored under. */
+    @Override
+    public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
+        Optional<ArtifactDescriptor> described = describedVersion(requestPath);
+        return described.isEmpty() ? Optional.empty()
+                : BlobLayout.stored("gatetest/" + described.get().coordinate() + "/" + described.get().version(), store);
+    }
+
     @Override
     public List<String> blobKeys(String coordinate, String version, ArtifactStore store) throws IOException {
         String key = "gatetest/" + coordinate + "/" + version;

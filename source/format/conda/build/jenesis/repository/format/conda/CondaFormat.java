@@ -505,6 +505,14 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         return ProxyRelay.streamRemembered(fetcher, target, null, exchange, ProxyRelay.Document.ENUMERATION, store);
     }
 
+    /** A package, {@code /conda/<repo>/<subdir>/<file>}, is served from its {@code pkgs} pointer. */
+    @Override
+    public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
+        String[] parts = requestPath.startsWith(PREFIX) ? requestPath.substring(PREFIX.length()).split("/") : null;
+        return parts == null || parts.length != 3 || describedVersion(requestPath).isEmpty() ? Optional.empty()
+                : BlobLayout.stored(packageKey(parts[0], parts[1], parts[2]), store);
+    }
+
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith(PREFIX)) {

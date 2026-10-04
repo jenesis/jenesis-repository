@@ -602,6 +602,23 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
         }
     }
 
+    /** A crate download, {@code /cargo/<repo>/api/v1/crates/<crate>/<version>/download}, is served from its
+     *  {@code .crate} pointer. */
+    @Override
+    public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
+        Optional<ArtifactDescriptor> described = describedVersion(requestPath);
+        int slash = requestPath.indexOf('/', PREFIX.length());
+        if (described.isEmpty() || slash < 0) {
+            return Optional.empty();
+        }
+        String repo = requestPath.substring(PREFIX.length(), slash);
+        String crate = described.get().coordinate();
+        String version = described.get().version();
+        return requestPath.equals(PREFIX + repo + "/" + API_CRATES + crate + "/" + version + DOWNLOAD)
+                ? BlobLayout.stored(crateKey(repo, canonical(crate), version), store)
+                : Optional.empty();
+    }
+
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith(PREFIX)) {

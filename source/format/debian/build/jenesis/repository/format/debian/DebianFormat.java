@@ -315,6 +315,13 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
      *  the package name, as the compliance inspector reads it from the control. The filename version lacks any epoch.
      *  The generated indexes and the keyring endpoints name no package and stay empty, as does a filename off the
      *  convention. */
+    /** A {@code .deb} is served from the pool key its path names. */
+    @Override
+    public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
+        return describedVersion(requestPath).isEmpty() ? Optional.empty()
+                : BlobLayout.stored(requestPath.substring(1), store);
+    }
+
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith("/debian/") || !path.endsWith(".deb")) {

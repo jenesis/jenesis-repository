@@ -20,6 +20,13 @@ public interface PathKeyedBlobLayout extends BlobLayout {
                 .map(described -> described.withPath(key));
     }
 
+    /** A version's file is served from the key its path names. */
+    @Override
+    default Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
+        return describedVersion(requestPath).isEmpty() ? Optional.empty()
+                : BlobLayout.stored(requestPath.substring(1), store);
+    }
+
     /** Every pointer key of the version, as the path it is served at. */
     @Override
     default List<String> servedPaths(String coordinate, String version, ArtifactStore store) throws IOException {

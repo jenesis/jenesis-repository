@@ -682,6 +682,13 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         xml.writeEndElement();
     }
 
+    /** An {@code .rpm} is served from the pool key its path names. */
+    @Override
+    public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
+        return describedVersion(requestPath).isEmpty() ? Optional.empty()
+                : BlobLayout.stored(requestPath.substring(1), store);
+    }
+
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith(PREFIX) || !path.endsWith(".rpm")) {

@@ -170,9 +170,24 @@ public interface BlobLayout extends BlobRoots {
      * <p>The key is a pointer whose body names the blob for every format that keeps pointers, and the blob's own
      * {@code blobs/<hex>} key for one that serves by digest - OCI's manifests and layers - which {@code Blobs} reads
      * as content rather than as a pointer, so a reader needs no second code path for the difference.
+     *
+     * <p>Abstract, because every layout here serves its versions' files from keys of its own and only it knows which:
+     * an empty answer for a path a layout does serve hides that file from every reader asking - an import from this
+     * deployment among them.
      */
-    default Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
-        return Optional.empty();
+    Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException;
+
+    /** {@code key} when a pointer stands there, else empty: the answer a {@link #servingKey} gives once it has mapped
+     *  a request path to the key it would serve from. */
+    static Optional<String> stored(String key, ArtifactStore store) throws IOException {
+        return store.exists(key) ? Optional.of(key) : Optional.empty();
+    }
+
+    /** The coordinate and version {@code describe} reads off {@code requestPath}, or empty for a path naming no
+     *  version's file - where a {@link #servingKey} starts. */
+    default Optional<ArtifactDescriptor> describedVersion(String requestPath) {
+        return describe(requestPath).filter(described -> described.coordinate() != null
+                && described.version() != null);
     }
 
     /**

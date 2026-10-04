@@ -373,6 +373,24 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
 
     // ---- layout
 
+    /** An installer, {@code /winget/<repo>/installers/<identifier>/<version>/<file>}, is served from its blob
+     *  pointer. */
+    @Override
+    public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
+        Optional<ArtifactDescriptor> described = describedVersion(requestPath);
+        int slash = requestPath.indexOf('/', PREFIX.length());
+        if (described.isEmpty() || slash < 0) {
+            return Optional.empty();
+        }
+        String repo = requestPath.substring(PREFIX.length(), slash);
+        String identifier = described.get().coordinate();
+        String version = described.get().version();
+        String file = requestPath.substring(requestPath.lastIndexOf('/') + 1);
+        return requestPath.equals(PREFIX + repo + "/" + INSTALLERS + identifier + "/" + version + "/" + file)
+                ? BlobLayout.stored(installerKey(repo, identifier, version, file), store)
+                : Optional.empty();
+    }
+
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith(PREFIX)) {

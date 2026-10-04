@@ -147,6 +147,20 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
      *  ({@code /nuget/v3-flatcontainer/<id>/<version>/<file>.nupkg}), the id lower-cased as the store keys it. The
      *  service index, search, registrations, the version list, the push endpoint and the dependency sidecar name no
      *  versioned artifact. A {@code -} in the version marks a prerelease, as {@link Semver#compare} ranks it. */
+    /** A package, at its flat-container path, is served from its {@code .nupkg} pointer. */
+    @Override
+    public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
+        Optional<ArtifactDescriptor> described = describedVersion(requestPath);
+        if (described.isEmpty()) {
+            return Optional.empty();
+        }
+        String id = described.get().coordinate().toLowerCase(Locale.ROOT);
+        String version = described.get().version();
+        return requestPath.equals(flatContainerPath(id, version))
+                ? BlobLayout.stored("nuget/" + id + "/" + version + "/" + id + "." + version + ".nupkg", store)
+                : Optional.empty();
+    }
+
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith("/nuget/v3-flatcontainer/") || !path.endsWith(".nupkg")) {

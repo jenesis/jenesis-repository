@@ -545,6 +545,23 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
         }
     }
 
+    /** A dist archive, {@code /composer/<repo>/dists/<vendor>/<package>/<version>.zip}, is served from its
+     *  {@code dist} pointer. */
+    @Override
+    public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
+        Optional<ArtifactDescriptor> described = describedVersion(requestPath);
+        int slash = requestPath.indexOf('/', PREFIX.length());
+        if (described.isEmpty() || slash < 0) {
+            return Optional.empty();
+        }
+        String repo = requestPath.substring(PREFIX.length(), slash);
+        String coordinate = described.get().coordinate();
+        String version = described.get().version();
+        return requestPath.equals(PREFIX + repo + "/" + DISTS + coordinate + "/" + version + ZIP)
+                ? BlobLayout.stored("composer/" + repo + "/dist/" + coordinate + "/" + version + ZIP, store)
+                : Optional.empty();
+    }
+
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith(PREFIX)) {

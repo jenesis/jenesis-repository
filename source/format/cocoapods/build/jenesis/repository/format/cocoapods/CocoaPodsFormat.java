@@ -528,6 +528,23 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         }
     }
 
+    /** A pod's archive, {@code /cocoapods/<repo>/pods/<name>/<version>/<name>.zip}, is served from its blob
+     *  pointer. */
+    @Override
+    public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
+        Optional<ArtifactDescriptor> described = describedVersion(requestPath);
+        int slash = requestPath.indexOf('/', PREFIX.length());
+        if (described.isEmpty() || slash < 0) {
+            return Optional.empty();
+        }
+        String repo = requestPath.substring(PREFIX.length(), slash);
+        String name = described.get().coordinate();
+        String version = described.get().version();
+        return requestPath.equals(PREFIX + repo + "/" + PODS + name + "/" + version + "/" + name + ZIP)
+                ? BlobLayout.stored(blobKey(repo, name, version), store)
+                : Optional.empty();
+    }
+
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith(PREFIX)) {
