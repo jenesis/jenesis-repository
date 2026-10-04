@@ -1,4 +1,5 @@
 package build.jenesis.repository.server;
+import build.jenesis.repository.store.BackgroundJobs;
 import build.jenesis.repository.net.http.ScreenedHttpClient;
 import module java.base;
 import module org.slf4j;
@@ -505,6 +506,20 @@ public class RepositoryAutoConfiguration {
     public NodeFingerprintPublisher nodeFingerprintPublisher(NodeConsistency consistency, ArtifactStore store,
                                                              Environment environment) {
         return new NodeFingerprintPublisher(consistency, store, environment::getProperty);
+    }
+
+    /** The background jobs started over the store - imports, exports, stored reports, removals - bound to it so each
+     *  is tracked by this deployment. */
+    @Bean
+    public StoreBindings backgroundJobsBinding() {
+        return StoreBindings.of(BackgroundJobs.class, new BackgroundJobs());
+    }
+
+    /** The background jobs bound to the store, closed with the context: every job still running is interrupted and
+     *  waited for. It takes the store, so it closes before the store the jobs write into. */
+    @Bean
+    public BackgroundJobs backgroundJobs(ArtifactStore store) {
+        return store.bindings().get(BackgroundJobs.class).orElseGet(BackgroundJobs::new);
     }
 
     /** The deferred listing derivations ({@code StoredListing.later}): a stopping node finishes the derived twins it

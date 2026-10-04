@@ -55,7 +55,7 @@
                                   th:with="reasons=${#strings.listJoin(q.reasons, '; ')}">
                                 <input type="hidden" name="coordinate" th:value="${q.coordinate}">
                                 <input type="hidden" name="path" th:each="path : ${q.paths()}" th:value="${path}">
-                                <button th:replace="~{base :: cautionButton('Release', |Serve ${q.coordinate}, held for ${#strings.listJoin(q.rules, ', ')}? ${reasons}|)}">Release</button>
+                                <button th:replace="~{base :: cautionButton('Release', |Serve ${q.coordinate}${q.rules.isEmpty() ? '' : ', held for ' + #strings.listJoin(q.rules, ', ')}? ${reasons}|)}">Release</button>
                             </form>
                             <form method="post" class="app-actions__danger"
                                   th:action="@{'/ui/repositories/' + ${repo} + '/quarantine/discard'}">

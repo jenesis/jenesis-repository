@@ -1,5 +1,6 @@
 package build.jenesis.repository.export;
 
+import build.jenesis.repository.store.BackgroundJobs;
 import module java.base;
 import build.jenesis.repository.format.EcosystemLayout;
 import build.jenesis.repository.format.ExportTarget;
@@ -78,7 +79,7 @@ public final class ExportJobs {
         // read and no run holds it - a reap that dismissed it since wins, and so does a run still working on it.
         JobState.Run job = JobState.Run.claim(store, RECORDS, jobId,
                 body(JobState.RUNNING, url, counts, cursor, null, null), prior == null ? null : prior.token());
-        Thread.ofVirtual().name("export-" + jobId).start(() -> run(job, store, target, url, formats, counts, cursor));
+        BackgroundJobs.start(store, "export-" + jobId, () -> run(job, store, target, url, formats, counts, cursor));
     }
 
     private void run(JobState.Run job, ArtifactStore store, ExportTarget target, String url,

@@ -1,5 +1,6 @@
 package build.jenesis.repository.cleanup;
 
+import build.jenesis.repository.store.BackgroundJobs;
 import module java.base;
 
 import build.jenesis.repository.store.ArtifactStore;
@@ -98,7 +99,7 @@ public final class StoredReport {
         Report previous = read(store, name).flatMap(Report::lastFinished).orElse(null);
         store.write(ROOT + "/" + name, new ByteArrayInputStream(
                 serialize(new Report(Status.RUNNING, now, null, 0, List.of(), null, previous))));
-        Thread.ofVirtual().name("report-" + name).start(() -> {
+        BackgroundJobs.start(store, "report-" + name, () -> {
             Report finished;
             try {
                 Rows rows = pass.run();

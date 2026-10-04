@@ -1,5 +1,6 @@
 package build.jenesis.repository.cache.server;
 
+import build.jenesis.repository.store.BackgroundJobs;
 import module java.base;
 import build.jenesis.repository.cache.storage.CacheStorage;
 import build.jenesis.repository.cache.storage.Names;
@@ -91,6 +92,10 @@ public class Cache {
     // Single-flight guard for the off-request free-space reclaim, so a burst of writers under low disk spawns one
     // sweep.
     private final AtomicBoolean reclaiming = new AtomicBoolean();
+    /** The evictions and reclaims running in the background, ended with the cache by {@link #stop} and begun afresh
+     *  by a {@link #start} after it. */
+    private volatile BackgroundJobs background = new BackgroundJobs();
+    private volatile boolean stopped;
     // A counter per (tenant, project, outcome), resolved once rather than looked up on every request.
     private final Map<String, Counter> counters = new ConcurrentHashMap<>();
     private final MeterRegistry registry;
@@ -175,15 +180,23 @@ public class Cache {
         return this;
     }
 
-    /** Start the ttl and free-space reaper thread; a no-op when no interval is configured. */
+    /** Start the ttl and free-space reaper thread, a no-op when no interval is configured; after a {@link #stop}, the
+     *  background evictions and reclaims run again too. */
     public void start() {
+        if (stopped) {
+            background = new BackgroundJobs();
+            stopped = false;
+        }
         if (reaper != null && !reaping) {
             reaping = true;
             reaperThread = Thread.ofVirtual().name("jenesis-cache-reaper").start(this::reap);
         }
     }
 
+    /** Stop the reaper and end the evictions and reclaims still running, so none outlives the cache. */
     public void stop() {
+        stopped = true;
+        background.close();
         reaping = false;
         if (reaperThread != null) {
             reaperThread.interrupt();
@@ -365,14 +378,14 @@ public class Cache {
 
     /** Kick a single-flight background free-space reclaim; a caller while one runs is a no-op. */
     private void triggerReclaim() {
-        if (reclaiming.compareAndSet(false, true)) {
-            Thread.ofVirtual().name("jenesis-cache-reclaim").start(() -> {
-                try {
-                    reclaim();
-                } finally {
-                    reclaiming.set(false);
-                }
-            });
+        if (reclaiming.compareAndSet(false, true) && !background("jenesis-cache-reclaim", () -> {
+            try {
+                reclaim();
+            } finally {
+                reclaiming.set(false);
+            }
+        })) {
+            reclaiming.set(false);
         }
     }
 
@@ -485,8 +498,9 @@ public class Cache {
     private void scheduleEviction(String key, CacheStorage store, Project project) {
         dirty.computeIfAbsent(key, _ -> new AtomicBoolean()).set(true);
         AtomicBoolean running = evicting.computeIfAbsent(key, _ -> new AtomicBoolean());
-        if (running.compareAndSet(false, true)) {
-            Thread.ofVirtual().name("jenesis-cache-eviction").start(() -> drain(key, store, project, running));
+        if (running.compareAndSet(false, true)
+                && !background("jenesis-cache-eviction", () -> drain(key, store, project, running))) {
+            running.set(false);
         }
     }
 
@@ -499,8 +513,20 @@ public class Cache {
         } finally {
             running.set(false);
         }
-        if (flag.get() && running.compareAndSet(false, true)) {
-            Thread.ofVirtual().name("jenesis-cache-eviction").start(() -> drain(key, store, project, running));
+        if (flag.get() && running.compareAndSet(false, true)
+                && !background("jenesis-cache-eviction", () -> drain(key, store, project, running))) {
+            running.set(false);
+        }
+    }
+
+    /** Run {@code work} in the background, ended by {@link #stop}; {@code false} once the cache is stopping, when
+     *  nothing is started. */
+    private boolean background(String name, Runnable work) {
+        try {
+            background.start(name, work);
+            return true;
+        } catch (IllegalStateException stopping) {
+            return false;
         }
     }
 

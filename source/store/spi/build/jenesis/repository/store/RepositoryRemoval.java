@@ -76,7 +76,7 @@ public final class RepositoryRemoval {
      */
     public static void purgeInBackground(ArtifactStore tenant, String repository, String name) {
         System.Logger logger = System.getLogger(RepositoryRemoval.class.getName());
-        Thread.ofVirtual().name("repository-removal-" + name.replace('/', '-')).start(() -> {
+        BackgroundJobs.start(tenant, "repository-removal-" + name.replace('/', '-'), () -> {
             try {
                 purge(tenant, repository);
                 logger.log(System.Logger.Level.INFO, "Deleted repository {0} and everything it held.", name);

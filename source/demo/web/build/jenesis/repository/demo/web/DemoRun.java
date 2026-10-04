@@ -1,5 +1,6 @@
 package build.jenesis.repository.demo.web;
 
+import build.jenesis.repository.store.BackgroundJobs;
 import module java.base;
 import module org.slf4j;
 
@@ -269,7 +270,7 @@ public final class DemoRun {
                     ? "A repository exists here already; the demo loads only into an empty start."
                     : "A demo is loading here already.");
         }
-        Thread.ofVirtual().name("demo-" + tenant).start(() -> finish(recorder.get()));
+        BackgroundJobs.start(root, "demo-" + tenant, () -> finish(recorder.get()));
         return Optional.empty();
     }
 

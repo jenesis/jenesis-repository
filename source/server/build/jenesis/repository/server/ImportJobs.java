@@ -1,5 +1,6 @@
 package build.jenesis.repository.server;
 
+import build.jenesis.repository.store.BackgroundJobs;
 import module java.base;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryType;
@@ -61,7 +62,7 @@ public final class ImportJobs {
                 baseSkipped, 0, 0, new LinkedHashSet<>(), Map.of(), null, null, null), prior == null ? null
                 : prior.token());
         Runnable body = () -> run(claimed, source, jobId, baseImported, baseSkipped, listener, formats, store);
-        Thread.ofVirtual().name("import-" + jobId).start(jobScope.apply(body));
+        BackgroundJobs.start(store, "import-" + jobId, jobScope.apply(body));
     }
 
     /**
