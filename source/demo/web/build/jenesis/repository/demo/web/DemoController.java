@@ -89,8 +89,7 @@ public class DemoController {
         if (held > 0) {
             said.add(count(held, "file", "files") + " held for review");
         }
-        said.add(count(state.count(DemoRun.Kind.FETCH, Demo.Outcome.DONE), "file", "files")
-                + " read through the proxies");
+        said.add(count(state.read(), "file", "files") + " read through the proxies");
         said.add(count(state.count(DemoRun.Kind.SETTING, Demo.Outcome.DONE), "settings change", "settings changes")
                 + " made");
         long failed = state.count(Demo.Outcome.FAILED) + state.count(Demo.Outcome.REFUSED);

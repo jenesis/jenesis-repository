@@ -260,6 +260,7 @@ class DemoRunTest {
                     assertThat(step.outcome()).isEqualTo(Demo.Outcome.HELD);
                     assertThat(step.detail()).startsWith("Held for review");
                 });
+        assertThat(state.nothingFetched()).as("a read held as it arrived reached its registry").isFalse();
     }
 
     @Test

@@ -196,11 +196,15 @@ public final class DemoRun {
             return steps.stream().filter(step -> step.outcome() == outcome).count();
         }
 
-        /** Whether the run asked a proxy for anything and every one of those reads came back without it - the
-         *  registries were not reached from this server. */
+        /** How many reads through a proxy reached its registry: cached, or held for review as they were read. */
+        public long read() {
+            return count(Kind.FETCH, Outcome.DONE) + count(Kind.FETCH, Outcome.HELD);
+        }
+
+        /** Whether the run asked a proxy for anything and none of those reads reached its registry - the registries
+         *  were not reached from this server. */
         public boolean nothingFetched() {
-            return steps.stream().anyMatch(step -> step.kind() == Kind.FETCH)
-                    && count(Kind.FETCH, Outcome.DONE) == 0;
+            return steps.stream().anyMatch(step -> step.kind() == Kind.FETCH) && read() == 0;
         }
 
         /** Whether the run asked for the background pass {@code pass}. */
