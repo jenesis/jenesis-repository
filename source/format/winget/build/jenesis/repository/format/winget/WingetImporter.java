@@ -13,11 +13,13 @@ import build.jenesis.repository.store.ArtifactStore;
  * <p>The version manifests and the installer bytes migrate; the {@code information} document, the search index and the
  * assembled {@code packageManifests} answers are derived. A source path is mapped by its trailing
  * {@code .../manifests/<id>/<version>} or {@code .../installers/<id>/<version>/<file>} segments; an identifier and a
- * version contain no {@code /}, so this is unambiguous. All packages land in one {@code /winget/winget/...} registry.
+ * version contain no {@code /}, so this is unambiguous. A path of the served shape, {@code <registry>/manifests/...} or
+ * {@code <registry>/installers/...} - another deployment's listing - keeps its registry; every other package lands in
+ * one {@code /winget/winget/...} registry.
  */
 public final class WingetImporter implements RepositoryImporter {
 
-    /** The single registry migrated packages land in. */
+    /** The registry a package lands in when its path names none. */
     private static final String REPO = "winget";
 
     private static final String MANIFESTS = "manifests";
@@ -39,28 +41,31 @@ public final class WingetImporter implements RepositoryImporter {
         // one.
         String[] segments = relative.split("/", -1);
         for (int at = 0; at < segments.length; at++) {
+            // A path of the served shape, <registry>/<manifests|installers>/..., keeps its registry.
+            String registry = at == 1 ? segments[0] : REPO;
             if (segments[at].equals(MANIFESTS) && segments.length - at == 3) {
-                return descriptor(segments[at + 1], segments[at + 2], null);
+                return descriptor(registry, segments[at + 1], segments[at + 2], null);
             }
             if (segments[at].equals(INSTALLERS) && segments.length - at == 4) {
-                return descriptor(segments[at + 1], segments[at + 2], segments[at + 3]);
+                return descriptor(registry, segments[at + 1], segments[at + 2], segments[at + 3]);
             }
         }
         return Optional.empty();
     }
 
     /** The target descriptor for one asset: a manifest when {@code file} is null, an installer when it is not. */
-    private static Optional<ArtifactDescriptor> descriptor(String identifier, String version, String file) {
+    private static Optional<ArtifactDescriptor> descriptor(String registry, String identifier, String version,
+                                                           String file) {
         if (identifier.isEmpty() || version.isEmpty() || (file != null && file.isEmpty())) {
             return Optional.empty();
         }
         boolean prerelease = version.indexOf('-') >= 0;
         return Optional.of(file == null
                 ? new ArtifactDescriptor(WingetFormat.ECOSYSTEM, identifier, version,
-                        "/winget/" + REPO + "/manifests/" + identifier + "/" + version,
+                        "/winget/" + registry + "/manifests/" + identifier + "/" + version,
                         "application/json", prerelease, null, -1L)
                 : new ArtifactDescriptor(WingetFormat.ECOSYSTEM, identifier, version,
-                        "/winget/" + REPO + "/installers/" + identifier + "/" + version + "/" + file,
+                        "/winget/" + registry + "/installers/" + identifier + "/" + version + "/" + file,
                         "application/octet-stream", prerelease, null, -1L));
     }
 

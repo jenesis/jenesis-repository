@@ -12,13 +12,14 @@ import build.jenesis.repository.store.ArtifactStore;
  * - an index, a {@code ping} answer, a path without {@code v2/conans/} - is skipped.
  *
  * <p>The reference tail is replayed unchanged as {@code PUT /conan/<repo>/v2/conans/<tail>} through
- * {@link ConanFormat#handle}, so the revisions are preserved and the file streams into the store. All packages land in
- * one {@code /conan/conan/...} registry whose index the replayed uploads maintain. No licence is reconstructed: Conan
- * declares it only in its {@code conanfile.py}.
+ * {@link ConanFormat#handle}, so the revisions are preserved and the file streams into the store. A path of the
+ * served shape, {@code <registry>/v2/conans/...} - another deployment's listing - keeps its registry; every other
+ * package lands in one {@code /conan/conan/...} registry, whose index the replayed uploads maintain. No licence is
+ * reconstructed: Conan declares it only in its {@code conanfile.py}.
  */
 public final class ConanImporter implements RepositoryImporter {
 
-    /** The single registry migrated packages land in. */
+    /** The registry a package lands in when its path names none. */
     private static final String REPO = "conan";
 
     /** The v2 REST marker rooting every revision file, as {@link ConanFormat} routes on it; the reference tail follows
@@ -41,7 +42,7 @@ public final class ConanImporter implements RepositoryImporter {
         // The coordinate under the v2 path importArtifact lays the file at, so the edge screens it; empty for a derived
         // index.
         return new ConanFormat().describe(
-                "/conan/" + REPO + "/" + MARKER + relative.substring(marker + MARKER.length()));
+                "/conan/" + registry(relative, marker) + "/" + MARKER + relative.substring(marker + MARKER.length()));
     }
 
     @Override
@@ -64,7 +65,15 @@ public final class ConanImporter implements RepositoryImporter {
             return;
         }
         // Replayed unchanged, revisions included, so the file streams in at the key it is served from.
-        new ConanFormat().handle(new ReplayExchange("/conan/" + REPO + "/" + MARKER + tail, content), store);
+        new ConanFormat().handle(new ReplayExchange("/conan/" + registry(relative, marker) + "/" + MARKER + tail,
+                content), store);
+    }
+
+    /** The registry a path of the served shape, {@code <registry>/v2/conans/...}, names, else the single one. */
+    private static String registry(String relative, int marker) {
+        String ahead = relative.substring(0, marker);
+        return ahead.length() > 1 && ahead.indexOf('/') == ahead.length() - 1
+                ? ahead.substring(0, ahead.length() - 1) : REPO;
     }
 
 }

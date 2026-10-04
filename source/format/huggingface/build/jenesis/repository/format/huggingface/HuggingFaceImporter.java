@@ -13,13 +13,14 @@ import build.jenesis.repository.store.ArtifactStore;
  * a derived {@code api/...} index, is skipped.
  *
  * <p>The path is replayed unchanged, its revision preserved, as a {@code PUT /huggingface/<repo>/<path>} through
- * {@link HuggingFaceFormat#handle}, so the file streams into the content-addressed store. All files land in one
- * {@code /huggingface/huggingface/...} registry whose index the replayed uploads maintain. No licence is reconstructed:
- * a repository declares it in a model card no single file carries.
+ * {@link HuggingFaceFormat#handle}, so the file streams into the content-addressed store. A path of the served shape,
+ * {@code <registry>/<repo_id>/resolve/...} - another deployment's listing - keeps its registry; every other file lands
+ * in one {@code /huggingface/huggingface/...} registry, whose index the replayed uploads maintain. No licence is
+ * reconstructed: a repository declares it in a model card no single file carries.
  */
 public final class HuggingFaceImporter implements RepositoryImporter {
 
-    /** The single registry migrated files land in. */
+    /** The registry a file lands in when its path names none. */
     private static final String REPO = "huggingface";
 
     /** The segment rooting every revision file: before it the (optionally type-prefixed) {@code repo_id}, after it
@@ -42,7 +43,7 @@ public final class HuggingFaceImporter implements RepositoryImporter {
         }
         // The coordinate under the path importArtifact lays the file at, so the edge screens it; empty for an api/...
         // index.
-        return new HuggingFaceFormat().describe("/huggingface/" + REPO + "/" + relative);
+        return new HuggingFaceFormat().describe(target(relative));
     }
 
     @Override
@@ -61,7 +62,20 @@ public final class HuggingFaceImporter implements RepositoryImporter {
             return;
         }
         // Replayed unchanged, so the file streams in at the key it is served from; the format guards each segment.
-        new HuggingFaceFormat().handle(new ReplayExchange("/huggingface/" + REPO + "/" + relative, content), store);
+        new HuggingFaceFormat().handle(new ReplayExchange(target(relative), content), store);
     }
+
+    /** The path a revision file lands at: as served where the path names its registry ahead of a repo_id - which is
+     *  {@code <org>/<name>} or a type-prefixed {@code <datasets|models|spaces>/<org>/<name>} - else in the single
+     *  registry. */
+    private static String target(String relative) {
+        String[] ahead = relative.substring(0, relative.indexOf(RESOLVE)).split("/");
+        boolean typed = ahead.length == 4 && TYPES.contains(ahead[1]);
+        boolean registry = typed || ahead.length == 3 && !TYPES.contains(ahead[0]);
+        return "/huggingface/" + (registry ? relative : REPO + "/" + relative);
+    }
+
+    /** The repository types a repo_id may be prefixed with. */
+    private static final Set<String> TYPES = Set.of("datasets", "models", "spaces");
 
 }

@@ -4,6 +4,10 @@ import module java.base;
 import module org.junit.jupiter.api;
 import module org.junit.jupiter.params;
 import build.jenesis.repository.format.RepositoryImporter;
+import build.jenesis.repository.format.huggingface.HuggingFaceImporter;
+import build.jenesis.repository.format.conan.ConanImporter;
+import build.jenesis.repository.format.winget.WingetImporter;
+import build.jenesis.repository.format.swift.SwiftImporter;
 import build.jenesis.repository.format.cargo.CargoImporter;
 import build.jenesis.repository.format.cocoapods.CocoaPodsImporter;
 import build.jenesis.repository.format.composer.ComposerImporter;
@@ -18,9 +22,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * A format whose served paths name a repository of their own - an RPM repository, a conda channel, a Composer, Cargo,
- * Helm or CocoaPods registry - imports a path of that shape into the repository it names, so another deployment's
- * listing, which names each file where it is served, is laid out where the source served it rather than collapsed
- * into the importer's one default. Ivy and Homebrew lay a file out where it was served.
+ * Helm, CocoaPods, Hugging Face, Conan, winget or Swift registry - imports a path of that shape into the repository it
+ * names, so another deployment's listing, which names each file where it is served, is laid out where the source served
+ * it rather than collapsed into the importer's one default. Ivy and Homebrew lay a file out where it was served.
  */
 class ServedShapeImportTest {
 
@@ -33,7 +37,13 @@ class ServedShapeImportTest {
                 Arguments.of(new HelmImporter(), "helm", "charts/charts/demo-1.0.0.tgz"),
                 Arguments.of(new CocoaPodsImporter(), "cocoapods", "pods/pods/Alamofire/5.6.4/Alamofire.zip"),
                 Arguments.of(new IvyImporter(), "ivy", "com.acme.ivy/widget/1.0/widget-1.0.jar"),
-                Arguments.of(new HomebrewImporter(), "homebrew", "bottles/hello-2.12.3.x86_64_linux.bottle.tar.gz"));
+                Arguments.of(new HomebrewImporter(), "homebrew", "bottles/hello-2.12.3.x86_64_linux.bottle.tar.gz"),
+                Arguments.of(new HuggingFaceImporter(), "huggingface", "hf/acme/demo/resolve/v1/config.json"),
+                Arguments.of(new HuggingFaceImporter(), "huggingface", "hf/datasets/acme/demo/resolve/v1/data.bin"),
+                Arguments.of(new ConanImporter(), "conan",
+                        "recipes/v2/conans/zlib/1.3/_/_/revisions/abc123/files/conanfile.py"),
+                Arguments.of(new WingetImporter(), "winget", "packages/installers/Acme.Tool/1.0.0/tool.exe"),
+                Arguments.of(new SwiftImporter(), "swift", "registry/acme/Widget/1.0.0.zip"));
     }
 
     @ParameterizedTest(name = "{1}")

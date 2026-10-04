@@ -12,11 +12,13 @@ import build.jenesis.repository.store.ArtifactStore;
  * replaying each archive through {@link SwiftFormat}'s own publish, so a release is screened, indexed and made
  * immutable as a client's is. Only the archives migrate; the documents, manifests and identifier lookup derive from
  * what a publish stores. The name is the archive's directory, and the file must be that name, a hyphen, the version and
- * {@code .zip}, which splits a hyphenated name in the one place it can. All releases land in one
- * {@code /swift/swift/...} registry.
+ * {@code .zip}, which splits a hyphenated name in the one place it can. Those releases land in one
+ * {@code /swift/swift/...} registry; another deployment's listing names an archive as it serves it,
+ * {@code <registry>/<scope>/<name>/<version>.zip}, and keeps its registry.
  */
 public final class SwiftImporter implements RepositoryImporter {
 
+    /** The registry a release lands in when its path names none. */
     private static final String REPO = "swift";
 
     private static final String ZIP = ".zip";
@@ -46,8 +48,9 @@ public final class SwiftImporter implements RepositoryImporter {
         }
     }
 
-    /** The release path {@code /swift/swift/<scope>/<name>/<version>} an archive's source path names, or empty for any
-     *  other path. */
+    /** The release path {@code /swift/<registry>/<scope>/<name>/<version>} an archive's source path names, or empty for
+     *  any other path: an incumbent's {@code <scope>/<name>/<name>-<version>.zip} lands in the single registry, and a
+     *  path of this format's own served shape, {@code <registry>/<scope>/<name>/<version>.zip}, keeps its registry. */
     private static Optional<String> release(String path) {
         String[] segments = RepositoryImporter.importablePath(path, "swift").split("/");
         if (segments.length < 3) {
@@ -55,11 +58,17 @@ public final class SwiftImporter implements RepositoryImporter {
         }
         String scope = segments[segments.length - 3], name = segments[segments.length - 2];
         String file = segments[segments.length - 1];
-        if (!file.startsWith(name + "-") || !file.endsWith(ZIP)
-                || file.length() <= name.length() + 1 + ZIP.length()) {
+        if (!file.endsWith(ZIP)) {
             return Optional.empty();
         }
-        String version = file.substring(name.length() + 1, file.length() - ZIP.length());
-        return Optional.of("/swift/" + REPO + "/" + scope + "/" + name + "/" + version);
+        if (file.startsWith(name + "-") && file.length() > name.length() + 1 + ZIP.length()) {
+            String version = file.substring(name.length() + 1, file.length() - ZIP.length());
+            return Optional.of("/swift/" + REPO + "/" + scope + "/" + name + "/" + version);
+        }
+        if (segments.length == 4 && file.length() > ZIP.length()) {
+            return Optional.of("/swift/" + segments[0] + "/" + scope + "/" + name + "/"
+                    + file.substring(0, file.length() - ZIP.length()));
+        }
+        return Optional.empty();
     }
 }

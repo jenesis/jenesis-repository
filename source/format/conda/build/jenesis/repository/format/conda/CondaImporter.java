@@ -29,9 +29,9 @@ public final class CondaImporter implements RepositoryImporter {
     public Optional<ArtifactDescriptor> importTarget(String path) {
         // RepositoryImporter clause 4: a traversal-shaped source path is refused by name.
         String relative = RepositoryImporter.importablePath(path, "conda");
-        // The coordinate under the path importArtifact lays the package at, so the edge screens it; empty for a
-        // non-package or subdir-less path.
-        return publishPath(relative).flatMap(new CondaFormat()::describe);
+        // The coordinate under the path importArtifact lays the package at, so the edge screens it; a subdir-less
+        // package is described by its filename alone, though importArtifact skips it, and a non-package is empty.
+        return new CondaFormat().describe(publishPath(relative).orElse("/conda/" + REPO + "/" + relative));
     }
 
     @Override
