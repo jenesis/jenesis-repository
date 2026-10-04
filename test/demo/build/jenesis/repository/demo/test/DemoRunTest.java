@@ -240,9 +240,13 @@ class DemoRunTest {
 
             @Override
             public int fetch(String tenant, String repository, String path) throws IOException {
-                // What the pull-through leaves when the gate holds what it fetched: the copy under review, and a 404.
+                // What the pull-through leaves when the gate holds what it fetched: the copy under review, laid out at
+                // the path the format sees - npm's under its mount, Maven's at the client's own - and a 404.
+                String type = RepositoryDocument.read(repository(repository)).orElseThrow().format();
+                String laidOut = RepositoryType.installed(type).orElseThrow().formatPath(path);
                 Publication publication = new Publication(repository(repository));
-                publication.link("/quarantine" + path, publication.storeBlob(new ByteArrayInputStream(new byte[]{1})));
+                publication.link("/quarantine" + laidOut,
+                        publication.storeBlob(new ByteArrayInputStream(new byte[]{1})));
                 return 404;
             }
         };

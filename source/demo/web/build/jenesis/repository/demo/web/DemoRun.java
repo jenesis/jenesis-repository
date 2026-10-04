@@ -313,9 +313,11 @@ public final class DemoRun {
     private void run(Recorder recorder) throws IOException {
         List<Planned> planned = plans();
         Bound bound = new Bound(recorder.tenant, recorder.actor);
+        Map<String, String> types = new HashMap<>();
         for (Planned each : planned) {
             for (DemoContributor.Repository repository : each.plan().repositories()) {
                 recorder.add(create(bound.lifecycle, repository));
+                types.put(repository.name(), repository.type());
             }
         }
         for (Planned each : planned) {
@@ -323,7 +325,7 @@ public final class DemoRun {
                 continue;
             }
             try {
-                each.contributor().load(new Run(recorder, each.plan().settings().keySet()));
+                each.contributor().load(new Run(recorder, each.plan().settings().keySet(), types));
             } catch (IOException | RuntimeException failure) {
                 LOGGER.warn("The demo contributor {} stopped", each.contributor().getClass().getName(), failure);
                 recorder.add(new Step(Kind.LOAD, "Load " + each.contributor().getClass().getSimpleName(),
@@ -371,9 +373,13 @@ public final class DemoRun {
         private final Recorder recorder;
         private final Set<String> declared;
 
-        private Run(Recorder recorder, Set<String> declared) {
+        /** The type of each repository the plans name, by its name. */
+        private final Map<String, String> types;
+
+        private Run(Recorder recorder, Set<String> declared, Map<String, String> types) {
             this.recorder = recorder;
             this.declared = Set.copyOf(declared);
+            this.types = Map.copyOf(types);
         }
 
         @Override
@@ -444,7 +450,11 @@ public final class DemoRun {
             try {
                 ArtifactStore space = root.scope(Scopes.require("tenant", recorder.tenant))
                         .scope(Scopes.require("repository", repository));
-                return new ServableNames(space).located("/" + ServableNames.QUARANTINE + path).state()
+                // The hold is laid out at the path the format sees, which is the client's own only where the
+                // repository's type mounts its format at the root.
+                String laidOut = Optional.ofNullable(types.get(repository)).flatMap(RepositoryType::installed)
+                        .map(type -> type.formatPath(path)).orElse(path);
+                return new ServableNames(space).located("/" + ServableNames.QUARANTINE + laidOut).state()
                         != ServableNames.State.UNPUBLISHED;
             } catch (IOException | RuntimeException unreadable) {
                 return false;
