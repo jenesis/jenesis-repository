@@ -49,7 +49,7 @@ public final class ProvenanceSection {
         }
         return section.get().payload().map(data -> new Summary(
                 data.path(VERIFIED_FIELD).asBoolean(false),
-                text(data.path(SHA256_FIELD))));
+                Section.text(data.path(SHA256_FIELD))));
     }
 
     /** A version's provenance summary: whether the attestation verified, and the SHA-256 hex of the subject it bound
@@ -85,13 +85,5 @@ public final class ProvenanceSection {
             data.put(SHA256_FIELD, sha256);
         }
         return data;
-    }
-
-    private static String text(JsonNode node) {
-        if (node.isMissingNode() || node.isNull()) {
-            return null;
-        }
-        String value = node.asString();
-        return value.isBlank() ? null : value;
     }
 }

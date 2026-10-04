@@ -73,8 +73,8 @@ public final class SignatureSection {
     }
 
     private static Summary summary(JsonNode data) {
-        return new Summary(text(data.path(OUTCOME_FIELD)), text(data.path(SIGNER_FIELD)), text(data.path(GRADE_FIELD)),
-                text(data.path(LOCATION_FIELD)), text(data.path(SOURCE_FIELD)), details(data.path(DETAILS_FIELD)));
+        return new Summary(Section.text(data.path(OUTCOME_FIELD)), Section.text(data.path(SIGNER_FIELD)), Section.text(data.path(GRADE_FIELD)),
+                Section.text(data.path(LOCATION_FIELD)), Section.text(data.path(SOURCE_FIELD)), details(data.path(DETAILS_FIELD)));
     }
 
     /**
@@ -144,7 +144,7 @@ public final class SignatureSection {
         }
         ObjectNode data = summarising == null ? JSON.createObjectNode() : ((ObjectNode) summarising).deepCopy();
         FileFacts.write(data, files);
-        return Section.derived(TAG, SCHEMA, updated, signal(text(data.path(OUTCOME_FIELD))), data);
+        return Section.derived(TAG, SCHEMA, updated, signal(Section.text(data.path(OUTCOME_FIELD))), data);
     }
 
     private static ObjectNode entry(String outcome, String signer, String grade, String location, String source,
@@ -164,7 +164,7 @@ public final class SignatureSection {
 
     /** The outcome an entry records, or {@code null} for one it does not name or that this node does not know. */
     private static ComplianceGate.Signature.Outcome outcome(JsonNode entry) {
-        String name = text(entry.path(OUTCOME_FIELD));
+        String name = Section.text(entry.path(OUTCOME_FIELD));
         return name == null ? null : Arrays.stream(ComplianceGate.Signature.Outcome.values())
                 .filter(outcome -> outcome.name().equals(name)).findFirst().orElse(null);
     }
@@ -202,19 +202,11 @@ public final class SignatureSection {
         }
         Map<String, String> details = new LinkedHashMap<>();
         node.properties().forEach(entry -> {
-            String value = text(entry.getValue());
+            String value = Section.text(entry.getValue());
             if (value != null) {
                 details.put(entry.getKey(), value);
             }
         });
         return Map.copyOf(details);
-    }
-
-    private static String text(JsonNode node) {
-        if (node.isMissingNode() || node.isNull()) {
-            return null;
-        }
-        String value = node.asString();
-        return value.isBlank() ? null : value;
     }
 }

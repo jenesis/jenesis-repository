@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.apk;
 
 import module java.base;
+import module org.slf4j;
 
 import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.blobs.BlobExport;
@@ -51,7 +52,7 @@ import build.jenesis.repository.format.Listings;
 public final class ApkFormat implements RepositoryFormat, ArtifactLayout, PathKeyedBlobLayout, ArtifactSignatures,
         RepositoryExporter, RepositoryImporter.Delegating, ProxyLeg {
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(ApkFormat.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ApkFormat.class);
 
     /** The package-ecosystem name apk coordinates report. */
     public static final String ECOSYSTEM = "Alpine";

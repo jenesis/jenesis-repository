@@ -2,6 +2,7 @@ package build.jenesis.repository.health.store;
 
 import module java.base;
 import module tools.jackson.databind;
+import java.time.format.DateTimeParseException;
 import build.jenesis.repository.bounds.GenerationIndex;
 import build.jenesis.repository.compliance.HealthSource.Health;
 import build.jenesis.repository.health.HealthLedger;
@@ -106,7 +107,7 @@ final class HealthRankIndex {
         }
         try {
             return Optional.of(Instant.parse(scan));
-        } catch (java.time.format.DateTimeParseException _) {
+        } catch (DateTimeParseException _) {
             return Optional.empty();
         }
     }

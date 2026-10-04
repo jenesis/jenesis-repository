@@ -9,7 +9,7 @@ import build.jenesis.repository.store.NodeMemoStore;
 import build.jenesis.repository.store.MissMemory;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.store.ServableNames;
-import build.jenesis.repository.format.Checksums;
+import build.jenesis.repository.store.Checksums;
 
 /**
  * A content-addressed view over an {@link ArtifactStore}, so a format stores bytes the way Maven and OCI do:
@@ -556,7 +556,7 @@ public final class Blobs {
      *  {@link #list(String)} a format uses to walk a very large id space (a flat container's package ids) without
      *  materialising and sorting the whole set in heap. Names arrive in lexicographic order; {@code after} is the last
      *  name of the previous page ({@code ""} for the first), and a page shorter than {@code limit} is the last. */
-    public void page(String prefix, String after, int limit, java.util.function.Consumer<String> names) {
+    public void page(String prefix, String after, int limit, Consumer<String> names) {
         store.page(prefix, after, limit, names);
     }
 

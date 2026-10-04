@@ -2,6 +2,7 @@ package build.jenesis.repository.cache.protocol.bazel;
 
 import module java.base;
 
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.cache.protocol.CacheProtocol;
 
 /**
@@ -54,7 +55,7 @@ public final class BazelCacheProtocol implements CacheProtocol {
         }
         String hash = request.path().substring(PREFIX.length() + namespace.length() + 1);
         // The namespace rides in the hashed value, so one hash meaning two unrelated entries stays two entries.
-        String digest = digest(namespace + "/" + hash);
+        String digest = Checksums.sha256(namespace + "/" + hash);
         return Optional.of(new Address(digest.substring(0, 4), digest,
                 request.project(), request.presentedKey(),
                 ACTIONS.equals(namespace) ? Existing.REWRITE : Existing.DEDUPE));
@@ -72,12 +73,4 @@ public final class BazelCacheProtocol implements CacheProtocol {
         return null;
     }
 
-    private static String digest(String value) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is required by the platform", e);
-        }
-    }
 }

@@ -2,6 +2,7 @@ package build.jenesis.repository.metadata;
 
 import module java.base;
 import module tools.jackson.databind;
+import java.time.format.DateTimeParseException;
 
 /**
  * One contributor's section envelope in the consolidated document: {@code schema} (the contributor's section version),
@@ -36,6 +37,29 @@ public record Section(String tag, int schema, Instant updated, State state, Sect
     }
 
     /** An inspected-but-empty section - "present, nothing to declare", distinct from one never derived (absent). */
+    /** A payload field's text, or {@code null} when the field is absent, null or blank - how a section reads one it
+     *  may never have written. */
+    public static String text(JsonNode field) {
+        if (field.isMissingNode() || field.isNull()) {
+            return null;
+        }
+        String value = field.asString();
+        return value.isBlank() ? null : value;
+    }
+
+    /** A payload field's instant, or {@code null} when the field is absent, null or not an ISO-8601 instant. */
+    public static Instant instant(JsonNode field) {
+        String value = text(field);
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Instant.parse(value);
+        } catch (DateTimeParseException unreadable) {
+            return null;
+        }
+    }
+
     public static Section empty(String tag, int schema, Instant updated) {
         return new Section(tag, schema, updated, State.EMPTY, null, Signal.NEUTRAL, null);
     }

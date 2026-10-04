@@ -5,12 +5,12 @@ import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.ImportEdgeProvider;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.importer.ImportRequest;
-import build.jenesis.repository.importer.ImportScreen;
 import build.jenesis.repository.importer.ImportSource;
 import build.jenesis.repository.importer.ImportSourceProvider;
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.JobState;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.settings.ImportHostGuard;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import jakarta.servlet.http.HttpServletRequest;
@@ -104,7 +104,7 @@ public class ImportEdgeController {
             respond(response, 400, "url and repository are required");
             return;
         }
-        // The import screen, both halves under the one block-private-import-hosts dial (ImportScreen.refusalReason):
+        // The import screen, both halves under the one block-private-import-hosts dial (ImportHostGuard.refusalReason):
         // the transport must be https, because the request below attaches the operator's upstream username and
         // password and a plaintext migration hands them to every observer on the path; and the host must not resolve
         // internally, because with the anonymous-possible default an unguarded import URL otherwise turns this
@@ -112,7 +112,7 @@ public class ImportEdgeController {
         // internal host). The reason is carried through rather than flattened, so an operator whose source is
         // plaintext on a perfectly public host is not told to go and look at its host. On by default; an
         // internal or plaintext on-prem migration opts out with jenrepo.block-private-import-hosts=false.
-        String refusal = ImportScreen.refusalReason(url, blockPrivateImportHosts());
+        String refusal = ImportHostGuard.refusalReason(url, blockPrivateImportHosts());
         if (refusal != null) {
             respond(response, 400, "import url is refused: " + refusal + "; a migration is walked server-side with "
                     + "the upstream credentials attached, so it must be an https URL to a public host (set "

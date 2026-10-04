@@ -20,6 +20,7 @@ import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.format.LifecycleMark;
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
@@ -1216,7 +1217,7 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
             }
             JsonNode shasum = dist.get("shasum");
             if (shasum != null) {
-                byte[] raw = hex(shasum.asString(), 20);
+                byte[] raw = Checksums.parse(shasum.asString(), 20);
                 if (raw != null) {
                     return ProxyRelay.Declared.of("SHA-1", raw);
                 }
@@ -1230,18 +1231,6 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
     private static String basename(String url) {
         int slash = url.lastIndexOf('/');
         return slash < 0 ? url : url.substring(slash + 1);
-    }
-
-    /** Decode a hex digest of exactly {@code bytes} bytes to its raw bytes, or {@code null} when absent or malformed. */
-    private static byte[] hex(String value, int bytes) {
-        if (value == null || value.length() != bytes * 2) {
-            return null;
-        }
-        try {
-            return HexFormat.of().parseHex(value);
-        } catch (IllegalArgumentException e) {
-            return null;
-        }
     }
 
     private byte[] rewritePackument(byte[] body, FormatExchange exchange) throws IOException {
@@ -1261,11 +1250,6 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         }
         return MAPPER.writeValueAsBytes(packument);
     }
-
-
-
-
-
 
     /** The migration-import capability, delegated to {@link NpmImporter}. */
     private final NpmImporter importer = new NpmImporter();

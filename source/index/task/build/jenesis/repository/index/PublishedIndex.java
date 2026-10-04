@@ -1,6 +1,7 @@
 package build.jenesis.repository.index;
 
 import module java.base;
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.index.keys.PublishedIndexKeys;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Retries;
@@ -23,7 +24,6 @@ public final class PublishedIndex {
      *  {@link PublishedIndexStorageNamespace storage namespace}; its presence, never its body, tells the next pass to
      *  rebase. */
     static final String RETRACT = PublishedIndexKeys.RETRACT;
-
 
     private final ArtifactStore store;
 
@@ -57,7 +57,7 @@ public final class PublishedIndex {
 
     /** Store an immutable chunk content-addressed by its SHA-256 and return its id. */
     String writeChunk(byte[] bytes) throws IOException {
-        String id = sha256(bytes);
+        String id = Checksums.sha256(bytes);
         store.write(CHUNKS + "/" + id, new ByteArrayInputStream(bytes));
         return id;
     }
@@ -112,11 +112,4 @@ public final class PublishedIndex {
         return json.toString().getBytes(StandardCharsets.UTF_8);
     }
 
-    static String sha256(byte[] bytes) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is unavailable", e);
-        }
-    }
 }

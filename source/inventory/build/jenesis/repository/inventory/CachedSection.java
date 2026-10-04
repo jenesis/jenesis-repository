@@ -42,7 +42,7 @@ public final class CachedSection {
             return Optional.empty();
         }
         return section.get().payload()
-                .map(data -> new Facts(instant(data.path(AT_FIELD)), text(data.path(UPSTREAM_FIELD))))
+                .map(data -> new Facts(Section.instant(data.path(AT_FIELD)), Section.text(data.path(UPSTREAM_FIELD))))
                 .filter(facts -> facts.at() != null);
     }
 
@@ -72,24 +72,5 @@ public final class CachedSection {
             data.put(UPSTREAM_FIELD, upstream);
         }
         return Section.derived(TAG, SCHEMA, at, Signal.NEUTRAL, data);
-    }
-
-    private static String text(JsonNode node) {
-        if (node.isMissingNode() || node.isNull()) {
-            return null;
-        }
-        String value = node.asString();
-        return value.isBlank() ? null : value;
-    }
-
-    private static Instant instant(JsonNode node) {
-        if (node.isMissingNode() || node.isNull()) {
-            return null;
-        }
-        try {
-            return Instant.parse(node.asString());
-        } catch (java.time.format.DateTimeParseException e) {
-            return null;
-        }
     }
 }

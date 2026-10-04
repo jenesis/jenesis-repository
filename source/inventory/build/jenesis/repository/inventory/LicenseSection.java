@@ -50,8 +50,8 @@ public final class LicenseSection {
         JsonNode array = data.path(DECLARED_FIELD);
         if (array.isArray()) {
             for (JsonNode entry : array) {
-                String name = text(entry.path(NAME_FIELD));
-                String url = text(entry.path(URL_FIELD));
+                String name = Section.text(entry.path(NAME_FIELD));
+                String url = Section.text(entry.path(URL_FIELD));
                 if (name != null || url != null) {
                     declared.add(new LicenseInventory.Declared(name, url));
                 }
@@ -170,13 +170,5 @@ public final class LicenseSection {
         String name = license.name() == null || license.name().isBlank() ? null : license.name();
         String url = license.url() == null || license.url().isBlank() ? null : license.url();
         return new LicenseInventory.Declared(name, url);
-    }
-
-    private static String text(JsonNode node) {
-        if (node.isMissingNode() || node.isNull()) {
-            return null;
-        }
-        String value = node.asString();
-        return value.isBlank() ? null : value;
     }
 }

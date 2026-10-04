@@ -3,7 +3,7 @@ package build.jenesis.repository.compliance.web;
 import module java.base;
 import module tools.jackson.databind;
 
-import build.jenesis.repository.format.Checksums;
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.compliance.ProvenanceSigner;
 import build.jenesis.repository.store.ArtifactStore;
 

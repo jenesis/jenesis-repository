@@ -6,7 +6,7 @@ import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ServableNames;
-import build.jenesis.repository.format.Checksums;
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.store.StoredListing;
 
 /**

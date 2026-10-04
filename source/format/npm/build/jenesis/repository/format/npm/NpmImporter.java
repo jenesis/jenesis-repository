@@ -7,7 +7,7 @@ import module tools.jackson.databind;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.blobs.Keys;
 import build.jenesis.repository.format.RepositoryImporter;
-import build.jenesis.repository.format.Checksums;
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;

@@ -22,6 +22,7 @@ import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
 import build.jenesis.repository.store.ArtifactDescriptor;
@@ -287,7 +288,6 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         new CondaListings(blobs).published(repo, subdir, file, indexed);
         exchange.respond(201);
     }
-
 
     /** Read {@code info/index.json} from a stored package, decompressing only as far as it: a {@code .conda} is a zip
      *  whose {@code info-*.tar.zst} member is a Zstandard tar, a {@code .tar.bz2} a bzip2 tar. The zip walk and the
@@ -600,7 +600,7 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
                             && parser.currentToken() == JsonToken.START_OBJECT) {
                         String sha256 = scanRepodataSection(parser, file);
                         if (sha256 != null) {
-                            byte[] raw = hex(sha256, 32);
+                            byte[] raw = Checksums.parse(sha256, 32);
                             return raw == null ? ProxyRelay.Declared.NONE : ProxyRelay.Declared.of("SHA-256", raw);
                         }
                     } else {
@@ -637,18 +637,6 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
             return sha256;
         }
         return null;
-    }
-
-    /** Decode a hex digest of exactly {@code bytes} bytes to its raw bytes, or {@code null} when absent or malformed. */
-    private static byte[] hex(String value, int bytes) {
-        if (value == null || value.length() != bytes * 2) {
-            return null;
-        }
-        try {
-            return HexFormat.of().parseHex(value);
-        } catch (IllegalArgumentException e) {
-            return null;
-        }
     }
 
     static String packageKey(String repo, String subdir, String file) {

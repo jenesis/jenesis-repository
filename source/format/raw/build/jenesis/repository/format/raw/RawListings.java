@@ -18,14 +18,8 @@ import build.jenesis.repository.format.Listings;
  */
 final class RawListings {
 
-    private static final StoredListing.Codec LINKS = StoredListing.Codec.delimited("\n", link -> {
-        int start = link.indexOf('>') + 1;
-        int end = link.indexOf("</a>");
-        return start > 0 && end > start ? unescape(link.substring(start, end)) : "";
-    });
-
     static final StoredListing.Codec PAGE = StoredListing.framed("<!DOCTYPE html><html><body>\n", "</body></html>",
-            LINKS);
+            Listings.ANCHORS);
 
     private final ArtifactStore store;
     private final ServableNames names;
@@ -121,11 +115,4 @@ final class RawListings {
         return true;
     }
 
-
-    static String unescape(String text) {
-        if (text.indexOf('&') < 0) {
-            return text;
-        }
-        return text.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&amp;", "&");
-    }
 }

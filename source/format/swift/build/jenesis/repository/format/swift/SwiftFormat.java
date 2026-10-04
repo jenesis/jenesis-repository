@@ -2,6 +2,7 @@ package build.jenesis.repository.format.swift;
 
 import module java.base;
 
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.blobs.BlobLayout;
@@ -747,12 +748,7 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Path
 
     /** The reverse index's folder for one URL - digested so any URL is one safe key segment. */
     private static String urlIndex(String repo, String url) {
-        try {
-            return "swift/" + repo + "/by-url/" + HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(url.strip().getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException(impossible);
-        }
+        return "swift/" + repo + "/by-url/" + Checksums.sha256(url.strip());
     }
 
     // ---- responses ----

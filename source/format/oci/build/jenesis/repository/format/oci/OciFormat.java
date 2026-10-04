@@ -25,7 +25,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import build.jenesis.repository.format.OciTags;
 import build.jenesis.repository.format.OciTagIndex;
-import build.jenesis.repository.format.Checksums;
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.cleanup.VersionRemoval;
 import build.jenesis.repository.store.ServableNames;
@@ -653,9 +653,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             // Buffered for the screen, bounded: one byte past the cap is read to detect an overflow.
             byte[] body = exchange.requestStream().readNBytes(MAX_MANIFEST + 1);
             if (body.length > MAX_MANIFEST) {
-                exchange.setResponseHeader("Content-Type", "application/json");
-                exchange.respond(413, ("{\"errors\":[{\"code\":\"MANIFEST_INVALID\",\"message\":"
-                        + "\"manifest exceeds the " + MAX_MANIFEST + "-byte limit\"}]}").getBytes(StandardCharsets.UTF_8));
+                error(exchange, 413, "MANIFEST_INVALID", "manifest exceeds the " + MAX_MANIFEST + "-byte limit");
                 return;
             }
             OciManifests.Ingested ingested;
@@ -663,17 +661,13 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
                 ingested = OciManifests.ingest(name, reference, body, exchange.requestHeader("Content-Type"), store,
                         OciManifests.Origin.PUSHED);
             } catch (OciManifests.InvalidManifest invalid) {
-                exchange.setResponseHeader("Content-Type", "application/json");
-                exchange.respond(400, ("{\"errors\":[{\"code\":\"MANIFEST_INVALID\",\"message\":"
-                        + "\"the manifest is not a valid JSON manifest\"}]}").getBytes(StandardCharsets.UTF_8));
+                error(exchange, 400, "MANIFEST_INVALID", "the manifest is not a valid JSON manifest");
                 return;
             }
             String hex = ingested.hex();
             // A push by digest must hash to that digest.
             if (reference.startsWith("sha256:") && !reference.substring("sha256:".length()).equalsIgnoreCase(hex)) {
-                exchange.setResponseHeader("Content-Type", "application/json");
-                exchange.respond(400, ("{\"errors\":[{\"code\":\"MANIFEST_INVALID\",\"message\":"
-                        + "\"the manifest body does not hash to the referenced digest\"}]}").getBytes(StandardCharsets.UTF_8));
+                error(exchange, 400, "MANIFEST_INVALID", "the manifest body does not hash to the referenced digest");
                 return;
             }
             ingested.subject().ifPresent(subject -> exchange.setResponseHeader("OCI-Subject", "sha256:" + subject));

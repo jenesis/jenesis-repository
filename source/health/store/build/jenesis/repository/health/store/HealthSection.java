@@ -48,7 +48,7 @@ public final class HealthSection {
             if (!overall.isNumber()) {
                 return Optional.empty();                        // not a health payload
             }
-            Health health = new Health(text(data.path(SOURCE_REPOSITORY_FIELD)), overall.asDouble(),
+            Health health = new Health(Section.text(data.path(SOURCE_REPOSITORY_FIELD)), overall.asDouble(),
                     data.path(MAINTENANCE_FIELD).asDouble(Health.NOT_EVALUATED),
                     data.path(REVIEW_FIELD).asDouble(Health.NOT_EVALUATED),
                     data.path(PROVENANCE_FIELD).asDouble(Health.NOT_EVALUATED));
@@ -80,14 +80,6 @@ public final class HealthSection {
         data.put(REVIEW_FIELD, health.review());
         data.put(PROVENANCE_FIELD, health.provenance());
         return Section.derived(TAG, SCHEMA, scannedAt, Signal.NEUTRAL, data);
-    }
-
-    private static String text(JsonNode node) {
-        if (node.isMissingNode() || node.isNull()) {
-            return null;
-        }
-        String value = node.asString();
-        return value.isBlank() ? null : value;
     }
 
     /** A parsed health section: the scored health and the instant it was scored. */

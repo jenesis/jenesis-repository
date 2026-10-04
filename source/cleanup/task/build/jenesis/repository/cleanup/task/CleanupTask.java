@@ -3,6 +3,7 @@ package build.jenesis.repository.cleanup.task;
 import module java.base;
 import module org.slf4j;
 import module tools.jackson.databind;
+import java.time.format.DateTimeParseException;
 import build.jenesis.repository.gc.GarbageCollector;
 import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
@@ -140,7 +141,7 @@ public final class CleanupTask implements MaintenanceTask {
             Instant since;
             try {
                 since = Instant.parse(new String(seen.get().content(), StandardCharsets.UTF_8).trim());
-            } catch (java.time.format.DateTimeParseException _) {  // qualified: jackson's module exports a homonym
+            } catch (DateTimeParseException _) {
                 continue;
             }
             if (Duration.between(since, context.now()).compareTo(ttl) >= 0) {

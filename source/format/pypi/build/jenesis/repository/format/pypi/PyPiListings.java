@@ -16,12 +16,6 @@ import build.jenesis.repository.format.Listings;
  */
 final class PyPiListings {
 
-    private static final StoredListing.Codec LINKS = StoredListing.Codec.delimited("\n", link -> {
-        int start = link.indexOf('>') + 1;
-        int end = link.indexOf("</a>");
-        return start > 0 && end > start ? unescape(link.substring(start, end)) : "";
-    });
-
     private final Blobs blobs;
     private final ArtifactStore store;
 
@@ -40,7 +34,7 @@ final class PyPiListings {
 
     static StoredListing.Codec page(String title) {
         return StoredListing.framed("<!DOCTYPE html><html><head><title>" + Listings.html(title) + "</title></head><body>\n",
-                "</body></html>", LINKS);
+                "</body></html>", Listings.ANCHORS);
     }
 
     StoredListing.Spec rootSpec() {
@@ -142,11 +136,4 @@ final class PyPiListings {
         }
     }
 
-
-    static String unescape(String text) {
-        if (text.indexOf('&') < 0) {
-            return text;
-        }
-        return text.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&amp;", "&");
-    }
 }

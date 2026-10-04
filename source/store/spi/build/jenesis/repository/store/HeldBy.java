@@ -102,11 +102,6 @@ public final class HeldBy {
     /** A served path as one key segment: its SHA-256, so its own separators never shape the key space and its
      *  length never meets a name bound. The path itself is the entry's body. */
     static String name(String servedPath) {
-        try {
-            return HexFormat.of().formatHex(
-                    MessageDigest.getInstance("SHA-256").digest(servedPath.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException(impossible);
-        }
+        return Checksums.sha256(servedPath);
     }
 }

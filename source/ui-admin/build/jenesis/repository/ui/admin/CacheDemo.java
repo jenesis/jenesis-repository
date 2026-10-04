@@ -2,6 +2,7 @@ package build.jenesis.repository.ui.admin;
 
 import module java.base;
 
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.cache.storage.CacheStorage;
 import build.jenesis.repository.demo.Demo;
@@ -108,8 +109,8 @@ public final class CacheDemo implements DemoContributor {
             long bytes = 0;
             try {
                 for (Output output : project.outputs()) {
-                    cache.store(new CacheStorage.Entry(project.name(), digest(project.type() + ":" + output.step()),
-                            digest(project.name() + ":" + output.step() + ":inputs")), body(output));
+                    cache.store(new CacheStorage.Entry(project.name(), Checksums.sha256(project.type() + ":" + output.step()),
+                            Checksums.sha256(project.name() + ":" + output.step() + ":inputs")), body(output));
                     bytes += output.size();
                 }
             } catch (IOException | RuntimeException failed) {
@@ -126,16 +127,6 @@ public final class CacheDemo implements DemoContributor {
     /** The projects whose build tool a cache protocol here speaks. */
     private static List<Project> installed() {
         return PROJECTS.stream().filter(project -> CacheService.TYPES.contains(project.type())).toList();
-    }
-
-    /** A step's or its inputs' address, as hex as a build tool sends it. */
-    private static String digest(String value) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is required by the platform", e);
-        }
     }
 
     /** An output's bytes, generated from its step so the same run stores the same bytes. */

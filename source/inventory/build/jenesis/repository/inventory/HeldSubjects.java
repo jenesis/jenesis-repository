@@ -1,6 +1,7 @@
 package build.jenesis.repository.inventory;
 
 import module java.base;
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
@@ -125,13 +126,13 @@ public final class HeldSubjects {
      * path of one coordinate version - bounded by the review queue, like everything else here.
      */
     static String pathKey(String path) {
-        return PATHS + "/" + digest(path);
+        return PATHS + "/" + Checksums.sha256(path);
     }
 
     /** The version face's key for one held path of one coordinate version - see {@link #pathKey} for why the path is
      *  a digest and the three coordinate segments are URL-encoded. */
     static String versionKey(String ecosystem, String coordinate, String version, String path) {
-        return versionRoot(ecosystem, coordinate, version) + "/" + digest(path);
+        return versionRoot(ecosystem, coordinate, version) + "/" + Checksums.sha256(path);
     }
 
     /** The version face's container for one coordinate version - the level {@link #paths} lists and {@link #forget}
@@ -253,7 +254,7 @@ public final class HeldSubjects {
      *  version face. */
     public static boolean heldBesides(ArtifactStore store, String ecosystem, String coordinate, String version,
                                       String path) {
-        String own = digest(path);
+        String own = Checksums.sha256(path);
         boolean[] other = new boolean[1];
         store.page(versionRoot(ecosystem, coordinate, version), "", 2, name -> other[0] |= !name.equals(own));
         return other[0];
@@ -307,16 +308,6 @@ public final class HeldSubjects {
             }
         }
         return new Subject(path, ecosystem, coordinate, version, upstream);
-    }
-
-    /** The hex SHA-256 of a request path - the fixed-width name both faces key a held path by. */
-    private static String digest(String path) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(path.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException("SHA-256 is a required JDK digest", impossible);
-        }
     }
 
     private static void deleteIfPresent(ArtifactStore store, String key) throws IOException {

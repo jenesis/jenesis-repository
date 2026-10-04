@@ -1,6 +1,7 @@
 package build.jenesis.repository.importer.maven;
 
 import module java.base;
+import build.jenesis.repository.format.Listings;
 
 /**
  * Extracts a directory listing from an autoindex page as any generator serves one - nginx, Apache httpd, Nexus,
@@ -101,7 +102,7 @@ final class HtmlListing {
                 value = page.substring(index, end);
                 at = end;
             }
-            values.add(unescape(value.trim()));
+            values.add(Listings.unhtml(value.trim()));
         }
         return values;
     }
@@ -147,16 +148,6 @@ final class HtmlListing {
     private static boolean sameAuthority(URI left, URI right) {
         return Objects.equals(left.getScheme(), right.getScheme())
                 && Objects.equals(left.getRawAuthority(), right.getRawAuthority());
-    }
-
-    /** The few entities autoindex generators actually emit in an href. */
-    private static String unescape(String href) {
-        return href.indexOf('&') < 0 ? href : href
-                .replace("&amp;", "&")
-                .replace("&lt;", "<")
-                .replace("&gt;", ">")
-                .replace("&quot;", "\"")
-                .replace("&#39;", "'");
     }
 
     /** Percent-decode a path segment as UTF-8; a plus stays literal (path, not form, encoding) and a malformed escape

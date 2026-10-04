@@ -101,15 +101,15 @@ public final class OriginSection {
         }
         List<Acquisition> parsed = new ArrayList<>();
         for (JsonNode row : rows) {
-            String source = text(row.path(SOURCE_FIELD));
-            String sha256 = text(row.path(SHA256_FIELD));
+            String source = Section.text(row.path(SOURCE_FIELD));
+            String sha256 = Section.text(row.path(SHA256_FIELD));
             if (source == null) {
                 continue;
             }
-            parsed.add(new Acquisition(source, sha256, instant(row.path(AT_FIELD)), text(row.path(REPOSITORY_FIELD)),
-                    row.path(FALLBACK_INDEX_FIELD).asInt(-1), text(row.path(TARGET_FIELD)),
-                    row.path(STORED_FIELD).asBoolean(false), text(row.path(SCREENING_FIELD)),
-                    instant(row.path(LAST_SERVED_FIELD)), row.path(SERVES_FIELD).asLong(0)));
+            parsed.add(new Acquisition(source, sha256, Section.instant(row.path(AT_FIELD)), Section.text(row.path(REPOSITORY_FIELD)),
+                    row.path(FALLBACK_INDEX_FIELD).asInt(-1), Section.text(row.path(TARGET_FIELD)),
+                    row.path(STORED_FIELD).asBoolean(false), Section.text(row.path(SCREENING_FIELD)),
+                    Section.instant(row.path(LAST_SERVED_FIELD)), row.path(SERVES_FIELD).asLong(0)));
         }
         return List.copyOf(parsed);
     }
@@ -200,8 +200,8 @@ public final class OriginSection {
      *  identity. A row with no readable sha never matches a real digest (so a torn row is carried, not overwritten). */
     private static ObjectNode find(ArrayNode rows, String source, String sha256) {
         for (JsonNode row : rows) {
-            if (row instanceof ObjectNode object && source.equals(text(object.path(SOURCE_FIELD)))
-                    && sha256 != null && sha256.equals(text(object.path(SHA256_FIELD)))) {
+            if (row instanceof ObjectNode object && source.equals(Section.text(object.path(SOURCE_FIELD)))
+                    && sha256 != null && sha256.equals(Section.text(object.path(SHA256_FIELD)))) {
                 return object;
             }
         }
@@ -220,24 +220,5 @@ public final class OriginSection {
         ObjectNode data = JSON.createObjectNode();
         data.set(ACQUISITIONS_FIELD, rows);
         return Section.derived(TAG, SCHEMA, updated, Signal.NEUTRAL, data);
-    }
-
-    private static String text(JsonNode node) {
-        if (node.isMissingNode() || node.isNull()) {
-            return null;
-        }
-        String value = node.asString();
-        return value.isBlank() ? null : value;
-    }
-
-    private static Instant instant(JsonNode node) {
-        if (node.isMissingNode() || node.isNull()) {
-            return null;
-        }
-        try {
-            return Instant.parse(node.asString());
-        } catch (java.time.format.DateTimeParseException e) {
-            return null;
-        }
     }
 }

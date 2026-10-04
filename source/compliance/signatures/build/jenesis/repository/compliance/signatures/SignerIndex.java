@@ -1,6 +1,7 @@
 package build.jenesis.repository.compliance.signatures;
 
 import module java.base;
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.compliance.SignerIdentity;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Retries;
@@ -77,7 +78,7 @@ public final class SignerIndex {
     static boolean counted(ArtifactStore store, String ecosystem, String coordinate, String version,
                            SignerIdentity signer) throws IOException {
         String key = COUNTED + "/" + id(signer) + "/" + ContinuityTrust.coordinateId(ecosystem, coordinate) + "/"
-                + digest(version);
+                + Checksums.sha256(version);
         return store.writeVersioned(key, new byte[0], null);
     }
 
@@ -106,16 +107,7 @@ public final class SignerIndex {
 
     /** The hash a signer is filed under, a digest of its wire form. */
     public static String id(SignerIdentity signer) {
-        return digest(signer.wire());
-    }
-
-    private static String digest(String value) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException("SHA-256 is required of every JDK", impossible);
-        }
+        return Checksums.sha256(signer.wire());
     }
 
     /** Up to {@code limit + 1} child names after {@code after}, the extra one saying whether a next page exists. */

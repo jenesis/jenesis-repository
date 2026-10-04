@@ -94,6 +94,61 @@ public final class Listings {
         }
     }
 
+    /** The entries of an HTML page that lists one {@code <a>} per line, each keyed by the anchor's text, unescaped -
+     *  the shape a Simple page and a folder page share. */
+    public static final StoredListing.Codec ANCHORS = StoredListing.Codec.delimited("\n", link -> {
+        int start = link.indexOf('>') + 1;
+        int end = link.indexOf("</a>");
+        return start > 0 && end > start ? unhtml(link.substring(start, end)) : "";
+    });
+
+    /**
+     * The text {@code escaped} stands for: {@link #html}'s inverse, and the character references an HTML generator
+     * emits besides - {@code &#39;}, {@code &apos;} and any numeric one. One pass, so an escaped ampersand stays the
+     * literal text it encodes ({@code &amp;lt;} reads {@code &lt;}, not {@code <}); a reference this does not know
+     * stays as written.
+     */
+    public static String unhtml(String escaped) {
+        if (escaped.indexOf('&') < 0) {
+            return escaped;
+        }
+        StringBuilder text = new StringBuilder(escaped.length());
+        for (int at = 0; at < escaped.length(); at++) {
+            char c = escaped.charAt(at);
+            int end = c == '&' ? escaped.indexOf(';', at) : -1;
+            String decoded = end > at ? reference(escaped.substring(at + 1, end)) : null;
+            if (decoded == null) {
+                text.append(c);
+            } else {
+                text.append(decoded);
+                at = end;
+            }
+        }
+        return text.toString();
+    }
+
+    private static String reference(String name) {
+        return switch (name) {
+            case "amp" -> "&";
+            case "lt" -> "<";
+            case "gt" -> ">";
+            case "quot" -> "\"";
+            case "apos" -> "'";
+            default -> {
+                if (name.length() < 2 || name.charAt(0) != '#') {
+                    yield null;
+                }
+                boolean hex = name.charAt(1) == 'x' || name.charAt(1) == 'X';
+                try {
+                    int code = Integer.parseInt(name.substring(hex ? 2 : 1), hex ? 16 : 10);
+                    yield Character.isValidCodePoint(code) ? Character.toString(code) : null;
+                } catch (NumberFormatException notANumber) {
+                    yield null;
+                }
+            }
+        };
+    }
+
     public static String html(String text) {
         StringBuilder escaped = new StringBuilder(text.length());
         for (int i = 0; i < text.length(); i++) {

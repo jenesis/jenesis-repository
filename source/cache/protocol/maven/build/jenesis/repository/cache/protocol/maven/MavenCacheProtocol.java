@@ -2,6 +2,7 @@ package build.jenesis.repository.cache.protocol.maven;
 
 import module java.base;
 
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.cache.protocol.CacheProtocol;
 
 /**
@@ -57,8 +58,8 @@ public final class MavenCacheProtocol implements CacheProtocol {
         String segment = segments[4];
         String file = segments[5];
         // The project from the path, the credential from Basic.
-        return Optional.of(new Address(digest(group + "/" + artifact),
-                digest(version + "/" + segment + "/" + file),
+        return Optional.of(new Address(Checksums.sha256(group + "/" + artifact),
+                Checksums.sha256(version + "/" + segment + "/" + file),
                 project, request.presentedKey(), Existing.DEDUPE));
     }
 
@@ -79,12 +80,4 @@ public final class MavenCacheProtocol implements CacheProtocol {
         return segments;
     }
 
-    private static String digest(String value) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is required by the platform", e);
-        }
-    }
 }

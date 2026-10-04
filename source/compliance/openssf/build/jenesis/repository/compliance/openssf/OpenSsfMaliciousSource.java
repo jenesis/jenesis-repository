@@ -130,17 +130,7 @@ public final class OpenSsfMaliciousSource implements AdvisorySource {
     // The reviewer's severity word when the record carries one; an unworded record stays NONE rather than inventing
     // a score, since the gate acts on the malicious flag.
     private static Severity severityOf(JsonNode vuln) {
-        String word = vuln.path("database_specific").path("severity").asString(null);
-        if (word == null) {
-            return Severity.NONE;
-        }
-        return switch (word.toUpperCase(Locale.ROOT)) {
-            case "LOW" -> Severity.LOW;
-            case "MODERATE", "MEDIUM" -> Severity.MEDIUM;
-            case "HIGH" -> Severity.HIGH;
-            case "CRITICAL" -> Severity.CRITICAL;
-            default -> Severity.NONE;
-        };
+        return Severity.ofWord(vuln.path("database_specific").path("severity").asString(null), Severity.NONE);
     }
 
     // The advisory's CVE aliases, the keys the known-exploited catalogue uses and combined() de-duplicates by.

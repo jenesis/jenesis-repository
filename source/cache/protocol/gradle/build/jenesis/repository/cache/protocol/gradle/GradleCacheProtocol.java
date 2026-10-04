@@ -2,6 +2,7 @@ package build.jenesis.repository.cache.protocol.gradle;
 
 import module java.base;
 
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.cache.protocol.CacheProtocol;
 
 /**
@@ -46,18 +47,10 @@ public final class GradleCacheProtocol implements CacheProtocol {
         if (!handles(request.path())) {
             return Optional.empty();
         }
-        String digest = digest(request.path().substring(PREFIX.length()));
+        String digest = Checksums.sha256(request.path().substring(PREFIX.length()));
         // The Basic user name and password, both read off the request by the caller.
         return Optional.of(new Address(digest.substring(0, 4), digest,
                 request.project(), request.presentedKey(), Existing.DEDUPE));
     }
 
-    private static String digest(String value) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is required by the platform", e);
-        }
-    }
 }

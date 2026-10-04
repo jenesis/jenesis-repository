@@ -45,7 +45,7 @@ public final class DownloadsSection {
         }
         return section.get().payload().map(data -> new Facts(
                 data.path(COUNT_FIELD).asLong(0L),
-                instant(data.path(LAST_FIELD))));
+                Section.instant(data.path(LAST_FIELD))));
     }
 
     /**
@@ -72,16 +72,5 @@ public final class DownloadsSection {
             data.put(LAST_FIELD, last.toString());
         }
         return Section.derived(TAG, SCHEMA, updated, Signal.NEUTRAL, data);
-    }
-
-    private static Instant instant(JsonNode node) {
-        if (node.isMissingNode() || node.isNull()) {
-            return null;
-        }
-        try {
-            return Instant.parse(node.asString());
-        } catch (java.time.format.DateTimeParseException e) {
-            return null;
-        }
     }
 }

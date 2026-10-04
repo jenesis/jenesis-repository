@@ -21,6 +21,7 @@ import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.format.LifecycleMark;
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
@@ -515,24 +516,11 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
             }
             if (MAPPER.readTree(trimmed.getBytes(StandardCharsets.UTF_8)) instanceof ObjectNode entry
                     && version.equals(text(entry, "vers"))) {
-                byte[] cksum = hex(text(entry, "cksum"), 32);
+                byte[] cksum = Checksums.parse(text(entry, "cksum"), 32);
                 return cksum == null ? ProxyRelay.Declared.NONE : ProxyRelay.Declared.of("SHA-256", cksum);
             }
         }
         return ProxyRelay.Declared.NONE;
-    }
-
-    /** Decode a hex digest of exactly {@code bytes} bytes, or {@code null} when absent or malformed - so a malformed
-     *  checksum falls back to plain caching. */
-    static byte[] hex(String value, int bytes) {
-        if (value == null || value.length() != bytes * 2) {
-            return null;
-        }
-        try {
-            return HexFormat.of().parseHex(value);
-        } catch (IllegalArgumentException e) {
-            return null;
-        }
     }
 
     /**

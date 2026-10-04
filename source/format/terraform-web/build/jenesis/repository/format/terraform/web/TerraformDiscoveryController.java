@@ -3,7 +3,6 @@ package build.jenesis.repository.format.terraform.web;
 import module java.base;
 
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -33,8 +32,7 @@ public class TerraformDiscoveryController {
      * hostnames needs no configuration to say so.
      */
     @GetMapping(path = "/.well-known/terraform.json", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<String> discovery() {
-        return ResponseEntity.ok("{\"modules.v1\":\"" + prefix + "/v1/modules/\","
-                + "\"providers.v1\":\"" + prefix + "/v1/providers/\"}");
+    public Map<String, String> discovery() {
+        return Map.of("modules.v1", prefix + "/v1/modules/", "providers.v1", prefix + "/v1/providers/");
     }
 }

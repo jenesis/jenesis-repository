@@ -2,7 +2,7 @@ package build.jenesis.repository.format.terraform;
 
 import module java.base;
 
-import build.jenesis.repository.format.Checksums;
+import build.jenesis.repository.store.Checksums;
 
 /**
  * The two coordinate shapes Terraform's registry protocols address, and the store keys this format gives them: a

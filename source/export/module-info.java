@@ -21,6 +21,7 @@ open module build.jenesis.repository.export {
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.importer;
     requires build.jenesis.repository.scope;
+    requires build.jenesis.repository.settings;
     requires jakarta.servlet;
     requires tools.jackson.databind;
     requires spring.beans;

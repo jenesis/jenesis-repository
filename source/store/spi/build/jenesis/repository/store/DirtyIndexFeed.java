@@ -56,7 +56,6 @@ import module java.base;
  */
 public final class DirtyIndexFeed {
 
-
     private final ArtifactStore store;
     private final String dirtyPrefix;
 
@@ -220,7 +219,7 @@ public final class DirtyIndexFeed {
      *  prefix. A stable function of the coordinate, so re-marking coalesces onto one key; hashed so any coordinate
      *  string (with slashes, colons, whatever a format uses) becomes one traversal-free, fixed-length store segment. */
     private String keyFor(String coordinate) {
-        return dirtyPrefix + "/" + sha256Hex(coordinate);
+        return dirtyPrefix + "/" + Checksums.sha256(coordinate);
     }
 
     /** Marker body: a first line {@code "<version> <U|R>"} then the coordinate as the remainder, so a coordinate
@@ -238,15 +237,6 @@ public final class DirtyIndexFeed {
         long version = Long.parseLong(header.substring(0, space));
         boolean removed = header.charAt(space + 1) == 'R';
         return new Entry(coordinate, version, removed, marker.token());
-    }
-
-    private static String sha256Hex(String value) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException("SHA-256 is a required MessageDigest algorithm", impossible);
-        }
     }
 
     private static String strip(String prefix) {

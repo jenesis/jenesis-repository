@@ -20,6 +20,7 @@ import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
 import build.jenesis.repository.store.ArtifactDescriptor;
@@ -524,7 +525,7 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
                     // plaintext host - so it is screened, and a refused target falls through to a 404 (ProxyLeg clause
                     // 2).
                     return OutboundTargets.mayFollow(target, URI.create(root), allowInternal)
-                            ? new Dist(target, hex(text(entry.path("dist"), "shasum"), 20))
+                            ? new Dist(target, Checksums.parse(text(entry.path("dist"), "shasum"), 20))
                             : null;
                 } catch (IllegalArgumentException e) {
                     return null;
@@ -532,19 +533,6 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
             }
         }
         return null;
-    }
-
-    /** Decode a hex digest of exactly {@code bytes} bytes, or {@code null} when absent, empty or malformed, so an empty
-     *  {@code shasum} falls back to plain caching. */
-    private static byte[] hex(String value, int bytes) {
-        if (value == null || value.length() != bytes * 2) {
-            return null;
-        }
-        try {
-            return HexFormat.of().parseHex(value);
-        } catch (IllegalArgumentException e) {
-            return null;
-        }
     }
 
     /** Parse an upstream metadata document, or {@code null} when malformed, read as a miss rather than a

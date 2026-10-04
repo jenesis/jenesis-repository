@@ -131,12 +131,12 @@ public final class VerdictSection {
             return Optional.empty();
         }
         return section.get().payload().map(data -> new Recorded(
-                text(data.path(DIGEST_FIELD)),
+                Section.text(data.path(DIGEST_FIELD)),
                 verdict(data.path(VERDICT_FIELD)),
-                text(data.path(REFUSAL_FIELD)),
-                instant(data.path(SCREENED_AT_FIELD)),
-                text(data.path(PROFILE_FIELD)),
-                text(data.path(SOURCE_FIELD)),
+                Section.text(data.path(REFUSAL_FIELD)),
+                Section.instant(data.path(SCREENED_AT_FIELD)),
+                Section.text(data.path(PROFILE_FIELD)),
+                Section.text(data.path(SOURCE_FIELD)),
                 validators(data.path(VALIDATORS_FIELD)),
                 data.path(INSPECTION_LIMIT_FIELD).asLong(0L)));
     }
@@ -215,30 +215,11 @@ public final class VerdictSection {
         }
         List<Validator> validators = new ArrayList<>();
         for (JsonNode entry : node) {
-            String name = text(entry.path(NAME_FIELD));
+            String name = Section.text(entry.path(NAME_FIELD));
             if (name != null) {
-                validators.add(new Validator(name, text(entry.path(VERSION_FIELD))));
+                validators.add(new Validator(name, Section.text(entry.path(VERSION_FIELD))));
             }
         }
         return validators;
-    }
-
-    private static Instant instant(JsonNode node) {
-        if (node.isMissingNode() || node.isNull()) {
-            return null;
-        }
-        try {
-            return Instant.parse(node.asString());
-        } catch (java.time.format.DateTimeParseException e) {
-            return null;
-        }
-    }
-
-    private static String text(JsonNode node) {
-        if (node.isMissingNode() || node.isNull()) {
-            return null;
-        }
-        String value = node.asString();
-        return value.isBlank() ? null : value;
     }
 }

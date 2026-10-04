@@ -83,44 +83,6 @@ public final class ImportScreen implements ProxyFormat.Fetcher {
                 : null;
     }
 
-    /**
-     * The reason the URL an operator submitted must be refused under the current dial, or {@code null}: the edge shape,
-     * the one leg taking a dial. A request may carry the incumbent's credentials, so plaintext exposes them, and an
-     * unrestricted host makes the endpoint an SSRF against the deployment's own network.
-     *
-     * <p><b>One dial governs both halves</b>, {@code block-private-import-hosts}: separate dials would let an operator
-     * permit cleartext while the guard reads as on. An on-premises migration, usually private and plaintext, sets that
-     * dial.
-     *
-     * <p><b>An unresolvable host stays admissible</b>: it cannot be reached, and the source's own probe reports it
-     * better. The transport is judged first, so a plaintext URL pays no resolution.
-     */
-    public static String refusalReason(String url, boolean blockPrivateHosts) {
-        if (!blockPrivateHosts) {
-            return null;                                 // the single explicit opt-out, and it covers both halves
-        }
-        URI uri;
-        try {
-            uri = URI.create(url);
-        } catch (IllegalArgumentException _) {
-            return "the URL is malformed";
-        }
-        String scheme = uri.getScheme();
-        if (scheme == null || !(scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))) {
-            return "the URL is not an http(s) URL (scheme '" + scheme + "')";
-        }
-        if (!scheme.equalsIgnoreCase("https")) {
-            return "the URL is not https (scheme '" + scheme + "')";
-        }
-        String host = uri.getHost();
-        if (host == null || host.isBlank()) {
-            return "the URL names no host";
-        }
-        return PrivateHosts.resolvesToPrivate(host)
-                ? "the host resolves to a private, loopback, link-local or cloud-metadata address"
-                : null;
-    }
-
     @Override
     public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) throws IOException {
         return delegate.fetch(screen(url), requestHeaders);

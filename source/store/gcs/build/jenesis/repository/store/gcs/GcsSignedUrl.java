@@ -1,5 +1,6 @@
 package build.jenesis.repository.store.gcs;
 
+import build.jenesis.repository.store.Checksums;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -56,8 +57,8 @@ final class GcsSignedUrl {
         query.forEach((name, value) -> canonicalQuery.append(canonicalQuery.isEmpty() ? "" : "&")
                 .append(encode(name, false)).append('=').append(encode(value, false)));
         String canonicalRequest = "GET\n" + path + "\n" + canonicalQuery + "\nhost:" + host + "\n\nhost\nUNSIGNED-PAYLOAD";
-        String stringToSign = ALGORITHM + "\n" + stamp + "\n" + scope + "\n" + hex(sha256(canonicalRequest));
-        String signature = hex(signer.sign(stringToSign.getBytes(StandardCharsets.UTF_8)));
+        String stringToSign = ALGORITHM + "\n" + stamp + "\n" + scope + "\n" + Checksums.sha256(canonicalRequest);
+        String signature = HexFormat.of().formatHex(signer.sign(stringToSign.getBytes(StandardCharsets.UTF_8)));
         return URI.create(endpoint.getScheme() + "://" + host + path + "?" + canonicalQuery + "&X-Goog-Signature=" + signature);
     }
 
@@ -77,15 +78,4 @@ final class GcsSignedUrl {
         return out.toString();
     }
 
-    private static byte[] sha256(String value) {
-        try {
-            return MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-        } catch (NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException(impossible);
-        }
-    }
-
-    private static String hex(byte[] bytes) {
-        return HexFormat.of().formatHex(bytes);
-    }
 }

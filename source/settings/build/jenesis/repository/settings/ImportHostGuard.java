@@ -44,12 +44,12 @@ public final class ImportHostGuard {
     }
 
     /**
-     * The reason an import URL must be refused, or {@code null} when the migration may proceed: the screen both import
-     * legs (the {@code /api/repository/import} controller and the console migration panel) call. The transport must be
+     * The reason an import URL must be refused, or {@code null} when the migration may proceed: the screen every leg
+     * that submits one calls: the {@code /api/repository/import} controller, the console migration panel, the import
+     * edge and an export. The transport must be
      * {@code https} ({@link PrivateHostGuard#cleartextRefusal(URI)}), since an import may carry the incumbent's
      * credentials, and the host must not resolve into a {@link PrivateHostGuard#blocked(InetAddress) blocked range}.
-     * One dial governs both halves, so an operator cannot opt out of one while believing the other still holds; the
-     * import edge ({@code ImportScreen.refusalReason}) applies the same decision.
+     * One dial governs both halves, so an operator cannot opt out of one while believing the other still holds.
      *
      * <p>An unresolvable host is admitted, unlike in {@link PrivateHostGuard#refusalReason(URI, boolean)}: it cannot be
      * reached, and the import source's own probe reports it better. This judges only the submitted URL; the URLs a

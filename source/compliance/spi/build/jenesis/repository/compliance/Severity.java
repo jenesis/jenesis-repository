@@ -76,6 +76,21 @@ public enum Severity {
         return first.compareTo(second) >= 0 ? first : second;
     }
 
+    /**
+     * The band an advisory names in words - {@code low}, {@code medium} (or {@code moderate}, or Socket's
+     * {@code middle}), {@code high}, {@code critical}, in any case - or {@code fallback} for any other word or none:
+     * a source chooses whether a word it cannot read is {@link #UNKNOWN} or {@link #NONE}.
+     */
+    public static Severity ofWord(String word, Severity fallback) {
+        return switch (word == null ? "" : word.toLowerCase(Locale.ROOT)) {
+            case "low" -> LOW;
+            case "medium", "moderate", "middle" -> MEDIUM;
+            case "high" -> HIGH;
+            case "critical" -> CRITICAL;
+            default -> fallback;
+        };
+    }
+
     public static Severity ofScore(double score) {
         if (score >= 9.0) {
             return CRITICAL;

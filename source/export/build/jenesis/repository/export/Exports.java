@@ -3,11 +3,11 @@ package build.jenesis.repository.export;
 import module java.base;
 import build.jenesis.repository.export.http.HttpExportTarget;
 import build.jenesis.repository.format.ExportTarget;
-import build.jenesis.repository.importer.ImportScreen;
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.store.JobState;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.settings.ImportHostGuard;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -69,7 +69,7 @@ public final class Exports {
         if (url == null || url.isBlank()) {
             return new Started(400, null, "url is required: the URL the format's client would be pointed at");
         }
-        String refusal = ImportScreen.refusalReason(url, blockPrivateHosts());
+        String refusal = ImportHostGuard.refusalReason(url, blockPrivateHosts());
         if (refusal != null) {
             return new Started(400, null, "export url is refused: " + refusal + "; an export sends the repository's "
                     + "contents and a credential, so it must be an https URL to a public host (set "

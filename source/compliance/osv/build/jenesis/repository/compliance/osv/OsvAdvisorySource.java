@@ -167,14 +167,8 @@ public final class OsvAdvisorySource implements AdvisorySource {
         }
         String word = vuln.path("database_specific").path("severity").asString(null);
         if (word != null) {
-            return switch (word.toUpperCase(Locale.ROOT)) {
-                case "LOW" -> Severity.LOW;
-                case "MODERATE", "MEDIUM" -> Severity.MEDIUM;
-                case "HIGH" -> Severity.HIGH;
-                case "CRITICAL" -> Severity.CRITICAL;
-                // An unrecognised word is a vocabulary this source cannot read, not "nothing severe".
-                default -> Severity.UNKNOWN;
-            };
+            // An unrecognised word is a vocabulary this source cannot read, not "nothing severe".
+            return Severity.ofWord(word, Severity.UNKNOWN);
         }
         // A malicious-package record (OpenSSF MAL-) carries no score by design: its verdict is the malicious flag.
         // Banded UNKNOWN it would outrank CRITICAL and a severity floor would reject what the gate's rule quarantines.

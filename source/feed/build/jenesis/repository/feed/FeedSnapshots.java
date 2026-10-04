@@ -3,6 +3,7 @@ package build.jenesis.repository.feed;
 import module java.base;
 import module org.slf4j;
 
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Documents;
 
@@ -135,7 +136,7 @@ public final class FeedSnapshots {
         Objects.requireNonNull(snapshot, "snapshot");
         Objects.requireNonNull(ttl, "ttl");
         Instant now = clock.instant();
-        String digest = digest(snapshot);
+        String digest = Checksums.sha256(snapshot);
         String key = bodyKey(digest);
         if (!store.exists(key)) {
             // The body is durable before anything references it; an identical catalogue writes nothing, the key being
@@ -211,14 +212,6 @@ public final class FeedSnapshots {
 
     private String bodyKey(String digest) {
         return ArtifactStore.key(namespace + '/' + BODIES + '/' + digest);
-    }
-
-    private static String digest(byte[] content) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is required of every JVM", e);
-        }
     }
 
     /** The pointer document as {@link Properties}: a fixed handful of fields. */

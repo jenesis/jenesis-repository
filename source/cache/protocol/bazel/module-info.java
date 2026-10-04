@@ -8,6 +8,7 @@
  */
 module build.jenesis.repository.cache.protocol.bazel {
     requires build.jenesis.repository.cache.protocol;
+    requires build.jenesis.repository.store;
     exports build.jenesis.repository.cache.protocol.bazel;
     provides build.jenesis.repository.cache.protocol.CacheProtocol
             with build.jenesis.repository.cache.protocol.bazel.BazelCacheProtocol;

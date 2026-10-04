@@ -49,7 +49,7 @@ public final class AttestationGatePolicyProvider implements GatePolicyProvider {
      *  readable key throws, so a bad save rolls back. */
     static List<PublicKey> keys(String pem) {
         List<PublicKey> keys = new ArrayList<>();
-        java.util.regex.Matcher block = Pattern.compile(
+        Matcher block = Pattern.compile(
                 "-----BEGIN PUBLIC KEY-----(.*?)-----END PUBLIC KEY-----", Pattern.DOTALL).matcher(pem);
         while (block.find()) {
             keys.add(publicKey(Base64.getMimeDecoder().decode(block.group(1).replaceAll("\\s", ""))));

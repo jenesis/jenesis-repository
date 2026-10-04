@@ -1,6 +1,7 @@
 package build.jenesis.repository.store;
 
 import module java.base;
+import module org.slf4j;
 
 /**
  * A running total under one store key, moved by signed deltas under compare-and-set and recomputed from truth by a
@@ -83,7 +84,7 @@ public final class StoredCounter {
 
     private static final Map<String, Deferred> DEFERRED = new ConcurrentHashMap<>();
     private static final AtomicReference<ScheduledExecutorService> FLUSHER = new AtomicReference<>();
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(StoredCounter.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(StoredCounter.class);
 
     /** The deferred deltas as the node's held writes list them, written now on a thread of their own. */
     private static final HeldWrites.Holder HOLDER = new HeldWrites.Holder() {

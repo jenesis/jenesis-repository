@@ -1,8 +1,8 @@
 package build.jenesis.repository.gate;
 
-
 import module java.base;
 
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.events.EventSink;
@@ -119,7 +119,9 @@ public final class QuarantineLog {
     public void record(Instant when, String path, String coordinate, Verdict verdict, List<String> reasons,
                        List<String> rules) throws IOException {
         String line = serialize(when, path, coordinate, verdict, reasons, rules);
-        store.write(eventKey(RecentIndex.orderKey(when.toEpochMilli()) + "-" + digest(path)),
+        // Named by the path's digest, so two paths withheld in the same millisecond never share an event object; hex
+        // carries no '-', so RecentIndex.epochMilli splits the name on its first dash.
+        store.write(eventKey(RecentIndex.orderKey(when.toEpochMilli()) + "-" + Checksums.sha256(path)),
                 new ByteArrayInputStream(line.getBytes(StandardCharsets.UTF_8)));
         indexLatest(when, path, line);
         // Best-effort, and a no-op without an installed event sink.
@@ -267,7 +269,7 @@ public final class QuarantineLog {
      * the objects whose name carries this path's digest.
      */
     public void discarded(String path) throws IOException {
-        String suffix = "-" + digest(path);
+        String suffix = "-" + Checksums.sha256(path);
         String after = "";
         for (List<String> names = page(ROOT, after); !names.isEmpty(); names = page(ROOT, after)) {
             after = names.getLast();
@@ -312,28 +314,16 @@ public final class QuarantineLog {
         return field.isEmpty() ? List.of() : List.of(REASON_SEPARATOR.split(field));
     }
 
-    /** The hex SHA-256 of a request path, so two paths withheld in the same millisecond never share an event object.
-     *  Contains no {@code '-'}, so {@link RecentIndex#epochMilli} splits the name on its first dash. */
-    private static String digest(String path) {
-        try {
-            return HexFormat.of().formatHex(
-                    MessageDigest.getInstance("SHA-256").digest(path.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);                 // SHA-256 is a required JDK algorithm
-        }
-    }
-
-
     /** One event object's key under {@link #ROOT}. */
     private static String eventKey(String name) {
         return ROOT + "/" + name;
     }
 
     /**
-     * The index row's key under {@link #INDEX_ROOT}: the path's {@link #digest}, which is fixed-width, so a deep path
+     * The index row's key under {@link #INDEX_ROOT}: the path's SHA-256, which is fixed-width, so a deep path
      * never overruns a filesystem store's 255-byte name limit. The path itself is the row body's second field.
      */
     private static String indexKey(String path) {
-        return INDEX_ROOT + "/" + digest(path);
+        return INDEX_ROOT + "/" + Checksums.sha256(path);
     }
 }

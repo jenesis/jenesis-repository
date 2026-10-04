@@ -21,6 +21,7 @@ import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
 import build.jenesis.repository.store.ArtifactDescriptor;
@@ -483,27 +484,15 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
             }
             // The archive checksum: :sha256 preferred, else :sha1.
             JsonNode declared = podspec.path("source");
-            byte[] sha256 = decodeHex(text(declared, "sha256"), 32);
+            byte[] sha256 = Checksums.parse(text(declared, "sha256"), 32);
             if (sha256 != null) {
                 return new Source(source, "SHA-256", sha256);
             }
-            byte[] sha1 = decodeHex(text(declared, "sha1"), 20);
+            byte[] sha1 = Checksums.parse(text(declared, "sha1"), 20);
             if (sha1 != null) {
                 return new Source(source, "SHA-1", sha1);
             }
             return new Source(source, null, null);
-        } catch (IllegalArgumentException e) {
-            return null;
-        }
-    }
-
-    /** Decode a hex digest of exactly {@code bytes} bytes to its raw bytes, or {@code null} when absent or malformed. */
-    private static byte[] decodeHex(String value, int bytes) {
-        if (value == null || value.length() != bytes * 2) {
-            return null;
-        }
-        try {
-            return HexFormat.of().parseHex(value);
         } catch (IllegalArgumentException e) {
             return null;
         }

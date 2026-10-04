@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.ivy;
 
 import module java.base;
+import module org.slf4j;
 
 import build.jenesis.repository.blobs.ProxyLeg;
 import build.jenesis.repository.blobs.ProxyRelay;
@@ -54,7 +55,7 @@ import build.jenesis.repository.format.PublishedExport;
 public final class IvyFormat implements RepositoryFormat, ArtifactLayout, ArtifactSignatures.Delegating, RepositoryExporter,
         ProxyLeg {
 
-    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(IvyFormat.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(IvyFormat.class);
 
     /** The coordinate space these artifacts belong to, spelled rather than taken from the Maven format: an ecosystem
      *  name is a vulnerability database's vocabulary, shared rather than owned by whichever format declared it

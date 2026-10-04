@@ -46,8 +46,8 @@ public final class PublishedSection {
             return Optional.empty();
         }
         return section.get().payload().map(data -> {
-            Instant at = instant(data.path(AT_FIELD));
-            Instant changed = instant(data.path(CHANGED_FIELD));
+            Instant at = Section.instant(data.path(AT_FIELD));
+            Instant changed = Section.instant(data.path(CHANGED_FIELD));
             return new Facts(at, data.path(PRERELEASE_FIELD).asBoolean(false), data.path(PINNED_FIELD).asBoolean(false),
                     changed == null ? at : changed);
         });
@@ -109,16 +109,5 @@ public final class PublishedSection {
         data.put(PRERELEASE_FIELD, prerelease);
         data.put(PINNED_FIELD, pinned);
         return Section.derived(TAG, SCHEMA, updated, Signal.NEUTRAL, data);
-    }
-
-    private static Instant instant(JsonNode node) {
-        if (node.isMissingNode() || node.isNull()) {
-            return null;
-        }
-        try {
-            return Instant.parse(node.asString());
-        } catch (java.time.format.DateTimeParseException e) {
-            return null;
-        }
     }
 }

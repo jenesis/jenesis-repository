@@ -10,7 +10,7 @@ import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.walk.ScreenedNames;
 import build.jenesis.repository.walk.Traversal;
-import build.jenesis.repository.format.Checksums;
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.format.jvm.MavenMetadataSettingsContributor;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;

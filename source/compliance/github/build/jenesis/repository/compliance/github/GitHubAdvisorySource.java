@@ -231,13 +231,7 @@ public final class GitHubAdvisorySource implements AdvisorySource {
         if (score.isNumber() && score.asDouble() > 0) {
             return Severity.ofScore(score.asDouble());
         }
-        return switch (advisory.path("severity").asString("").toLowerCase(Locale.ROOT)) {
-            case "low" -> Severity.LOW;
-            case "medium", "moderate" -> Severity.MEDIUM;
-            case "high" -> Severity.HIGH;
-            case "critical" -> Severity.CRITICAL;
-            default -> Severity.NONE;
-        };
+        return Severity.ofWord(advisory.path("severity").asString(null), Severity.NONE);
     }
 
     // The versions fixing this advisory for the queried package: each matching vulnerability's first_patched_version.
