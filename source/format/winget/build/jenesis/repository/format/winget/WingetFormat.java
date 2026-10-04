@@ -6,6 +6,7 @@ import module tools.jackson.databind;
 import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.blobs.BlobExport;
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.blobs.ComposedLayout;
 import build.jenesis.repository.format.ExportTarget;
 import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.blobs.Blobs;
@@ -46,8 +47,8 @@ import build.jenesis.repository.store.Publication;
  * runs through {@link #blobKeys}/{@link #servedPaths}. OSV publishes no winget feed, so vulnerability screening finds
  * nothing while licence and malicious-package screening still apply.
  */
-public final class WingetFormat implements RepositoryFormat, ArtifactLayout, BlobLayout, RepositoryImporter.Delegating,
-        RepositoryExporter {
+public final class WingetFormat implements RepositoryFormat, ArtifactLayout, ComposedLayout,
+        RepositoryImporter.Delegating, RepositoryExporter {
 
     /** The ecosystem name this format's artifacts report, distinct from {@link #name()}, the routing id: the product's
      *  own spelling, as {@code CocoaPods} and {@code RubyGems} are. */
@@ -152,6 +153,8 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
                     packageManifest(repo, sub.substring(PACKAGE_MANIFESTS.length()), exchange, blobs);
                 } else if (sub.startsWith(INSTALLERS)) {
                     download(repo, sub.substring(INSTALLERS.length()), exchange, blobs);
+                } else if (sub.startsWith(MANIFESTS)) {
+                    manifest(repo, sub.substring(MANIFESTS.length()), exchange, blobs);
                 } else {
                     exchange.respond(404);
                 }
@@ -246,6 +249,17 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
     }
 
     // ---- reads
+
+    /** A version's manifest as it was published, at the path it was published to: what another deployment importing
+     *  this one lays the version down from, before its installers. A withheld one is absent. */
+    private void manifest(String repo, String rest, FormatExchange exchange, Blobs blobs) throws IOException {
+        String[] parts = rest.split("/", -1);
+        if (parts.length != 2 || Keys.unsafe(parts[0]) || Keys.unsafe(parts[1])) {
+            exchange.respond(404);
+            return;
+        }
+        blobs.answer(manifestKey(repo, parts[0], parts[1]), exchange, "application/json");
+    }
 
     /** The source's own description: who it is, and which protocol versions it speaks. */
     private void information(String repo, FormatExchange exchange) throws IOException {
@@ -374,7 +388,7 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
     // ---- layout
 
     /** An installer, {@code /winget/<repo>/installers/<identifier>/<version>/<file>}, is served from its blob
-     *  pointer. */
+     *  pointer, and a version's manifest, {@code /winget/<repo>/manifests/<identifier>/<version>}, from its own. */
     @Override
     public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
         Optional<ArtifactDescriptor> described = describedVersion(requestPath);
@@ -386,9 +400,30 @@ public final class WingetFormat implements RepositoryFormat, ArtifactLayout, Blo
         String identifier = described.get().coordinate();
         String version = described.get().version();
         String file = requestPath.substring(requestPath.lastIndexOf('/') + 1);
+        if (requestPath.equals(PREFIX + repo + "/" + MANIFESTS + identifier + "/" + version)) {
+            return BlobLayout.stored(manifestKey(repo, identifier, version), store);
+        }
         return requestPath.equals(PREFIX + repo + "/" + INSTALLERS + identifier + "/" + version + "/" + file)
                 ? BlobLayout.stored(installerKey(repo, identifier, version, file), store)
                 : Optional.empty();
+    }
+
+    /** A version is its manifest and its installers, the manifest first: an installer is accepted only under a version
+     *  whose manifest is already there. */
+    @Override
+    public List<String> contents(String coordinate, String version, ArtifactStore store) throws IOException {
+        List<String> served = servedPaths(coordinate, version, store);
+        if (served.isEmpty()) {
+            return List.of();
+        }
+        List<String> contents = new ArrayList<>();
+        for (String repo : store.list("winget")) {
+            if (store.exists(manifestKey(repo, coordinate, version))) {
+                contents.add(PREFIX + repo + "/" + MANIFESTS + coordinate + "/" + version);
+            }
+        }
+        contents.addAll(served);
+        return List.copyOf(contents);
     }
 
     @Override

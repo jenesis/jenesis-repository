@@ -19,14 +19,19 @@ import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
  *       changes.</li>
  * </ul>
  * {@code SHA256SUMS} and its signature are derived and signed with this repository's key, so an incumbent's are skipped
- * with every other asset. A provider's file name must name the type and version of its folders. Everything lands in one
- * {@code /terraform/terraform/...} registry.
+ * with every other asset. A provider's file name must name the type and version of its folders. These land in one
+ * {@code /terraform/terraform/...} registry. A path of this format's own served shape -
+ * {@code <registry>/providers/<namespace>/<type>/<version>/<file>.zip} or
+ * {@code <registry>/modules/<namespace>/<name>/<system>/<version>.tar.gz}, another deployment's listing - keeps its
+ * registry, and a module comes as the archive it is served as.
  */
 public final class TerraformImporter implements RepositoryImporter {
 
     private static final String REPO = "terraform";
 
     private static final String ZIP = ".zip";
+
+    private static final String TAR_GZ = ".tar.gz";
 
     private static final String PROVIDER = "terraform-provider-";
 
@@ -74,6 +79,12 @@ public final class TerraformImporter implements RepositoryImporter {
 
     private static Optional<Target> target(String path) {
         String[] segments = RepositoryImporter.importablePath(path, "terraform").split("/");
+        if (segments.length == 6 && segments[1].equals("providers") && segments[5].endsWith(ZIP)
+                && segments[5].startsWith(PROVIDER + segments[3] + "_" + segments[4] + "_")
+                || segments.length == 6 && segments[1].equals("modules") && segments[5].endsWith(TAR_GZ)
+                && segments[5].length() > TAR_GZ.length()) {
+            return Optional.of(new Target("/terraform/" + String.join("/", segments), false));
+        }
         if (segments.length < 4 || !segments[segments.length - 1].endsWith(ZIP)) {
             return Optional.empty();
         }

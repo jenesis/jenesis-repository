@@ -22,7 +22,8 @@ public final class HomebrewImporter implements RepositoryImporter {
     public Optional<ArtifactDescriptor> importTarget(String sourcePath) {
         // RepositoryImporter clause 4: a traversal-shaped source path is refused by name.
         String relative = RepositoryImporter.importablePath(sourcePath, "homebrew");
-        return new HomebrewFormat().describe("/homebrew/" + relative);
+        // A path that is no bottle is declined rather than screened under a coordinate it does not carry.
+        return new HomebrewFormat().describe("/homebrew/" + relative).filter(bottle -> bottle.coordinate() != null);
     }
 
     @Override

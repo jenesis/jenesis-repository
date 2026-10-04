@@ -136,7 +136,7 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Path
 
     private static final int METADATA_LIMIT = 1024 * 1024;
 
-    private static final int MANIFEST_LIMIT = 1024 * 1024;
+    static final int MANIFEST_LIMIT = 1024 * 1024;
 
     @Override
     public String name() {

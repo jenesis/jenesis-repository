@@ -8,6 +8,7 @@ import build.jenesis.repository.format.huggingface.HuggingFaceImporter;
 import build.jenesis.repository.format.conan.ConanImporter;
 import build.jenesis.repository.format.winget.WingetImporter;
 import build.jenesis.repository.format.swift.SwiftImporter;
+import build.jenesis.repository.format.terraform.TerraformImporter;
 import build.jenesis.repository.format.cargo.CargoImporter;
 import build.jenesis.repository.format.cocoapods.CocoaPodsImporter;
 import build.jenesis.repository.format.composer.ComposerImporter;
@@ -22,9 +23,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * A format whose served paths name a repository of their own - an RPM repository, a conda channel, a Composer, Cargo,
- * Helm, CocoaPods, Hugging Face, Conan, winget or Swift registry - imports a path of that shape into the repository it
- * names, so another deployment's listing, which names each file where it is served, is laid out where the source served
- * it rather than collapsed into the importer's one default. Ivy and Homebrew lay a file out where it was served.
+ * Helm, CocoaPods, Hugging Face, Conan, winget, Swift or Terraform registry - imports a path of that shape into the
+ * repository it names, so another deployment's listing, which names each file where it is served, is laid out where the
+ * source served it rather than collapsed into the importer's one default. Ivy and Homebrew lay a file out where it was
+ * served.
  */
 class ServedShapeImportTest {
 
@@ -43,6 +45,10 @@ class ServedShapeImportTest {
                 Arguments.of(new ConanImporter(), "conan",
                         "recipes/v2/conans/zlib/1.3/_/_/revisions/abc123/files/conanfile.py"),
                 Arguments.of(new WingetImporter(), "winget", "packages/installers/Acme.Tool/1.0.0/tool.exe"),
+                Arguments.of(new WingetImporter(), "winget", "packages/manifests/Acme.Tool/1.0.0"),
+                Arguments.of(new TerraformImporter(), "terraform",
+                        "registry/providers/acme/widget/1.0.0/terraform-provider-widget_1.0.0_linux_amd64.zip"),
+                Arguments.of(new TerraformImporter(), "terraform", "registry/modules/acme/network/aws/1.0.0.tar.gz"),
                 Arguments.of(new SwiftImporter(), "swift", "registry/acme/Widget/1.0.0.zip"));
     }
 
