@@ -5,6 +5,7 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.inventory.DependencySection;
 import build.jenesis.repository.inventory.ProvenanceSection;
 import build.jenesis.repository.inventory.SignatureSection;
+import build.jenesis.repository.inventory.SignatureSummaries;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.metadata.MetadataProvider;
 import build.jenesis.repository.metadata.MetadataStore;
@@ -49,6 +50,24 @@ class FileFactsTest {
 
     private Optional<Section> section(String tag) throws IOException {
         return metadata.section(ECO, COORD, VERSION, tag);
+    }
+
+    @Test
+    void a_file_s_own_signature_answers_for_its_path_and_the_version_s_for_the_version() throws IOException {
+        // Paths this module's test format describes, so the read resolves them to their coordinate version.
+        String jar = "/test/signed/1.0/signed-1.0.bin";
+        String pom = "/test/signed/1.0/signed-1.0.pom";
+        inventory().recording(ECO, "signed", "1.0", false, NOW).file(pom)
+                .signature("ABSENT", null, null, null, null, null).commit();
+        inventory().recording(ECO, "signed", "1.0", false, NOW).file(jar)
+                .signature("VALID", "openpgp:ABCD", "STRONG", jar + ".asc", "configured", null).commit();
+
+        assertThat(SignatureSummaries.of(store, jar)).get().extracting(SignatureSection.Summary::outcome)
+                .as("the signed file answers for itself").isEqualTo("VALID");
+        assertThat(SignatureSummaries.of(store, pom)).get().extracting(SignatureSection.Summary::outcome)
+                .isEqualTo("ABSENT");
+        assertThat(SignatureSummaries.of(store, ECO, "signed", "1.0")).get()
+                .extracting(SignatureSection.Summary::outcome).as("the version, its weakest file").isEqualTo("ABSENT");
     }
 
     @Test

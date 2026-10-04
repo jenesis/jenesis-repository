@@ -2,6 +2,7 @@ package build.jenesis.repository.inventory;
 
 import module java.base;
 import build.jenesis.repository.metadata.MetadataProvider;
+import build.jenesis.repository.metadata.Section;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 
@@ -22,13 +23,25 @@ public final class SignatureSummaries {
     private SignatureSummaries() {
     }
 
-    /** The signature summary recorded for whatever coordinate version a request path resolves to. */
+    /**
+     * The signature summary recorded for the file at a request path: its own, from the version document of the
+     * coordinate version the path resolves to, else the version's - the weakest among its files - for a file whose
+     * own was never recorded. A version's jar is signed though its POM is not, and asking about the jar answers the
+     * jar.
+     */
     public static Optional<SignatureSection.Summary> of(ArtifactStore store, String path) {
         Optional<ArtifactDescriptor> descriptor = new StoreRepositoryInventory(store).describe(path);
-        if (descriptor.isEmpty()) {
+        if (descriptor.isEmpty() || descriptor.get().coordinate() == null || descriptor.get().version() == null) {
             return Optional.empty();
         }
-        return of(store, descriptor.get().ecosystem(), descriptor.get().coordinate(), descriptor.get().version());
+        try {
+            Optional<Section> section = MetadataProvider.installed().over(store).section(descriptor.get().ecosystem(),
+                    descriptor.get().coordinate(), descriptor.get().version(), SignatureSection.TAG);
+            SignatureSection.Summary own = SignatureSection.files(section).get(path);
+            return own != null ? Optional.of(own) : SignatureSection.summary(section);
+        } catch (IOException | RuntimeException unreadable) {
+            return Optional.empty();
+        }
     }
 
     /**
