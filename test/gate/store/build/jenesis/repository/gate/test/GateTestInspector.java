@@ -33,6 +33,8 @@ import build.jenesis.repository.compliance.QualityInspector;
  *   <li>{@code /gatetest/inspectorbroken/...}- a CLAIMED artifact whose inspector raises an {@link Error}: the runtime
  *       or module graph giving way under one guest, which must never be filed as a clean verdict on the artifact.
  * </ul>
+ *
+ * <p>A path ending {@code .declaration} completes the declaration of the files in its directory.
  */
 public final class GateTestInspector implements QualityInspector {
 
@@ -41,6 +43,15 @@ public final class GateTestInspector implements QualityInspector {
     @Override
     public boolean handles(String path) {
         return path.startsWith(PREFIX);
+    }
+
+    /** A {@code .declaration} completes its own directory, as a POM completes its version's: its arrival re-assesses
+     *  the held files beside it. */
+    @Override
+    public Optional<String> completes(String path) {
+        int slash = path.lastIndexOf('/');
+        return handles(path) && path.endsWith(".declaration") ? Optional.of(path.substring(0, slash + 1))
+                : Optional.empty();
     }
 
     @Override

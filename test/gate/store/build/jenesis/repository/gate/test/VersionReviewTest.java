@@ -87,6 +87,53 @@ class VersionReviewTest {
                 .doesNotContain("Version held");
     }
 
+    /** Publish {@code path} through the screen as a deployment wires it, observing as well as intercepting: an
+     *  accepted upload is laid out and its observers told, as the dispatch does. Answers the screen's disposition. */
+    private PublishInterceptor.Disposition publishObserved(String path) throws IOException {
+        ComplianceGate clean = new ComplianceGate(new VulnerabilityPolicy(Severity.CRITICAL, Verdict.QUARANTINE),
+                AdvisorySource.none());
+        ComplianceScreen screen = new ComplianceScreen(() -> clean);
+        Publication publication = new Publication(store, List.of(screen), List.of(screen));
+        ArtifactDescriptor descriptor = new ArtifactDescriptor(ECOSYSTEM, COORD, VERSION, path, null, false, null, -1L);
+        byte[] body = "declares".getBytes(StandardCharsets.UTF_8);
+        PublishInterceptor.Disposition disposition =
+                publication.screen(descriptor, new ByteArrayInputStream(body)).disposition();
+        if (disposition == PublishInterceptor.Disposition.ACCEPT) {
+            publication.link(path, publication.storeBlob(new ByteArrayInputStream(body)));
+            publication.published(descriptor);
+        }
+        return disposition;
+    }
+
+    @Test
+    void a_declaration_its_held_siblings_wait_for_is_admitted_so_its_arrival_can_release_them() throws IOException {
+        // The jar waits for the document that declares it - held while that evidence is in flight - and a declaration
+        // held with its version could never be the publish that releases it.
+        hold("/gatetest/clean/lib/1.0/lib-1.0.jar");
+        String declaration = "/gatetest/clean/lib/1.0/lib-1.0.declaration";
+        ComplianceGate clean = new ComplianceGate(new VulnerabilityPolicy(Severity.CRITICAL, Verdict.QUARANTINE),
+                AdvisorySource.none());
+        Publication publication = new Publication(store, List.of(new ComplianceScreen(() -> clean)));
+
+        assertThat(publication.screen(new ArtifactDescriptor(ECOSYSTEM, COORD, VERSION, declaration, null, false,
+                null, -1L), new ByteArrayInputStream("declares".getBytes(StandardCharsets.UTF_8))).disposition())
+                .isEqualTo(PublishInterceptor.Disposition.ACCEPT);
+    }
+
+    @Test
+    void a_declaration_lands_held_with_its_version_when_its_siblings_stay_held() throws IOException {
+        String declaration = "/gatetest/clean/lib/1.0/lib-1.0.declaration";
+        hold(JAR);
+
+        assertThat(publishObserved(declaration)).as("admitted, so it could have released them")
+                .isEqualTo(PublishInterceptor.Disposition.ACCEPT);
+
+        assertThat(new Publication(store).located(declaration)).as("then held with its version").isEmpty();
+        assertThat(new QuarantineLog(store).latest(declaration)).get().satisfies(event ->
+                assertThat(event.rules()).containsExactly("Version held"));
+        assertThat(HeldSubjects.paths(store, ECOSYSTEM, COORD, VERSION)).contains(JAR, declaration);
+    }
+
     @Test
     void a_release_of_one_file_releases_every_held_file_of_its_version() throws IOException {
         hold(JAR);
