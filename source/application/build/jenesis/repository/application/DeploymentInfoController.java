@@ -16,7 +16,7 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.compliance.AdvisorySignal;
 import build.jenesis.repository.compliance.AdvisorySource;
-import build.jenesis.repository.compliance.ProvenanceSigner;
+import build.jenesis.repository.compliance.ComplianceSources;
 import build.jenesis.repository.settings.ModuleCapability;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
@@ -42,9 +42,8 @@ public class DeploymentInfoController {
     private final RepositoryProperties properties;
     private final ProxyFormat.Fetcher upstreamFetcher;
     private final TokenExchange tokenExchange;
-    private final AdvisorySource advisories;
-    private final List<AdvisorySignal> advisorySignals;
-    private final ProvenanceSigner provenanceSigner;
+    /** Asked at each request, so a feed or signer switched on is reported at once. */
+    private final ComplianceSources sources;
     private final Settings settings;
     /** The effective-value chain both reads resolve through - an operator's pin over the stored value over the
      *  deployment environment - held composed so no read can miss the pin leg. */
@@ -58,16 +57,13 @@ public class DeploymentInfoController {
 
     public DeploymentInfoController(Repositories repositories, RepositoryProperties properties,
                                     ProxyFormat.Fetcher upstreamFetcher, TokenExchange tokenExchange,
-                                    AdvisorySource advisories, List<AdvisorySignal> advisorySignals,
-                                    ProvenanceSigner provenanceSigner, Settings settings, Environment environment,
+                                    ComplianceSources sources, Settings settings, Environment environment,
                                     PinnedSettings pins) {
         this.repositories = repositories;
         this.properties = properties;
         this.upstreamFetcher = upstreamFetcher;
         this.tokenExchange = tokenExchange;
-        this.advisories = advisories;
-        this.advisorySignals = advisorySignals;
-        this.provenanceSigner = provenanceSigner;
+        this.sources = sources;
         this.settings = settings;
         this.effective = pins.effective(settings, environment);
     }
@@ -86,7 +82,7 @@ public class DeploymentInfoController {
                 FirstRunHardening.firstRun(settings), DECLARED, effective);
         return new ConfigView(properties.getStore(), proxy,
                 properties.isAuth(), licenseAllowed, licenseUnknown,
-                threshold, advisories != AdvisorySource.none(), hardening);
+                threshold, sources.advisories() != AdvisorySource.none(), hardening);
     }
 
     /** One dial's value through {@link #effective}, or {@code fallback} when nothing in the chain sets it. */
@@ -136,7 +132,7 @@ public class DeploymentInfoController {
                     format instanceof ArtifactLayout layout ? layout.ecosystem() : null));
         }
         List<SignalColumnView> signals = new ArrayList<>();
-        for (AdvisorySignal signal : advisorySignals) {
+        for (AdvisorySignal signal : sources.advisorySignals()) {
             signals.add(new SignalColumnView(signal.name(), signal.label()));
         }
         // Enumerated from the discovered contributors; a module named only by a leftover stored document is not
@@ -150,10 +146,10 @@ public class DeploymentInfoController {
         // context's beans can answer.
         return new CapabilitiesView(1, formatViews, importSources, signals, moduleViews, new FeaturesView(
                 advisoryModule,
-                advisories != AdvisorySource.none(),
+                sources.advisories() != AdvisorySource.none(),
                 repositories.stagingInstalled(),
                 repositories.retentionSweeper().isPresent(),
-                provenanceSigner.enabled(),
+                sources.provenanceSigner().enabled(),
                 upstreamFetcher != ProxyFormat.Fetcher.NONE,
                 tokenExchange != TokenExchange.NONE,
                 rateLimiting,

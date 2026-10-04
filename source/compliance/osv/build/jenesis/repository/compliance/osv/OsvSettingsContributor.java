@@ -17,9 +17,9 @@ public final class OsvSettingsContributor implements SettingsContributor {
                                 + "scheduled scan re-checks what is published. A lookup is an outbound call to a "
                                 + "public API. It fails closed: while it is on and unreachable, a publish it would "
                                 + "have screened is held for review.",
-                        Setting.Kind.BOOLEAN, "false", false).essential(),
+                        Setting.Kind.BOOLEAN, "false", true).essential(),
                 new Setting("osv-endpoint", "Compliance", "OSV endpoint",
                         "The OSV API base URL, for a mirror or a proxy.",
-                        Setting.Kind.URI, "https://api.osv.dev", false).advanced());
+                        Setting.Kind.URI, "https://api.osv.dev", true).advanced());
     }
 }

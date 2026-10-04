@@ -20,9 +20,9 @@ public final class OpenSsfSettingsContributor implements SettingsContributor {
                                 + "closed: while it is on and cannot be reached, a publish it would have screened is "
                                 + "held for review - so switch it on only where this deployment can reach the endpoint "
                                 + "below.",
-                        Setting.Kind.BOOLEAN, "false", false).essential(),
+                        Setting.Kind.BOOLEAN, "false", true).essential(),
                 new Setting("openssf-endpoint", "Compliance", "OpenSSF feed endpoint",
                         "The OSV API base URL serving the dataset, for a mirror or a proxy.",
-                        Setting.Kind.URI, "https://api.osv.dev", false).advanced());
+                        Setting.Kind.URI, "https://api.osv.dev", true).advanced());
     }
 }

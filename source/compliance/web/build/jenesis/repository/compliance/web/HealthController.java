@@ -43,23 +43,23 @@ public class HealthController {
     // Empty without the health-ledger module, which answers 501.
     private final Optional<HealthLedgerProvider> health;
     // Consulted only on an explicit refresh; none() when no source is enabled, so nothing is persisted.
-    private final HealthSource source;
+    private final Supplier<HealthSource> source;
     /** The scheduler, so a refresh can build the ranking under the pass's lease; without one the ranking waits. */
     private final Supplier<MaintenanceScheduler> maintenance;
 
-    public HealthController(Repositories repositories, RepositoryRouting routing, HealthSource source,
+    public HealthController(Repositories repositories, RepositoryRouting routing, Supplier<HealthSource> source,
                             Supplier<MaintenanceScheduler> maintenance) {
         this(repositories, routing, source, HealthLedgerProvider.installed(), maintenance);
     }
 
     /** With an explicit health-ledger provider, empty for none, rather than {@link HealthLedgerProvider#installed()}. */
-    public HealthController(Repositories repositories, RepositoryRouting routing, HealthSource source,
+    public HealthController(Repositories repositories, RepositoryRouting routing, Supplier<HealthSource> source,
                             Optional<HealthLedgerProvider> health) {
         this(repositories, routing, source, health, () -> null);
     }
 
     /** @param maintenance resolved at use, since resolving the scheduler bean here would start its workers early. */
-    public HealthController(Repositories repositories, RepositoryRouting routing, HealthSource source,
+    public HealthController(Repositories repositories, RepositoryRouting routing, Supplier<HealthSource> source,
                             Optional<HealthLedgerProvider> health, Supplier<MaintenanceScheduler> maintenance) {
         this.repositories = repositories;
         this.routing = routing;
@@ -159,12 +159,13 @@ public class HealthController {
      *  score upserted, as the scheduled sweep does; one the source cannot score stays unrecorded. Best-effort per
      *  coordinate. */
     private void refreshLedger(HealthLedger ledger, String tenant, String repo, Instant now) throws IOException {
+        HealthSource source = this.source.get();
         if (source == HealthSource.none()) {
             return;                                             // no live source enabled: nothing to re-probe
         }
         Set<String> probed = new HashSet<>();
-        // Streamed over the coordinate walk.
-        new StoreRepositoryInventory(repositories.store(tenant, repo)).coordinates(held -> {
+        // Streamed over everything the repository holds, its cached copies too, as the scheduled pass is.
+        new StoreRepositoryInventory(repositories.store(tenant, repo)).holdings(held -> {
             if (!probed.add(held.ecosystem() + ' ' + held.coordinate())) {
                 return;
             }

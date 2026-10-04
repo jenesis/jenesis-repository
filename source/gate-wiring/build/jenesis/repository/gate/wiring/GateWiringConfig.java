@@ -2,8 +2,7 @@ package build.jenesis.repository.gate.wiring;
 
 import module java.base;
 
-import build.jenesis.repository.compliance.HealthSource;
-import build.jenesis.repository.compliance.NamedAdvisoryFeeds;
+import build.jenesis.repository.compliance.ComplianceSources;
 import build.jenesis.repository.gate.store.ComplianceScreen;
 import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.PublishTenant;
@@ -33,8 +32,7 @@ public class GateWiringConfig {
      */
     @Bean(destroyMethod = "close")
     public ComplianceScreen.Binding complianceScreenBinding(ObjectProvider<LiveConfig> liveConfig,
-                                                            ObjectProvider<NamedAdvisoryFeeds> namedAdvisoryFeeds,
-                                                            ObjectProvider<HealthSource> healthSource,
+                                                            ObjectProvider<ComplianceSources> sources,
                                                             ObjectProvider<MeterRegistry> meterRegistry) {
         return ComplianceScreen.binding()
                 // The publishing thread's tenant (PublishTenant) picks the gate, so a tenant's own policy screens its
@@ -45,9 +43,9 @@ public class GateWiringConfig {
                 // and is answered by that tenant's publish gate.
                 .tenantGates(tenant -> liveConfig.getObject().publishGate(tenant))
                 // Re-queried at commit to persist an accepted coordinate's advisory findings before the next sweep.
-                .advisoryFeeds(() -> namedAdvisoryFeeds.getObject().feeds())
+                .advisoryFeeds(() -> sources.getObject().advisoryFeeds())
                 // Probed at commit to persist an accepted coordinate's maintainer health before the next sweep.
-                .healthSource(healthSource::getObject)
+                .healthSource(() -> sources.getObject().health())
                 // Whether a failed hold-mapping round trip fails the publish or only alarms (strict-hold-mapping),
                 // off by default so a broken blobs-namespace format cannot stop publishes.
                 .strictHoldMapping(() -> liveConfig.getObject().strictHoldMapping())

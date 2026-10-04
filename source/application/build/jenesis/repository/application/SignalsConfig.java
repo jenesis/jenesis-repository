@@ -12,13 +12,8 @@ import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.server.kernel.SettingsEditor;
-import build.jenesis.repository.compliance.AdvisorySignal;
-import build.jenesis.repository.compliance.AdvisorySource;
-import build.jenesis.repository.compliance.NamedAdvisoryFeeds;
-import build.jenesis.repository.compliance.HealthSource;
+import build.jenesis.repository.compliance.ComplianceSources;
 import build.jenesis.repository.compliance.SignalContext;
-import build.jenesis.repository.compliance.ProvenanceSigner;
-import build.jenesis.repository.compliance.ProvenanceSignerProvider;
 import build.jenesis.repository.compliance.Vex;
 import build.jenesis.repository.compliance.VexProvider;
 import build.jenesis.repository.store.ArtifactStore;
@@ -30,9 +25,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
 /**
- * The compliance dimensions' inputs: the advisory feeds built once and shared, the de-duplicated
- * {@link AdvisorySource} over them, the maintainer-health source, the report signals, the provenance signer and the
- * {@link LiveConfig} gate with its per-tenant VEX view. A publish screen is armed by the module that provides it,
+ * The compliance dimensions' inputs: the {@link ComplianceSources} the live settings switch on - the advisory feeds,
+ * the maintainer-health source, the report signals and the provenance signer - and the {@link LiveConfig} gate with
+ * its per-tenant VEX view. A publish screen is armed by the module that provides it,
  * from these beans.
  */
 @Configuration(proxyBeanMethods = false)
@@ -47,41 +42,26 @@ public class SignalsConfig {
         return SignalContext.deployment(store, Clock.systemUTC());
     }
 
+    /**
+     * The compliance sources the live settings switch on: the advisory feeds, the health source, the signal columns
+     * and the provenance signer, each resolved again when a setting it read changes, so a feed switched on screens
+     * without a restart. Closed with the context, which closes every source it holds. The snapshot binding is an
+     * unread parameter, so it exists before any source is created and is retired after they are closed.
+     */
     @Bean
-    public NamedAdvisoryFeeds namedAdvisoryFeeds(Environment environment, SignalContext.Deployment signalSnapshots) {
-        // Built once, so the gate's union and the screen's commit-time re-query share instances and their warm cache.
-        return new NamedAdvisoryFeeds(AdvisorySource.named(Features.namespaced(environment::getProperty)));
+    public ComplianceSources complianceSources(Settings settings, Environment environment,
+                                               PinnedSettings pinnedSettings,
+                                               SignalContext.Deployment signalSnapshots) {
+        return new ComplianceSources(pinnedSettings.effective(settings, environment));
     }
 
     @Bean
-    public AdvisorySource advisorySource(NamedAdvisoryFeeds namedAdvisoryFeeds) {
-        return AdvisorySource.resolve(namedAdvisoryFeeds.feeds().values());
-    }
-
-    @Bean
-    public HealthSource healthSource(Environment environment, SignalContext.Deployment signalSnapshots) {
-        // Built once and shared by the screen's commit-time probe and the /api/health refresh; HealthSource.none()
-        // when no source is enabled.
-        return HealthSource.resolve(Features.namespaced(environment::getProperty));
-    }
-
-    @Bean
-    public List<AdvisorySignal> advisorySignals(Environment environment, SignalContext.Deployment signalSnapshots) {
-        return AdvisorySignal.resolve(Features.namespaced(environment::getProperty));
-    }
-
-    @Bean
-    public ProvenanceSigner provenanceSigner(Environment environment) {
-        return ProvenanceSignerProvider.resolve(Features.namespaced(environment::getProperty));
-    }
-
-    @Bean
-    public LiveConfig liveConfig(Settings settings, RepositoryProperties properties, AdvisorySource advisories,
+    public LiveConfig liveConfig(Settings settings, RepositoryProperties properties, ComplianceSources sources,
                                  Environment environment, PinnedSettings pinnedSettings, ArtifactStore store,
                                  SignalContext.Deployment signalSnapshots) {
         // Dimension keys resolve from the runtime settings over the deployment's configuration, except a key pinned
         // above the store.
-        LiveConfig liveConfig = new LiveConfig(settings, properties, advisories,
+        LiveConfig liveConfig = new LiveConfig(settings, properties, sources::advisories,
                 Features.namespaced(environment::getProperty),
                 key -> pinnedSettings.pinned(key).map(PinnedSettings.Pin::value));
         // A tenant's ingested VEX statements suppress a non-applicable advisory on its own uploads and pull-throughs;

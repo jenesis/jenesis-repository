@@ -20,9 +20,9 @@ public final class GitHubSettingsContributor implements SettingsContributor {
                                 + "published. A lookup calls GitHub's REST API with the token in JENREPO_GITHUB_TOKEN; "
                                 + "without one the feed disables itself. It fails closed: while unreachable, a publish "
                                 + "it would screen is held for review.",
-                        Setting.Kind.BOOLEAN, "false", false).essential(),
+                        Setting.Kind.BOOLEAN, "false", true).essential(),
                 new Setting("github-endpoint", "Compliance", "GitHub endpoint",
                         "The GitHub REST API base URL, for a self-hosted GitHub or a proxy.",
-                        Setting.Kind.URI, "https://api.github.com", false).advanced());
+                        Setting.Kind.URI, "https://api.github.com", true).advanced());
     }
 }

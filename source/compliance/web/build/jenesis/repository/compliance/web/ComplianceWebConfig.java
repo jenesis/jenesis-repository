@@ -2,12 +2,8 @@ package build.jenesis.repository.compliance.web;
 
 import module java.base;
 
-import build.jenesis.repository.store.Features;
 import build.jenesis.repository.audit.AuditTrail;
-import build.jenesis.repository.compliance.AdvisorySignal;
-import build.jenesis.repository.compliance.AdvisorySource;
-import build.jenesis.repository.compliance.HealthSource;
-import build.jenesis.repository.compliance.ProvenanceSigner;
+import build.jenesis.repository.compliance.ComplianceSources;
 import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.MaintenanceScheduler;
 import build.jenesis.repository.server.kernel.PinnedSettings;
@@ -22,7 +18,7 @@ import org.springframework.core.env.Environment;
 /**
  * Wires the compliance-review API into the repository server - quarantine, vulnerabilities, findings, health,
  * provenance, signatures, signers, hardening, licence retro - over {@link Repositories}, {@link AuditTrail}, the
- * discovered {@link AdvisorySource} and {@link AdvisorySignal}s and the configured {@link ProvenanceSigner}. Imported
+ * {@link ComplianceSources} the live settings switch on. Imported
  * through {@link ComplianceWebModule}; every controller is registered explicitly. The VEX API is the VEX store's own
  * web module.
  */
@@ -53,13 +49,11 @@ public class ComplianceWebConfig {
 
     @Bean
     public VulnerabilityController vulnerabilityController(Repositories repositories, RepositoryRouting routing,
-                                                           AdvisorySource advisories,
-                                                           List<AdvisorySignal> advisorySignals,
-                                                           Environment environment) {
-        // The same feeds per name, so the ledger records which feed reported an advisory.
-        return new VulnerabilityController(repositories, routing, advisories,
-                AdvisorySource.named(Features.namespaced(environment::getProperty)),
-                advisorySignals);
+                                                           ComplianceSources sources) {
+        // The feeds merged for a report and by name for the ledger, so it records which feed reported an advisory -
+        // each asked at use, so a feed switched on is the one a report reads.
+        return new VulnerabilityController(repositories, routing, sources::advisories, sources::advisoryFeeds,
+                sources::advisorySignals);
     }
 
     @Bean
@@ -71,17 +65,17 @@ public class ComplianceWebConfig {
 
     @Bean
     public HealthController healthController(Repositories repositories, RepositoryRouting routing,
-                                             HealthSource healthSource,
+                                             ComplianceSources sources,
                                              ObjectProvider<MaintenanceScheduler> maintenance) {
         // The scheduler is optional (absent on a read-only node) and supplied lazily, so its workers do not start
         // early.
-        return new HealthController(repositories, routing, healthSource, maintenance::getIfAvailable);
+        return new HealthController(repositories, routing, sources::health, maintenance::getIfAvailable);
     }
 
     @Bean
     public ProvenanceController provenanceController(Repositories repositories, RepositoryRouting routing,
-                                                     ProvenanceSigner provenanceSigner, AuditTrail audit) {
-        return new ProvenanceController(repositories, routing, provenanceSigner, audit);
+                                                     ComplianceSources sources, AuditTrail audit) {
+        return new ProvenanceController(repositories, routing, sources::provenanceSigner, audit);
     }
 
     @Bean

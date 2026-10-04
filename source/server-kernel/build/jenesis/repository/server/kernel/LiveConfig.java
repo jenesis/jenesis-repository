@@ -29,14 +29,14 @@ import build.jenesis.repository.settings.SettingsScopes;
  * <p>Rebuilding from cheap in-memory {@link Settings} reads keeps the per-request cost to building a few small policy
  * objects. The snapshot is refreshed when a setting is written (so the writing node applies it at once) and on a
  * schedule (so another node's write is applied within the interval), which converges a write-anywhere deployment.
- * The advisory source and the worker/audit lifecycle are not here: they own a client or a thread and so are seeded
- * once at startup from the same settings and only change on a restart.
+ * The gate screens with the advisory feeds as they stand when it is rebuilt, asked of a supplier that answers the
+ * feeds the settings switch on; the worker/audit lifecycle is not here, since it owns a thread.
  */
 public final class LiveConfig implements SettingsEditor.Resolution {
 
     private final Settings settings;
     private final RepositoryProperties defaults;
-    private final AdvisorySource advisories;
+    private final Supplier<AdvisorySource> advisories;
     private final UnaryOperator<String> fileDefaults;
     private final Function<String, Optional<String>> pinned;
 
@@ -69,6 +69,13 @@ public final class LiveConfig implements SettingsEditor.Resolution {
      *  origin probe: a key an operator has pinned from a higher-precedence source resolves to that pin, and the stored
      *  value is inert - the store never overrides an explicit operator pin. */
     public LiveConfig(Settings settings, RepositoryProperties defaults, AdvisorySource advisories,
+                      UnaryOperator<String> fileDefaults, Function<String, Optional<String>> pinned) {
+        this(settings, defaults, () -> advisories, fileDefaults, pinned);
+    }
+
+    /** Screening with the advisory feeds {@code advisories} answers each time a gate is built - the feeds the live
+     *  settings switch on, so one switched on screens from the next rebuild with no restart. */
+    public LiveConfig(Settings settings, RepositoryProperties defaults, Supplier<AdvisorySource> advisories,
                       UnaryOperator<String> fileDefaults, Function<String, Optional<String>> pinned) {
         this.settings = settings;
         this.defaults = defaults;
@@ -428,7 +435,7 @@ public final class LiveConfig implements SettingsEditor.Resolution {
 
     private ComplianceGate gate(Severity threshold, Verdict vulnerable, Verdict malware, List<String> denied,
                                 Verdict denyAction, List<GatePolicy> policies) {
-        return new ComplianceGate(new VulnerabilityPolicy(threshold, vulnerable), advisories)
+        return new ComplianceGate(new VulnerabilityPolicy(threshold, vulnerable), advisories.get())
                 .malicious(new MaliciousPackagePolicy().action(malware))
                 .denyList(new DenyListPolicy(denied).action(denyAction))
                 .policies(policies);

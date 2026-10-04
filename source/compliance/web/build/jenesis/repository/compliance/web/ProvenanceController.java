@@ -31,11 +31,11 @@ public class ProvenanceController {
 
     private final Repositories repositories;
     private final RepositoryRouting routing;
-    private final ProvenanceSigner provenanceSigner;
+    private final Supplier<ProvenanceSigner> provenanceSigner;
     private final AuditTrail audit;
 
     public ProvenanceController(Repositories repositories, RepositoryRouting routing,
-                                ProvenanceSigner provenanceSigner, AuditTrail audit) {
+                                Supplier<ProvenanceSigner> provenanceSigner, AuditTrail audit) {
         this.repositories = repositories;
         this.routing = routing;
         this.provenanceSigner = provenanceSigner;
@@ -87,7 +87,7 @@ public class ProvenanceController {
         if (tenant == null) {
             return null;
         }
-        if (!provenanceSigner.enabled()) {
+        if (!provenanceSigner.get().enabled()) {
             response.setStatus(404);
             return null;
         }
@@ -119,7 +119,7 @@ public class ProvenanceController {
         statement.put("predicate", predicate);
         ProvenanceSigner.Attestation attestation;
         try {
-            attestation = provenanceSigner.attest(statement);
+            attestation = provenanceSigner.get().attest(statement);
         } catch (GeneralSecurityException e) {
             throw new IOException("Could not sign the provenance attestation", e);
         }
@@ -132,11 +132,11 @@ public class ProvenanceController {
     @GetMapping(value = "/api/provenance/key", produces = "application/x-pem-file")
     @ResponseBody
     public String provenanceKey(HttpServletResponse response) {
-        if (!provenanceSigner.enabled()) {
+        if (!provenanceSigner.get().enabled()) {
             response.setStatus(404);
             return null;
         }
-        return provenanceSigner.publicKeyPem();
+        return provenanceSigner.get().publicKeyPem();
     }
 
     /** The certificate chain binding the signing key to an identity, for a certificate-shaped signer (keyless
@@ -144,7 +144,7 @@ public class ProvenanceController {
     @GetMapping(value = "/api/provenance/certificate", produces = "application/x-pem-file")
     @ResponseBody
     public String provenanceCertificate(HttpServletResponse response) {
-        String chain = provenanceSigner.enabled() ? provenanceSigner.certificateChainPem() : null;
+        String chain = provenanceSigner.get().enabled() ? provenanceSigner.get().certificateChainPem() : null;
         if (chain == null) {
             response.setStatus(404);
             return null;
