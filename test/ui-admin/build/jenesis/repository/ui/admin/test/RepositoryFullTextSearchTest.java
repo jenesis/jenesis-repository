@@ -121,6 +121,10 @@ public class RepositoryFullTextSearchTest {
      *  scope so a test can assert RepositoryBrowse passed them through unchanged. */
     private static final class FakeSearch implements SearchQueryProvider, SearchQuery {
 
+        @Override
+        public void close() {
+        }
+
         private final List<SearchQuery.Hit> matches;
         private String lastQuery;
         private String lastScope;

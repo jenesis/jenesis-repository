@@ -13,6 +13,7 @@ import build.jenesis.repository.server.NodeConsistency;
 import build.jenesis.repository.server.NodeConsistencyObservability;
 import build.jenesis.repository.server.NodeDivergence;
 import build.jenesis.repository.server.NodeDivergenceAdvisor;
+import build.jenesis.repository.server.NodeFingerprintPublisher;
 import build.jenesis.repository.server.NodeFingerprint;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ForwardingArtifactStore;
@@ -309,25 +310,29 @@ class MultiNodeConsistencyTest {
     }
 
     @Test
-    void the_advisor_surfaces_a_live_config_split_and_is_silent_for_a_single_node(@TempDir Path root)
+    void the_advisor_surfaces_the_split_this_nodes_heartbeat_saw_and_forgets_it_as_the_node_stops(@TempDir Path root)
             throws IOException {
         ArtifactStore store = filesystem(root);
-        Configuration config = Configuration.ofMap(Map.of(
-                "jenrepo.store", "filesystem", "jenrepo.filesystem.root", root.toString()));
+        Configuration config = Configuration.ofMap(Map.of());
+        NodeFingerprintPublisher publisher = new NodeFingerprintPublisher(over(store), store,
+                Map.of("jenrepo.consistency.node-id", "node-a")::get);
+        try (publisher) {
+            publisher.publishQuietly();
+            assertThat(new NodeDivergenceAdvisor().advise(config))
+                    .as("a single node raises no divergence advisory").isEmpty();
 
-        over(store).publish(new NodeFingerprint("node-a", System.currentTimeMillis(), System.currentTimeMillis(),
-                100, "", 1L, 0L, 0L, 0L, Map.of()));
+            over(store).publish(new NodeFingerprint("node-b", System.currentTimeMillis(), System.currentTimeMillis(),
+                    100, "", -1L, 0L, 0L, 0L, Map.of()));
+            publisher.publishQuietly();
+            assertThat(new NodeDivergenceAdvisor().advise(config))
+                    .as("two live nodes on different config generations surface a critical advisory")
+                    .anySatisfy(advisory -> {
+                        assertThat(advisory.id()).isEqualTo("jenrepo.consistency.config");
+                        assertThat(advisory.severity()).isEqualTo(Severity.CRITICAL);
+                    });
+        }
         assertThat(new NodeDivergenceAdvisor().advise(config))
-                .as("a single node raises no divergence advisory").isEmpty();
-
-        over(store).publish(new NodeFingerprint("node-b", System.currentTimeMillis(), System.currentTimeMillis(),
-                100, "", 2L, 0L, 0L, 0L, Map.of()));
-        assertThat(new NodeDivergenceAdvisor().advise(config))
-                .as("two live nodes on different config generations surface a critical advisory")
-                .anySatisfy(advisory -> {
-                    assertThat(advisory.id()).isEqualTo("jenrepo.consistency.config");
-                    assertThat(advisory.severity()).isEqualTo(Severity.CRITICAL);
-                });
+                .as("a stopped node advises from no report it no longer refreshes").isEmpty();
     }
 
     @Test

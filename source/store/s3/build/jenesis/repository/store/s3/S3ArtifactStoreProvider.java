@@ -123,8 +123,12 @@ public final class S3ArtifactStoreProvider implements ArtifactStoreProvider {
             ConditionalWrites.probe(store, endpoint == null || endpoint.isBlank() ? "the S3 endpoint for bucket " + bucket
                     : "the S3-compatible endpoint " + endpoint, config.apply(PROBE_KEY));
         } catch (IOException failure) {
+            store.close();
             throw new IllegalStateException("the s3 store could not be probed for conditional writes at boot - is bucket "
                     + bucket + " writable with these credentials? " + failure.getMessage(), failure);
+        } catch (RuntimeException refused) {
+            store.close();
+            throw refused;
         }
         return store;
     }

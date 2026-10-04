@@ -325,6 +325,10 @@ class RepositorySearchTest {
     /** An installed index that answers a fixed page, or has not been built when it holds none. */
     private static final class StandInIndex implements SearchQueryProvider, SearchQuery {
 
+        @Override
+        public void close() {
+        }
+
         private final List<Hit> hits;
         private final String next;
         private String lastQuery;

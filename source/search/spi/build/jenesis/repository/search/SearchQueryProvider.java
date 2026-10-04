@@ -32,17 +32,22 @@ import build.jenesis.repository.store.Providers;
  *       path.</li>
  *   <li><b>Staleness.</b> A snapshot-backed searcher is behind the store by construction; the surface shows when the
  *       index was last built.</li>
- *   <li><b>Lifecycle / ownership.</b> The caller resolves the provider once and calls {@link #over} per request; the
- *       provider owns and closes the readers it caches, and {@link #installed()} caches and closes nothing.</li>
+ *   <li><b>Lifecycle / ownership.</b> The caller resolves the provider once, calls {@link #over} per request and
+ *       {@link #close() closes} it when it closes itself; the provider owns the readers it caches and closes them
+ *       there, and {@link #installed()} caches and closes nothing.</li>
  *   <li><b>Ordering / determinism.</b> Which provider answers depends on what is installed, never on discovery
  *       order.</li>
  * </ol>
  */
-public interface SearchQueryProvider {
+public interface SearchQueryProvider extends AutoCloseable {
 
     /** Bind the search read model to one repository's scoped store; {@code scope} is a stable per-repository key
      *  ({@code tenant/repository}) the provider may cache a searcher under. */
     SearchQuery over(ArtifactStore store, String scope);
+
+    /** Close every reader the provider caches; its owner closes it once, as the owner closes. */
+    @Override
+    void close();
 
     /** The installed provider, through the shared {@link Providers#singleton}: empty without the index module, and a
      *  second installed provider throws rather than letting module-path order decide which index answers. */

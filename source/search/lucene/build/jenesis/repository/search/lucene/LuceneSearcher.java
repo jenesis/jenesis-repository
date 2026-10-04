@@ -80,7 +80,28 @@ final class LuceneSearcher {
         this.ttl = ttl;
     }
 
+    /**
+     * One loaded generation. Its reader is reference counted: this searcher holds one reference while the snapshot is
+     * current and a query holds another for as long as it runs, so a snapshot replaced or evicted under a running
+     * query closes once that query finishes - its reader first, then the directory, through the reader's closed
+     * listener.
+     */
     private record Snapshot(int generation, IndexSearcher searcher, Directory directory) {
+
+        static Snapshot open(int generation, Directory directory) throws IOException {
+            DirectoryReader reader = DirectoryReader.open(directory);
+            reader.getReaderCacheHelper().addClosedListener(_ -> directory.close());
+            return new Snapshot(generation, new IndexSearcher(reader), directory);
+        }
+
+        /** Drop the reference this searcher held; the snapshot closes once no query holds one either. */
+        void release() {
+            try {
+                searcher.getIndexReader().decRef();
+            } catch (IOException | RuntimeException _) {
+                // best-effort: a reader that cannot close holds only its own files
+            }
+        }
     }
 
     /**
@@ -100,6 +121,19 @@ final class LuceneSearcher {
             return Optional.of(SearchQuery.Hits.last(List.of()));   // a usable index, an empty page - not "no index"
         }
         IndexSearcher searcher = active.searcher();
+        if (!searcher.getIndexReader().tryIncRef()) {
+            return Optional.empty();                            // released under this query: answer by name
+        }
+        try {
+            return search(searcher, query, cursor, rows);
+        } finally {
+            searcher.getIndexReader().decRef();
+        }
+    }
+
+    /** {@link #search(ArtifactStore, String, String, int)} over a searcher whose reader the caller holds open. */
+    private Optional<SearchQuery.Hits> search(IndexSearcher searcher, String query, String cursor, int rows)
+            throws IOException {
         // Free text is matched against the coordinate names first, and against the whole text only when no name
         // matches, so a package's name answers that package rather than every coordinate sharing a token. A query
         // without free text runs once.
@@ -162,13 +196,13 @@ final class LuceneSearcher {
         try {
             Optional<ArtifactStore.Versioned> stored = index.manifestVersioned();
             if (stored.isEmpty()) {
-                snapshot = null;                                // no index built yet - the caller answers by name
+                replace(null);                                  // no index built yet - the caller answers by name
                 refreshAt = System.currentTimeMillis() + ttl.toMillis();
                 return null;
             }
             SearchManifest manifest = SearchManifest.parse(stored.get().content());
             if (manifest.format() != SearchIndex.FORMAT) {
-                snapshot = null;                                // a format this reader cannot open; the sweep rebuilds
+                replace(null);                                  // a format this reader cannot open; the sweep rebuilds
                 refreshAt = System.currentTimeMillis() + ttl.toMillis();
                 return null;
             }
@@ -176,9 +210,7 @@ final class LuceneSearcher {
                 refreshAt = System.currentTimeMillis() + ttl.toMillis();   // unchanged token - no download
                 return snapshot;
             }
-            Directory directory = index.openSnapshot(manifest.generation());
-            IndexSearcher searcher = new IndexSearcher(DirectoryReader.open(directory));
-            snapshot = new Snapshot(manifest.generation(), searcher, directory);   // swap whole
+            replace(Snapshot.open(manifest.generation(), index.openSnapshot(manifest.generation())));   // swap whole
             refreshAt = System.currentTimeMillis() + ttl.toMillis();
             return snapshot;
         } catch (IOException | RuntimeException e) {
@@ -187,24 +219,20 @@ final class LuceneSearcher {
         }
     }
 
-    /** Release the loaded snapshot when the query cache evicts this scope. Best-effort: only an idle or
-     *  least-recently-used scope is evicted, and a straggling query holding it degrades to an answer by name. */
-    void close() {
-        Snapshot active = snapshot;
-        snapshot = null;
-        refreshAt = 0;
-        if (active != null) {
-            try {
-                active.searcher().getIndexReader().close();
-            } catch (IOException | RuntimeException _) {
-                // best-effort
-            }
-            try {
-                active.directory().close();
-            } catch (IOException | RuntimeException _) {
-                // best-effort
-            }
+    /** Make {@code next} the current snapshot and release the one it replaces. */
+    private synchronized void replace(Snapshot next) {
+        Snapshot replaced = snapshot;
+        snapshot = next;
+        if (replaced != null && replaced != next) {
+            replaced.release();
         }
+    }
+
+    /** Release the loaded snapshot when the query cache evicts this scope or the searcher closes; a query still
+     *  running on it finishes first, and one arriving after answers by name. */
+    void close() {
+        refreshAt = 0;
+        replace(null);
     }
 
     /** The bytes the loaded snapshot's file-backed directory occupies, the summed segment lengths, for the cache's byte

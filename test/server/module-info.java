@@ -60,6 +60,7 @@ open module build.jenesis.repository.test {
     requires tools.jackson.databind;
     requires jakarta.servlet;
     requires java.net.http;
+    requires build.jenesis.repository.net.http;
     requires org.slf4j;
     requires ch.qos.logback.classic;
     requires ch.qos.logback.core;

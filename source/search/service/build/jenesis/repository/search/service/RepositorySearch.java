@@ -24,7 +24,7 @@ import build.jenesis.repository.store.ServableNames;
  * <p>One instance serves every tenant and repository, holding the index provider so its searchers survive across
  * requests.
  */
-public final class RepositorySearch {
+public final class RepositorySearch implements AutoCloseable {
 
     /** The hits a surface shows on one page unless it asks for another number. */
     public static final int PAGE = 100;
@@ -43,6 +43,12 @@ public final class RepositorySearch {
      *  {@code ServiceLoader} registration. */
     public RepositorySearch(Optional<SearchQueryProvider> index) {
         this.index = index;
+    }
+
+    /** Close the index provider this search holds, and the readers it caches. */
+    @Override
+    public void close() {
+        index.ifPresent(SearchQueryProvider::close);
     }
 
     /** Whether this composition carries a full-text index at all. */

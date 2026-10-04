@@ -26,9 +26,13 @@ import build.jenesis.repository.store.OwnerOnly;
  * concurrent conditional write can raise, becomes {@code false}, so the caller re-reads and retries. Concurrent writers
  * across nodes resolve through S3 itself.
  */
-public final class S3ArtifactStore extends S3CompatibleArtifactStore {
+public final class S3ArtifactStore extends S3CompatibleArtifactStore implements AutoCloseable {
 
     private final S3Presigner presigner;
+
+    /** Whether this store owns its client and presigner and closes them: the store it was built as does, and a
+     *  {@linkplain #scope scoped view} sharing them does not, so closing a view never closes the backend. */
+    private final boolean owner;
     /** The KMS key id for {@code aws:kms} encryption, or {@code null} for the SSE-S3 (AES256) default. */
     private final String kmsKeyId;
 
@@ -36,25 +40,26 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
     private final boolean streamingWrites;
 
     public S3ArtifactStore(S3Client s3, String bucket) {
-        this(s3, null, bucket, "", null, true);
+        this(s3, null, bucket, "", null, true, true);
     }
 
     /** As {@link #S3ArtifactStore(S3Client, String)} with a {@link S3Presigner}, built from the client's region,
      *  credentials and endpoint, so {@link #presign} can mint a direct-fetch GET URL. */
     public S3ArtifactStore(S3Client s3, S3Presigner presigner, String bucket) {
-        this(s3, presigner, bucket, "", null, true);
+        this(s3, presigner, bucket, "", null, true, true);
     }
 
     /** The provider's constructor, the only one deciding {@code streamingWrites}; the others take the default. */
     public S3ArtifactStore(S3Client s3, S3Presigner presigner, String bucket, String kmsKeyId,
                            boolean streamingWrites) {
-        this(s3, presigner, bucket, "", kmsKeyId, streamingWrites);
+        this(s3, presigner, bucket, "", kmsKeyId, streamingWrites, true);
     }
 
     private S3ArtifactStore(S3Client s3, S3Presigner presigner, String bucket, String keyPrefix, String kmsKeyId,
-                            boolean streamingWrites) {
+                            boolean streamingWrites, boolean owner) {
         super(s3, bucket, keyPrefix);
         this.presigner = presigner;
+        this.owner = owner;
         this.kmsKeyId = kmsKeyId;
         this.streamingWrites = streamingWrites;
     }
@@ -62,7 +67,19 @@ public final class S3ArtifactStore extends S3CompatibleArtifactStore {
     @Override
     public ArtifactStore scope(String tenant) {
         return new S3ArtifactStore(s3, presigner, bucket, keyPrefix + ArtifactStore.segment(tenant) + "/", kmsKeyId,
-                streamingWrites);
+                streamingWrites, false);
+    }
+
+    /** Close the client and the presigner, when this is the store that owns them; a scoped view closes nothing. */
+    @Override
+    public void close() {
+        if (!owner) {
+            return;
+        }
+        s3.close();
+        if (presigner != null) {
+            presigner.close();
+        }
     }
 
     @Override

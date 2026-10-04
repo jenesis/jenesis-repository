@@ -1,5 +1,6 @@
 package build.jenesis.repository.test;
 
+import build.jenesis.repository.net.http.ScreenedHttpClient;
 import module java.base;
 import module org.junit.jupiter.api;
 
@@ -67,7 +68,7 @@ class ArtifactStoreDecoratorOrderTest {
 
         ArtifactStore store = new RepositoryAutoConfiguration(environment)
                 .artifactStore(properties, environment, beans.getBeanProvider(ArtifactStoreDecorator.class),
-                        beans.getBeanProvider(StoreBindings.class));
+                        beans.getBeanProvider(StoreBindings.class), ScreenedHttpClient.lease());
 
         assertThat(applied)
                 .as("the lowest order sits closest to the backend, so it is applied first")
@@ -99,7 +100,7 @@ class ArtifactStoreDecoratorOrderTest {
 
         ArtifactStore store = new RepositoryAutoConfiguration(environment)
                 .artifactStore(properties, environment, beans.getBeanProvider(ArtifactStoreDecorator.class),
-                        beans.getBeanProvider(StoreBindings.class));
+                        beans.getBeanProvider(StoreBindings.class), ScreenedHttpClient.lease());
 
         assertThat(store.bindings().get(String.class)).as("through the quota and read-only wrappers")
                 .contains("the deployment's");

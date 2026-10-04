@@ -24,6 +24,10 @@ public final class CountingIssuer implements UpstreamTokenIssuer {
     }
 
     @Override
+    public void close() {
+    }
+
+    @Override
     public Token issue(String host) throws IOException {
         if (failing) {
             throw new IOException("the identity was refused");

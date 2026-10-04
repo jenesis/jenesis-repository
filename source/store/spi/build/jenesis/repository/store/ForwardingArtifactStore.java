@@ -20,8 +20,12 @@ import module java.base;
  *
  * <p>{@link #scope} is the one method every decorator overrides, since a scope of a decorated store is decorated
  * too; it forwards here only so that a decorator's own override is what the compiler asks for.
+ *
+ * <p>{@link #close} forwards too, so the decorated store a composition holds closes the backend it was built over when
+ * its context closes. A backend that owns a client closes it only as the store it was built as - a scoped view of it
+ * closes nothing - so closing a decorated view is as harmless as closing the view itself.
  */
-public abstract class ForwardingArtifactStore implements ArtifactStore {
+public abstract class ForwardingArtifactStore implements ArtifactStore, AutoCloseable {
 
     /** The store this one wraps. */
     protected final ArtifactStore delegate;
@@ -32,6 +36,20 @@ public abstract class ForwardingArtifactStore implements ArtifactStore {
 
     @Override
     public abstract ArtifactStore scope(String tenant);
+
+    /** Close the wrapped store, when it is closeable. */
+    @Override
+    public void close() {
+        if (delegate instanceof AutoCloseable owned) {
+            try {
+                owned.close();
+            } catch (RuntimeException failed) {
+                throw failed;
+            } catch (Exception failed) {
+                throw new IllegalStateException("the wrapped store could not be closed", failed);
+            }
+        }
+    }
 
     @Override
     public Object identity() {

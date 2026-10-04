@@ -75,6 +75,22 @@ public final class AwsTokenIssuer implements UpstreamTokenIssuer {
         throw new IllegalArgumentException(host + " is neither an ECR registry nor a CodeArtifact domain host.");
     }
 
+    /** Close every client opened to mint, and the identity when it holds anything. */
+    @Override
+    public void close() {
+        ecr.values().forEach(EcrClient::close);
+        ecr.clear();
+        codeartifact.values().forEach(CodeartifactClient::close);
+        codeartifact.clear();
+        if (identity instanceof AutoCloseable owned) {
+            try {
+                owned.close();
+            } catch (Exception ignored) {
+                // The identity chain holds no client of ours; a provider that cannot close keeps nothing open.
+            }
+        }
+    }
+
     private Token ecr(String account, String region) throws IOException {
         EcrClient client = ecr.computeIfAbsent(region, _ -> {
             var builder = EcrClient.builder().region(Region.of(region)).credentialsProvider(identity)

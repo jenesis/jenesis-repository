@@ -15,8 +15,15 @@ import org.springframework.context.annotation.Configuration;
 @Configuration(proxyBeanMethods = false)
 public class SearchWebConfig {
 
+    /** The one search, holding the index provider and the readers it caches; closed with the context. */
     @Bean
-    public BrowseController browseController(Repositories repositories, RepositoryRouting routing) {
-        return new BrowseController(repositories, routing, new RepositorySearch());
+    public RepositorySearch repositorySearch() {
+        return new RepositorySearch();
+    }
+
+    @Bean
+    public BrowseController browseController(Repositories repositories, RepositoryRouting routing,
+                                             RepositorySearch repositorySearch) {
+        return new BrowseController(repositories, routing, repositorySearch);
     }
 }

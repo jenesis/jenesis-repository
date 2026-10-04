@@ -25,8 +25,10 @@ public class StorageConfig {
         return Documents.over(repositoryStore);
     }
 
+    /** The cache's segment of the store this context already holds, so the console opens no second backend client
+     *  and its cache operations are metered with the rest. */
     @Bean
-    public CacheStorage cacheRootStorage(Environment environment) {
-        return CacheStorageProvider.resolve(environment::getProperty);
+    public CacheStorage cacheRootStorage(Environment environment, ArtifactStore repositoryStore) {
+        return CacheStorageProvider.resolve(environment::getProperty, repositoryStore);
     }
 }

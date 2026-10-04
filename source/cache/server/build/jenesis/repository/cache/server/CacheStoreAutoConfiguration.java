@@ -1,5 +1,6 @@
 package build.jenesis.repository.cache.server;
 
+import build.jenesis.repository.net.http.ScreenedHttpClient;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.StoreBindings;
@@ -27,11 +28,20 @@ import org.springframework.core.env.Environment;
 @ConditionalOnProperty(name = "jenrepo." + CacheNode.GATE, havingValue = "true", matchIfMissing = true)
 public class CacheStoreAutoConfiguration {
 
+    /** This context's hold on the shared outbound HTTP clients. The store takes it, so it is closed after the store
+     *  and after everything that uses the store, and the last context to close stops the clients. */
+    @Bean
+    @ConditionalOnMissingBean
+    public ScreenedHttpClient.Lease outboundHttpLease() {
+        return ScreenedHttpClient.lease();
+    }
+
     /** The deployment's store, selected by {@code jenrepo.store}, carrying what the composition binds to it. */
     @Bean
     @ConditionalOnMissingBean
     public ArtifactStore artifactStore(Environment environment, MeterRegistry registry,
-                                       ObjectProvider<StoreBindings> bindings) {
+                                       ObjectProvider<StoreBindings> bindings,
+                                       ScreenedHttpClient.Lease outboundHttpLease) {
         String backend = environment.getProperty("jenrepo.store");
         return new MeteringArtifactStore(StoreBindings.all(bindings.orderedStream())
                 .over(ArtifactStoreProvider.resolve(backend, environment::getProperty)), registry, backend);

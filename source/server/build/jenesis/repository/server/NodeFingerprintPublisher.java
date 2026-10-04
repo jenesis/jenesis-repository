@@ -108,10 +108,12 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
         scheduler.scheduleAtFixedRate(this::publishQuietly, heartbeatMillis, heartbeatMillis, TimeUnit.MILLISECONDS);
     }
 
-    /** Build and publish this node's current fingerprint; never throws (best-effort heartbeat). */
+    /** Build and publish this node's current fingerprint, then read the fleet's report for the posture surface;
+     *  never throws (best-effort heartbeat). */
     public void publishQuietly() {
         try {
             consistency.publish(fingerprint());
+            NodeDivergenceAdvisor.observe(consistency.report(System.currentTimeMillis()));
         } catch (IOException | RuntimeException best) {
             // A read-only deployment refuses the write, or the store hiccuped - retry on the next heartbeat rather than
             // fail the node. Consistency detects and reports; it never blocks the node it runs on.
@@ -153,6 +155,7 @@ public final class NodeFingerprintPublisher implements AutoCloseable {
     @Override
     public void close() {
         scheduler.shutdownNow();
+        NodeDivergenceAdvisor.forget();
     }
 
     private static Map<String, String> mustMatch(UnaryOperator<String> config) {

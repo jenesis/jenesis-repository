@@ -35,6 +35,7 @@
  *
  */
 open module build.jenesis.repository.server {
+    requires build.jenesis.repository.net.http;
     requires transitive build.jenesis.repository.server.spi;
     requires build.jenesis.repository.scope;
     requires build.jenesis.repository.store;

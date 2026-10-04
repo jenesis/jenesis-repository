@@ -82,6 +82,13 @@ public final class LuceneSearchQueryProvider implements SearchQueryProvider {
         };
     }
 
+    /** Close every resident searcher; a query still running on one finishes first. */
+    @Override
+    public synchronized void close() {
+        entries.values().forEach(entry -> entry.searcher.close());
+        entries.clear();
+    }
+
     /** The number of scopes resident, never past {@code maxResident} once eviction has run. */
     public int residentScopes() {
         return entries.size();

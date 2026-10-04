@@ -20,6 +20,9 @@ import build.jenesis.repository.store.Providers;
  *       to fail later.</li>
  *   <li><b>Selection.</b> Every installed issuer contributes ({@code ALL}); the one that {@link #issues} a host serves
  *       it. Two claiming one host is a packaging error, and {@link #serving} throws naming both.</li>
+ *   <li><b>Lifecycle / ownership.</b> Whoever resolves the issuers holds them for its own life rather than resolving
+ *       them per token, and {@link #close() closes} each when it closes: an issuer releases the clients it opened to
+ *       mint, and is asked for nothing after.</li>
  *   <li><b>Error visibility.</b> {@link #issue} throws {@link IOException} naming the host and cause when the identity
  *       is missing or refused, since a proxy fetching without its token answers an anonymous {@code 401}.</li>
  *   <li><b>Network.</b> {@link #issue} is the one outbound call, to the cloud provider's token endpoint, made only for
@@ -27,7 +30,7 @@ import build.jenesis.repository.store.Providers;
  *   <li><b>Tenant scoping.</b> None: a token authenticates the deployment's own outbound fetches.</li>
  * </ol>
  */
-public interface UpstreamTokenIssuer {
+public interface UpstreamTokenIssuer extends AutoCloseable {
 
     /** The name an issued credential records, e.g. {@code aws}. */
     String name();
@@ -37,6 +40,10 @@ public interface UpstreamTokenIssuer {
 
     /** A fresh token for {@code host}. */
     Token issue(String host) throws IOException;
+
+    /** Release the clients this issuer opened to mint; its owner closes it once, when it closes. */
+    @Override
+    void close();
 
     /** One minted credential: the header to send, its value, and when it stops being accepted. */
     record Token(String header, String value, Instant expires) {
@@ -57,14 +64,14 @@ public interface UpstreamTokenIssuer {
                 Optional::of);
     }
 
-    /** The installed issuer called {@code name}, or empty. */
-    static Optional<UpstreamTokenIssuer> named(String name) {
-        return installed().stream().filter(issuer -> issuer.name().equals(name)).findFirst();
+    /** The issuer among {@code issuers} called {@code name}, or empty. */
+    static Optional<UpstreamTokenIssuer> named(List<UpstreamTokenIssuer> issuers, String name) {
+        return issuers.stream().filter(issuer -> issuer.name().equals(name)).findFirst();
     }
 
-    /** The one installed issuer serving {@code host}, or empty; two claiming it throws. */
-    static Optional<UpstreamTokenIssuer> serving(String host) {
-        List<UpstreamTokenIssuer> serving = installed().stream().filter(issuer -> issuer.issues(host)).toList();
+    /** The one issuer among {@code issuers} serving {@code host}, or empty; two claiming it throws. */
+    static Optional<UpstreamTokenIssuer> serving(List<UpstreamTokenIssuer> issuers, String host) {
+        List<UpstreamTokenIssuer> serving = issuers.stream().filter(issuer -> issuer.issues(host)).toList();
         if (serving.size() > 1) {
             throw new IllegalStateException("More than one upstream token issuer serves " + host + ": "
                     + serving.stream().map(UpstreamTokenIssuer::name).toList());

@@ -6,8 +6,6 @@ import build.jenesis.repository.posture.Configuration;
 import build.jenesis.repository.posture.SafetyAdvisor;
 import build.jenesis.repository.posture.SecurityAdvisory;
 import build.jenesis.repository.posture.Severity;
-import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.ArtifactStoreProvider;
 
 /**
  * The "node divergence" security-posture advisor: it reads every node's published
@@ -16,33 +14,36 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
  * long) and the fix (check the sweep lease, reconcile the config), so a wedged node surfaces on the same
  * {@code GET /api/posture} / console / boot-log posture surfaces every other configuration warning does. It is
  * {@code provides}-declared, discovered with {@link java.util.ServiceLoader} like the core {@code SecurityPosture}
- * seed, and reads its store from the effective configuration exactly as the deployment resolves it.
+ * seed.
  *
- * <p>It <strong>degrades cleanly</strong>: a single-node deployment (or one whose nodes agree) reports nothing, so the
- * posture surface never advises about divergence that is not happening; and a store it cannot read (misconfigured,
- * absent, or a transient I/O error) yields no advisory rather than a failure - observing consistency never blocks. The
- * advisory names the risk, never a resolved hash or a config value, so this surface cannot leak one. The read is cheap
- * (the node prefix plus one small object per node), never a scan.
+ * <p>It reads no store: the report is the one this node's {@link NodeFingerprintPublisher} computed on its last
+ * heartbeat over the deployment's own store and {@linkplain #observe handed} here, so a posture read costs nothing
+ * and stands whatever the store is doing. It <strong>degrades cleanly</strong>: a node that publishes no fingerprint,
+ * a single-node deployment and one whose nodes agree all report nothing, so the posture surface never advises about
+ * divergence that is not happening. The advisory names the risk, never a resolved hash or a config value, so this
+ * surface cannot leak one.
  */
 public final class NodeDivergenceAdvisor implements SafetyAdvisor {
 
     static final String DOCS = "https://jenesis.build/repository/operations/";
 
+    /** The report this node's heartbeat last computed, or {@code null} while none publishes. */
+    private static final AtomicReference<ConsistencyReport> OBSERVED = new AtomicReference<>();
+
+    /** Record the report a heartbeat computed, which the next posture read advises from. */
+    static void observe(ConsistencyReport report) {
+        OBSERVED.set(Objects.requireNonNull(report, "report"));
+    }
+
+    /** Forget the observed report, as the publisher that recorded it stops. */
+    static void forget() {
+        OBSERVED.set(null);
+    }
+
     @Override
     public List<SecurityAdvisory> advise(Configuration config) {
-        ConsistencyReport report;
-        try {
-            String backend = config.optional("jenrepo.store").orElse("filesystem");
-            ArtifactStore store = ArtifactStoreProvider.resolve(backend, config::value);
-            NodeConsistency check = new NodeConsistency(store, NodeConsistency.settingsFrom(config::value));
-            report = check.report(System.currentTimeMillis());
-        } catch (RuntimeException unavailable) {
-            // The store is not resolvable here (or a transient read failure) - the consistency surface degrades to
-            // nothing rather than turning a posture read into an error. The dedicated /api/consistency surface, wired
-            // with the live store, remains the authoritative read.
-            return List.of();
-        }
-        if (report.converged()) {
+        ConsistencyReport report = OBSERVED.get();
+        if (report == null || report.converged()) {
             return List.of();
         }
         List<SecurityAdvisory> advisories = new ArrayList<>();

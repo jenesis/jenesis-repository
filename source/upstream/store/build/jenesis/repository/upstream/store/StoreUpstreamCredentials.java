@@ -24,7 +24,7 @@ import build.jenesis.repository.upstream.UpstreamTokenIssuer;
  * closed, so a value it cannot decrypt, or one that is not an envelope, fails the fetch and must be re-entered rather
  * than being sent as the literal header.
  */
-public final class StoreUpstreamCredentials implements UpstreamCredentialSource {
+public final class StoreUpstreamCredentials implements UpstreamCredentialSource, AutoCloseable {
 
     /** The single deployment-global document, declared shared in {@link UpstreamCredentialsStorageNamespace}. */
     static final String PATH = Scopes.space(Scopes.CONFIG) + "/upstream-auth";
@@ -48,6 +48,8 @@ public final class StoreUpstreamCredentials implements UpstreamCredentialSource 
     private final ConcurrentHashMap<String, UpstreamTokenIssuer.Token> minted = new ConcurrentHashMap<>();
     /** One lock per host, so concurrent fetches of one upstream mint its token once. */
     private final ConcurrentHashMap<String, Object> minting = new ConcurrentHashMap<>();
+    /** The installed issuers, held for this source's life so an issuer's clients are opened once and closed with it. */
+    private final List<UpstreamTokenIssuer> issuers = UpstreamTokenIssuer.installed();
     private volatile Properties snapshot;
     private volatile long freshUntil;
 
@@ -128,7 +130,7 @@ public final class StoreUpstreamCredentials implements UpstreamCredentialSource 
             UpstreamCredentialSource.super.set(host, credential);
             return;
         }
-        UpstreamTokenIssuer issuer = UpstreamTokenIssuer.serving(host)
+        UpstreamTokenIssuer issuer = UpstreamTokenIssuer.serving(issuers, host)
                 .filter(serving -> serving.name().equals(issued.issuer()))
                 .orElseThrow(() -> new IllegalArgumentException("No installed " + issued.issuer()
                         + " token issuer serves '" + host + "'."));
@@ -154,7 +156,7 @@ public final class StoreUpstreamCredentials implements UpstreamCredentialSource 
             if (usable(token)) {
                 return token;
             }
-            UpstreamTokenIssuer issuer = UpstreamTokenIssuer.named(issuerName).orElseThrow(() ->
+            UpstreamTokenIssuer issuer = UpstreamTokenIssuer.named(issuers, issuerName).orElseThrow(() ->
                     new IllegalStateException("The upstream credential for '" + host + "' is issued by "
                             + issuerName + ", which is not installed on this node."));
             try {
@@ -165,6 +167,12 @@ public final class StoreUpstreamCredentials implements UpstreamCredentialSource 
             minted.put(host, token);
             return token;
         }
+    }
+
+    /** Close the issuers this source holds, releasing the clients they opened to mint. */
+    @Override
+    public void close() {
+        issuers.forEach(UpstreamTokenIssuer::close);
     }
 
     private boolean usable(UpstreamTokenIssuer.Token token) {

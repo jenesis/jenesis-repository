@@ -1,4 +1,5 @@
 package build.jenesis.repository.server;
+import build.jenesis.repository.net.http.ScreenedHttpClient;
 import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.audit.AuditTrail;
@@ -97,11 +98,20 @@ public class RepositoryAutoConfiguration {
         }
     }
 
+    /** This context's hold on the shared outbound HTTP clients. The store takes it, so it is closed after the store
+     *  and after everything that uses the store, and the last context to close stops the clients. */
+    @Bean
+    @ConditionalOnMissingBean
+    public ScreenedHttpClient.Lease outboundHttpLease() {
+        return ScreenedHttpClient.lease();
+    }
+
     @Bean
     @ConditionalOnMissingBean
     public ArtifactStore artifactStore(RepositoryProperties properties, Environment environment,
                                        ObjectProvider<ArtifactStoreDecorator> decorators,
-                                       ObjectProvider<StoreBindings> bindings) {
+                                       ObjectProvider<StoreBindings> bindings,
+                                       ScreenedHttpClient.Lease outboundHttpLease) {
         ArtifactStore resolved = ArtifactStoreProvider.resolve(properties.getStore(), environment::getProperty);
         // What the composition hands the plug-ins it cannot inject - a screen's gate, say - rides the store itself,
         // bound closest to the backend so every layer above forwards it and every scope of the store carries it.
@@ -498,16 +508,18 @@ public class RepositoryAutoConfiguration {
     }
 
     /** The deferred listing derivations ({@code StoredListing.later}): a stopping node finishes the derived twins it
-     *  queued before its context closes, rather than dropping them. */
+     *  queued before its context closes, rather than dropping them. The store is an unread parameter, so this closes
+     *  before the store it writes into. */
     @Bean(destroyMethod = "close")
-    public StoredListing.Deferred deferredListingDerivations() {
+    public StoredListing.Deferred deferredListingDerivations(ArtifactStore store) {
         return new StoredListing.Deferred();
     }
 
     /** The deferred counters ({@code StoredCounter.addLater}): a stopping node writes what it still holds before
-     *  its context closes, and holds nothing for a store that is gone - see {@link StoredCounter#settle()}. */
+     *  its context closes, and holds nothing for a store that is gone - see {@link StoredCounter#settle()}. The store
+     *  is an unread parameter, so this closes before the store it writes into. */
     @Bean(destroyMethod = "close")
-    public StoredCounter.Settling deferredCounters() {
+    public StoredCounter.Settling deferredCounters(ArtifactStore store) {
         return new StoredCounter.Settling();
     }
 

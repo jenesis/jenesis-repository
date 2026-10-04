@@ -64,6 +64,10 @@ class FullTextSearchDefaultTest {
     /** An index that would answer anything, so a repository that asked it would be seen asking. */
     private static final class AnsweringIndex implements SearchQueryProvider, SearchQuery {
 
+        @Override
+        public void close() {
+        }
+
         private boolean asked;
 
         @Override

@@ -45,7 +45,7 @@ import io.micrometer.observation.ObservationRegistry;
  * breadcrumbed browse tree and per-artifact detail, coordinate search, the license inventory and the read-only
  * published-index card - every read served from small pointer, sidecar and roll-up objects, never an artifact blob.
  */
-public class RepositoryBrowse extends TenantScope {
+public class RepositoryBrowse extends TenantScope implements AutoCloseable {
 
     /** The reserved subtree under {@code publish/} holding what the gate withholds for review, hidden from the browse
      *  as a GET hides it ({@code ServableNames.QUARANTINE}). */
@@ -71,6 +71,12 @@ public class RepositoryBrowse extends TenantScope {
                             Optional<SearchQueryProvider> index) {
         super(repositoryStore, current, observations);
         this.search = new RepositorySearch(index);
+    }
+
+    /** Close the search this browse holds, and the index readers it caches. */
+    @Override
+    public void close() {
+        search.close();
     }
 
     /** The immediate entries under a path in a repository's layout, for navigating the tree. */

@@ -66,6 +66,10 @@ public class RepositorySearchDirectLookupTest {
 
     /** The fake installed index: returns a fixed hit set so {@link RepositoryBrowse#search} takes its indexed branch. */
     private record FakeIndex(List<SearchQuery.Hit> hits) implements SearchQueryProvider, SearchQuery {
+
+        @Override
+        public void close() {
+        }
         @Override
         public SearchQuery over(ArtifactStore store, String scope) {
             return this;

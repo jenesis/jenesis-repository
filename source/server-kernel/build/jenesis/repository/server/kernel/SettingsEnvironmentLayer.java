@@ -46,25 +46,34 @@ public final class SettingsEnvironmentLayer implements ApplicationListener<Appli
         try {
             ArtifactStore store = ArtifactStoreProvider.resolve(
                     environment.getProperty("jenrepo.store", "filesystem"), environment::getProperty);
-            Map<String, Object> overrides = new HashMap<>();
-            for (String child : store.list(SettingsDocuments.ROOT)) {
-                if (!child.endsWith(".json")) {
-                    continue;
-                }
-                Optional<ArtifactStore.Versioned> object = store.readVersioned(SettingsDocuments.ROOT + "/" + child);
-                if (object.isPresent()) {
-                    for (Map.Entry<String, String> entry : SettingsDocuments.parse(object.get().content()).entrySet()) {
-                        overrides.put(Features.key(entry.getKey()), entry.getValue());
-                    }
-                }
+            // Resolved only to read the settings before the context exists, so whatever client it opened is closed
+            // once they are read; the context resolves the store it serves from.
+            try (AutoCloseable closed = store instanceof AutoCloseable owned ? owned : () -> { }) {
+                layer(environment, store);
             }
-            if (overrides.isEmpty()) {
-                return;
-            }
-            insert(environment.getPropertySources(), overrides);
         } catch (Exception e) {
             LOGGER.warn("Could not layer stored runtime settings; booting from file/env configuration only", e);
         }
+    }
+
+    /** Insert the settings {@code store} holds into {@code environment}. */
+    private static void layer(ConfigurableEnvironment environment, ArtifactStore store) throws IOException {
+        Map<String, Object> overrides = new HashMap<>();
+        for (String child : store.list(SettingsDocuments.ROOT)) {
+            if (!child.endsWith(".json")) {
+                continue;
+            }
+            Optional<ArtifactStore.Versioned> object = store.readVersioned(SettingsDocuments.ROOT + "/" + child);
+            if (object.isPresent()) {
+                for (Map.Entry<String, String> entry : SettingsDocuments.parse(object.get().content()).entrySet()) {
+                    overrides.put(Features.key(entry.getKey()), entry.getValue());
+                }
+            }
+        }
+        if (overrides.isEmpty()) {
+            return;
+        }
+        insert(environment.getPropertySources(), overrides);
     }
 
     /** Re-seed the stored-settings property source from the current runtime overrides so this node converges on

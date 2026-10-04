@@ -23,6 +23,7 @@ import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.SortedDocValuesField;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
+import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
@@ -180,10 +181,12 @@ public final class SearchIndexTask implements MaintenanceTask {
         try {
             // A reader over the pre-apply snapshot for the out-of-order guard, opened before the writer mutates the
             // directory.
-            try (DirectoryReader before = DirectoryReader.open(directory)) {
+            // The writer does not close the analyzer it was configured with, so the analyzer is closed after it.
+            try (DirectoryReader before = DirectoryReader.open(directory);
+                 Analyzer analyzer = CoordinateAnalyzer.fields()) {
                 IndexSearcher guard = new IndexSearcher(before);
                 IndexWriter writer = new IndexWriter(directory,
-                        new IndexWriterConfig(CoordinateAnalyzer.fields()).setOpenMode(IndexWriterConfig.OpenMode.APPEND));
+                        new IndexWriterConfig(analyzer).setOpenMode(IndexWriterConfig.OpenMode.APPEND));
                 try {
                     // Paged through the feed's drain into one writer; nothing clears until the snapshot below commits.
                     feed.drain(ArtifactStore.DRAIN_PAGE, page -> {
@@ -334,6 +337,9 @@ public final class SearchIndexTask implements MaintenanceTask {
         try (accumulation) {
             inventory.releases(accumulation);
             inventory.servedPaths(path -> accumulation.visitServedPath(inventory, path));
+        } catch (IOException | RuntimeException failed) {
+            accumulation.release();   // abandoned: nothing will link its files
+            throw failed;
         }
         return accumulation;
     }
@@ -349,6 +355,9 @@ public final class SearchIndexTask implements MaintenanceTask {
             try (accumulation) {
                 pass = inventory.releases(walk, CONSUMER, accumulation,
                         path -> accumulation.visitServedPath(inventory, path));
+            } catch (IOException | RuntimeException failed) {
+                accumulation.release();   // abandoned: nothing will link its files
+                throw failed;
             }
             if (!pass.complete()) {
                 accumulation.release();
@@ -460,6 +469,8 @@ public final class SearchIndexTask implements MaintenanceTask {
     private static final class Accumulation implements RepositoryInventory.ReleaseVisitor, Closeable {
 
         private final Directory directory = SearchIndex.scratch();
+        /** The analyzer the writer was configured with, which closing the writer leaves open. */
+        private final Analyzer analyzer = CoordinateAnalyzer.fields();
         private final IndexWriter writer;
         private final StoreRepositoryInventory inventory;
         private final LicenseDerivation licenses;
@@ -468,7 +479,13 @@ public final class SearchIndexTask implements MaintenanceTask {
         private Accumulation(StoreRepositoryInventory inventory, LicenseDerivation licenses) throws IOException {
             this.inventory = inventory;
             this.licenses = licenses;
-            writer = new IndexWriter(directory, new IndexWriterConfig(CoordinateAnalyzer.fields()));
+            try {
+                writer = new IndexWriter(directory, new IndexWriterConfig(analyzer));
+            } catch (IOException | RuntimeException failed) {
+                analyzer.close();
+                SearchIndex.discard(directory);   // nothing was written into it, and no one else holds it
+                throw failed;
+            }
         }
 
         @Override
@@ -494,7 +511,11 @@ public final class SearchIndexTask implements MaintenanceTask {
 
         @Override
         public void close() throws IOException {
-            writer.close();
+            try {
+                writer.close();
+            } finally {
+                analyzer.close();
+            }
         }
 
         /** Release the scratch directory, once its files are linked into the cache or the build is abandoned. */

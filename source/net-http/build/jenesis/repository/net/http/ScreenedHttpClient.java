@@ -64,8 +64,11 @@ import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
  * builder's {@link SSLContext}. A cookie handler, authenticator or proxy selector is refused at build time, since a
  * silently ignored security setting would not hold.
  *
- * <p>Clients built with the same connect timeout, trust and resolver share one Jetty client and pool for the life of
- * the JVM, so {@link #close()} releases nothing and a caller need not hold a client to avoid a leak.
+ * <p>Clients built with the same connect timeout, trust and resolver share one Jetty client and pool, so
+ * {@link #close()} releases nothing and a caller need not hold a client to avoid a leak. A composition holds a
+ * {@link #lease()} for its life and closes it as it shuts down; once the last lease is closed the shared clients are
+ * stopped, their threads with them, and a client built after starts afresh. A process holding no lease - a command-line
+ * tool - keeps them until it exits, on daemon threads that never hold it open.
  */
 public final class ScreenedHttpClient extends HttpClient {
 
@@ -107,6 +110,9 @@ public final class ScreenedHttpClient extends HttpClient {
 
     private static final Map<Engine.Key, Engine> ENGINES = new ConcurrentHashMap<>();
 
+    /** The leases open on the shared clients; guarded by {@link #ENGINES}. */
+    private static int leases;
+
     private final Engine engine;
     private final Duration connectTimeout;
     private final Duration idleTimeout;
@@ -134,6 +140,39 @@ public final class ScreenedHttpClient extends HttpClient {
     /** The least a body must move per window of reading; the bytes are read afresh per exchange so a live setting is
      *  honoured, and {@code 0} lifts the floor. */
     private record Floor(LongSupplier bytes, Duration window) {
+    }
+
+    /**
+     * A hold on the shared clients for as long as the returned lease is open: a composition takes one as it starts and
+     * closes it as it shuts down, and closing the last one stops every shared client and its threads.
+     */
+    public static Lease lease() {
+        synchronized (ENGINES) {
+            leases++;
+        }
+        return new Lease();
+    }
+
+    /** A composition's hold on the shared clients; closing it twice counts once. */
+    public static final class Lease implements AutoCloseable {
+
+        private final AtomicBoolean open = new AtomicBoolean(true);
+
+        private Lease() {
+        }
+
+        @Override
+        public void close() {
+            if (!open.compareAndSet(true, false)) {
+                return;
+            }
+            synchronized (ENGINES) {
+                if (--leases == 0) {
+                    ENGINES.values().forEach(Engine::stop);
+                    ENGINES.clear();
+                }
+            }
+        }
     }
 
     /** A builder in place of {@code HttpClient.newBuilder()}. */
@@ -668,13 +707,26 @@ public final class ScreenedHttpClient extends HttpClient {
         }
 
         private final org.eclipse.jetty.client.HttpClient client;
+        private final QueuedThreadPool threads;
+        private final ScheduledExecutorScheduler scheduler;
+
+        /** Stop the client and its threads; a request still in flight on it fails as a closed connection does. */
+        void stop() {
+            for (org.eclipse.jetty.util.component.LifeCycle part : List.of(client, scheduler, threads)) {
+                try {
+                    part.stop();
+                } catch (Exception ignored) {
+                    // Stopping is best-effort: what does not stop holds only daemon threads.
+                }
+            }
+        }
 
         private Engine(Key key) {
-            QueuedThreadPool threads = new QueuedThreadPool();
+            threads = new QueuedThreadPool();
             threads.setName("jenesis-http");
             threads.setDaemon(true);
             threads.setMinThreads(2);
-            ScheduledExecutorScheduler scheduler = new ScheduledExecutorScheduler("jenesis-http-scheduler", true);
+            scheduler = new ScheduledExecutorScheduler("jenesis-http-scheduler", true);
             SslContextFactory.Client tls = new SslContextFactory.Client();
             tls.setSslContext(key.sslContext());
             tls.setEndpointIdentificationAlgorithm("HTTPS");
