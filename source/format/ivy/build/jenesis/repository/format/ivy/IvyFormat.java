@@ -328,8 +328,12 @@ public final class IvyFormat implements RepositoryFormat, ArtifactLayout, Artifa
 
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
-        return Coordinate.of(path).map(at -> new ArtifactDescriptor(ECOSYSTEM, at.coordinate(), at.revision(),
-                path, contentType(at.file()), at.revision().indexOf('-') >= 0, null, -1L));
+        return Coordinate.of(path).map(at -> sidecar(at.file())
+                // A checksum or a signature is no file of the revision: it records nothing against it, raises no
+                // event, counts no download and is not held with it.
+                ? ArtifactDescriptor.at(ECOSYSTEM, path)
+                : new ArtifactDescriptor(ECOSYSTEM, at.coordinate(), at.revision(), path, contentType(at.file()),
+                        at.revision().indexOf('-') >= 0, null, -1L));
     }
 
     @Override
