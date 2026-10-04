@@ -320,7 +320,9 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, PathKe
         }
         URI target = URI.create(root + architecture + "/" + file);
         Optional<String> declared;
-        try (ProxyFormat.Download document = fetcher.download(index, Map.of()).orElse(null)) {
+        // The index is read beside the package rather than as it: a screen judging it would hold the index in the
+        // package's place.
+        try (ProxyFormat.Download document = fetcher.beside().download(index, Map.of()).orElse(null)) {
             if (document == null) {
                 return ProxyRelay.unverifiable(target, ProxyRelay.Declared.unreachable(index));
             }

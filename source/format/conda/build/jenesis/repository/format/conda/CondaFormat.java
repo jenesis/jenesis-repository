@@ -483,8 +483,9 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
         URI target = URI.create(root + subdir + "/" + file);
         if (isPackage(file)) {
             // The subdir's repodata.json publishes each package's SHA-256, and the streamed archive is held to it. The
-            // index is a separate fetch, and one that could not be read must not become an unverified fill.
-            ProxyRelay.Declared expected = repodataChecksum(root, subdir, file, fetcher);
+            // index is a separate fetch, and one that could not be read must not become an unverified fill. It is read
+            // beside the package rather than as it: a screen judging it would hold the index in the package's place.
+            ProxyRelay.Declared expected = repodataChecksum(root, subdir, file, fetcher.beside());
             if (!expected.readable()) {
                 return ProxyRelay.unverifiable(target, expected);
             }

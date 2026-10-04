@@ -62,14 +62,32 @@ class ApkProxyTest {
     }
 
     @Test
+    void a_screen_judges_the_package_and_never_the_index_read_beside_it() throws IOException {
+        byte[] apk = Packages.apk("widget", "1.0.0-r0", "x86_64");
+        JudgingScreen screen = new JudgingScreen(upstream(apk, entry(checksum(apk))));
+        ContractExchange exchange = ContractExchange.of("GET", REQUEST);
+        ((ProxyFormat) apk()).proxy(exchange, store("screened"), ROOT, screen);
+
+        assertThat(exchange.status()).isEqualTo(200);
+        assertThat(screen.judged).containsExactly(ROOT.resolve("x86_64/" + FILE));
+    }
+
+    @Test
     void an_unpublished_repository_misses_so_its_index_can_be_proxied() throws IOException {
         assertThat(get(store("empty"), "/apk/main/x86_64/APKINDEX.tar.gz").status()).isEqualTo(404);
     }
 
     /** Proxy one request for {@link #FILE} against an upstream serving {@code apk} and an index of {@code entries}. */
     private static ContractExchange proxy(ArtifactStore store, byte[] apk, String entries) throws IOException {
+        ContractExchange exchange = ContractExchange.of("GET", REQUEST);
+        ((ProxyFormat) apk()).proxy(exchange, store, ROOT, upstream(apk, entries));
+        return exchange;
+    }
+
+    /** An upstream serving {@code apk} as {@link #FILE} and an index of {@code entries}. */
+    private static ProxyFormat.Fetcher upstream(byte[] apk, String entries) {
         byte[] index = index(entries);
-        ProxyFormat.Fetcher fetcher = new ProxyFormat.Fetcher.Buffered() {
+        return new ProxyFormat.Fetcher.Buffered() {
 
             @Override
             public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) {
@@ -86,9 +104,6 @@ class ApkProxyTest {
                         : Optional.of(new ProxyFormat.Download(404, InputStream.nullInputStream(), Map.of()));
             }
         };
-        ContractExchange exchange = ContractExchange.of("GET", REQUEST);
-        ((ProxyFormat) apk()).proxy(exchange, store, ROOT, fetcher);
-        return exchange;
     }
 
     /** One index block for the package, declaring {@code checksum}. */
