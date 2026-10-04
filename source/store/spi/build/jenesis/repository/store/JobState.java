@@ -34,6 +34,12 @@ public final class JobState {
     /** The state a job's record holds while a run works on it. */
     public static final String RUNNING = "running";
 
+    /** The state a job's record holds once its run finished the work. */
+    public static final String COMPLETED = "completed";
+
+    /** The state a job's record holds once its run stopped on a failure it records. */
+    public static final String FAILED = "failed";
+
     /** How long a run's hold on its job outlives its last renewal: long enough that a busy node renewing a third of the
      *  way through keeps it, short enough that a job whose node died reads interrupted within minutes. */
     static final Duration LEASE = Duration.ofMinutes(3);

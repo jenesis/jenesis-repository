@@ -40,7 +40,8 @@ open module build.jenesis.repository.ui.store {
     requires build.jenesis.repository.staging;
     requires build.jenesis.repository.search;
     requires build.jenesis.repository.search.service;
-    requires build.jenesis.repository.settings;
+    // Transitive: a setting's view carries its kind, form and choices.
+    requires transitive build.jenesis.repository.settings;
     requires build.jenesis.repository.upstream;
     requires build.jenesis.repository.dependents.spi;
     requires build.jenesis.repository.findings;

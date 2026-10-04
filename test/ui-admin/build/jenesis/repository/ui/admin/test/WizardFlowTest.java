@@ -5,6 +5,7 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.ui.admin.web.WizardFlow;
 import build.jenesis.repository.ui.DurationWords;
 import build.jenesis.repository.ui.store.SettingsAdmin;
+import build.jenesis.repository.settings.Setting.Kind;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -18,7 +19,7 @@ class WizardFlowTest {
 
     private final List<Map<String, String>> checked = new ArrayList<>();
 
-    private static SettingsAdmin.SettingView view(String key, String kind, String inherited, boolean pinned) {
+    private static SettingsAdmin.SettingView view(String key, Kind kind, String inherited, boolean pinned) {
         return new SettingsAdmin.SettingView(key, "Retention", key, "What " + key + " does.", kind, List.of(),
                 inherited, inherited, false, true, false, pinned, pinned ? "the deployment's operator" : null,
                 "build.jenesis.repository.probe", false, null);
@@ -44,9 +45,9 @@ class WizardFlowTest {
             "Create now",
             List.of(new WizardFlow.Step.Identity("Repository", List.of("What it is called."),
                             List.of(new WizardFlow.Field("name", "Name", "Letters and digits.", List.of(), true))),
-                    new WizardFlow.Step.Settings("Retention", List.of(view("keep-last", "LONG", "0", false),
-                            view("max-age", "DURATION_OR_NONE", "", false))),
-                    new WizardFlow.Step.Settings("Routing", List.of(view("routing", "STRING", "writable", true)))),
+                    new WizardFlow.Step.Settings("Retention", List.of(view("keep-last", Kind.LONG, "0", false),
+                            view("max-age", Kind.DURATION_OR_NONE, "", false))),
+                    new WizardFlow.Step.Settings("Routing", List.of(view("routing", Kind.STRING, "writable", true)))),
             List.of("Nothing is created until the review is completed."), checks);
 
     private static Map<String, String> form(String... pairs) {
@@ -124,8 +125,9 @@ class WizardFlowTest {
     void the_review_shows_a_chosen_value_as_the_settings_screen_does_and_never_a_secret() {
         WizardFlow.Definition secrets = new WizardFlow.Definition("Setup", "/ui/setup",
                 new WizardFlow.Exit("Skip", "/ui/setup/skip", true), "Apply", "Apply now",
-                List.of(new WizardFlow.Step.Settings("Access", List.of(view("token", "SECRET", "", false),
-                        view("enabled", "BOOLEAN", "false", false), view("max-age", "DURATION_OR_NONE", "", false)))),
+                List.of(new WizardFlow.Step.Settings("Access", List.of(view("token", Kind.SECRET, "", false),
+                        view("enabled", Kind.BOOLEAN, "false", false),
+                        view("max-age", Kind.DURATION_OR_NONE, "", false)))),
                 List.of(), checks);
         WizardFlow flow = WizardFlow.resume(secrets,
                 form("step", "1", "setting.token", "s3cr3t-value", "setting.enabled", "true", "setting.max-age", "P30D"));

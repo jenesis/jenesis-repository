@@ -47,7 +47,7 @@ public final class Exports {
                       String reached, String error) {
 
         public boolean running() {
-            return "running".equals(state);
+            return JobState.RUNNING.equals(state);
         }
     }
 

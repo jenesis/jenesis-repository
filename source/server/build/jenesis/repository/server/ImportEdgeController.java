@@ -160,7 +160,7 @@ public class ImportEdgeController {
             return;
         }
         response.setHeader("Content-Type", "application/json");
-        respond(response, 202, JSON.writeValueAsString(Map.of("job", jobId, "state", "running")));
+        respond(response, 202, JSON.writeValueAsString(Map.of("job", jobId, "state", JobState.RUNNING)));
     }
 
     /** The routed artifact space of {@code repo} in the tenant the request answers for, or empty when the routing

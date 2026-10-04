@@ -1,5 +1,7 @@
 package build.jenesis.repository.ui.store;
 
+import build.jenesis.repository.settings.Setting;
+
 import module java.base;
 
 /**
@@ -36,24 +38,24 @@ public enum SettingControl {
     /** A repository's routing, edited as its clauses. */
     ROUTING;
 
-    /** The control for a setting of {@code kind} declared with {@code form}, both as the catalogue names them: the
-     *  kind decides a switch and a drop-down, the form how text is edited, and the kind again what one line checks. */
-    public static SettingControl of(String kind, String form) {
+    /** The control for a setting of {@code kind} declared with {@code form}: the kind decides a switch and a
+     *  drop-down, the form how text is edited, and the kind again what one line checks. */
+    public static SettingControl of(Setting.Kind kind, Setting.Form form) {
         return switch (kind) {
-            case "BOOLEAN" -> SWITCH;
-            case "CHOICE" -> SELECT;
-            default -> switch (form == null ? "LINE" : form) {
-                case "TEXT" -> TEXT;
-                case "LINES" -> LINES;
-                case "JSON" -> JSON;
-                case "VALUES" -> VALUES;
-                case "ROUTING" -> ROUTING;
+            case BOOLEAN -> SWITCH;
+            case CHOICE -> SELECT;
+            default -> switch (form == null ? Setting.Form.LINE : form) {
+                case TEXT -> TEXT;
+                case LINES -> LINES;
+                case JSON -> JSON;
+                case VALUES -> VALUES;
+                case ROUTING -> ROUTING;
                 default -> switch (kind) {
-                    case "INTEGER", "LONG" -> NUMBER;
-                    case "URI" -> URL;
-                    case "SECRET" -> SECRET;
-                    case "DURATION" -> DURATION;
-                    case "DURATION_OR_NONE" -> DURATION_OR_NONE;
+                    case INTEGER, LONG -> NUMBER;
+                    case URI -> URL;
+                    case SECRET -> SECRET;
+                    case DURATION -> DURATION;
+                    case DURATION_OR_NONE -> DURATION_OR_NONE;
                     default -> LINE;
                 };
             };

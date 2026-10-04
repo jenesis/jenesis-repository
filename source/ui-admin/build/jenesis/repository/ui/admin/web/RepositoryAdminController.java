@@ -595,7 +595,7 @@ public class RepositoryAdminController {
         model.addAttribute("jobs", jobs);
         model.addAttribute("next", page.next());
         model.addAttribute("paged", !after.isBlank());
-        model.addAttribute("running", jobs.stream().anyMatch(job -> "running".equals(job.state())));
+        model.addAttribute("running", jobs.stream().anyMatch(job -> JobState.RUNNING.equals(job.state())));
         return "import";
     }
 

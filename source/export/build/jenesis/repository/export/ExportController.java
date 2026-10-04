@@ -1,6 +1,7 @@
 package build.jenesis.repository.export;
 
 import module java.base;
+import build.jenesis.repository.store.JobState;
 import build.jenesis.repository.server.RepositoryRouting;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -48,7 +49,7 @@ public class ExportController {
             return;
         }
         response.setHeader("Content-Type", "application/json");
-        respond(response, 202, JSON.writeValueAsString(Map.of("job", started.job(), "state", "running")));
+        respond(response, 202, JSON.writeValueAsString(Map.of("job", started.job(), "state", JobState.RUNNING)));
     }
 
     @GetMapping("/api/repository/export/{id}")

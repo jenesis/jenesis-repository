@@ -183,9 +183,9 @@ public class SettingsAdmin {
     private SettingView view(Setting setting, String effective, String baseline, boolean overridden,
                              Optional<PinnedSettings.Pin> pin, String module) {
         return new SettingView(setting.key(), setting.group(), setting.label(), setting.description(),
-                setting.kind().name(), setting.options(), effective, baseline, overridden, setting.live(),
+                setting.kind(), setting.options(), effective, baseline, overridden, setting.live(),
                 highImpact(setting), pin.isPresent(), pin.map(PinnedSettings.Pin::source).orElse(""), module,
-                setting.tier() == Setting.Tier.ADVANCED, setting.editedAs().name());
+                setting.tier() == Setting.Tier.ADVANCED, setting.editedAs());
     }
 
     /** The JPMS module a key is attributed to - the contributor that declares it, or {@link SettingsDocuments#NEUTRAL}
@@ -861,16 +861,17 @@ public class SettingsAdmin {
      *  override, live, high-impact and pin state, contributing module and tier. The helpers keep the template free of
      *  logic. */
     public record SettingView(String key, String group, String label, String description,
-                              String kind, List<Setting.Choice> named, String value, String defaultValue,
+                              Setting.Kind kind, List<Setting.Choice> named, String value, String defaultValue,
                               boolean overridden, boolean live, boolean highImpact,
-                              boolean pinned, String pinnedBy, String module, boolean advanced, String form) {
+                              boolean pinned, String pinnedBy, String module, boolean advanced,
+                              Setting.Form form) {
 
         /** What an empty value reads as - nothing is set, and nothing applies: "none (default)" beside a default. */
         public static final String NOTHING = "none";
 
         public SettingView {
             named = List.copyOf(named);
-            form = form == null ? Setting.Form.LINE.name() : form;
+            form = form == null ? Setting.Form.LINE : form;
         }
 
         /** The values the setting may take, or suggests, as the store spells them. */

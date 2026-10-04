@@ -133,13 +133,13 @@ public final class ImportJobs {
                     delegate.checkpoint(reached);
                 }
             });
-            job.write(body("completed", imported.get(), skipped.get(), held.get(), rejected.get(),
+            job.write(body(JobState.COMPLETED, imported.get(), skipped.get(), held.get(), rejected.get(),
                     skippedFormats, dropped, null, asset.get(), null));
         } catch (JobState.Lost lost) {
             // Another run has the job and writes its record; this one only stops.
         } catch (Exception e) {
             try {
-                job.write(body("failed", imported.get(), skipped.get(), held.get(), rejected.get(),
+                job.write(body(JobState.FAILED, imported.get(), skipped.get(), held.get(), rejected.get(),
                         skippedFormats, dropped, cursor[0], asset.get(),
                         e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
             } catch (JobState.Lost lost) {

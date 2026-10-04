@@ -2,6 +2,7 @@ package build.jenesis.repository.ui.store;
 
 import module java.base;
 
+import build.jenesis.repository.store.JobState;
 import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.store.Features;
 import build.jenesis.repository.ui.CurrentTenant;
@@ -69,7 +70,7 @@ public class RepositoryImports extends TenantScope {
     public boolean dismiss(String repository, String jobId) throws IOException {
         ArtifactStore store = scope(repository);
         Optional<ImportJobs.Snapshot> snapshot = new ImportJobs().snapshot(store, jobId);
-        if (snapshot.isPresent() && "running".equals(snapshot.get().state())) {
+        if (snapshot.isPresent() && JobState.RUNNING.equals(snapshot.get().state())) {
             return false;
         }
         store.delete("imports/" + jobId);

@@ -203,7 +203,7 @@ public class CacheProjectsController {
                               String description, boolean advanced) {
 
         static SettingView of(SettingsAdmin.SettingView view) {
-            return new SettingView(view.key(), view.kind(), view.value(), view.defaultValue(), view.overridden(),
+            return new SettingView(view.key(), view.kind().name(), view.value(), view.defaultValue(), view.overridden(),
                     view.live(), view.pinned(), view.pinnedBy(), view.group(), view.label(), view.description(),
                     view.advanced());
         }

@@ -150,7 +150,7 @@ public class ImportController {
             audit.record(tenant, key == null ? "anonymous" : Authorization.hash(key), AuditActions.REPOSITORY_IMPORT,
                     repo + " from " + (request.source() == null || request.source().isBlank() ? "none" : request.source()));
             response.setStatus(202);
-            return new ImportJob(jobId, "running");
+            return new ImportJob(jobId, JobState.RUNNING);
         });
     }
 

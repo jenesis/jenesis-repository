@@ -93,12 +93,12 @@ public final class ExportJobs {
                     walk.coordinates(format, exporter);
                 }
             }
-            job.write(body("completed", url, counts, null, walk.reached, null));
+            job.write(body(JobState.COMPLETED, url, counts, null, walk.reached, null));
         } catch (JobState.Lost lost) {
             // Another run has the job and writes its record; this one only stops.
         } catch (Exception e) {
             try {
-                job.write(body("failed", url, counts, walk.cursor, walk.reached,
+                job.write(body(JobState.FAILED, url, counts, walk.cursor, walk.reached,
                         e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
             } catch (JobState.Lost lost) {
                 // As above: the record is the other run's.
