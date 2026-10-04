@@ -20,12 +20,11 @@ import build.jenesis.repository.store.Requests;
  *     ({@link RepositoryFormat#demoArtifacts()} over {@link ProxyFormat#defaultUpstream()}), and those artifacts - old
  *     releases with known vulnerabilities - read through it, so they are cached, recorded and screened.</li>
  * <li><b>A walk of the store</b> asked for once the content is in, so the walks screen reports a run over it.</li>
- * <li><b>The OSV advisory feed</b> switched on after the first-party publishes and before the proxies are read, where
- *     its module is installed, so a version with a critical advisory is held for review as it arrives and the
- *     quarantine shows it held for that advisory; the scheduled scan is asked for, so the vulnerability screens fill.
- *     It screens fail-closed - a publish it would screen while the database is unreachable is held - so it comes after
- *     the first-party packages, and it is switched off again when no registry answered a read, since an offline
- *     deployment would otherwise hold every publish after the demo.</li>
+ * <li><b>The OSV advisory feed</b> switched on, where its module is installed, and the scheduled scan asked for, which
+ *     reads the feed at once, so the vulnerability screens fill with what the proxies read. The gate screens with the
+ *     feed from the next restart, since a feed owns a client and is resolved as the node boots. It screens fail-closed
+ *     - a publish it would screen while the database is unreachable is held - so it is switched off again when no
+ *     registry answered a read, since an offline deployment would otherwise hold every publish once restarted.</li>
  * </ul>
  */
 public final class StarterDemo implements DemoContributor {
@@ -100,9 +99,8 @@ public final class StarterDemo implements DemoContributor {
                     + proxied.registry());
         }
         if (Labels.catalogued(OSV) && !PROXIED.isEmpty()) {
-            settings.put(OSV, "on, before the proxies are read, so a version with a critical advisory is held for "
-                    + "review as it arrives and the advisory database is asked about every version held - and off "
-                    + "again if no registry answers");
+            settings.put(OSV, "on, so the scan asks the advisory database about every version the proxies read "
+                    + "and the gate screens with it from the next restart - and off again if no registry answers");
             reaches.add("the OSV vulnerability database (the endpoint the osv-endpoint setting names, "
                     + "api.osv.dev by default)");
         }

@@ -221,8 +221,8 @@ class DemoRunTest {
                 .contains("demo-maven-proxy/maven/org/apache/logging/log4j/log4j-core/2.14.1/log4j-core-2.14.1.jar",
                         "demo-npm-proxy/lodash/-/lodash-4.17.11.tgz");
         assertThat(state.nothingFetched()).isFalse();
-        assertThat(screened).as("the advisory feed is on before the first read, so a vulnerable version is screened "
-                + "as it arrives").isNotEmpty().containsOnly("true");
+        assertThat(screened).as("the advisory feed is on as the proxies read, for the scan to ask about what they "
+                + "read").isNotEmpty().containsOnly("true");
         assertThat(editor.effective(null, "osv", "")).as("and stays on").isEqualTo("true");
         assertThat(Requests.pending(store, "scan")).as("the scan is asked for, a minute on").isPresent()
                 .get().satisfies(request -> assertThat(request.notBefore()).isAfter(Instant.now()));
