@@ -9,9 +9,11 @@ import build.jenesis.repository.compliance.BoundedBodyReader;
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
 import build.jenesis.repository.compliance.ComplianceGate;
+import build.jenesis.repository.compliance.IncompleteScreenException;
 import build.jenesis.repository.compliance.Maintainer;
 import build.jenesis.repository.compliance.ManifestSubjectBuilder;
 import build.jenesis.repository.compliance.QualityInspector;
+import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.dependency.ArtifactSbom;
 import build.jenesis.repository.dependency.CycloneDxParser;
 import build.jenesis.repository.dependency.DependencyComponent;
@@ -155,7 +157,17 @@ public final class MavenQualityInspector implements QualityInspector {
         List<ComplianceGate.Subject> subjects = new ArrayList<>(inspectArtifact(path, content, lookup));
         String[] coordinate = coordinate(path);
         if (!subjects.isEmpty() && coordinate != null && path.endsWith(".pom")) {
-            subjects.addAll(closure(path, content, coordinate, lookup));
+            Optional<DependencyGraph> declared = siblingSbom(path, coordinate, lookup);
+            List<ComplianceGate.Subject> sbom = declared.map(MavenQualityInspector::declaredClosure).orElse(List.of());
+            if (!sbom.isEmpty()) {
+                subjects.addAll(sbom);
+                return subjects;
+            }
+            ClosureResolution.Resolved resolved = ClosureResolution.graph(path, content, coordinate, lookup);
+            resolved.graph().map(MavenQualityInspector::declaredClosure).ifPresent(subjects::addAll);
+            if (resolved.incomplete().isPresent() && resolved.verdict() != Verdict.ALLOW) {
+                throw new IncompleteScreenException(resolved.incomplete().get(), resolved.verdict(), subjects);
+            }
         }
         return subjects;
     }
@@ -414,21 +426,6 @@ public final class MavenQualityInspector implements QualityInspector {
                     + "resolves", path, unreadable);
             return Optional.empty();
         }
-    }
-
-    /** The closure, declared first: the sibling CycloneDX attachment when stored, read from the store, else the bounded
-     *  walk through the named repository, if one is named. */
-    private static List<ComplianceGate.Subject> closure(String path, byte[] pom, String[] coordinate,
-                                                        QualityInspector.Lookup lookup) throws IOException {
-        Optional<DependencyGraph> declared = siblingSbom(path, coordinate, lookup);
-        if (declared.isPresent()) {
-            List<ComplianceGate.Subject> subjects = declaredClosure(declared.get());
-            if (!subjects.isEmpty()) {
-                return subjects;
-            }
-        }
-        return ClosureResolution.graph(path, pom, coordinate, lookup).map(MavenQualityInspector::declaredClosure)
-                .orElse(List.of());
     }
 
     /** Every dependency the SBOM resolved, as gate subjects: its Maven coordinate and version, its own licences, and

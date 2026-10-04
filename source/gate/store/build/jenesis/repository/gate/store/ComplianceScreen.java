@@ -7,6 +7,7 @@ import build.jenesis.repository.store.Clocks;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.HealthSource;
+import build.jenesis.repository.compliance.IncompleteScreenException;
 import build.jenesis.repository.compliance.MalformedArtifactException;
 import build.jenesis.repository.compliance.QualityInspector;
 import build.jenesis.repository.compliance.SignerTrustProvider;
@@ -137,7 +138,9 @@ public final class ComplianceScreen implements PublishInterceptor {
     /** Whether the reason stashed above is an oversize refusal rather than a parse failure - the two are
      *  recorded under different codes, because a ledger that filed them together could not tell an artifact
      *  nobody could read from one nobody was asked to. Set beside the reason and cleared with it. */
-    private final ThreadLocal<Boolean> oversizedFinding = new ThreadLocal<>();
+    /** The code of the inspection finding a screen that did not read the whole artifact records - oversized or
+     *  incomplete - and unparseable when none is set. */
+    private final ThreadLocal<String> inspectionCode = new ThreadLocal<>();
 
     /** The reason an advisory feed failed closed while assessing this upload (a rate limit, a mirror outage - the feed
      *  throws rather than reporting a clean answer), stashed between {@link #assess} and {@link #committed} on the
@@ -518,7 +521,7 @@ public final class ComplianceScreen implements PublishInterceptor {
         assessed.remove();
         subjects.remove();
         unparseable.remove();
-        oversizedFinding.remove();
+        inspectionCode.remove();
         feedFailure.remove();
         if (RELEASING.get()) {
             // A review release is replaying this upload's own dispatch: the hold was already reviewed and released, so
@@ -538,6 +541,10 @@ public final class ComplianceScreen implements PublishInterceptor {
             // Unlike the two legs below this is not a failure of anything - nothing was attempted - so
             // the reason recorded is about the artifact's SIZE and claims nothing about its contents.
             return screenOversized(artifact, oversized);
+        } catch (IncompleteScreenException incomplete) {
+            // An inspector read the artifact and could not read all it depends on, and the deployment holds or refuses
+            // such an artifact: decided on what it did read, the reason naming what it did not.
+            return screenIncomplete(artifact, incomplete);
         } catch (MalformedArtifactException malformed) {
             // An inspector claimed this artifact but could not parse it (truncated, corrupt, a decompression bomb).
             // That is distinct from "parsed fine, declares nothing": it must never read as a silent clean. The gate's
@@ -697,12 +704,12 @@ public final class ComplianceScreen implements PublishInterceptor {
         ComplianceGate.Assessment assessment = assessed.get();
         List<ComplianceGate.Subject> inspected = subjects.get();
         String malformed = unparseable.get();
-        boolean oversized = Boolean.TRUE.equals(oversizedFinding.get());
+        String code = inspectionCode.get();
         String feedFailed = feedFailure.get();
         assessed.remove();
         subjects.remove();
         unparseable.remove();
-        oversizedFinding.remove();
+        inspectionCode.remove();
         feedFailure.remove();
         Binding binding = binding(store);
         PublishRecorder recorder = (binding == null ? NO_BINDING : binding).recorder();
@@ -711,7 +718,7 @@ public final class ComplianceScreen implements PublishInterceptor {
             // coordinate whatever the disposition (admitted-but-unscreened by default, or held), so the artifact
             // renders as "could not derive - not fully screened" rather than a silent clean.
             recorder.recordUnparseableFinding(store, artifact, inspected, malformed,
-                    oversized ? "oversized" : "unparseable");
+                    code == null ? "unparseable" : code);
         }
         VerdictListener listener = binding == null ? null : binding.verdicts;
         if (listener != null) {
@@ -902,12 +909,25 @@ public final class ComplianceScreen implements PublishInterceptor {
                                         PublishInspection.OversizedArtifactException oversized) {
         LOGGER.warn("Not screening " + artifact.path() + ": " + oversized.getMessage());
         unparseable.set(oversized.getMessage());
-        oversizedFinding.set(Boolean.TRUE);
+        inspectionCode.set("oversized");
         subjects.set(List.of(PublishInspection.pathDerivedSubject(artifact)));
         assessed.remove();
         return oversized.policy() == QualityInspector.Oversized.QUARANTINE
                 ? Disposition.QUARANTINE
                 : Disposition.REJECT;
+    }
+
+    /** Hold or refuse an artifact an inspector read only in part, on the deployment's instruction: the inspection
+     *  finding is recorded under its own code, on the subjects that were read, so a review names the coordinate and
+     *  what could not be screened. No gate assessment is stashed, because the screen did not decide on a whole. */
+    private Disposition screenIncomplete(ArtifactDescriptor artifact, IncompleteScreenException incomplete) {
+        LOGGER.warn("Not fully screening " + artifact.path() + ": " + incomplete.getMessage());
+        unparseable.set(incomplete.getMessage());
+        inspectionCode.set("incomplete");
+        subjects.set(incomplete.subjects().isEmpty()
+                ? List.of(PublishInspection.pathDerivedSubject(artifact)) : incomplete.subjects());
+        assessed.remove();
+        return incomplete.verdict() == Verdict.QUARANTINE ? Disposition.QUARANTINE : Disposition.REJECT;
     }
 
     /** Route an artifact an inspector claimed but could not parse: FAIL CLOSED. A could-not-parse outcome means the

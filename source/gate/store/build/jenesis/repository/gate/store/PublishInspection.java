@@ -6,7 +6,9 @@ import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.ComplianceSettings;
+import build.jenesis.repository.compliance.IncompleteScreenException;
 import build.jenesis.repository.compliance.MalformedArtifactException;
+import build.jenesis.repository.compliance.ProxiedUpstreams;
 import build.jenesis.repository.compliance.QualityInspector;
 import build.jenesis.repository.compliance.SignerTrustProvider;
 import build.jenesis.repository.compliance.TrustAware;
@@ -235,6 +237,9 @@ public final class PublishInspection {
         } catch (MalformedArtifactException malformed) {
             throw new MalformedArtifactException(identity + " could not parse " + path + ": "
                     + reason(malformed), malformed);
+        } catch (IncompleteScreenException incomplete) {
+            // An answer, not a fault: the inspector read what it could and says what the deployment does about the rest.
+            throw incomplete;
         } catch (IOException | RuntimeException failure) {
             // Both re-raised as the inspection-fault the caller already fails closed on, attributed to the
             // inspector: a deployment carries many of these, and "a quality inspector threw" names none of them.
@@ -295,6 +300,12 @@ public final class PublishInspection {
             @Override
             public Optional<ArtifactDescriptor> described(String path) {
                 return BlobLayout.claimed(path, content.store());
+            }
+
+            /** A publish follows what it pulls in through the upstreams the deployment proxies for its format. */
+            @Override
+            public Optional<List<URI>> resolvesFrom(String format) {
+                return Optional.of(ProxiedUpstreams.of(content.store(), format));
             }
 
             @Override

@@ -512,6 +512,11 @@ public interface QualityInspector {
             return delegate.described(path);
         }
 
+        @Override
+        public Optional<List<URI>> resolvesFrom(String format) {
+            return delegate.resolvesFrom(format);
+        }
+
         /** Whether any bounded sibling read stopped at its limit during this inspection. */
         boolean truncated() {
             return truncated;
@@ -737,6 +742,11 @@ public interface QualityInspector {
             default Optional<Bounded> fetchRecorded(String key, int limit) throws IOException {
                 return Optional.empty();
             }
+
+            @Override
+            default Optional<List<URI>> resolvesFrom(String format) {
+                return Optional.empty();
+            }
         }
 
         /**
@@ -757,6 +767,15 @@ public interface QualityInspector {
          * behind it with none.
          */
         Optional<ArtifactDescriptor> described(String path) throws IOException;
+
+        /**
+         * Where a screen that follows what an artifact pulls in reads after the repository this inspection reads
+         * from: on a publish into the repository, the upstreams the deployment proxies for repositories of
+         * {@code format} - possibly none ({@link ProxiedUpstreams}); and empty where the read is not a publish's - a
+         * proxy's fill, an inspection of bytes alone - which follows nothing beyond what an operator named, since a
+         * walk for every document a build pulls through a proxy would multiply what the proxy fetches.
+         */
+        Optional<List<URI>> resolvesFrom(String format);
 
         /** {@link #described} where it names a version - a coordinate and a version both - and empty otherwise: the
          *  coordinate an inspector screens a versioned artifact under. */

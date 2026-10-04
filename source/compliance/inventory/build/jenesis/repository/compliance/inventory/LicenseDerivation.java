@@ -171,6 +171,12 @@ public final class LicenseDerivation {
             return BlobLayout.claimed(path, store);
         }
 
+        /** A derivation re-reads what was published, and follows nothing beyond what an operator named. */
+        @Override
+        public Optional<List<URI>> resolvesFrom(String format) {
+            return Optional.empty();
+        }
+
         @Override
         public Optional<byte[]> fetch(String path) throws IOException {
             Optional<String> blob = publication.located(path);
