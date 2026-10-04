@@ -502,6 +502,38 @@ public final class ComplianceScreen implements PublishInterceptor {
                 + " is held for review, so a file arriving for it is held with it";
     }
 
+    /** Whether {@code assessment} holds for something the version pulls in rather than for the file itself: a finding
+     *  reached on its build graph, which is the whole version's to answer for. A file held for its own evidence - its
+     *  signature yet to arrive - is released by that evidence, and holds nothing beside it. */
+    private static boolean pulledIn(ComplianceGate.Assessment assessment) {
+        return assessment != null && assessment.findings().stream().anyMatch(finding ->
+                finding.verdict() != Verdict.ALLOW && finding.reachability() != null
+                        && (finding.reachability().kind() == ComplianceGate.Reachability.Kind.DIRECT
+                        || finding.reachability().kind() == ComplianceGate.Reachability.Kind.TRANSITIVE));
+    }
+
+    /** Hold the files of a version that already serve when one of its files is held for what the version pulls in, or
+     *  for a closure it could not resolve: the version is reviewed whole, and a file published first - a Maven jar
+     *  before the POM the hold is found in - would otherwise serve, and resolve, while it waits. A release replaying a
+     *  held file's dispatch holds nothing. */
+    private static void holdServedSiblings(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
+        if (RELEASING.get() || !versioned(artifact)) {
+            return;
+        }
+        StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
+        List<String> siblings = inventory.paths(artifact.ecosystem(), artifact.coordinate(), artifact.version())
+                .stream().filter(path -> !path.equals(artifact.path())).toList();
+        if (siblings.isEmpty()) {
+            return;
+        }
+        RetroactiveHolds.hold(store, new Publication(store), inventory, new QuarantineLog(store), Clocks.now(),
+                artifact.ecosystem(), artifact.coordinate(), artifact.version(), siblings,
+                new RetroactiveHolds.Grounds(VERSION_HELD_RULE, artifact.coordinate() + ":" + artifact.version(),
+                        List.of(artifact.coordinate() + ":" + artifact.version() + " is held for review, so the files "
+                                + "of it already served are held with it")), () -> {
+                });
+    }
+
     /** Hold an admitted declaration with its version when the siblings it completed are still held once
      *  re-assessed: the version is reviewed whole, and it was admitted only so its arrival could release them. */
     private static void holdWithVersion(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
@@ -766,6 +798,9 @@ public final class ComplianceScreen implements PublishInterceptor {
                 if (disposition == Disposition.QUARANTINE) {
                     recorder.recordGateFindings(store, artifact, assessment);
                     PublishHolds.recordHeld(store, reviewPath, artifact, inspected, assessment);
+                    if ("incomplete".equals(code) || pulledIn(assessment)) {
+                        holdServedSiblings(artifact, store);
+                    }
                 }
             }
         }
