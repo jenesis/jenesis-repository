@@ -146,15 +146,6 @@ public final class ComplianceScreen implements PublishInterceptor {
      *  verdict - the ordinary case. */
     private final ThreadLocal<String> feedFailure = new ThreadLocal<>();
 
-    /**
-     * The wording a fail-closed feed's hold reason carries, so a reader can tell a <em>screening outage to retry</em>
-     * from a policy verdict about the content. Public and named because it is read back: a hold recorded under it is
-     * the environment failing, not the artifact, and a caller that must distinguish the two - an end-to-end scenario
-     * deciding whether an unreachable feed should skip it rather than red it - matches on this constant
-     * instead of keeping its own copy of the sentence, so a reworded reason moves both ends at once.
-     */
-    public static final String FEED_FAILED_CLOSED = "an advisory feed failed closed";
-
     /** The {@code ServiceLoader} constructor: the screen judges each call by the {@link Binding} its store carries. */
     public ComplianceScreen() {
         this.explicit = null;
@@ -584,7 +575,7 @@ public final class ComplianceScreen implements PublishInterceptor {
         }
         if (feedFailed != null) {
             reasons.add("Could not fully screen the artifact " + artifact.path()
-                    + " - " + FEED_FAILED_CLOSED + ": " + feedFailed);
+                    + " - " + ComplianceGate.FEED_FAILED_CLOSED + ": " + feedFailed);
         }
         return reasons;
     }
@@ -596,7 +587,7 @@ public final class ComplianceScreen implements PublishInterceptor {
             rules.add(UNREADABLE_RULE);
         }
         if (feedFailed != null) {
-            rules.add(FEED_UNAVAILABLE_RULE);
+            rules.add(ComplianceGate.FEED_UNAVAILABLE_RULE);
         }
         return List.copyOf(rules);
     }
@@ -606,9 +597,6 @@ public final class ComplianceScreen implements PublishInterceptor {
 
     /** The rule an upload no inspector could parse is held for. */
     static final String UNREADABLE_RULE = "Unreadable artifact";
-
-    /** The rule an upload is held for while an advisory feed it must be screened against cannot answer. */
-    static final String FEED_UNAVAILABLE_RULE = "Advisory feed unavailable";
 
     /**
      * The gate this repository actually assesses through: the deployment's gate with its two per-repository overlays

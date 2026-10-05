@@ -155,7 +155,7 @@ class ComplianceScreenTest {
         assertThat(new QuarantineLog(store).events().getFirst().reasons())
                 .as("the hold names itself a screening outage to retry, not a verdict about the content")
                 .anySatisfy(reason -> assertThat(reason)
-                        .contains(ComplianceScreen.FEED_FAILED_CLOSED)
+                        .contains(ComplianceGate.FEED_FAILED_CLOSED)
                         .contains("advisory feed unreachable (rate limited)"));
         assertThat(new QuarantineLog(store).events().getFirst().reasons())
                 .as("a policy hold must not be mistakable for one: the deny-listed and malicious legs above carry no "
@@ -232,7 +232,7 @@ class ComplianceScreenTest {
         assertThat(new QuarantineLog(store).events().getFirst().reasons())
                 .as("a malicious-package hold is a verdict about the content, never a screening outage")
                 .isNotEmpty()
-                .allSatisfy(reason -> assertThat(reason).doesNotContain(ComplianceScreen.FEED_FAILED_CLOSED));
+                .allSatisfy(reason -> assertThat(reason).doesNotContain(ComplianceGate.FEED_FAILED_CLOSED));
     }
 
     @Test

@@ -21,6 +21,19 @@ import build.jenesis.repository.store.ArtifactStore;
  */
 public final class ComplianceGate {
 
+    /**
+     * The wording a fail-closed feed's hold reason carries, on a publish and on a fetch alike, so a reader can tell a
+     * <em>screening outage to retry</em> from a policy verdict about the content. Public and named because it is read
+     * back: a hold recorded under it is the environment failing, not the artifact, and a caller that must distinguish
+     * the two - an end-to-end scenario deciding whether an unreachable feed should skip it rather than red it -
+     * matches on this constant instead of keeping its own copy of the sentence, so a reworded reason moves both ends
+     * at once.
+     */
+    public static final String FEED_FAILED_CLOSED = "an advisory feed failed closed";
+
+    /** The rule an artifact is held for while an advisory feed it must be screened against cannot answer. */
+    public static final String FEED_UNAVAILABLE_RULE = "Advisory feed unavailable";
+
     private final VulnerabilityPolicy vulnerabilityPolicy;
     private final MaliciousPackagePolicy maliciousPolicy;
     private final DenyListPolicy denyListPolicy;
