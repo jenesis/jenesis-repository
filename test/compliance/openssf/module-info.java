@@ -10,6 +10,7 @@
  */
 open module build.jenesis.repository.compliance.openssf.test {
     requires build.jenesis.repository.compliance.openssf;
+    requires build.jenesis.repository.compliance.osv;
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.feed;
     requires org.junit.jupiter;

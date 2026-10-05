@@ -93,19 +93,22 @@ public final class OsvAdvisorySource implements AdvisorySource.Batched, Advisory
     private final FeedCache<List<Advisory>> cache;
     private final FeedCache<JsonNode> records;
     private final OsvChanges changes;
+    private final OsvQuery.Shared shared;
 
     public OsvAdvisorySource() {
         this(FeedClient.of(FEED, FeedTransport.jdk(CONNECT_TIMEOUT), POLICY), DEFAULT_ENDPOINT, DEFAULT_EXPORT,
-                NO_SPACE, Clock.systemUTC());
+                NO_SPACE, Clock.systemUTC(), OsvQuery.Shared.none());
     }
 
     public OsvAdvisorySource(Endpoint endpoint) {
         this(FeedClient.of(FEED, transport(endpoint), POLICY), DEFAULT_ENDPOINT, DEFAULT_EXPORT, NO_SPACE,
-                Clock.systemUTC());
+                Clock.systemUTC(), OsvQuery.Shared.none());
     }
 
-    private OsvAdvisorySource(FeedClient client, URI base, URI export, Supplier<ArtifactStore> space, Clock clock) {
+    private OsvAdvisorySource(FeedClient client, URI base, URI export, Supplier<ArtifactStore> space, Clock clock,
+                              OsvQuery.Shared shared) {
         this.client = client;
+        this.shared = shared;
         this.query = base.resolve("/v1/query");
         this.querybatch = base.resolve("/v1/querybatch");
         this.vulns = base.resolve("/v1/vulns/");
@@ -123,13 +126,21 @@ public final class OsvAdvisorySource implements AdvisorySource.Batched, Advisory
     /** As {@link #exchanging(Exchange)}, keeping its change log in {@code space} on {@code clock}. */
     public static OsvAdvisorySource exchanging(Exchange exchange, Supplier<ArtifactStore> space, Clock clock) {
         return new OsvAdvisorySource(FeedClient.of(FEED, (request, timeout) -> FeedResponse.of(200,
-                exchange.answer(request)), POLICY), DEFAULT_ENDPOINT, DEFAULT_EXPORT, space, clock);
+                exchange.answer(request)), POLICY), DEFAULT_ENDPOINT, DEFAULT_EXPORT, space, clock,
+                OsvQuery.Shared.none());
+    }
+
+    /** As {@link #exchanging(Exchange)}, sharing its answers through {@code shared}. */
+    public static OsvAdvisorySource exchanging(Exchange exchange, OsvQuery.Shared shared) {
+        return new OsvAdvisorySource(FeedClient.of(FEED, (request, timeout) -> FeedResponse.of(200,
+                exchange.answer(request)), POLICY), DEFAULT_ENDPOINT, DEFAULT_EXPORT, NO_SPACE, Clock.systemUTC(),
+                shared);
     }
 
     /** The production form, over the deployment clock the reading's retry window is measured on. */
     public static OsvAdvisorySource over(URI base, URI export, Supplier<ArtifactStore> space, Clock clock) {
         return new OsvAdvisorySource(FeedClient.of(FEED, FeedTransport.jdk(CONNECT_TIMEOUT), POLICY), base, export,
-                space, clock);
+                space, clock, OsvQuery.Shared.node());
     }
 
     @Override
@@ -220,9 +231,11 @@ public final class OsvAdvisorySource implements AdvisorySource.Batched, Advisory
         String ecosystem = key.substring(0, middle), coordinate = key.substring(middle + 1, last),
                 version = key.substring(last + 1);
         try {
-            return client.fetch(OsvQuery.request(query, ecosystem, coordinate, version, null),
-                    () -> new OsvQuery.Pages(query, ecosystem, coordinate, version, vuln -> advisory(vuln, coordinate)))
-                    .orElse(List.of());
+            List<Advisory> advisories = new ArrayList<>();
+            for (JsonNode vuln : shared.answered(client, query, ecosystem, coordinate, version)) {
+                advisory(vuln, coordinate).ifPresent(advisories::add);
+            }
+            return List.copyOf(advisories);
         } catch (FeedException e) {
             throw new IOException(OsvQuery.reason(e), e);
         }
