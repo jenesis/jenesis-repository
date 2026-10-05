@@ -228,6 +228,12 @@ public final class OsvAdvisorySource implements AdvisorySource.Batched, Advisory
         }
     }
 
+    /** The ecosystems OSV publishes that the product asks it about. */
+    @Override
+    public Set<String> ecosystems() {
+        return OsvQuery.covered();
+    }
+
     /** Display-only for this fail-closed feed, so no caller misreads a degraded value. It is the cache's own account:
      *  while a coordinate this feed could not screen is in its retry window the reading is not authoritative, clearing
      *  when it screens again or the window lapses. */

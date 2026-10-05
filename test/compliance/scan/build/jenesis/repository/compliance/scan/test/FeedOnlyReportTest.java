@@ -2,6 +2,7 @@ package build.jenesis.repository.compliance.scan.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import build.jenesis.repository.compliance.Ecosystems;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.Freshness;
 import build.jenesis.repository.compliance.Severity;
@@ -32,6 +33,11 @@ class FeedOnlyReportTest {
         inventory.cache("Maven", "org.public:fetched", "1.0", "https://repo.example/", NOW);
         List<String> asked = new ArrayList<>();
         AdvisorySource feed = new AdvisorySource() {
+            @Override
+            public Set<String> ecosystems() {
+                return Ecosystems.canonical();
+            }
+
             @Override
             public List<Advisory> advisories(String ecosystem, String coordinate, String version) {
                 asked.add(coordinate);

@@ -2,6 +2,7 @@ package build.jenesis.repository.gateway.contract.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import build.jenesis.repository.compliance.Ecosystems;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.Freshness;
@@ -50,6 +51,11 @@ class ScreeningModeDefaultTest {
         ArtifactStore store = ArtifactStoreProvider.resolve("filesystem",
                 key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         AdvisorySource unreachable = new AdvisorySource() {
+            @Override
+            public Set<String> ecosystems() {
+                return Ecosystems.canonical();
+            }
+
             @Override
             public List<Advisory> advisories(String ecosystem, String coordinate, String version) {
                 throw new UncheckedIOException(new IOException("the feed answered 503"));

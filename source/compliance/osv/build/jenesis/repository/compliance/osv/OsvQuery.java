@@ -59,6 +59,11 @@ public final class OsvQuery {
                 .map(Map.Entry::getKey).findFirst();
     }
 
+    /** Every ecosystem OSV publishes that the product asks it about, in the product's spelling. */
+    public static Set<String> covered() {
+        return OSV_NAMES.keySet();
+    }
+
     /** The name OSV knows the product's {@code ecosystem} by, which is the one a query carries. */
     private static String name(String ecosystem) {
         String name = OSV_NAMES.get(ecosystem);

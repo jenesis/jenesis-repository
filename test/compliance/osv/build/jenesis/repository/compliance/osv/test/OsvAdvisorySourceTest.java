@@ -3,6 +3,7 @@ package build.jenesis.repository.compliance.osv.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.compliance.AdvisorySource;
+import build.jenesis.repository.compliance.Ecosystems;
 import build.jenesis.repository.compliance.osv.OsvAdvisorySource;
 import build.jenesis.repository.compliance.Severity;
 
@@ -481,5 +482,20 @@ class OsvAdvisorySourceTest {
 
         assertThat(batched.advisories(queries)).hasSize(1_500).allSatisfy(found -> assertThat(found).isEmpty());
         assertThat(batches).as("OSV refuses a batch past a thousand").containsExactly(1_000, 500);
+    }
+
+    @Test
+    void the_declared_coverage_is_what_is_asked_and_nothing_else_is() {
+        List<String> asked = new ArrayList<>();
+        OsvAdvisorySource source = new OsvAdvisorySource(body -> {
+            asked.add(body);
+            return "{\"vulns\":[]}";
+        });
+        assertThat(source.ecosystems()).contains("Maven", "npm", "PyPI").doesNotContain("conda", "CocoaPods");
+        for (String ecosystem : Ecosystems.canonical()) {
+            asked.clear();
+            source.advisories(ecosystem, "acme-" + ecosystem.length(), "1.0");
+            assertThat(asked).as(ecosystem).hasSize(source.ecosystems().contains(ecosystem) ? 1 : 0);
+        }
     }
 }

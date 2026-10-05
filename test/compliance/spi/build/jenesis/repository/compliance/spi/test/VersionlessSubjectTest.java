@@ -2,6 +2,7 @@ package build.jenesis.repository.compliance.spi.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import build.jenesis.repository.compliance.Ecosystems;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.DenyListPolicy;
@@ -21,6 +22,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class VersionlessSubjectTest {
 
     private static final AdvisorySource REFUSES_EVERY_QUERY = new AdvisorySource() {
+        @Override
+        public Set<String> ecosystems() {
+            return Ecosystems.canonical();
+        }
+
 
         @Override
         public List<Advisory> advisories(String ecosystem, String coordinate, String version) {

@@ -3,6 +3,7 @@ package build.jenesis.repository.gate.contract.test;
 import module org.junit.jupiter.api;
 import module java.base;
 
+import build.jenesis.repository.compliance.Ecosystems;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.Freshness;
 import build.jenesis.repository.compliance.ExploitProbabilitySource;
@@ -36,12 +37,22 @@ class SignalMergeContainmentTest {
 
         merges.put("AdvisorySource", () -> AdvisorySource.combined(
                 new AdvisorySource() {
+                    @Override
+                    public Set<String> ecosystems() {
+                        return Ecosystems.canonical();
+                    }
+
                     @Override public List<AdvisorySource.Advisory> advisories(String eco, String coordinate, String version) {
                         return List.of();
                     }
                     @Override public Freshness freshness() { return Freshness.NEVER; }
                 },
                 new AdvisorySource() {
+                    @Override
+                    public Set<String> ecosystems() {
+                        return Ecosystems.canonical();
+                    }
+
                     @Override public List<AdvisorySource.Advisory> advisories(String eco, String coordinate, String version) {
                         throw PLANTED;
                     }

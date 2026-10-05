@@ -57,6 +57,12 @@ import module java.base;
  *     a gate decision stands while the vendor is down. A feed that fetches on the query path - with no cache, or
  *     behind a process-local TTL cache that dies with the JVM - does not meet it: its advisory answer depends on the
  *     vendor being reachable, and clause 4 is what keeps that honest rather than dangerous.</li>
+ * <li><b>Coverage.</b> {@link #ecosystems()} names, in their canonical spelling, every ecosystem this source can
+ *     answer for - the ones its vendor publishes advisories in - and no other. A version of any other is answered
+ *     empty without a request, and a caller reads that as unscreened rather than clean, which is the point of
+ *     declaring it: a deployment whose feeds cover none of a version's ecosystem never shows the version as clean. A
+ *     decorator answers the union of what it decorates. It is abstract because a default would be wrong for every
+ *     feed but one.</li>
  * <li><b>Staleness.</b> {@link SignalSource#freshness()} carries it, for this contract as for the whole family: a
  *     consumer reads the instant the advisories behind an answer were fetched, so an empty list beside a fetch
  *     instant is "screened, nothing found" and an empty list beside {@link Freshness#NEVER} is "this feed has never
@@ -153,6 +159,9 @@ public interface AdvisorySource extends SignalSource {
 
     List<Advisory> advisories(String ecosystem, String coordinate, String version);
 
+    /** The ecosystems this source answers for, in their canonical spelling (clause "Coverage"). */
+    Set<String> ecosystems();
+
     /** One version a {@link Batched} source is asked about. */
     record Query(String ecosystem, String coordinate, String version) {
     }
@@ -244,6 +253,12 @@ public interface AdvisorySource extends SignalSource {
             return List.of();
         }
 
+        /** None: no feed is active, so nothing is screened. */
+        @Override
+        public Set<String> ecosystems() {
+            return Set.of();
+        }
+
         @Override
         public Freshness freshness() {
             return Freshness.NEVER;
@@ -263,6 +278,12 @@ public interface AdvisorySource extends SignalSource {
             @Override
             public List<Advisory> advisories(String ecosystem, String coordinate, String version) {
                 return copy.getOrDefault(coordinate, List.of());
+            }
+
+            /** Every ecosystem: the map is keyed by coordinate whatever the ecosystem. */
+            @Override
+            public Set<String> ecosystems() {
+                return Ecosystems.canonical();
             }
 
             @Override
@@ -323,6 +344,14 @@ public interface AdvisorySource extends SignalSource {
                     all.addAll(feed.advisories(ecosystem, coordinate, version));
                 }
                 return merged(all);
+            }
+
+            /** What any of the feeds covers. */
+            @Override
+            public Set<String> ecosystems() {
+                Set<String> covered = new TreeSet<>();
+                feeds.forEach(feed -> covered.addAll(feed.ecosystems()));
+                return Collections.unmodifiableSet(covered);
             }
 
             /** The conservative fold: authoritative only when every feed is, and as old as the oldest of them. */
