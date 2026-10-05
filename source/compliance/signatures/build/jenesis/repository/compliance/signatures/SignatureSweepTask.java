@@ -19,9 +19,11 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
 
 /**
- * The retroactive signature sweep: applies the current dials to what is already published, since a verdict is reached
- * once, when the bytes arrive. It walks the inventory, judges each version's recorded signature summary under the
- * policy as it stands, and holds a version the policy would no longer admit, under the ordinary {@code signature} hold.
+ * The retroactive signature sweep: applies the current dials to what is already held, since a verdict is reached once,
+ * when the bytes arrive. It walks the inventory, judges each version's recorded signature summary under the policy as
+ * it stands - a release through the publish flavour, a copy cached from an upstream through the proxy one, whose
+ * missing-signature dial is its own - and holds a version the policy would no longer admit, under the ordinary
+ * {@code signature} hold.
  *
  * <p>It judges the record, never the bytes: a cryptographic outcome does not change with a dial. So it neither
  * re-decides trust nor re-judges continuity, which need re-verification (a re-publish or a late sidecar), and a version
@@ -71,17 +73,19 @@ public final class SignatureSweepTask implements MaintenanceTask {
             return;   // switched off since it was scheduled: write nothing this pass
         }
         ArtifactStore store = context.store();
-        SignaturePolicy policy = SignaturePolicy.from(context.config());
+        SignaturePolicy published = SignaturePolicy.from(context.config());
+        SignaturePolicy proxied = published.onProxy();
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
         Publication publication = new Publication(store);
         QuarantineLog log = new QuarantineLog(store);
         HoldKind kind = SignatureHoldReleaseObserver.KIND;
         long[] held = {0};
         long[] unenforceable = {0};
-        // Every version every Nth pass, the versions published since between; the first pass is full.
+        // Every version every Nth pass, the versions published or cached since between; the first pass is full.
         IncrementalPasses cadence = IncrementalPasses.over(store, name(), "findings/signature-sweep", context.config());
-        cadence.releases(inventory, release -> {
-            String eco = release.ecosystem(), coordinate = release.coordinate(), version = release.version();
+        cadence.eachHolding(inventory, holding -> {
+            String eco = holding.ecosystem(), coordinate = holding.coordinate(), version = holding.version();
+            SignaturePolicy policy = holding.cached() ? proxied : published;
             Optional<SignatureSection.Summary> summary = SignatureSummaries.of(store, eco, coordinate, version);
             if (summary.isEmpty()) {
                 return;   // never judged: nothing to re-judge
@@ -137,7 +141,7 @@ public final class SignatureSweepTask implements MaintenanceTask {
         });
         cadence.completed(context.now(), true);
         context.gauge("jenrepo.signatures.sweep.unenforceable",
-                "Published versions the retroactive signature sweep would hold but cannot enforce because the "
+                "Versions the retroactive signature sweep would hold but cannot enforce because the "
                         + "blobs-namespace format resolved no served path or content hash - a wiring-regression alarm",
                 Map.of("tenant", context.tenant(), "repository", context.repository()), unenforceable[0]);
         if (held[0] > 0) {

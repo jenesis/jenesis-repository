@@ -213,6 +213,17 @@ final class InventoryReleases {
         });
     }
 
+    /** Stream every version the repository holds to {@code visitor} as its {@link StoreRepositoryInventory.Holding} -
+     *  see {@link StoreRepositoryInventory#eachHolding(StoreRepositoryInventory.HoldingVisitor)}. */
+    void eachHolding(StoreRepositoryInventory.HoldingVisitor visitor) throws IOException {
+        inventory.walk(MetadataKey.PREFIX, key -> {
+            StoreRepositoryInventory.Holding holding = holding(key);
+            if (holding != null) {
+                visitor.accept(holding);
+            }
+        });
+    }
+
     /** Stream every copy cached from an upstream that is no release of the repository's own to {@code visitor} - see
      *  {@link StoreRepositoryInventory#cachedCopies(StoreRepositoryInventory.CoordinateVisitor)}. */
     void cachedCopies(StoreRepositoryInventory.CoordinateVisitor visitor) throws IOException {

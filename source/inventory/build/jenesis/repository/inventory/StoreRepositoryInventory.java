@@ -629,6 +629,12 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         void accept(Coordinate coordinate) throws IOException;
     }
 
+    /** A visitor over the streamed holdings of {@link #eachHolding(HoldingVisitor)}, allowed per-member store I/O. */
+    @FunctionalInterface
+    public interface HoldingVisitor {
+        void accept(Holding holding) throws IOException;
+    }
+
     /** A published coordinate version as its format-neutral triple, without the publish-time / pin metadata a full
      *  {@link Release} carries - the shape a coordinate-only request path needs. */
     public record Coordinate(String ecosystem, String coordinate, String version) {
@@ -775,6 +781,13 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      */
     public void cachedCopies(CoordinateVisitor visitor) throws IOException {
         enumeration.cachedCopies(visitor);
+    }
+
+    /** Stream every version the repository holds as the {@link Holding} it is - a release or a cached copy - without
+     *  buffering the set: the enumeration a pass rides that judges the two through different gate flavours. The same
+     *  walk as {@link #holdings(CoordinateVisitor)}, one read per document. */
+    public void eachHolding(HoldingVisitor visitor) throws IOException {
+        enumeration.eachHolding(visitor);
     }
 
     /** One bounded page of a coordinate's holdings, releases and cached copies alike, in version-key order and
