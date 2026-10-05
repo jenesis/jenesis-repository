@@ -157,7 +157,7 @@ public final class HoldLifecycle {
             // itself behind the same withheld/<hash> marker - so the blobs-namespace release is one mechanism (lift the
             // marker), a pure retraction-lift, which is what makes a retried release converge by construction.
             publication.link(path, held.get());
-            if (fetched.isEmpty()) {
+            if (fetched.isEmpty() && !cachedCopy(inventory, path)) {
                 inventory.record(path, Instant.now());
             }
         }
@@ -557,6 +557,19 @@ public final class HoldLifecycle {
     }
 
     /**
+     * Whether the version {@code path} belongs to is held as a copy cached from an upstream. A retroactive hold on such
+     * a copy - a known-exploited listing, a re-analysis - is released as the copy it was: recording it as a release
+     * would take it out of the passes that judge cached copies, so a later listing would never hold it again. One
+     * point read of the version's document.
+     */
+    private static boolean cachedCopy(StoreRepositoryInventory inventory, String path) throws IOException {
+        Optional<ArtifactDescriptor> described = inventory.describe(path);
+        return described.isPresent() && described.get().coordinate() != null && described.get().version() != null
+                && inventory.cachedAt(described.get().ecosystem(), described.get().coordinate(),
+                        described.get().version()).isPresent();
+    }
+
+    /**
      * Complete the deferred OCI layout for a released manifest hold, so a held image becomes pullable by tag AND
      * digest. The OCI manifest choke point stored the manifest content-addressed at the serving key
      * {@code blobs/<hash>} but, on QUARANTINE, laid out none of OCI's native metadata and set the
@@ -579,7 +592,10 @@ public final class HoldLifecycle {
         int manifests = path.indexOf("/manifests/");
         if (!path.startsWith("/v2/") || manifests < "/v2/".length()) {
             new Publication(store).link(path, hash);
-            new StoreRepositoryInventory(store).record(path, Instant.now());
+            StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
+            if (!cachedCopy(inventory, path)) {
+                inventory.record(path, Instant.now());
+            }
             return;
         }
         String name = path.substring("/v2/".length(), manifests);
