@@ -150,6 +150,28 @@ class HoldLifecycleTest {
     }
 
     @Test
+    void releasing_a_retroactive_hold_on_a_cached_copy_keeps_it_a_cached_copy() throws IOException {
+        String cached = "/maven/org/cached/lib/4.0/lib-4.0.jar";
+        String upstream = "https://repo.example/maven2/";
+        Publication publication = new Publication(store);
+        StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
+        inventory.cache(ECOSYSTEM, "org.cached:lib", "4.0", upstream, Instant.parse("2026-07-01T00:00:00Z"));
+        // What an enforcement pass leaves on a copy that was served: the review pointer, the release pointer gone, and
+        // no fetch record - the copy was screened clean when it was fetched and held only later.
+        publication.link("/quarantine" + cached, publication.storeBlob(
+                new ByteArrayInputStream("cached".getBytes(StandardCharsets.UTF_8))));
+
+        HoldLifecycle.release(store, cached);
+
+        assertThat(publication.blob(cached)).as("the released copy serves").isPresent();
+        assertThat(inventory.release(ECOSYSTEM, "org.cached:lib", "4.0"))
+                .as("not turned into a release, which the passes over cached copies would never judge again")
+                .isEmpty();
+        assertThat(inventory.cachedAt(ECOSYSTEM, "org.cached:lib", "4.0"))
+                .hasValueSatisfying(facts -> assertThat(facts.upstream()).isEqualTo(upstream));
+    }
+
+    @Test
     void releasing_a_held_publish_makes_it_a_release() throws IOException {
         String published = "/maven/org/uploaded/lib/3.0/lib-3.0.jar";
         Publication publication = new Publication(store);
