@@ -848,4 +848,21 @@ public interface QualityInspector {
         record Bounded(byte[] content, boolean truncated) {
         }
     }
+
+    /**
+     * The role of an inspector whose subjects can name the question an advisory database answers under another name
+     * than their coordinate ({@link ComplianceGate.Subject#advised}) - a Debian binary under its source package, an
+     * Alpine package under its origin in its release. What reads it re-inspects a copy cached before its name was
+     * recorded, and asks only these inspectors, since reading every cached package to learn a name only these give
+     * would cost the store a read per copy for nothing.
+     *
+     * <h2>Contract</h2>
+     * <ol>
+     *   <li><b>Selection.</b> Opt-in: an inspector that never sets {@link ComplianceGate.Subject#advised} does not
+     *       implement it.</li>
+     *   <li><b>Read purity.</b> As {@link #inspectArtifact}: the bytes it is handed and nothing else.</li>
+     * </ol>
+     */
+    interface AdvisoryNames {
+    }
 }

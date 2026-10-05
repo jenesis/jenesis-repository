@@ -398,6 +398,12 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return browse.describe(path);
     }
 
+    /** What the repository holds of {@code coordinate} at {@code version} - a release or a cached copy, with what its
+     *  document records beside it - or empty where it holds neither. One read of the version's document. */
+    public Optional<Holding> holding(String ecosystem, String coordinate, String version) throws IOException {
+        return Optional.ofNullable(enumeration.holding(MetadataKey.version(ecosystem, coordinate, version)));
+    }
+
     /** The version {@code path} is one of the files of: what {@link #describe} names, and for a file a format
      *  publishes beside a version's artifact ({@link BlobLayout.VersionMembers}), the version of that artifact. */
     public Optional<ArtifactDescriptor> versionOf(String path) {
