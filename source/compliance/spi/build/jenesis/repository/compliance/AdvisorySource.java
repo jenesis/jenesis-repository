@@ -181,6 +181,59 @@ public interface AdvisorySource extends SignalSource {
         List<List<Advisory>> advisories(List<Query> queries);
     }
 
+    /** A package a source's records name: every version of it may be judged differently once a record changes. */
+    record Package(String ecosystem, String coordinate) {
+    }
+
+    /**
+     * What a {@link Changes} source's log holds after a caller's last sequence: the packages whose records changed
+     * since, and the newest sequence to resume after. {@code gap} says the log no longer reaches back that far - it was
+     * trimmed, or a draw saw more changes than it could name - so the caller cannot know what it missed and judges
+     * every version again instead.
+     */
+    record ChangeLog(long latest, Set<Package> packages, boolean gap) {
+
+        public ChangeLog {
+            packages = Set.copyOf(packages);
+        }
+    }
+
+    /**
+     * The role of a source whose vendor publishes what changed and when, so a caller re-judging held versions asks
+     * again only about the packages whose records changed rather than about everything it holds. The source keeps a
+     * durable log of the packages each draw found changed, deployment-wide, which every node's scan reads from its own
+     * position.
+     *
+     * <h2>Contract</h2>
+     * <ol>
+     * <li><b>Ordering / concurrency.</b> {@link #drawChanges} is called by one node at a time, under the refresh pass's
+     *     lease; {@link #changes} and {@link #forget} by any node, concurrently with it and with each other.</li>
+     * <li><b>Idempotency / replay.</b> A draw resumes from the vendor position the log recorded, so a draw repeated
+     *     after a crash names nothing twice beyond its overlap and loses nothing; reading the log moves nothing.</li>
+     * <li><b>Error visibility.</b> A draw that could not reach the vendor raises and records nothing, leaving the log
+     *     where it was; a draw that saw more changes than it may name records a gap rather than a shorter list, since a
+     *     missed package would read as unchanged.</li>
+     * <li><b>Bounded work.</b> One draw reads a bounded window of the vendor's change list and names a bounded number
+     *     of packages; the log keeps a bounded number of draws, and a caller whose position fell off it reads a gap.</li>
+     * <li><b>Durability.</b> The log is committed by compare-and-set into the source's own signal space; a draw is
+     *     visible to every node once committed, and a caller's position is its own to keep.</li>
+     * <li><b>Read purity.</b> {@link #changes} reads only the stored log and never reaches the vendor.</li>
+     * </ol>
+     */
+    interface Changes extends AdvisorySource {
+
+        /** Draw what changed at the vendor since the last draw and commit it to the log; answers how many packages it
+         *  named. The first draw only records where the vendor stands. */
+        int drawChanges() throws IOException;
+
+        /** What the log holds after sequence {@code after}; {@code 0} asks from the start of what is kept. */
+        ChangeLog changes(long after) throws IOException;
+
+        /** Drop every answer this instance holds for any version of {@code packages}, so the next ask of one reaches
+         *  the vendor. */
+        void forget(Set<Package> packages);
+    }
+
     /** The shared source that reports nothing, for deployments that gate on licenses only. It is a singleton so a
      *  caller can tell "no advisory feed is active" by identity ({@code source == AdvisorySource.none()}). Its
      *  freshness is {@link Freshness#NEVER}: no feed was consulted, so the empty list confirms nothing. */

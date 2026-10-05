@@ -1,6 +1,7 @@
 package build.jenesis.repository.compliance.scan;
 
 import module java.base;
+import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.RefreshableSource;
 import build.jenesis.repository.compliance.SignalSource;
 import build.jenesis.repository.compliance.SignalSourceProvider;
@@ -13,8 +14,8 @@ import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
  * inventory, an opt-in cost, while this one keeps an enabled signal's data present at all, and a gate running with
  * re-scans off would otherwise render a snapshot nothing draws.
  *
- * <p>It is scoped by the signals instead: only enabled sources that mirror ({@link RefreshableSource}) have anything to
- * refresh, so with none there is no task.
+ * <p>It is scoped by the signals instead: only enabled sources that mirror ({@link RefreshableSource}) or publish their
+ * changes ({@link AdvisorySource.Changes}) have anything to draw, so with none there is no task.
  *
  * <p>The cadence is an {@link IntervalSetting} rendered into {@link ScanSettingsContributor}.
  */
@@ -34,14 +35,19 @@ public final class SignalRefreshTaskProvider implements MaintenanceTaskProvider 
     @Override
     public Optional<MaintenanceTask> create(UnaryOperator<String> config) {
         Map<String, RefreshableSource> mirrors = new LinkedHashMap<>();
-        // SignalSource.class yields every enabled source: refreshing is a property of how a source holds its data.
+        Map<String, AdvisorySource.Changes> changes = new LinkedHashMap<>();
+        // SignalSource.class yields every enabled source: refreshing is a property of how a source holds its data, and
+        // publishing its changes of how a feed answers.
         SignalSourceProvider.named(SignalSource.class, config).forEach((signal, source) -> {
             if (source instanceof RefreshableSource mirror) {
                 mirrors.put(signal, mirror);
             }
+            if (source instanceof AdvisorySource.Changes changed) {
+                changes.put(signal, changed);
+            }
         });
-        return mirrors.isEmpty()
+        return mirrors.isEmpty() && changes.isEmpty()
                 ? Optional.empty()
-                : Optional.of(new SignalRefreshTask(INTERVAL.resolve(config), mirrors));
+                : Optional.of(new SignalRefreshTask(INTERVAL.resolve(config), mirrors, changes));
     }
 }

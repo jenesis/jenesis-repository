@@ -48,6 +48,17 @@ public final class OsvQuery {
         return OSV_NAMES.containsKey(ecosystem);
     }
 
+    /** Every ecosystem name OSV publishes that the product asks it about, in OSV's spelling. */
+    public static List<String> osvEcosystems() {
+        return OSV_NAMES.values().stream().sorted().toList();
+    }
+
+    /** The product's ecosystem OSV's {@code osvName} is, or empty for one the product does not ask about. */
+    public static Optional<String> ecosystem(String osvName) {
+        return OSV_NAMES.entrySet().stream().filter(entry -> entry.getValue().equals(osvName))
+                .map(Map.Entry::getKey).findFirst();
+    }
+
     /** The name OSV knows the product's {@code ecosystem} by, which is the one a query carries. */
     private static String name(String ecosystem) {
         String name = OSV_NAMES.get(ecosystem);

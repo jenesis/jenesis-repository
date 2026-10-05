@@ -30,7 +30,12 @@ public final class OsvAdvisorySourceProvider implements SignalSourceProvider {
             return Optional.empty();
         }
         String endpoint = context.setting("osv-endpoint");
-        return Optional.of(OsvAdvisorySource.over(URI.create(
-                endpoint == null || endpoint.isBlank() ? "https://api.osv.dev" : endpoint), context.clock()));
+        String export = context.setting("osv-export");
+        // The signal space is asked for when the change log is drawn or read, not here: a source built where no
+        // deployment bound a root still screens.
+        return Optional.of(OsvAdvisorySource.over(
+                URI.create(endpoint == null || endpoint.isBlank() ? "https://api.osv.dev" : endpoint),
+                export == null || export.isBlank() ? OsvAdvisorySource.DEFAULT_EXPORT : URI.create(export),
+                context::snapshots, context.clock()));
     }
 }
