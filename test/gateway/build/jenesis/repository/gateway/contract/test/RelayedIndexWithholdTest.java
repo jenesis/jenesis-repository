@@ -86,7 +86,8 @@ class RelayedIndexWithholdTest {
                 .contains("<version>1.0</version>");
         UpstreamMemory.reset();
         assertThat(relay("maven", document + ".sha1", metadata).body())
-                .as("its checksum is the served document's, so a client checking one against the other finds them equal")
+                .as("its checksum is the served document's, so a client checking one against the other finds them "
+                        + "equal")
                 .isEqualTo(Checksums.hex("SHA-1", served.bytes()));
     }
 
@@ -167,6 +168,40 @@ class RelayedIndexWithholdTest {
         publication.link("/quarantine" + info, publication.storeBlob(new ByteArrayInputStream(new byte[]{1})));
 
         assertThat(relay("go", "/go/example.com/acme/mod/@v/list", list).body()).isEqualTo("v1.0.0\n");
+    }
+
+    @Test
+    void a_minified_composer_list_leaves_out_a_held_version_the_rest_inherit_from() throws IOException {
+        // Packagist minifies a p2 file: each entry carries only what differs from the one before. The held version is
+        // the first, which every entry after it inherits its name, its requirements and its licence from.
+        byte[] p2 = """
+                {"minified":"composer/2.0","packages":{"acme/widget":[
+                  {"name":"acme/widget","version":"1.0.0","require":{"php":">=7.4"},"license":["MIT"],
+                   "dist":{"type":"zip","url":"https://upstream.example/acme/widget/1.0.0.zip"}},
+                  {"version":"1.1.0","dist":{"type":"zip","url":"https://upstream.example/acme/widget/1.1.0.zip"}},
+                  {"version":"2.0.0","require":"__unset","license":["Apache-2.0"],
+                   "dist":{"type":"zip","url":"https://upstream.example/acme/widget/2.0.0.zip"}}]}}"""
+                .getBytes(StandardCharsets.UTF_8);
+        String path = "/composer/main/p2/acme/widget.json";
+        assertThat(JSON.readTree(relay("composer", path, p2).body()).path("packages").path("acme/widget"))
+                .as("nothing held: every version").hasSize(3);
+
+        UpstreamMemory.reset();
+        hold("/composer/main/dists/acme/widget/1.0.0.zip", "Packagist", "acme/widget", "1.0.0");
+
+        JsonNode served = JSON.readTree(relay("composer", path, p2).body());
+        assertThat(served.path("minified").asString("")).isEqualTo("composer/2.0");
+        JsonNode versions = served.path("packages").path("acme/widget");
+        assertThat(versions).hasSize(2);
+        assertThat(versions.get(0).path("version").asString("")).isEqualTo("1.1.0");
+        assertThat(versions.get(0).path("name").asString("")).as("what it inherited, now its own")
+                .isEqualTo("acme/widget");
+        assertThat(versions.get(0).path("require").path("php").asString("")).isEqualTo(">=7.4");
+        assertThat(versions.get(0).path("license").get(0).asString("")).isEqualTo("MIT");
+        assertThat(versions.get(1).path("version").asString("")).isEqualTo("2.0.0");
+        assertThat(versions.get(1).path("require").asString("")).as("still removed from the one before")
+                .isEqualTo("__unset");
+        assertThat(versions.get(1).has("name")).as("unchanged, so inherited").isFalse();
     }
 
     @Test
