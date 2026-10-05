@@ -1,6 +1,8 @@
 package build.jenesis.repository.gateway;
 
 import module java.base;
+import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.definitions.RepositoryDefinition;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.GatePolicyProvider;
@@ -24,8 +26,9 @@ import build.jenesis.repository.store.Publication;
  * <p><b>{@link #verifyHit} - the HIT leg (fail-closed local serve).</b> A hardened cache hit is decided from LOCAL
  * state alone, <em>never</em> by re-fetching the upstream to re-validate cached bytes:
  * <ul>
- *   <li><b>Nothing durably local</b> ({@link Publication#located} empty) - {@link HitDecision#serveThrough()}: there is
- *       no cached blob to verify, so the local-first serve runs unchanged and a genuine local miss flows on to the
+ *   <li><b>Nothing durably local</b> (neither {@link Publication#located} nor, for a format keeping its own key
+ *       space, its {@link BlobLayout#servingKey} names a blob) - {@link HitDecision#serveThrough()}: there is no
+ *       cached blob to verify, so the local-first serve runs unchanged and a genuine local miss flows on to the
  *       (screened) miss leg.</li>
  *   <li><b>A valid recorded {@code ALLOW} verdict pinning exactly these cached bytes</b> (digest-pinned verdict
  *       reuse) - {@link HitDecision#serveThrough()}: the amortized steady state, one metadata read and no re-screen.
@@ -119,7 +122,7 @@ public final class HardenedHitVerify implements PullThroughHooks {
         // Resolve the local cached pointer. The blob key IS the content digest (the store is content-addressed), so the
         // digest is read from the tiny pointer, never by re-streaming the blob. Nothing durably local -> serve
         // through, so a genuine local miss flows on to the (screened) miss leg.
-        Optional<String> key = new Publication(store).located(path);
+        Optional<String> key = located(format, path, store);
         if (key.isEmpty()) {
             return HitDecision.serveThrough();
         }
@@ -211,8 +214,26 @@ public final class HardenedHitVerify implements PullThroughHooks {
                 coordinate.version(), VerdictSection.TAG));
     }
 
+    /** The {@code blobs/<hex>} key that serves {@code path}: the generic {@code publish/} pointer's, else - for a
+     *  format that keeps its own key space, which links nothing there - the blob its own serving key names. Empty
+     *  when nothing serves the path or the bytes are withheld, which the format's serve answers itself. */
+    private static Optional<String> located(RepositoryFormat format, String path, ArtifactStore store)
+            throws IOException {
+        Optional<String> published = new Publication(store).located(path);
+        if (published.isPresent() || !(format instanceof BlobLayout layout)) {
+            return published;
+        }
+        Optional<String> serving = layout.servingKey(path, store);
+        if (serving.isEmpty()) {
+            return Optional.empty();
+        }
+        return new Blobs(store).locate(serving.get()).map(located -> BLOB_PREFIX + located.hash());
+    }
+
     /** Evict a bad cached artifact's serving pointer so a subsequent request misses and re-fetches through the hardened
-     *  miss leg - the {@link MigrationRescreenTask.Eviction} idiom for a single served path. */
+     *  miss leg - the {@link MigrationRescreenTask.Eviction} idiom for a single served path. A format that keeps its
+     *  own key space links nothing under {@code publish/}, so this removes nothing of its: its bytes stay withheld by
+     *  the non-{@code ALLOW} verdict the refusal recorded, which every later hit reads before serving. */
     private static void evict(ArtifactStore store, String path) throws IOException {
         new Publication(store).unpublish(path);
     }
