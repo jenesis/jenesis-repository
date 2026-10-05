@@ -383,4 +383,103 @@ class OsvAdvisorySourceTest {
                 .extracting(AdvisorySource.Advisory::severity)
                 .containsExactly(Severity.NONE);
     }
+
+    /** A record OSV serves in full, its id, a CVSS-less severity word and one alias. */
+    private static String record(String id, String severity) {
+        return "{\"id\":\"" + id + "\",\"modified\":\"2026-10-01T00:00:00Z\",\"aliases\":[\"CVE-2026-" + id.length()
+                + "\"],\"database_specific\":{\"severity\":\"" + severity + "\"}}";
+    }
+
+    @Test
+    void a_batch_lists_records_once_and_answers_each_version_as_its_own_query_would() {
+        List<String> exchanged = new ArrayList<>();
+        OsvAdvisorySource batched = OsvAdvisorySource.exchanging(request -> {
+            exchanged.add(request.method() + " " + request.uri().getPath());
+            return switch (request.uri().getPath()) {
+                case "/v1/querybatch" -> {
+                    assertThat(request.body()).as("only the versions OSV covers are asked")
+                            .doesNotContain("conda").contains("\"name\":\"org.example:lib\"");
+                    yield """
+                            {"results":[
+                              {"vulns":[{"id":"GHSA-aaaa","modified":"2026-10-01T00:00:00Z"}]},
+                              {"vulns":[{"id":"GHSA-aaaa","modified":"2026-10-01T00:00:00Z"},
+                                        {"id":"GHSA-bbbb","modified":"2026-10-01T00:00:00Z"}]},
+                              {}
+                            ]}""";
+                }
+                case "/v1/vulns/GHSA-aaaa" -> record("GHSA-aaaa", "CRITICAL");
+                case "/v1/vulns/GHSA-bbbb" -> record("GHSA-bbbb", "MODERATE");
+                default -> throw new AssertionError("asked " + request.uri());
+            };
+        });
+
+        List<List<AdvisorySource.Advisory>> answers = batched.advisories(List.of(
+                new AdvisorySource.Query("Maven", "org.example:lib", "1.0"),
+                new AdvisorySource.Query("conda", "numpy", "1.0"),
+                new AdvisorySource.Query("Maven", "org.example:lib", "2.0"),
+                new AdvisorySource.Query("Maven", "org.example:clean", "1.0")));
+
+        assertThat(answers).hasSize(4);
+        assertThat(answers.get(0)).extracting(AdvisorySource.Advisory::id).containsExactly("GHSA-aaaa");
+        assertThat(answers.get(1)).as("an ecosystem OSV does not publish").isEmpty();
+        assertThat(answers.get(2)).extracting(AdvisorySource.Advisory::id).containsExactly("GHSA-aaaa", "GHSA-bbbb");
+        assertThat(answers.get(3)).as("screened and clean").isEmpty();
+        assertThat(exchanged).as("one batch, and each record it names fetched once")
+                .containsExactly("POST /v1/querybatch", "GET /v1/vulns/GHSA-aaaa", "GET /v1/vulns/GHSA-bbbb");
+
+        // The answer a single query gives for the same version: the batch's is equal to it.
+        String single = "{\"vulns\":[" + record("GHSA-aaaa", "CRITICAL") + "]}";
+        assertThat(answers.get(0)).isEqualTo(new OsvAdvisorySource(_ -> single)
+                .advisories("Maven", "org.example:lib", "1.0"));
+        assertThat(batched.advisories("Maven", "org.example:lib", "2.0"))
+                .as("what a batch answered is served from the same cache a single query fills")
+                .isEqualTo(answers.get(2));
+        assertThat(exchanged).hasSize(3);
+    }
+
+    @Test
+    void a_version_osv_answers_only_in_part_is_asked_on_its_own() {
+        List<String> exchanged = new ArrayList<>();
+        OsvAdvisorySource batched = OsvAdvisorySource.exchanging(request -> {
+            exchanged.add(request.uri().getPath());
+            return switch (request.uri().getPath()) {
+                case "/v1/querybatch" -> """
+                        {"results":[{"vulns":[{"id":"GHSA-aaaa","modified":"m"}],"next_page_token":"more"}]}""";
+                case "/v1/query" -> "{\"vulns\":[" + record("GHSA-aaaa", "HIGH") + ","
+                        + record("GHSA-cccc", "LOW") + "]}";
+                default -> throw new AssertionError("asked " + request.uri());
+            };
+        });
+
+        assertThat(batched.advisories(List.of(new AdvisorySource.Query("Maven", "org.example:wide", "1.0"))))
+                .singleElement().satisfies(found -> assertThat(found).extracting(AdvisorySource.Advisory::id)
+                        .containsExactly("GHSA-aaaa", "GHSA-cccc"));
+        assertThat(exchanged).containsExactly("/v1/querybatch", "/v1/query");
+    }
+
+    @Test
+    void a_batch_osv_cannot_answer_whole_fails_closed() {
+        OsvAdvisorySource batched = OsvAdvisorySource.exchanging(_ -> "{\"results\":[{}]}");
+        assertThatExceptionOfType(RuntimeException.class).as("two asked, one answered")
+                .isThrownBy(() -> batched.advisories(List.of(
+                        new AdvisorySource.Query("Maven", "org.example:a", "1.0"),
+                        new AdvisorySource.Query("Maven", "org.example:b", "1.0"))));
+    }
+
+    @Test
+    void more_versions_than_one_batch_takes_are_asked_in_several() {
+        List<Integer> batches = new ArrayList<>();
+        OsvAdvisorySource batched = OsvAdvisorySource.exchanging(request -> {
+            int asked = request.body().split("\"version\"", -1).length - 1;
+            batches.add(asked);
+            return "{\"results\":[" + String.join(",", Collections.nCopies(asked, "{}")) + "]}";
+        });
+        List<AdvisorySource.Query> queries = new ArrayList<>();
+        for (int i = 0; i < 1_500; i++) {
+            queries.add(new AdvisorySource.Query("npm", "package-" + i, "1.0.0"));
+        }
+
+        assertThat(batched.advisories(queries)).hasSize(1_500).allSatisfy(found -> assertThat(found).isEmpty());
+        assertThat(batches).as("OSV refuses a batch past a thousand").containsExactly(1_000, 500);
+    }
 }

@@ -2,6 +2,7 @@ package build.jenesis.repository.compliance.osv;
 
 import module java.base;
 import module tools.jackson.databind;
+import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.AdvisorySource.Advisory;
 import build.jenesis.repository.compliance.Ecosystems;
 import build.jenesis.repository.feed.FeedClient;
@@ -12,7 +13,9 @@ import build.jenesis.repository.feed.FeedResponse;
 /**
  * A query of the OSV.dev API for one package version, for every source that asks it - the vulnerability feed and the
  * curated malicious-packages dataset it serves alike: the request body, the ecosystem in OSV's spelling, and the walk of
- * {@code next_page_token} across the answer's pages. What a source keeps of each record is its own.
+ * {@code next_page_token} across the answer's pages - and the batch form a source asking about many versions at once
+ * takes: {@code /v1/querybatch}, which lists each version's records by id, and the fetch of a record in full. What a
+ * source keeps of each record is its own.
  */
 public final class OsvQuery {
 
@@ -65,6 +68,91 @@ public final class OsvQuery {
             body.put("page_token", pageToken);
         }
         return FeedRequest.post(query, JSON.writeValueAsString(body), "application/json");
+    }
+
+    /** The most queries OSV takes in one {@code /v1/querybatch}; one more is refused. */
+    public static final int BATCH_LIMIT = 1_000;
+
+    /** One {@code /v1/querybatch} request for {@code queries}, at most {@link #BATCH_LIMIT}, each an ecosystem
+     *  {@link #covers covered}. OSV answers each with the ids and modification instants of the records affecting it. */
+    public static FeedRequest batch(URI querybatch, List<AdvisorySource.Query> queries) {
+        if (queries.size() > BATCH_LIMIT) {
+            throw new IllegalArgumentException("OSV takes at most " + BATCH_LIMIT + " queries in one batch, not "
+                    + queries.size());
+        }
+        List<Map<String, Object>> bodies = new ArrayList<>();
+        for (AdvisorySource.Query query : queries) {
+            bodies.add(Map.of("version", query.version(),
+                    "package", Map.of("ecosystem", name(query.ecosystem()), "name", query.coordinate())));
+        }
+        return FeedRequest.post(querybatch, JSON.writeValueAsString(Map.of("queries", bodies)), "application/json");
+    }
+
+    /** One query's answer in a batch: the records affecting it, each named by id and last modification, and whether
+     *  OSV holds more than it answered here - a query to ask on its own. */
+    public record Listed(List<Record> records, boolean more) {
+    }
+
+    /** A record a batch names: its id and the instant it was last modified, which keys a fetched copy of it. */
+    public record Record(String id, String modified) {
+    }
+
+    /** The batch answer {@code body}, one {@link Listed} per query in their order; a body answering a different
+     *  number of queries than were asked is refused, since a position would then name another query's records. */
+    public static List<Listed> listed(JsonNode body, int asked) throws IOException {
+        JsonNode results = body.path("results");
+        if (!results.isArray() || results.size() != asked) {
+            throw new IOException("OSV answered " + (results.isArray() ? results.size() : "no") + " results to a "
+                    + "batch of " + asked + " queries");
+        }
+        List<Listed> listed = new ArrayList<>();
+        for (JsonNode result : results) {
+            List<Record> records = new ArrayList<>();
+            for (JsonNode vuln : result.path("vulns")) {
+                String id = vuln.path("id").asString(null);
+                if (id != null && !id.isBlank()) {
+                    records.add(new Record(id, vuln.path("modified").asString("")));
+                }
+            }
+            String token = result.path("next_page_token").asString(null);
+            listed.add(new Listed(List.copyOf(records), token != null && !token.isBlank()));
+        }
+        return List.copyOf(listed);
+    }
+
+    /** The request for one record in full, by its {@code id}. */
+    public static FeedRequest record(URI vulns, String id) {
+        return FeedRequest.get(vulns.resolve(URLEncoder.encode(id, StandardCharsets.UTF_8)));
+    }
+
+    /** One {@code /v1/querybatch} exchange through {@code client}: what OSV lists for each of {@code queries}, in
+     *  their order. A failed exchange raises, so a batched source fails closed as a single query does. */
+    public static List<Listed> ask(FeedClient client, URI querybatch, List<AdvisorySource.Query> queries) {
+        try {
+            JsonNode body = client.fetch(batch(querybatch, queries), FeedClient.Reader.document(JSON::readTree))
+                    .value().orElseThrow();
+            return listed(body, queries.size());
+        } catch (FeedException e) {
+            throw new UncheckedIOException("Failed to query " + client.feed() + " for a batch of " + queries.size()
+                    + " versions (" + reason(e) + ")", new IOException(e));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read " + client.feed() + "'s answer to a batch of "
+                    + queries.size() + " versions", e);
+        }
+    }
+
+    /** One record in full through {@code client}, by its {@code id}; an answer naming another record is refused. */
+    public static JsonNode fetch(FeedClient client, URI vulns, String id) throws IOException {
+        try {
+            JsonNode record = client.fetch(record(vulns, id), FeedClient.Reader.document(JSON::readTree))
+                    .value().orElseThrow();
+            if (!id.equals(record.path("id").asString(null))) {
+                throw new IOException("OSV answered a request for record " + id + " with another record");
+            }
+            return record;
+        } catch (FeedException e) {
+            throw new IOException(reason(e), e);
+        }
     }
 
     /** The client's failure reason in an operator's words, so a log line says whether the fetch hit the page cap, the

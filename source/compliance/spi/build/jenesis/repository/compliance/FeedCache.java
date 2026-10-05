@@ -152,6 +152,22 @@ public final class FeedCache<T> {
         return refresh(key);
     }
 
+    /** The answer held for {@code key} inside its window, without loading one: empty where none is held or the window
+     *  has lapsed, so a caller answering several keys at once asks only for the rest. */
+    @SuppressWarnings("unchecked")
+    public Optional<T> fresh(String key) {
+        Cached cached = cache.get(key);
+        return cached != null && clock.millis() < cached.until() ? Optional.of((T) cached.value()) : Optional.empty();
+    }
+
+    /** Hold {@code value} as {@code key}'s answer, drawn by a load that answered several keys at once: it is served
+     *  for the window exactly as a load of that key would be, and stamps the key as fetched. */
+    public void put(String key, T value) {
+        Objects.requireNonNull(value, "value");
+        fetches.fetched(key);
+        store(key, new Cached(value, clock.millis() + ttl));
+    }
+
     /**
      * What this cache is currently serving, in the shape {@link SignalSource#freshness()} hands out: the instant of
      * the last completed load and whether a consumer may act on what it gets. Renders only - no lookup, no stamp
