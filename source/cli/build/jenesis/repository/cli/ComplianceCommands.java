@@ -372,7 +372,8 @@ final class ComplianceCommands {
         List<ProvenanceClient.ClosureComponent> components = closure.components() == null ? List.of()
                 : closure.components();
         List<ProvenanceClient.ClosureCut> cuts = closure.cuts() == null ? List.of() : closure.cuts();
-        System.out.println(subject + "  " + closure.state().toLowerCase(Locale.ROOT) + ", resolved "
+        System.out.println(subject + "  " + closure.state().toLowerCase(Locale.ROOT)
+                + ("BILL".equals(closure.source()) ? ", from the bill it carries, read " : ", resolved ")
                 + closure.resolved() + ": " + components.size() + " component(s), " + cuts.size() + " unresolved");
         for (ProvenanceClient.ClosureComponent component : components) {
             String repository = component.repository() == null || component.repository().isBlank() ? ""

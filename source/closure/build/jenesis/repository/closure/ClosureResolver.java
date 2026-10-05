@@ -75,7 +75,8 @@ public final class ClosureResolver {
         Optional<List<ComplianceGate.Dependency>> roots = declarations(readers.getFirst(), ecosystem, coordinate,
                 version);
         if (roots.isEmpty()) {
-            return new ClosureSection.Closure(ClosureSection.Status.UNDECLARED, List.of(), List.of(), false, now);
+            return new ClosureSection.Closure(ClosureSection.Status.UNDECLARED, List.of(), List.of(), false, now,
+                    ClosureSection.Source.RESOLVED);
         }
         Deque<Pending> queue = new ArrayDeque<>();
         for (ComplianceGate.Dependency dependency : roots.get()) {
@@ -107,7 +108,8 @@ public final class ClosureResolver {
             }
         }
         return new ClosureSection.Closure(cuts.isEmpty() && !truncated ? ClosureSection.Status.RESOLVED
-                : ClosureSection.Status.PARTIAL, components, cuts, truncated, now);
+                : ClosureSection.Status.PARTIAL, components, cuts, truncated, now,
+                ClosureSection.Source.RESOLVED);
     }
 
     /** The held version a dependency resolves to and the repository holding it, or why none does. */

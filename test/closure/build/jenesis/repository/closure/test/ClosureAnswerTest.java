@@ -45,7 +45,8 @@ class ClosureAnswerTest {
 
         ClosureSection.Closure partial = new ClosureSection.Closure(ClosureSection.Status.PARTIAL,
                 List.of(new ClosureSection.Component("org.dep:a", "1.1", true, 1, "releases")),
-                List.of(new ClosureSection.Cut("org.dep:gone", "2.0", "not held by this repository")), false, NOW);
+                List.of(new ClosureSection.Cut("org.dep:gone", "2.0", "not held by this repository")), false, NOW,
+                ClosureSection.Source.RESOLVED);
         metadata.mutate("Maven", "org.acme:app", "1.0", ClosureSection.TAG, ClosureSection.record(partial));
 
         assertThat(answer("org.acme:app", "1.0")).hasValueSatisfying(answer -> {
@@ -59,7 +60,8 @@ class ClosureAnswerTest {
     void a_release_declaring_nothing_readable_is_undeclared() throws IOException {
         inventory.record("Maven", "org.acme:blob", "1.0", NOW);
         metadata.mutate("Maven", "org.acme:blob", "1.0", ClosureSection.TAG, ClosureSection.record(
-                new ClosureSection.Closure(ClosureSection.Status.UNDECLARED, List.of(), List.of(), false, NOW)));
+                new ClosureSection.Closure(ClosureSection.Status.UNDECLARED, List.of(), List.of(), false, NOW,
+                        ClosureSection.Source.RESOLVED)));
 
         assertThat(answer("org.acme:blob", "1.0")).map(ClosureSection.Answer::state)
                 .hasValue(ClosureSection.State.UNDECLARED);

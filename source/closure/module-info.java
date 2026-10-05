@@ -12,7 +12,9 @@
  * per repository by {@code closure-resolution}. What differs per ecosystem is evaluating a requirement, which a
  * discovered {@link build.jenesis.repository.closure.RequirementGrammar} does, and - for an ecosystem whose
  * dependencies are not read off one manifest - the walk itself, which a discovered
- * {@link build.jenesis.repository.closure.EcosystemClosure} takes over.
+ * {@link build.jenesis.repository.closure.EcosystemClosure} takes over. A release carrying a bill of materials that
+ * names its closure - published beside it or embedded in its archive - is taken as its build resolved it
+ * ({@link build.jenesis.repository.closure.CarriedBill}) before either walk.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -22,6 +24,7 @@ module build.jenesis.repository.closure {
     requires transitive build.jenesis.repository.store;
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.definitions;
+    requires build.jenesis.repository.dependency;
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.maintenance;
     requires build.jenesis.repository.metadata;

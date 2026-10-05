@@ -55,6 +55,46 @@ public final class PackageUrls {
         return purl.append('@').append(encoded(version)).toString();
     }
 
+    /** A coordinate a package URL names, in the product's ecosystem and coordinate spelling. */
+    public record Named(String ecosystem, String coordinate, String version) {
+    }
+
+    /**
+     * The coordinate {@code purl} names - the inverse of {@link #of}: its type's ecosystem, its namespace and name
+     * joined as that ecosystem writes a coordinate (a Maven {@code group:artifact}, a slashed name otherwise) and
+     * percent-decoded, and its version; qualifiers and a subpath are dropped. Empty for a purl of a type no ecosystem
+     * here is named by, or one without a name or a version.
+     */
+    public static Optional<Named> parse(String purl) {
+        if (purl == null || !purl.startsWith("pkg:")) {
+            return Optional.empty();
+        }
+        String body = purl.substring("pkg:".length());
+        for (char end : new char[]{'#', '?'}) {
+            int at = body.indexOf(end);
+            body = at < 0 ? body : body.substring(0, at);
+        }
+        int version = body.lastIndexOf('@');
+        if (version < 0 || version == body.length() - 1) {
+            return Optional.empty();
+        }
+        String[] segments = body.substring(0, version).split("/");
+        if (segments.length < 2) {
+            return Optional.empty();
+        }
+        String type = segments[0].toLowerCase(Locale.ROOT);
+        Optional<String> ecosystem = TYPES.covered().stream().filter(named -> type.equals(TYPES.of(named))).findFirst();
+        if (ecosystem.isEmpty()) {
+            return Optional.empty();
+        }
+        List<String> parts = new ArrayList<>();
+        for (int i = 1; i < segments.length; i++) {
+            parts.add(decoded(segments[i]));
+        }
+        String coordinate = String.join(Ecosystems.MAVEN.equals(ecosystem.get()) ? ":" : "/", parts);
+        return Optional.of(new Named(ecosystem.get(), coordinate, decoded(body.substring(version + 1))));
+    }
+
     /**
      * The candidate CPE 2.3 name for a coordinate, lower-cased per CPE convention: a Maven coordinate contributes its
      * group's organization segment as the vendor and its artifact as the product, a slashed name (a Packagist
@@ -97,6 +137,26 @@ public final class PackageUrls {
     private static String encoded(String segment) {
         return segment.replace("%", "%25").replace("@", "%40")
                 .replace("?", "%3F").replace("#", "%23").replace(" ", "%20");
+    }
+
+    // The purl spec's percent-decoding: every %XX is its byte, a '+' stays a '+', and a malformed escape stays literal.
+    private static String decoded(String segment) {
+        if (segment.indexOf('%') < 0) {
+            return segment;
+        }
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream(segment.length());
+        for (int i = 0; i < segment.length(); i++) {
+            char c = segment.charAt(i);
+            int hi = c == '%' && i + 2 < segment.length() ? Character.digit(segment.charAt(i + 1), 16) : -1;
+            int lo = hi >= 0 ? Character.digit(segment.charAt(i + 2), 16) : -1;
+            if (lo >= 0) {
+                bytes.write((hi << 4) + lo);
+                i += 2;
+            } else {
+                bytes.writeBytes(String.valueOf(c).getBytes(StandardCharsets.UTF_8));
+            }
+        }
+        return bytes.toString(StandardCharsets.UTF_8);
     }
 
     // The CPE 2.3 formatted-string escaping for the characters these coordinates carry; the field separators
