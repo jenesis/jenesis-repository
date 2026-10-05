@@ -747,10 +747,18 @@ public final class ComplianceGate {
             }
         }
         // A VEX statement that marks an advisory not-applicable to this subject downgrades it to a recorded allow and
-        // keeps it out of every dimension (vulnerability, malicious, known-exploited), so one attested claim clears the
-        // flaw uniformly rather than each dimension re-flagging it. The remaining advisories screen as usual.
+        // keeps it out of every dimension (vulnerability, known-exploited), so one attested claim clears the flaw
+        // uniformly rather than each dimension re-flagging it; a waiver does the same for an accepted risk. A malicious
+        // package is neither: whether a flaw is exploitable in a product says nothing of a package that is harmful
+        // whatever it is used for, and a waiver is a standing exemption outliving the version it was written for. So a
+        // malicious advisory always reaches the malicious dimension, and a false positive is released by a reviewer,
+        // version by version. The remaining advisories screen as usual.
         List<AdvisorySource.Advisory> applicable = new ArrayList<>(found.size());
         for (AdvisorySource.Advisory advisory : found) {
+            if (advisory.malicious()) {
+                applicable.add(advisory);
+                continue;
+            }
             Optional<VexStatement> suppressed = vex.notApplicable(subject.ecosystem(), subject.coordinate(),
                     subject.version(), advisory.id(), advisory.cves());
             if (suppressed.isPresent()) {
