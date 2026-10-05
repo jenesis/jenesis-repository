@@ -74,7 +74,7 @@ class ClosureResolverTest {
     }
 
     @Test
-    void a_requirement_no_installed_grammar_reads_is_a_cut_not_a_guess() throws IOException {
+    void a_requirement_its_grammar_cannot_read_is_a_cut_not_a_guess() throws IOException {
         release("org.acme", "app", "1.0", List.of(new DependencySection.Declared("org.dep:a", "${a.version}")));
         release("org.dep", "a", "1.0", List.of());
 
@@ -98,6 +98,18 @@ class ClosureResolverTest {
 
         assertThat(closure.status()).isEqualTo(ClosureSection.Status.RESOLVED);
         assertThat(closure.components()).as("the newest held version, ordered as versions are")
+                .containsExactly(new ClosureSection.Component("org.dep:a", "1.10", false, 1));
+    }
+
+    @Test
+    void a_range_takes_the_newest_held_version_it_admits() throws IOException {
+        release("org.acme", "app", "1.0", List.of(new DependencySection.Declared("org.dep:a", "[1.0,2.0)")));
+        release("org.dep", "a", "1.2", List.of());
+        release("org.dep", "a", "1.10", List.of());
+        release("org.dep", "a", "2.0", List.of());
+
+        assertThat(new ClosureResolver(store, QualityInspector.all()).resolve("Maven", "org.acme:app", "1.0", NOW)
+                .components()).as("the newest held version in the range, not the newest held")
                 .containsExactly(new ClosureSection.Component("org.dep:a", "1.10", false, 1));
     }
 
