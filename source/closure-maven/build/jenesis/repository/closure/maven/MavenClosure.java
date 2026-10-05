@@ -129,7 +129,8 @@ public final class MavenClosure implements EcosystemClosure {
         } catch (ArtifactDescriptorException unreadable) {
             return new ClosureSection.Closure(ClosureSection.Status.PARTIAL, List.of(),
                     List.of(new ClosureSection.Cut(root.getGroupId() + ":" + root.getArtifactId(), root.getVersion(),
-                            "its POM could not be read: " + unreadable.getMessage())), false, now);
+                            "its POM could not be read: " + unreadable.getMessage())), false, now,
+                    ClosureSection.Source.RESOLVED);
         } finally {
             system.shutdown();
         }
@@ -168,7 +169,8 @@ public final class MavenClosure implements EcosystemClosure {
             visit.node().getChildren().forEach(child -> queue.add(new Visit(child, visit.depth() + 1)));
         }
         return new ClosureSection.Closure(cuts.isEmpty() && !truncated ? ClosureSection.Status.RESOLVED
-                : ClosureSection.Status.PARTIAL, components, cuts, truncated, now);
+                : ClosureSection.Status.PARTIAL, components, cuts, truncated, now,
+                ClosureSection.Source.RESOLVED);
     }
 
     /** A collection failure as the cut it is: an unsatisfied range names its dependency and its range. */

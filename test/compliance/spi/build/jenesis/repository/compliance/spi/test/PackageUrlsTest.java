@@ -36,4 +36,24 @@ class PackageUrlsTest {
         assertThat(PackageUrls.of("Swift", "acme.widget", "1.0.0")).isNull();
         assertThat(PackageUrls.of(Ecosystems.DEBIAN, "curl", "7.88.1")).isNull();
     }
+
+    @Test
+    void a_package_url_parses_back_to_the_coordinate_it_was_made_from() {
+        for (String[] coordinate : List.of(
+                new String[]{Ecosystems.MAVEN, "org.apache.logging.log4j:log4j-core", "2.17.1"},
+                new String[]{Ecosystems.NPM, "@babel/core", "7.24.0"},
+                new String[]{Ecosystems.PYPI, "requests", "2.31.0"},
+                new String[]{Ecosystems.GO, "github.com/acme/thing", "v1.2.3"},
+                new String[]{Ecosystems.PACKAGIST, "symfony/console", "6.4.0"})) {
+            assertThat(PackageUrls.parse(PackageUrls.of(coordinate[0], coordinate[1], coordinate[2])))
+                    .as(String.join(" ", coordinate))
+                    .hasValue(new PackageUrls.Named(coordinate[0], coordinate[1], coordinate[2]));
+        }
+        assertThat(PackageUrls.parse("pkg:maven/org.acme/lib@1.0?type=jar#sub"))
+                .as("qualifiers and a subpath are not the coordinate")
+                .hasValue(new PackageUrls.Named(Ecosystems.MAVEN, "org.acme:lib", "1.0"));
+        assertThat(PackageUrls.parse("pkg:deb/debian/openssl@3.0")).as("a type no ecosystem here is named by").isEmpty();
+        assertThat(PackageUrls.parse("pkg:npm/left-pad")).as("no version").isEmpty();
+        assertThat(PackageUrls.parse("left-pad@1.0")).as("not a package URL").isEmpty();
+    }
 }

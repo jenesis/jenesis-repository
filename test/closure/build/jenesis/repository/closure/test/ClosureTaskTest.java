@@ -88,6 +88,35 @@ class ClosureTaskTest {
                 .singleElement().satisfies(cut -> assertThat(cut.coordinate()).isEqualTo("org.dep:missing"));
     }
 
+    @Test
+    void a_release_carrying_a_bill_naming_its_closure_is_resolved_from_it() throws IOException {
+        String jar = "/maven/org/acme/app/1.0/app-1.0.jar";
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (JarOutputStream out = new JarOutputStream(bytes)) {
+            out.putNextEntry(new JarEntry("META-INF/sbom/app.cdx.json"));
+            out.write("""
+                    {"bomFormat":"CycloneDX","specVersion":"1.5",
+                     "metadata":{"component":{"bom-ref":"root","name":"app","version":"1.0"}},
+                     "components":[{"bom-ref":"a","purl":"pkg:maven/org.dep/a@1.1","name":"a","version":"1.1"},
+                                   {"bom-ref":"b","purl":"pkg:maven/org.dep/b@2.0","name":"b","version":"2.0"}],
+                     "dependencies":[{"ref":"root","dependsOn":["a"]},{"ref":"a","dependsOn":["b"]}]}"""
+                    .getBytes(StandardCharsets.UTF_8));
+            out.closeEntry();
+        }
+        Publication publication = new Publication(store);
+        publication.link(jar, publication.storeBlob(new ByteArrayInputStream(bytes.toByteArray())));
+        new StoreRepositoryInventory(store).record(jar, NOW);
+
+        pass(null, NOW);
+
+        assertThat(closure().orElseThrow()).satisfies(closure -> {
+            assertThat(closure.source()).as("the bill, not the declared dependencies")
+                    .isEqualTo(ClosureSection.Source.BILL);
+            assertThat(closure.cuts()).extracting(ClosureSection.Cut::coordinate)
+                    .containsExactlyInAnyOrder("org.dep:a", "org.dep:b");
+        });
+    }
+
     private Optional<ClosureSection.Closure> closure() throws IOException {
         return ClosureSection.closure(metadata.section("Maven", "org.acme:app", "1.0", ClosureSection.TAG));
     }

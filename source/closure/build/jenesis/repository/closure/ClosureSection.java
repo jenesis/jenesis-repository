@@ -18,8 +18,9 @@ import tools.jackson.databind.node.ObjectNode;
  * every subtree that could not be. Absent for a version not yet resolved. The {@code data} payload is
  * {@code {"status":<RESOLVED|PARTIAL|UNDECLARED>,
  * "components":[{"coordinate","version","cached","depth","repository"}],
- * "cuts":[{"coordinate","requirement","reason"}], "truncated":<bool>}}, every component in the version's own
- * ecosystem; a component's {@code repository} is present only where a fallback's repository holds it.
+ * "cuts":[{"coordinate","requirement","reason"}], "truncated":<bool>, "source":<RESOLVED|BILL>}}, every component
+ * in the version's own ecosystem; a component's {@code repository} is present only where a fallback's repository holds
+ * it.
  */
 public final class ClosureSection {
 
@@ -55,13 +56,20 @@ public final class ClosureSection {
         }
     }
 
+    /** Where a closure came from: resolved from what the repository holds, or taken from the bill of materials the
+     *  version carries, as the build that made it resolved it. */
+    public enum Source {
+        RESOLVED, BILL
+    }
+
     /** A dependency whose subtree did not resolve: what was asked for and why it ended there. */
     public record Cut(String coordinate, String requirement, String reason) {
     }
 
-    /** A version's closure: the components it reaches, the cuts, whether a bound stopped it, and when it was read. */
+    /** A version's closure: the components it reaches, the cuts, whether a bound stopped it, when it was read and
+     *  where it came from. */
     public record Closure(Status status, List<Component> components, List<Cut> cuts, boolean truncated,
-                          Instant resolved) {
+                          Instant resolved, Source source) {
 
         public Closure {
             components = List.copyOf(components);
@@ -130,7 +138,8 @@ public final class ClosureSection {
             case "UNDECLARED" -> Status.UNDECLARED;
             default -> Status.RESOLVED;
         };
-        return new Closure(status, components, cuts, data.path("truncated").asBoolean(false), updated);
+        Source source = "BILL".equals(data.path("source").asString("")) ? Source.BILL : Source.RESOLVED;
+        return new Closure(status, components, cuts, data.path("truncated").asBoolean(false), updated, source);
     }
 
     /** Record {@code closure} as the version's, replacing what it had; re-derivable each compare-and-set attempt. */
@@ -153,6 +162,7 @@ public final class ClosureSection {
                         .put("reason", cut.reason());
             }
             data.put("truncated", closure.truncated());
+            data.put("source", closure.source().name());
             return Section.derived(TAG, SCHEMA, closure.resolved(), Signal.NEUTRAL, data);
         };
     }

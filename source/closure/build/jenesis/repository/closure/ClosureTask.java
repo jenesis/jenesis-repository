@@ -84,10 +84,15 @@ public final class ClosureTask implements MaintenanceTask {
                 return;
             }
             try {
-                // An ecosystem with a walk of its own resolves the release; the walk by declarations answers otherwise.
+                // The bill the release carries is the closure as its build resolved it; without one naming more than
+                // its direct dependencies, an ecosystem with a walk of its own resolves the release, and the walk by
+                // declarations answers otherwise.
                 Optional<EcosystemClosure> walk = EcosystemClosure.of(release.ecosystem());
-                Optional<ClosureSection.Closure> own = walk.isEmpty() ? Optional.empty()
-                        : walk.get().resolve(through, release.coordinate(), release.version(), context.now());
+                Optional<ClosureSection.Closure> own = CarriedBill.resolve(through, release.ecosystem(),
+                        release.coordinate(), release.version(), context.now());
+                if (own.isEmpty() && walk.isPresent()) {
+                    own = walk.get().resolve(through, release.coordinate(), release.version(), context.now());
+                }
                 ClosureSection.Closure closure = own.isPresent() ? own.get()
                         : resolver.resolve(release.ecosystem(), release.coordinate(), release.version(), context.now());
                 metadata.mutate(release.ecosystem(), release.coordinate(), release.version(), ClosureSection.TAG,
