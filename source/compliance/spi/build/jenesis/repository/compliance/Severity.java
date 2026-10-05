@@ -62,16 +62,23 @@ public enum Severity {
      * {@code CRITICAL} so a floor fails closed against it - but merging a source that scored an advisory CRITICAL
      * with one that could not score it at all must report CRITICAL, not lose it. "Something could not be read"
      * survives only when nothing else could read it either.
+     *
+     * <p>{@link #NONE} does not count as reading it. It is the claim that a source scored the advisory and found
+     * nothing severe, which is no evidence against a source that could not score it: merging the two answers
+     * {@code UNKNOWN}, so a floor still fails closed against the advisory rather than admitting it as clean.
      */
     public static Severity strongest(Severity first, Severity second) {
         if (first == null) {
             return second;
         }
-        if (second == null || second == UNKNOWN) {
+        if (second == null) {
             return first;
         }
         if (first == UNKNOWN) {
-            return second;
+            return second == NONE ? UNKNOWN : second;
+        }
+        if (second == UNKNOWN) {
+            return first == NONE ? UNKNOWN : first;
         }
         return first.compareTo(second) >= 0 ? first : second;
     }
