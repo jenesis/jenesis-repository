@@ -2,6 +2,7 @@ package build.jenesis.repository.gate.store;
 
 import module java.base;
 import build.jenesis.repository.compliance.QualityInspector;
+import build.jenesis.repository.compliance.ScreeningMode;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
@@ -13,6 +14,10 @@ import build.jenesis.repository.settings.SettingsContributor;
  * the description below names it so an operator who wants to move the boundary rather than change the policy can
  * find it. What is a row is the policy itself, because it is a compliance decision of exactly the kind
  * {@code license-unknown} beside it is, and it is read only for an artifact that has already exceeded the bound.
+ *
+ * <p>Beside it is what a screen does when a feed cannot answer, and whether what it finds holds at all
+ * ({@link ScreeningMode}): a repository's dial, since a repository being rolled out under screening and one already
+ * enforced sit side by side.
  */
 public final class InspectionSettingsContributor implements SettingsContributor {
 
@@ -26,6 +31,21 @@ public final class InspectionSettingsContributor implements SettingsContributor 
                                 + "refusing the publish both say it was too large to screen, which says nothing about "
                                 + "its content. This governs what is published here, not the proxy path.",
                         Setting.Kind.CHOICE, List.of("STREAM", "QUARANTINE", "REJECT"),
-                        QualityInspector.OVERSIZED_DEFAULT, true).advanced());
+                        QualityInspector.OVERSIZED_DEFAULT, true).advanced(),
+                new Setting(ScreeningMode.KEY, "Compliance", "Screening mode",
+                        "What the screen does when an advisory feed or a scanner cannot answer, and whether what it "
+                                + "finds holds at all. Holding, the default, keeps an artifact the screen could not "
+                                + "clear for review with the outage named. Admitting serves it when every check that "
+                                + "could answer allows it, and names the check that could not. Recording never holds on "
+                                + "what the screen found or could not find, and records it: the mode to run while "
+                                + "screening is rolled out over what a repository already serves. The deny list "
+                                + "refuses in every mode, and a hardened proxy screens strictly in every mode.",
+                        List.of(new Setting.Choice("HOLD", "Hold",
+                                        "an artifact the screen could not clear is held for review"),
+                                new Setting.Choice("ADMIT", "Admit",
+                                        "an outage leaves the artifact to the checks that could answer"),
+                                new Setting.Choice("RECORD", "Record only",
+                                        "nothing the screen found or could not find is held; all of it is recorded")),
+                        ScreeningMode.DEFAULT, true, Setting.Scope.REPOSITORY).standard());
     }
 }

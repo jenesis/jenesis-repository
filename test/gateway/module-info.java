@@ -49,6 +49,8 @@ open module build.jenesis.repository.gateway.contract.test {
     requires build.jenesis.repository.signing.testkit;
     requires build.jenesis.repository.sigstore.testkit;
     requires build.jenesis.repository.gate.spi;
+    // The screening-mode dial's declaration, read by its default test.
+    requires build.jenesis.repository.gate;
     requires build.jenesis.repository.cleanup;
     requires build.jenesis.repository.cleanup.task;
     requires build.jenesis.repository.gc;

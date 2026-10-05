@@ -248,6 +248,16 @@ public final class LiveConfig implements SettingsEditor.Resolution {
         return key -> settings.getOrDefault(tenant, key, fileDefaults.apply(key));
     }
 
+    /** {@link #settings(String)} for one repository: its own stored value of a repository setting over the tenant's
+     *  chain, so a repository's compliance dial reaches the screens of its publishes. A {@code null} repository reads
+     *  the tenant's. */
+    public UnaryOperator<String> settings(String tenant, String repository) {
+        if (repository == null) {
+            return settings(tenant);
+        }
+        return key -> settings.getOrDefault(tenant, repository, key, fileDefaults.apply(key));
+    }
+
     /** The publish-path compliance gate for a tenant: the deployment-wide gate where the tenant has overridden none of
      *  its policy keys (the precomputed snapshot, no per-request cost), otherwise a gate resolved from that tenant's
      *  effective chain (Spring pin &gt; tenant document &gt; global document &gt; packaged default) so a tenant's own

@@ -31,7 +31,6 @@ import build.jenesis.repository.gateway.ProxyScreenHooks;
 import build.jenesis.repository.gateway.HardenedScreen;
 import build.jenesis.repository.gateway.DeployEdgeHooks;
 import build.jenesis.repository.gateway.LiveDefinitions;
-import build.jenesis.repository.compliance.GatePolicyProvider;
 import build.jenesis.repository.gateway.RepositoryRouter;
 import build.jenesis.repository.gateway.RedirectHandlerProvider;
 import build.jenesis.repository.compliance.ComplianceGate;
@@ -119,9 +118,9 @@ public class ServingConfig {
         RepositoryRouter.WithheldGuard withheld = held::withheld;
         RepositoryRouter router = new RepositoryRouter(definitions::definition, repositories::store, upstreamFetcher)
                 .gating(liveConfig::gate, liveConfig::holdDays, liveConfig::withholdIncompleteScreens)
-                // A repository whose upstreams are marked internal has its fetches screened as a publish is.
-                .fetchedAs((tenant, repository) -> GatePolicyProvider.Path.fetched(
-                        key -> liveConfig.effective(tenant, repository, key, null)))
+                // A repository's own settings decide how its fetches are screened: as a publish is where its upstreams
+                // are marked internal, and under its screening mode.
+                .repositorySettings((tenant, repository) -> key -> liveConfig.effective(tenant, repository, key, null))
                 // The scratch carries the store's bindings, so a pass-through is screened as a publish would be.
                 .passingThrough(() -> spool.acquire(root.bindings()))
                 .hardening(hardeningBounds)

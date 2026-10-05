@@ -62,6 +62,23 @@ final class PublishHolds {
                 coordinate(artifact, inspected), Verdict.ALLOW, reasons, List.of());
     }
 
+    /** Log an upload the repository's screening mode accepted where the screen alone would have withheld it, or that
+     *  was screened around a feed that could not answer: the gate's findings and why it was served, under the outcome
+     *  the path actually has. */
+    static void logGoverned(ArtifactStore store, ArtifactDescriptor artifact, List<ComplianceGate.Subject> inspected,
+                            ComplianceGate.Assessment assessment, String governedBy) throws IOException {
+        List<String> reasons = new ArrayList<>();
+        if (assessment != null) {
+            for (ComplianceGate.Finding finding : assessment.findings()) {
+                reasons.add(finding.detail());
+            }
+        }
+        reasons.add(governedBy);
+        new QuarantineLog(store).record(Clocks.now(), reviewPath(artifact, inspected),
+                coordinate(artifact, inspected), Verdict.ALLOW, reasons,
+                assessment == null ? List.of() : assessment.rules());
+    }
+
     /**
      * Retire a stale publish-time gate hold at the path of an accepted publish. The gate just cleared a fresh upload
      * there, and serving the accepted artifact must not stay blocked by a verdict on a body that was since replaced.

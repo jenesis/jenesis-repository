@@ -91,8 +91,9 @@ final class PublishRecorder {
      * Persist a quarantining assessment's reasons as structured rows in the findings ledger - one attributed
      * {@link Finding.Kind#GATE} row per gate finding, keyed by the coordinate the layout descriptor maps the path
      * to (the same coordinate the {@code published} record uses, so a later release's eviction reclaims the
-     * rows) - beside the {@link QuarantineLog}'s flat audit line. Held to quarantines only: a rejected upload stores
-     * no artifact whose lifecycle could ever reclaim its rows, so its trail stays the retention-pruned log. Best
+     * rows) - beside the {@link QuarantineLog}'s flat audit line. Held to quarantines, and to an upload the
+     * repository's screening mode accepted rather than withheld: a rejected upload stores no artifact whose lifecycle
+     * could ever reclaim its rows, so its trail stays the retention-pruned log. Best
      * effort like every derived write here - the hold and the log line are already durable, so a failed ledger write
      * must not fail the publish choreography - and a no-op when no findings module is installed.
      */

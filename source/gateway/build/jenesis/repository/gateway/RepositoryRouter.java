@@ -7,6 +7,7 @@ import build.jenesis.repository.server.PullThroughCache;
 import build.jenesis.repository.server.PullThroughHooks;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.GatePolicyProvider;
+import build.jenesis.repository.compliance.ScreeningMode;
 import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.FormatExchange;
@@ -146,11 +147,11 @@ public final class RepositoryRouter {
      *  module, so the default is only ever reached by a directly-constructed one (fail-loud). */
     private final RedirectHandler redirect;
 
-    /** The gate flavour a repository's fallback fetches are screened through, by tenant and repository:
-     *  {@link GatePolicyProvider.Path#PUBLISH} for a repository whose upstreams are marked internal, {@link
-     *  GatePolicyProvider.Path#PROXY} otherwise - every repository until a deployment wires its settings through
-     *  {@link #fetchedAs}. */
-    private final BiFunction<String, String, GatePolicyProvider.Path> fetchedAs;
+    /** A repository's effective settings, by tenant and repository, which decide how its fallback fetches are screened:
+     *  the gate flavour ({@link GatePolicyProvider.Path#fetched}, the publishing one for a repository whose upstreams
+     *  are marked internal) and the {@link ScreeningMode}. Every key answers unset - the proxy flavour, the default
+     *  mode - until a deployment wires its settings through {@link #repositorySettings}. */
+    private final BiFunction<String, String, UnaryOperator<String>> repositorySettings;
 
     /** The origin-refresh coalescing gate: the day each {@code (tenant|repo|path|sha256)} key last had its
      *  {@code origin} row's {@code lastServed}/{@code serves} durably refreshed, so a hot no-copy pass-through
@@ -183,7 +184,7 @@ public final class RepositoryRouter {
         // injects one via tracking(...).
         this(definitions, stores, fetcher, (_, _) -> null, () -> 0, () -> false,
                 new SpoolStore(SpoolStore.Budget.standard())::acquire, HardenedScreen.Bounds.standard(),
-                WithheldGuard.NONE, INSTALLED_METADATA, REDIRECT_ABSENT, (_, _) -> GatePolicyProvider.Path.PROXY);
+                WithheldGuard.NONE, INSTALLED_METADATA, REDIRECT_ABSENT, (_, _) -> _ -> null);
     }
 
     /** Resolve the consolidated metadata store bound to a repository's scoped store from the discovered persistence
@@ -198,7 +199,8 @@ public final class RepositoryRouter {
                              IntSupplier holdDays, BooleanSupplier withholdIncomplete,
                              Supplier<ArtifactStore> passThrough, HardenedScreen.Bounds hardeningBounds,
                              WithheldGuard withheld, Function<ArtifactStore, MetadataStore> metadataOver,
-                             RedirectHandler redirect, BiFunction<String, String, GatePolicyProvider.Path> fetchedAs) {
+                             RedirectHandler redirect,
+                             BiFunction<String, String, UnaryOperator<String>> repositorySettings) {
         this.definitions = definitions;
         this.stores = stores;
         this.fetcher = fetcher;
@@ -210,7 +212,7 @@ public final class RepositoryRouter {
         this.withheld = withheld;
         this.metadataOver = metadataOver;
         this.redirect = redirect;
-        this.fetchedAs = fetchedAs;
+        this.repositorySettings = repositorySettings;
     }
 
     /** Screen every proxied artifact through the gate before caching or serving it, so a router-configured proxy
@@ -232,15 +234,16 @@ public final class RepositoryRouter {
     public RepositoryRouter gating(BiFunction<String, GatePolicyProvider.Path, ComplianceGate> gate,
                                    IntSupplier holdDays, BooleanSupplier withholdIncomplete) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
-                hardeningBounds, withheld, metadataOver, redirect, fetchedAs);
+                hardeningBounds, withheld, metadataOver, redirect, repositorySettings);
     }
 
-    /** Screen a repository's fallback fetches through the flavour {@code fetchedAs} answers for it - the publishing one
-     *  for a repository whose upstreams are marked internal ({@link GatePolicyProvider.Path#UPSTREAM_INTERNAL}),
-     *  read per fetch so the mark applies without a restart. */
-    public RepositoryRouter fetchedAs(BiFunction<String, String, GatePolicyProvider.Path> fetchedAs) {
+    /** Screen a repository's fallback fetches as its effective settings say, read per fetch so a change applies
+     *  without a restart: through the publishing flavour where its upstreams are marked internal
+     *  ({@link GatePolicyProvider.Path#UPSTREAM_INTERNAL}), and under its {@link ScreeningMode}. */
+    public RepositoryRouter repositorySettings(BiFunction<String, String, UnaryOperator<String>> repositorySettings) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
-                hardeningBounds, withheld, metadataOver, redirect, Objects.requireNonNull(fetchedAs, "fetchedAs"));
+                hardeningBounds, withheld, metadataOver, redirect,
+                Objects.requireNonNull(repositorySettings, "repositorySettings"));
     }
 
     /** A tenant's proxy-flavour gate - the null-check every "is this tenant gated at all?" test reads. */
@@ -251,7 +254,8 @@ public final class RepositoryRouter {
     /** The gate a body <em>arriving from an upstream</em> of {@code repository} is screened through: the tenant's
      *  proxy-flavour gate, or its publishing one where the repository marks its upstreams internal. */
     private ComplianceGate fetchGate(String tenant, String repository) {
-        return gate == null ? null : gate.apply(tenant, fetchedAs.apply(tenant, repository));
+        return gate == null ? null
+                : gate.apply(tenant, GatePolicyProvider.Path.fetched(repositorySettings.apply(tenant, repository)));
     }
 
     /** A repository's flavour lookup, as the re-screen legs take it: they decide the flavour per stored artifact
@@ -259,7 +263,8 @@ public final class RepositoryRouter {
      *  flavour is the one the repository's fetches are screened through. */
     private Function<GatePolicyProvider.Path, ComplianceGate> gates(String tenant, String repository) {
         return gate == null ? null : path -> gate.apply(tenant,
-                path == GatePolicyProvider.Path.PROXY ? fetchedAs.apply(tenant, repository) : path);
+                path == GatePolicyProvider.Path.PROXY
+                        ? GatePolicyProvider.Path.fetched(repositorySettings.apply(tenant, repository)) : path);
     }
 
     /** Inject the consolidated metadata-store factory the verdict and origin records are written through,
@@ -268,7 +273,7 @@ public final class RepositoryRouter {
      *  without installing the persistence module for every gateway test. */
     public RepositoryRouter tracking(Function<ArtifactStore, MetadataStore> metadataOver) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
-                hardeningBounds, withheld, metadataOver, redirect, fetchedAs);
+                hardeningBounds, withheld, metadataOver, redirect, repositorySettings);
     }
 
     /** Supply the scratch {@link ArtifactStore} the {@code nocache} pass-through leg fetches through, so a test can
@@ -279,7 +284,7 @@ public final class RepositoryRouter {
      *  uses to reclaim its scratch. */
     public RepositoryRouter passingThrough(Supplier<ArtifactStore> passThrough) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
-                hardeningBounds, withheld, metadataOver, redirect, fetchedAs);
+                hardeningBounds, withheld, metadataOver, redirect, repositorySettings);
     }
 
     /** Set the untrusted-upstream fetch {@link HardenedScreen.Bounds} the hardened leg enforces (the per-artifact
@@ -287,7 +292,7 @@ public final class RepositoryRouter {
      *  the default is {@link HardenedScreen.Bounds#standard()}. */
     public RepositoryRouter hardening(HardenedScreen.Bounds hardeningBounds) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
-                hardeningBounds, withheld, metadataOver, redirect, fetchedAs);
+                hardeningBounds, withheld, metadataOver, redirect, repositorySettings);
     }
 
     /** Wire the read-side {@link WithheldGuard} (the discovered publication-interceptor {@code withheld} chain), so a
@@ -296,7 +301,7 @@ public final class RepositoryRouter {
      *  content). */
     public RepositoryRouter withholding(WithheldGuard withheld) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
-                hardeningBounds, withheld, metadataOver, redirect, fetchedAs);
+                hardeningBounds, withheld, metadataOver, redirect, repositorySettings);
     }
 
     /** Inject the {@link RedirectHandler} a {@link RepositoryDefinition.Serve#REDIRECT} upstream leg delegates to (the
@@ -306,7 +311,7 @@ public final class RepositoryRouter {
      *  {@code redirect} token parses at all. */
     public RepositoryRouter redirecting(RedirectHandler redirect) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
-                hardeningBounds, withheld, metadataOver, redirect, fetchedAs);
+                hardeningBounds, withheld, metadataOver, redirect, repositorySettings);
     }
 
     /** The explicit definition of a repository as {@code tenant} sees it, or {@code null} when it is not configured
@@ -684,6 +689,7 @@ public final class RepositoryRouter {
             return raw;
         }
         return new ProxyScreen(active, records, holdDays.getAsInt(), withholdIncomplete.getAsBoolean())
+                .screening(ScreeningMode.of(repositorySettings.apply(tenant, repository)))
                 .wrap(raw, path, companions);
     }
 
