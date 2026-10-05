@@ -20,6 +20,7 @@ import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
+import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
@@ -447,6 +448,13 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
             return false;
         }
         String coordinate = vendor + "/" + pkg;
+        if (document instanceof ObjectNode relayed && relayed.path("packages") instanceof ObjectNode packages
+                && packages.get(coordinate) instanceof ArrayNode listed) {
+            Set<String> held = HeldVersions.of(store, ECOSYSTEM, coordinate);
+            if (!held.isEmpty()) {
+                packages.set(coordinate, withoutHeld(listed, held, MINIFIED.equals(text(relayed, "minified"))));
+            }
+        }
         if (document.path("packages").get(coordinate) instanceof ArrayNode versions) {
             for (JsonNode version : versions) {
                 if (version.path("dist") instanceof ObjectNode dist && dist.has("url")) {
@@ -460,6 +468,87 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
         exchange.setResponseHeader("Content-Type", "application/json");
         exchange.answer(MAPPER.writeValueAsBytes(document));
         return true;
+    }
+
+    /** The marker of a {@code p2} file whose versions each carry only what differs from the one before. */
+    static final String MINIFIED = "composer/2.0";
+
+    /** What a minified entry names for a field the entry before it carries and it does not. */
+    private static final String UNSET = "__unset";
+
+    /**
+     * {@code versions}, a package's entries in a {@code p2} file, without those whose {@code version} is {@code held}.
+     * A minified list carries in each entry only what differs from the one before, so an entry is left out by
+     * expanding the list, dropping it and minifying what remains again - dropping it alone would hand every entry after
+     * it the fields it changed. The two steps are Composer's own {@code MetadataMinifier}'s.
+     */
+    static ArrayNode withoutHeld(ArrayNode versions, Set<String> held, boolean minified) {
+        ArrayNode kept = MAPPER.createArrayNode();
+        for (ObjectNode version : minified ? expanded(versions) : objects(versions)) {
+            if (!held.contains(text(version, "version"))) {
+                kept.add(version);
+            }
+        }
+        return minified ? minified(kept) : kept;
+    }
+
+    /** A minified list's entries, each whole: the one before it with its own fields over it, a field it names
+     *  {@code __unset} removed. */
+    static List<ObjectNode> expanded(ArrayNode versions) {
+        List<ObjectNode> expanded = new ArrayList<>();
+        ObjectNode last = null;
+        for (ObjectNode version : objects(versions)) {
+            ObjectNode whole = last == null ? version.deepCopy() : last.deepCopy();
+            if (last != null) {
+                for (Map.Entry<String, JsonNode> field : version.properties()) {
+                    if (UNSET.equals(field.getValue().asString(null))) {
+                        whole.remove(field.getKey());
+                    } else {
+                        whole.set(field.getKey(), field.getValue().deepCopy());
+                    }
+                }
+            }
+            expanded.add(whole);
+            last = whole;
+        }
+        return expanded;
+    }
+
+    /** Whole entries minified: the first as it is, each after it only what differs from the one before, a field the
+     *  one before carries and it does not named {@code __unset}. */
+    static ArrayNode minified(ArrayNode versions) {
+        ArrayNode minified = MAPPER.createArrayNode();
+        ObjectNode last = null;
+        for (ObjectNode version : objects(versions)) {
+            if (last == null) {
+                minified.add(version.deepCopy());
+            } else {
+                ObjectNode changed = MAPPER.createObjectNode();
+                for (Map.Entry<String, JsonNode> field : version.properties()) {
+                    if (!field.getValue().equals(last.get(field.getKey()))) {
+                        changed.set(field.getKey(), field.getValue().deepCopy());
+                    }
+                }
+                for (String name : last.propertyNames()) {
+                    if (!version.has(name)) {
+                        changed.put(name, UNSET);
+                    }
+                }
+                minified.add(changed);
+            }
+            last = version;
+        }
+        return minified;
+    }
+
+    private static List<ObjectNode> objects(ArrayNode versions) {
+        List<ObjectNode> objects = new ArrayList<>();
+        for (JsonNode version : versions) {
+            if (version instanceof ObjectNode object) {
+                objects.add(object);
+            }
+        }
+        return objects;
     }
 
     /** Fetch, cache and serve an immutable archive: its {@code dist.url} resolved from the upstream {@code p2} file,
