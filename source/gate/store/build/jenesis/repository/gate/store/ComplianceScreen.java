@@ -771,8 +771,14 @@ public final class ComplianceScreen implements PublishInterceptor {
     private Disposition screenFromPath(ArtifactDescriptor artifact, ComplianceGate current,
                                        List<ComplianceGate.Subject> content) {
         ComplianceGate.Subject subject = PublishInspection.pathDerivedSubject(artifact);
-        ComplianceGate.Assessment unclaimed = current.assessUnclaimed(subject);
-        ComplianceGate.Assessment scanned = current.assess(content);
+        ComplianceGate.Assessment unclaimed;
+        ComplianceGate.Assessment scanned;
+        try {
+            unclaimed = current.assessUnclaimed(subject);
+            scanned = current.assess(content);
+        } catch (RuntimeException failure) {
+            return screenFeedFailure(artifact, List.of(), failure);
+        }
         List<ComplianceGate.Finding> findings = new ArrayList<>(unclaimed.findings());
         findings.addAll(scanned.findings());
         ComplianceGate.Assessment assessment =
@@ -802,10 +808,16 @@ public final class ComplianceScreen implements PublishInterceptor {
      *  raw upload is NOT over-quarantined as unknown-license while a deny-listed or advised coordinate is still
      *  held/rejected however it was delivered. The assessment is stashed for {@link #committed} exactly as a parsed
      *  one, so a non-ACCEPT outcome records its reasons in the quarantine log; an admitted (or withheld) upload is
-     *  also logged for the observability the audit asks for. */
+     *  also logged for the observability the audit asks for. A feed that cannot answer holds the upload as it does
+     *  for a parsed one. */
     private Disposition screenFromPath(ArtifactDescriptor artifact, ComplianceGate current) {
         ComplianceGate.Subject subject = PublishInspection.pathDerivedSubject(artifact);
-        ComplianceGate.Assessment assessment = current.assessUnclaimed(subject);
+        ComplianceGate.Assessment assessment;
+        try {
+            assessment = current.assessUnclaimed(subject);
+        } catch (RuntimeException failure) {
+            return screenFeedFailure(artifact, List.of(), failure);
+        }
         assessed.set(assessment);
         subjects.set(List.of(subject));
         Disposition disposition = switch (assessment.verdict()) {

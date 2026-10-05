@@ -180,6 +180,39 @@ class ComplianceScreenTest {
      * generic test layout rather than through NuGet, because the behaviour being pinned is the gate's.
      */
     @Test
+    void a_feed_that_fails_closed_holds_an_upload_screened_from_its_path() throws IOException {
+        // Nothing claims these bytes, so the screen asks the feeds about the coordinate the edge described the upload
+        // as - and a feed that cannot answer there holds the upload as it does a parsed one.
+        AdvisorySource failing = new AdvisorySource() {
+
+            @Override
+            public List<AdvisorySource.Advisory> advisories(String ecosystem, String coordinate, String version) {
+                throw new UncheckedIOException(new IOException("advisory feed unreachable (rate limited)"));
+            }
+
+            @Override
+            public Freshness freshness() {
+                return Freshness.NEVER;
+            }
+        };
+        ComplianceGate gate = gate(failing);
+        String path = "/raw/acme/lib-1.0.bin";
+        ArtifactDescriptor described = new ArtifactDescriptor("maven", "org.acme:lib", "1.0", path, null, false, null,
+                -1L);
+
+        Publication.Published published = publish(new Publication(store, List.of(new ComplianceScreen(() -> gate))),
+                described, new ByteArrayInputStream("bytes nothing claims".getBytes(StandardCharsets.UTF_8)));
+
+        assertThat(published.disposition()).as("an upload the feed could not clear is held, not admitted")
+                .isEqualTo(PublishInterceptor.Disposition.QUARANTINE);
+        assertThat(gated().located(path)).as("the un-screened upload is withheld from serving").isEmpty();
+        assertThat(new QuarantineLog(store).events()).singleElement().satisfies(event ->
+                assertThat(event.reasons()).anySatisfy(reason -> assertThat(reason)
+                        .contains(ComplianceGate.FEED_FAILED_CLOSED)
+                        .contains("advisory feed unreachable (rate limited)")));
+    }
+
+    @Test
     void a_hold_screened_under_a_shared_push_endpoint_files_its_reasons_where_the_artifact_will_be() throws IOException {
         ComplianceGate gate = gate(AdvisorySource.none())
                 .denyList(new DenyListPolicy(List.of("com.endpoint:*")).action(Verdict.QUARANTINE));
