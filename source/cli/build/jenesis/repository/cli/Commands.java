@@ -140,6 +140,11 @@ public final class Commands {
                     noun("signature", "what was made of a version's publisher signature",
                             ComplianceCommands::signature,
                             act("signature <repo> <path>", "the recorded outcome, signer, trust source, log entry and grade")),
+                    noun("closure", "what a published version resolves to, from what the repository holds",
+                            ComplianceCommands::closure,
+                            act("closure <repo> <ecosystem> <coordinate> <version>",
+                                    "the transitive closure, each component with the repository holding it, and "
+                                            + "every dependency that did not resolve")),
                     noun("provenance", "the signed build attestation",
                             ComplianceCommands::provenance,
                             act("provenance <repo> <path> [--material]",

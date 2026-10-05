@@ -1,6 +1,9 @@
 package build.jenesis.repository.closure;
 
 import module java.base;
+import build.jenesis.repository.inventory.CachedSection;
+import build.jenesis.repository.inventory.PublishedSection;
+import build.jenesis.repository.metadata.MetadataDocument;
 import build.jenesis.repository.metadata.Section;
 import build.jenesis.repository.metadata.SectionMutation;
 import build.jenesis.repository.metadata.Signal;
@@ -11,11 +14,12 @@ import tools.jackson.databind.node.ObjectNode;
 
 /**
  * The {@code closure} section codec of the consolidated metadata document: a published version's transitive closure as
- * the repository could resolve it from what it holds, when it was resolved, and every subtree that could not be.
- * Absent for a version not yet resolved. The {@code data} payload is {@code {"status":<RESOLVED|PARTIAL|UNDECLARED>,
- * "components":[{"coordinate","version","cached","depth","repository"}], "cuts":[{"coordinate","requirement","reason"}],
- * "truncated":<bool>}}, every component in the version's own ecosystem; a component's {@code repository} is present
- * only where a fallback's repository holds it.
+ * the repository could resolve it from what it and the repositories its fallbacks name hold, when it was resolved, and
+ * every subtree that could not be. Absent for a version not yet resolved. The {@code data} payload is
+ * {@code {"status":<RESOLVED|PARTIAL|UNDECLARED>,
+ * "components":[{"coordinate","version","cached","depth","repository"}],
+ * "cuts":[{"coordinate","requirement","reason"}], "truncated":<bool>}}, every component in the version's own
+ * ecosystem; a component's {@code repository} is present only where a fallback's repository holds it.
  */
 public final class ClosureSection {
 
@@ -63,6 +67,41 @@ public final class ClosureSection {
             components = List.copyOf(components);
             cuts = List.copyOf(cuts);
         }
+    }
+
+    /** What a version's document says of its closure, as every surface answers it. */
+    public enum State {
+        /** Every subtree resolved. */
+        RESOLVED,
+        /** Some subtree was cut, or a bound stopped the walk. */
+        PARTIAL,
+        /** The version declares nothing this repository can read. */
+        UNDECLARED,
+        /** A release whose closure the pass has not resolved yet - or never will, while the setting is off. */
+        PENDING,
+        /** A cached copy: it has no closure of its own, and is screened by its own coordinate. */
+        CACHED
+    }
+
+    /** A version's closure state and, where one is resolved, the closure; {@code closure} is {@code null} for a
+     *  {@link State#PENDING} release and a {@link State#CACHED} copy. */
+    public record Answer(State state, Closure closure) {
+    }
+
+    /** What {@code document} says of the version's closure, or empty where it records neither a publish nor a cached
+     *  copy - a version this repository does not hold. */
+    public static Optional<Answer> answer(MetadataDocument document) {
+        if (document.section(CachedSection.TAG).isPresent()) {
+            return Optional.of(new Answer(State.CACHED, null));
+        }
+        if (document.section(PublishedSection.TAG).isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(closure(document.section(TAG)).map(closure -> new Answer(switch (closure.status()) {
+            case RESOLVED -> State.RESOLVED;
+            case PARTIAL -> State.PARTIAL;
+            case UNDECLARED -> State.UNDECLARED;
+        }, closure)).orElse(new Answer(State.PENDING, null)));
     }
 
     /** What a section records, or empty for a version not yet resolved. */

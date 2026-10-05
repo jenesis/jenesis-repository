@@ -13,8 +13,8 @@ import build.jenesis.repository.store.ServableNames;
  * Resolves a version's transitive closure from what the repositories of a {@link ClosureWalk} hold: breadth-first from
  * the version's declared dependencies, each requirement taking the newest held version its ecosystem's
  * {@link RequirementGrammar} admits and the repository holding it serves - the earlier repository of the walk where
- * two hold the same version, as a request walks them - and that version's own declarations read next. The nearest declaration of a coordinate wins,
- * as the build tools that mediate do, and a coordinate is visited once.
+ * two hold the same version, as a request walks them - and that version's own declarations read next. The nearest
+ * declaration of a coordinate wins, as the build tools that mediate do, and a coordinate is visited once.
  *
  * <p>A held version's declarations are the ones its document records where its publish recorded them, and otherwise
  * the ones an installed inspector reads off its smallest claimed file - a cached copy records none, so its manifest is

@@ -17,7 +17,7 @@ import org.springframework.core.env.Environment;
 
 /**
  * Wires the compliance-review API into the repository server - quarantine, vulnerabilities, findings, health,
- * provenance, signatures, signers, hardening, licence retro - over {@link Repositories}, {@link AuditTrail}, the
+ * provenance, signatures, a version's closure, signers, hardening, licence retro - over {@link Repositories}, {@link AuditTrail}, the
  * {@link ComplianceSources} the live settings switch on. Imported
  * through {@link ComplianceWebModule}; every controller is registered explicitly. The VEX API is the VEX store's own
  * web module.
@@ -34,6 +34,11 @@ public class ComplianceWebConfig {
     @Bean
     public SignatureController signatureController(Repositories repositories, RepositoryRouting routing) {
         return new SignatureController(repositories, routing);
+    }
+
+    @Bean
+    public ClosureController closureController(Repositories repositories, RepositoryRouting routing) {
+        return new ClosureController(repositories, routing);
     }
 
     @Bean

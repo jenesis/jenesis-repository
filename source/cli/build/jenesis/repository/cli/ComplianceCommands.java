@@ -343,6 +343,54 @@ final class ComplianceCommands {
         return 0;
     }
 
+    static int closure(String[] args, Path home) throws Exception {
+        if (args.length < 5) {
+            throw new IllegalArgumentException("Usage: closure <repo> <ecosystem> <coordinate> <version>");
+        }
+        ProvenanceClient.Closure closure = CliSupport.client(home).provenance().closure(args[1], args[2], args[3],
+                args[4]);
+        String subject = closure.coordinate() + " " + closure.version();
+        switch (closure.state()) {
+            case "CACHED" -> {
+                System.out.println(subject + " is a cached copy: it has no closure of its own, and is screened by "
+                        + "its own coordinate.");
+                return 0;
+            }
+            case "PENDING" -> {
+                System.out.println(subject + " is not resolved yet: the closure pass resolves a release shortly "
+                        + "after its publish, unless the repository's closure resolution is off.");
+                return 0;
+            }
+            case "UNDECLARED" -> {
+                System.out.println(subject + " declares no dependencies this repository can read, so it has no "
+                        + "closure - which is not the same as an empty one.");
+                return 0;
+            }
+            default -> {
+            }
+        }
+        List<ProvenanceClient.ClosureComponent> components = closure.components() == null ? List.of()
+                : closure.components();
+        List<ProvenanceClient.ClosureCut> cuts = closure.cuts() == null ? List.of() : closure.cuts();
+        System.out.println(subject + "  " + closure.state().toLowerCase(Locale.ROOT) + ", resolved "
+                + closure.resolved() + ": " + components.size() + " component(s), " + cuts.size() + " unresolved");
+        for (ProvenanceClient.ClosureComponent component : components) {
+            String repository = component.repository() == null || component.repository().isBlank() ? ""
+                    : " of " + component.repository();
+            System.out.printf(Locale.ROOT, "    %s %s  %s%s, depth %d%n", component.coordinate(), component.version(),
+                    component.cached() ? "a cached copy" : "a release", repository, component.depth());
+        }
+        for (ProvenanceClient.ClosureCut cut : cuts) {
+            System.out.println("    unresolved: " + cut.coordinate()
+                    + (cut.requirement() == null || cut.requirement().isBlank() ? "" : " " + cut.requirement())
+                    + " - " + cut.reason());
+        }
+        if (closure.truncated()) {
+            System.out.println("    the closure stopped at its bound; what lies past it is not listed");
+        }
+        return 0;
+    }
+
     private static void line(String label, String value) {
         if (value != null && !value.isBlank()) {
             System.out.printf("    %-12s %s%n", label, value);
