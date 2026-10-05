@@ -10,7 +10,9 @@
  * resolved off the request path by a pass ({@link build.jenesis.repository.closure.ClosureTask}) that visits every
  * release without one, a release published late and one published before the setting was on alike, and asked for
  * per repository by {@code closure-resolution}. What differs per ecosystem is evaluating a requirement, which a
- * discovered {@link build.jenesis.repository.closure.RequirementGrammar} does.
+ * discovered {@link build.jenesis.repository.closure.RequirementGrammar} does, and - for an ecosystem whose
+ * dependencies are not read off one manifest - the walk itself, which a discovered
+ * {@link build.jenesis.repository.closure.EcosystemClosure} takes over.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -27,6 +29,7 @@ module build.jenesis.repository.closure {
     requires org.slf4j;
     exports build.jenesis.repository.closure;
     uses build.jenesis.repository.closure.RequirementGrammar;
+    uses build.jenesis.repository.closure.EcosystemClosure;
     provides build.jenesis.repository.maintenance.MaintenanceTaskProvider
             with build.jenesis.repository.closure.ClosureTaskProvider;
     provides build.jenesis.repository.settings.SettingsContributor

@@ -82,8 +82,12 @@ public final class ClosureTask implements MaintenanceTask {
                 return;
             }
             try {
-                ClosureSection.Closure closure = resolver.resolve(release.ecosystem(), release.coordinate(),
-                        release.version(), context.now());
+                // An ecosystem with a walk of its own resolves the release; the walk by declarations answers otherwise.
+                Optional<EcosystemClosure> walk = EcosystemClosure.of(release.ecosystem());
+                Optional<ClosureSection.Closure> own = walk.isEmpty() ? Optional.empty()
+                        : walk.get().resolve(context.store(), release.coordinate(), release.version(), context.now());
+                ClosureSection.Closure closure = own.isPresent() ? own.get()
+                        : resolver.resolve(release.ecosystem(), release.coordinate(), release.version(), context.now());
                 metadata.mutate(release.ecosystem(), release.coordinate(), release.version(), ClosureSection.TAG,
                         ClosureSection.record(closure));
                 resolved[0]++;
