@@ -2,3 +2,12 @@ build.jenesis.repository.dependents.requirements.MavenGrammar
 build.jenesis.repository.dependents.requirements.NpmGrammar
 build.jenesis.repository.dependents.requirements.CargoGrammar
 build.jenesis.repository.dependents.requirements.ComposerGrammar
+build.jenesis.repository.dependents.requirements.PyPiGrammar
+build.jenesis.repository.dependents.requirements.NuGetGrammar
+build.jenesis.repository.dependents.requirements.RubyGemsGrammar
+build.jenesis.repository.dependents.requirements.GoGrammar
+build.jenesis.repository.dependents.requirements.DebianGrammar
+build.jenesis.repository.dependents.requirements.RpmGrammar
+build.jenesis.repository.dependents.requirements.AlpineGrammar
+build.jenesis.repository.dependents.requirements.CondaGrammar
+build.jenesis.repository.dependents.requirements.HelmGrammar
