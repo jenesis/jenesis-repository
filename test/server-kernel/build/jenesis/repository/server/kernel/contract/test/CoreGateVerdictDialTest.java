@@ -55,14 +55,15 @@ class CoreGateVerdictDialTest {
         settings = new Settings(store);
     }
 
-    /** A gate resolved from the stored settings, over the feed above. The store is fresh per test method, and
-     *  within one method each call overwrites the keys it names - so a leg that tightens a dial after loosening it
-     *  reads the tightened value, which is the sequence these legs actually drive. */
+    /** The proxy gate resolved from the stored settings, over the feed above - the gate that asks a feed, since a
+     *  published version is asked of none. The store is fresh per test method, and within one method each call
+     *  overwrites the keys it names - so a leg that tightens a dial after loosening it reads the tightened value,
+     *  which is the sequence these legs actually drive. */
     private ComplianceGate gate(Map<String, String> stored) throws IOException {
         for (Map.Entry<String, String> entry : stored.entrySet()) {
             settings.set(entry.getKey(), entry.getValue());
         }
-        return new LiveConfig(settings, new RepositoryProperties(), FEED, _ -> null).publishGate();
+        return new LiveConfig(settings, new RepositoryProperties(), FEED, _ -> null).proxyGate();
     }
 
     /**
