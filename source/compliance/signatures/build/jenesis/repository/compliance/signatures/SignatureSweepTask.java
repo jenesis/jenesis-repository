@@ -2,6 +2,7 @@ package build.jenesis.repository.compliance.signatures;
 
 import module java.base;
 import build.jenesis.repository.compliance.ComplianceGate;
+import build.jenesis.repository.compliance.GatePolicyProvider;
 import build.jenesis.repository.compliance.SignatureQuality;
 import build.jenesis.repository.compliance.SignerIdentity;
 import build.jenesis.repository.compliance.Verdict;
@@ -75,6 +76,8 @@ public final class SignatureSweepTask implements MaintenanceTask {
         ArtifactStore store = context.store();
         SignaturePolicy published = SignaturePolicy.from(context.config());
         SignaturePolicy proxied = published.onProxy();
+        // A repository marking its upstreams internal has its copies judged as a version published here is.
+        boolean internal = GatePolicyProvider.Path.internal(context.config());
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
         Publication publication = new Publication(store);
         QuarantineLog log = new QuarantineLog(store);
@@ -85,7 +88,7 @@ public final class SignatureSweepTask implements MaintenanceTask {
         IncrementalPasses cadence = IncrementalPasses.over(store, name(), "findings/signature-sweep", context.config());
         cadence.eachHolding(inventory, holding -> {
             String eco = holding.ecosystem(), coordinate = holding.coordinate(), version = holding.version();
-            SignaturePolicy policy = holding.cached() ? proxied : published;
+            SignaturePolicy policy = holding.cached() && !internal ? proxied : published;
             Optional<SignatureSection.Summary> summary = SignatureSummaries.of(store, eco, coordinate, version);
             if (summary.isEmpty()) {
                 return;   // never judged: nothing to re-judge

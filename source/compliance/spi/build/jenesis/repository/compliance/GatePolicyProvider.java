@@ -133,7 +133,29 @@ public interface GatePolicyProvider {
 
     /** The gate flavor a policy is built for. */
     enum Path {
-        PUBLISH, PROXY
+        PUBLISH, PROXY;
+
+        /**
+         * The repository setting that marks what a repository fetches from its upstreams as internal: a repository
+         * proxying another instance of the organisation's own over HTTP. A copy it fetches is judged as a version
+         * published here is - asked of no advisory feed, exempt from the private-name dimension, under the publish
+         * flavour's licence and signature dials - because the upstream is where the organisation publishes, not a
+         * public registry. A repository reached through a fallback that names it is internal already and needs no
+         * mark.
+         */
+        public static final String UPSTREAM_INTERNAL = "upstream-internal";
+
+        /** Whether {@code config} - a repository's effective settings - marks its upstreams internal. */
+        public static boolean internal(UnaryOperator<String> config) {
+            String value = config == null ? null : config.apply(UPSTREAM_INTERNAL);
+            return value != null && Boolean.parseBoolean(value.trim());
+        }
+
+        /** The flavor a copy a repository fetched from an upstream is judged through: {@link #PUBLISH} where
+         *  {@code config} marks the repository's upstreams {@linkplain #internal internal}, {@link #PROXY} otherwise. */
+        public static Path fetched(UnaryOperator<String> config) {
+            return internal(config) ? PUBLISH : PROXY;
+        }
     }
 
     /**

@@ -3,6 +3,7 @@ package build.jenesis.repository.compliance.scan;
 import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.compliance.AdvisorySource;
+import build.jenesis.repository.compliance.GatePolicyProvider;
 import build.jenesis.repository.compliance.Freshness;
 import build.jenesis.repository.compliance.KnownExploitedSource;
 import build.jenesis.repository.compliance.Severity;
@@ -94,6 +95,10 @@ public final class ReanalysisTask implements MaintenanceTask {
 
     @Override
     public void repository(RepositoryContext context) throws IOException {
+        if (GatePolicyProvider.Path.internal(context.config())) {
+            // Its upstreams are marked internal: a copy is judged as a version published here is, asked of no feed.
+            return;
+        }
         UnaryOperator<String> config = context.config();
         String flag = config == null ? null : config.apply("kev-auto-release");
         boolean autoRelease = flag == null || flag.isBlank() || !"false".equalsIgnoreCase(flag.trim());

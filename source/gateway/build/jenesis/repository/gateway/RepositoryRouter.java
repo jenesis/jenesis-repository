@@ -146,6 +146,12 @@ public final class RepositoryRouter {
      *  module, so the default is only ever reached by a directly-constructed one (fail-loud). */
     private final RedirectHandler redirect;
 
+    /** The gate flavour a repository's fallback fetches are screened through, by tenant and repository:
+     *  {@link GatePolicyProvider.Path#PUBLISH} for a repository whose upstreams are marked internal, {@link
+     *  GatePolicyProvider.Path#PROXY} otherwise - every repository until a deployment wires its settings through
+     *  {@link #fetchedAs}. */
+    private final BiFunction<String, String, GatePolicyProvider.Path> fetchedAs;
+
     /** The origin-refresh coalescing gate: the day each {@code (tenant|repo|path|sha256)} key last had its
      *  {@code origin} row's {@code lastServed}/{@code serves} durably refreshed, so a hot no-copy pass-through
      *  refreshes a key at most once per day rather than CAS-storming one doc key on every serve (the
@@ -177,7 +183,7 @@ public final class RepositoryRouter {
         // injects one via tracking(...).
         this(definitions, stores, fetcher, (_, _) -> null, () -> 0, () -> false,
                 new SpoolStore(SpoolStore.Budget.standard())::acquire, HardenedScreen.Bounds.standard(),
-                WithheldGuard.NONE, INSTALLED_METADATA, REDIRECT_ABSENT);
+                WithheldGuard.NONE, INSTALLED_METADATA, REDIRECT_ABSENT, (_, _) -> GatePolicyProvider.Path.PROXY);
     }
 
     /** Resolve the consolidated metadata store bound to a repository's scoped store from the discovered persistence
@@ -192,7 +198,7 @@ public final class RepositoryRouter {
                              IntSupplier holdDays, BooleanSupplier withholdIncomplete,
                              Supplier<ArtifactStore> passThrough, HardenedScreen.Bounds hardeningBounds,
                              WithheldGuard withheld, Function<ArtifactStore, MetadataStore> metadataOver,
-                             RedirectHandler redirect) {
+                             RedirectHandler redirect, BiFunction<String, String, GatePolicyProvider.Path> fetchedAs) {
         this.definitions = definitions;
         this.stores = stores;
         this.fetcher = fetcher;
@@ -204,6 +210,7 @@ public final class RepositoryRouter {
         this.withheld = withheld;
         this.metadataOver = metadataOver;
         this.redirect = redirect;
+        this.fetchedAs = fetchedAs;
     }
 
     /** Screen every proxied artifact through the gate before caching or serving it, so a router-configured proxy
@@ -225,19 +232,34 @@ public final class RepositoryRouter {
     public RepositoryRouter gating(BiFunction<String, GatePolicyProvider.Path, ComplianceGate> gate,
                                    IntSupplier holdDays, BooleanSupplier withholdIncomplete) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
-                hardeningBounds, withheld, metadataOver, redirect);
+                hardeningBounds, withheld, metadataOver, redirect, fetchedAs);
     }
 
-    /** A tenant's proxy-flavour gate - what every leg that screens a body <em>arriving from an upstream</em> uses, and
-     *  the null-check every "is this tenant gated at all?" test reads. */
+    /** Screen a repository's fallback fetches through the flavour {@code fetchedAs} answers for it - the publishing one
+     *  for a repository whose upstreams are marked internal ({@link GatePolicyProvider.Path#UPSTREAM_INTERNAL}),
+     *  read per fetch so the mark applies without a restart. */
+    public RepositoryRouter fetchedAs(BiFunction<String, String, GatePolicyProvider.Path> fetchedAs) {
+        return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
+                hardeningBounds, withheld, metadataOver, redirect, Objects.requireNonNull(fetchedAs, "fetchedAs"));
+    }
+
+    /** A tenant's proxy-flavour gate - the null-check every "is this tenant gated at all?" test reads. */
     private ComplianceGate proxyGate(String tenant) {
         return gate == null ? null : gate.apply(tenant, GatePolicyProvider.Path.PROXY);
     }
 
-    /** A tenant's flavour lookup, as the re-screen legs take it: they decide the flavour per stored artifact through
-     *  {@link RescreenFlavor} rather than being handed a gate the router chose for them. */
-    private Function<GatePolicyProvider.Path, ComplianceGate> gates(String tenant) {
-        return gate == null ? null : path -> gate.apply(tenant, path);
+    /** The gate a body <em>arriving from an upstream</em> of {@code repository} is screened through: the tenant's
+     *  proxy-flavour gate, or its publishing one where the repository marks its upstreams internal. */
+    private ComplianceGate fetchGate(String tenant, String repository) {
+        return gate == null ? null : gate.apply(tenant, fetchedAs.apply(tenant, repository));
+    }
+
+    /** A repository's flavour lookup, as the re-screen legs take it: they decide the flavour per stored artifact
+     *  through {@link RescreenFlavor} rather than being handed a gate the router chose for them, and a fetched copy's
+     *  flavour is the one the repository's fetches are screened through. */
+    private Function<GatePolicyProvider.Path, ComplianceGate> gates(String tenant, String repository) {
+        return gate == null ? null : path -> gate.apply(tenant,
+                path == GatePolicyProvider.Path.PROXY ? fetchedAs.apply(tenant, repository) : path);
     }
 
     /** Inject the consolidated metadata-store factory the verdict and origin records are written through,
@@ -246,7 +268,7 @@ public final class RepositoryRouter {
      *  without installing the persistence module for every gateway test. */
     public RepositoryRouter tracking(Function<ArtifactStore, MetadataStore> metadataOver) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
-                hardeningBounds, withheld, metadataOver, redirect);
+                hardeningBounds, withheld, metadataOver, redirect, fetchedAs);
     }
 
     /** Supply the scratch {@link ArtifactStore} the {@code nocache} pass-through leg fetches through, so a test can
@@ -257,7 +279,7 @@ public final class RepositoryRouter {
      *  uses to reclaim its scratch. */
     public RepositoryRouter passingThrough(Supplier<ArtifactStore> passThrough) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
-                hardeningBounds, withheld, metadataOver, redirect);
+                hardeningBounds, withheld, metadataOver, redirect, fetchedAs);
     }
 
     /** Set the untrusted-upstream fetch {@link HardenedScreen.Bounds} the hardened leg enforces (the per-artifact
@@ -265,7 +287,7 @@ public final class RepositoryRouter {
      *  the default is {@link HardenedScreen.Bounds#standard()}. */
     public RepositoryRouter hardening(HardenedScreen.Bounds hardeningBounds) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
-                hardeningBounds, withheld, metadataOver, redirect);
+                hardeningBounds, withheld, metadataOver, redirect, fetchedAs);
     }
 
     /** Wire the read-side {@link WithheldGuard} (the discovered publication-interceptor {@code withheld} chain), so a
@@ -274,7 +296,7 @@ public final class RepositoryRouter {
      *  content). */
     public RepositoryRouter withholding(WithheldGuard withheld) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
-                hardeningBounds, withheld, metadataOver, redirect);
+                hardeningBounds, withheld, metadataOver, redirect, fetchedAs);
     }
 
     /** Inject the {@link RedirectHandler} a {@link RepositoryDefinition.Serve#REDIRECT} upstream leg delegates to (the
@@ -284,7 +306,7 @@ public final class RepositoryRouter {
      *  {@code redirect} token parses at all. */
     public RepositoryRouter redirecting(RedirectHandler redirect) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
-                hardeningBounds, withheld, metadataOver, redirect);
+                hardeningBounds, withheld, metadataOver, redirect, fetchedAs);
     }
 
     /** The explicit definition of a repository as {@code tenant} sees it, or {@code null} when it is not configured
@@ -362,7 +384,7 @@ public final class RepositoryRouter {
             // consulted here directly. A DEFAULT/other posture (or an ungated tenant) serve-throughs, so the
             // local-first below is byte-for-byte unchanged and the withheld-pointer retraction still applies.
             if (MigrationRescreenTask.hardenedProxy(definition) && proxyGate(tenant) != null) {
-                PullThroughHooks.HitDecision decision = new HardenedHitVerify(gates(tenant), holdDays.getAsInt(),
+                PullThroughHooks.HitDecision decision = new HardenedHitVerify(gates(tenant, repository), holdDays.getAsInt(),
                         hardeningBounds, passThrough, metadataOver).verifyHit(format, exchange.path(), local);
                 if (decision instanceof PullThroughHooks.HitDecision.Withhold) {
                     // A now-retracted/refused hardened hit: 404 without serving, evicted, and no upstream re-fetch. It
@@ -514,7 +536,7 @@ public final class RepositoryRouter {
             ArtifactStore spool = passThrough.get();
             ArtifactStore body = store ? durable : passThrough.get();
             try {
-                pullThrough(tenant, format, fallback, upstream, leg, body, durable, spool, probe);
+                pullThrough(tenant, repository, format, fallback, upstream, leg, body, durable, spool, probe);
                 digest = located(body, exchange.path());   // the verified copy the leg cached (durable) or spooled
             } catch (SpoolStore.BudgetExhausted exhausted) {
                 LOGGER.warn("Spool budget exhausted screening hardened "
@@ -529,7 +551,7 @@ public final class RepositoryRouter {
         } else if (store) {
             ArtifactStore durable = stores.apply(tenant, repository);
             records = durable;
-            pullThrough(tenant, format, fallback, upstream, leg, durable, durable, null, probe);
+            pullThrough(tenant, repository, format, fallback, upstream, leg, durable, durable, null, probe);
             digest = located(durable, exchange.path());
         } else {
             // A pass-through: the fetched bytes are served once and discarded, so they never touch the repository's
@@ -542,7 +564,7 @@ public final class RepositoryRouter {
             ArtifactStore scratch = passThrough.get();
             records = proxyGate(tenant) == null ? scratch : stores.apply(tenant, repository);
             try {
-                pullThrough(tenant, format, fallback, upstream, leg, scratch, records, null, probe);
+                pullThrough(tenant, repository, format, fallback, upstream, leg, scratch, records, null, probe);
                 digest = located(scratch, exchange.path());   // the transient scratch copy, read before it is reclaimed
             } catch (SpoolStore.BudgetExhausted exhausted) {
                 LOGGER.warn("Spool budget exhausted serving " + repository
@@ -629,9 +651,10 @@ public final class RepositoryRouter {
      *  {@code records} - the real per-repository store even on the {@code nocache} leg, never the throwaway scratch.
      *  {@code companions} are what the cache fetched beside the artifact - a signature, a bundle - which the screen
      *  reads before it decides on the artifact they cover. */
-    private ProxyFormat.Fetcher screening(String tenant, String path, ArtifactStore records, RepositoryDefinition.Fallback fallback,
-                                          ArtifactStore spool, ProxyFormat.Fetcher raw, Map<String, byte[]> companions) {
-        ComplianceGate active = proxyGate(tenant);
+    private ProxyFormat.Fetcher screening(String tenant, String repository, String path, ArtifactStore records,
+                                          RepositoryDefinition.Fallback fallback, ArtifactStore spool,
+                                          ProxyFormat.Fetcher raw, Map<String, byte[]> companions) {
+        ComplianceGate active = fetchGate(tenant, repository);
         if (fallback.screening() == RepositoryDefinition.Screening.HARDEN) {
             // Selected-but-unsatisfiable stays loud (like store=s3 without its module): a hardened fallback is
             // an explicit opt-in to full screening, so a missing screening gate must throw at resolution naming what
@@ -670,9 +693,10 @@ public final class RepositoryRouter {
      *  {@link UpstreamProbe} (to observe the real upstream status below the screen) and then by the fallback's
      *  {@link #screening} policy. A proxy-capable format runs the shared streaming {@link PullThroughCache}; any other
      *  format handles the request against the body store. */
-    private void pullThrough(String tenant, RepositoryFormat format, RepositoryDefinition.Fallback fallback, URI upstream,
-                             FormatExchange exchange, ArtifactStore body, ArtifactStore records, ArtifactStore spool,
-                             UpstreamProbe probe) throws IOException {
+    private void pullThrough(String tenant, String repository, RepositoryFormat format,
+                             RepositoryDefinition.Fallback fallback, URI upstream, FormatExchange exchange,
+                             ArtifactStore body, ArtifactStore records, ArtifactStore spool, UpstreamProbe probe)
+            throws IOException {
         if (format instanceof ProxyFormat proxy) {
             // Unify both pull-through legs through the seam: the raw probe is handed to the cache, and
             // the fallback's screening()-composed fetcher is injected on the MISS leg via HardenedHitVerify.screenFetch
@@ -683,11 +707,11 @@ public final class RepositoryRouter {
             // only when step-1 missed - idempotent, never a double serve.
             // Composed eagerly for the requested path, so an unsatisfiable hardened leg fails at resolution; a format
             // that keeps its answer under another path (ProxyFormat.keptAs) is screened under that one.
-            screening(tenant, exchange.path(), records, fallback, spool, probe, Map.of());
+            screening(tenant, repository, exchange.path(), records, fallback, spool, probe, Map.of());
             BiFunction<String, Map<String, byte[]>, ProxyFormat.Fetcher> screen = (path, companions) ->
-                    screening(tenant, path, records, fallback, spool, probe, companions);
+                    screening(tenant, repository, path, records, fallback, spool, probe, companions);
             HardenedHitVerify hooks = new HardenedHitVerify(fallback.screening() == RepositoryDefinition.Screening.HARDEN,
-                    gates(tenant), holdDays.getAsInt(), hardeningBounds, passThrough, metadataOver, screen);
+                    gates(tenant, repository), holdDays.getAsInt(), hardeningBounds, passThrough, metadataOver, screen);
             new PullThroughCache(probe, hooks).serve(format, proxy, upstream, exchange, body);
         } else {
             format.handle(exchange, body);

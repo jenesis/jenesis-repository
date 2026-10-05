@@ -31,6 +31,7 @@ import build.jenesis.repository.gateway.ProxyScreenHooks;
 import build.jenesis.repository.gateway.HardenedScreen;
 import build.jenesis.repository.gateway.DeployEdgeHooks;
 import build.jenesis.repository.gateway.LiveDefinitions;
+import build.jenesis.repository.compliance.GatePolicyProvider;
 import build.jenesis.repository.gateway.RepositoryRouter;
 import build.jenesis.repository.gateway.RedirectHandlerProvider;
 import build.jenesis.repository.compliance.ComplianceGate;
@@ -118,6 +119,9 @@ public class ServingConfig {
         RepositoryRouter.WithheldGuard withheld = held::withheld;
         RepositoryRouter router = new RepositoryRouter(definitions::definition, repositories::store, upstreamFetcher)
                 .gating(liveConfig::gate, liveConfig::holdDays, liveConfig::withholdIncompleteScreens)
+                // A repository whose upstreams are marked internal has its fetches screened as a publish is.
+                .fetchedAs((tenant, repository) -> GatePolicyProvider.Path.fetched(
+                        key -> liveConfig.effective(tenant, repository, key, null)))
                 // The scratch carries the store's bindings, so a pass-through is screened as a publish would be.
                 .passingThrough(() -> spool.acquire(root.bindings()))
                 .hardening(hardeningBounds)
@@ -246,10 +250,11 @@ public class ServingConfig {
         List<RepositoryFormat> formats = enabledFormats(environment);
         // A format's proxy() caches through Publication.storeBlob and link, which run no interceptor chain, so this
         // leg - every repository without a router definition - is screened here. The hooks are one singleton into
-        // which the dispatcher binds each request's tenant and store, so a tenant's own proxy policy screens it.
+        // which the dispatcher binds each request's tenant, repository and store, so a tenant's own proxy policy
+        // screens it, through the publishing flavour where the repository marks its upstreams internal.
         FormatDispatcher.Upstreams upstreams = new LiveUpstreams(liveConfig, formats);
         return new FormatDispatcher(formats, upstreams, upstreamFetcher, observations,
-                ProxyScreenHooks.perTenant(liveConfig::proxyGate, liveConfig::holdDays,
+                ProxyScreenHooks.perTenant(liveConfig::gate, liveConfig::holdDays,
                         liveConfig::withholdIncompleteScreens),
                 held());
     }
