@@ -398,6 +398,12 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return browse.describe(path);
     }
 
+    /** The version {@code path} is one of the files of: what {@link #describe} names, and for a file a format
+     *  publishes beside a version's artifact ({@link BlobLayout.VersionMembers}), the version of that artifact. */
+    public Optional<ArtifactDescriptor> versionOf(String path) {
+        return BlobLayout.versionOf(path, store);
+    }
+
     /**
      * A coordinate version as the layout owning its ecosystem keys it, or empty when no installed layout can place it.
      *
