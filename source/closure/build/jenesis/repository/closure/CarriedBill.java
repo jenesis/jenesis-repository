@@ -73,9 +73,8 @@ public final class CarriedBill implements ClosureSource {
                                                   String version) throws IOException {
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(own.store());
         Publication publication = new Publication(own.store());
-        List<String> candidates = inventory.paths(ecosystem, coordinate, version).stream()
+        List<String> candidates = billOrder(inventory.paths(ecosystem, coordinate, version)).stream()
                 .filter(path -> ArtifactSbom.isDocument(path) || archive(path))
-                .sorted(Comparator.comparing((String path) -> !ArtifactSbom.isDocument(path)))
                 .toList();
         for (String path : candidates) {
             Optional<String> key = publication.located(path);
@@ -84,13 +83,31 @@ public final class CarriedBill implements ClosureSource {
             }
             Optional<DependencyGraph> read;
             try (InputStream in = own.store().open(key.get())) {
-                read = ArtifactSbom.isDocument(path) ? ArtifactSbom.document(in) : ArtifactSbom.graph(in);
+                read = read(path, in);
             }
             if (read.isPresent() && namesClosure(read.get())) {
                 return read;
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * {@code paths}, a version's files, in the order the bill it carries is read from them - what the closure and the
+     * bill of materials the API and the console serve for a version both read: a bill published as a file of its own
+     * (a {@code -cyclonedx.json}, an {@code .spdx.json}) first, then an archive, which may embed one, then a
+     * descriptor ({@code .pom}, {@code .xml}, {@code .json}), through which only what its manifest declared answers.
+     * Stable within each rank.
+     */
+    public static List<String> billOrder(Collection<String> paths) {
+        return paths.stream().sorted(Comparator.comparingInt(path -> ArtifactSbom.isDocument(path) ? 0
+                : path.endsWith(".pom") || path.endsWith(".xml") || path.endsWith(".json") ? 2 : 1)).toList();
+    }
+
+    /** The bill the file at {@code path} carries, read from its bytes {@code in}: the document itself where it is a
+     *  bill published as a file, the one an archive embeds otherwise; empty where it carries none. */
+    public static Optional<DependencyGraph> read(String path, InputStream in) throws IOException {
+        return ArtifactSbom.isDocument(path) ? ArtifactSbom.document(in) : ArtifactSbom.graph(in);
     }
 
     /** Whether {@code graph} names more than its root's direct dependencies: a component past the root's own edges,
