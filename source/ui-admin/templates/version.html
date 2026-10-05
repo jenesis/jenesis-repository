@@ -147,6 +147,18 @@
         </th:block>
     </article>
 
+    <!--/* What screened this version: a cached copy by the enabled feeds covering its ecosystem - or none, which is
+         unscreened rather than clean - and a published version by its closure, or nothing while it has none. */-->
+    <p th:if="${detail.screenedThrough != null}"><small th:switch="${detail.screenedThrough.basis().name()}">
+        <th:block th:case="'FEEDS'" th:text="|Screened by its coordinate through ${#strings.listJoin(detail.screenedThrough.feeds(), ', ')}.|">Screened by its coordinate through osv.</th:block>
+        <th:block th:case="'UNCOVERED'"><span class="app-badge app-badge--warn">unscreened</span> No enabled advisory feed
+            covers this ecosystem, so no finding is not the same as clean.</th:block>
+        <th:block th:case="'CLOSURE'">Screened through what its resolved closure reaches; a version published here is
+            asked of no feed itself.</th:block>
+        <th:block th:case="'NOTHING'"><span class="app-badge app-badge--warn">unscreened</span> A version published here
+            is asked of no feed, and its closure is not resolved yet.</th:block>
+    </small></p>
+
     <!--/* What a build through this repository resolves for a release: every component its declared dependencies reach,
          each the newest held version its requirement admits - in this repository or one its fallbacks name, which
          the component then links to - and every dependency that did not resolve with why. A

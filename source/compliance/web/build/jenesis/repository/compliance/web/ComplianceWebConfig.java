@@ -37,8 +37,9 @@ public class ComplianceWebConfig {
     }
 
     @Bean
-    public ClosureController closureController(Repositories repositories, RepositoryRouting routing) {
-        return new ClosureController(repositories, routing);
+    public ClosureController closureController(Repositories repositories, RepositoryRouting routing,
+                                               ComplianceSources sources) {
+        return new ClosureController(repositories, routing, sources::advisoryFeeds);
     }
 
     @Bean

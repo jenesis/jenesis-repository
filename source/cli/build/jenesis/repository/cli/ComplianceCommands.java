@@ -350,6 +350,18 @@ final class ComplianceCommands {
         ProvenanceClient.Closure closure = CliSupport.client(home).provenance().closure(args[1], args[2], args[3],
                 args[4]);
         String subject = closure.coordinate() + " " + closure.version();
+        ProvenanceClient.ScreenedThrough screened = closure.screenedThrough();
+        if (screened != null) {
+            System.out.println(switch (screened.basis()) {
+                case "FEEDS" -> subject + " is screened by its coordinate through "
+                        + String.join(", ", screened.feeds() == null ? List.of() : screened.feeds()) + ".";
+                case "UNCOVERED" -> subject + " is unscreened: no enabled advisory feed covers " + closure.ecosystem()
+                        + ", so no finding is not the same as clean.";
+                case "NOTHING" -> subject + " is unscreened: a version published here is asked of no feed, and its "
+                        + "closure is not resolved yet.";
+                default -> subject + " is screened through what its resolved closure reaches.";
+            });
+        }
         switch (closure.state()) {
             case "CACHED" -> {
                 System.out.println(subject + " is a cached copy: it has no closure of its own, and is screened by "

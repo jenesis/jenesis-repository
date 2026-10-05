@@ -5,6 +5,7 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.Ecosystems;
 import build.jenesis.repository.compliance.Freshness;
+import build.jenesis.repository.compliance.ScreenedThrough;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -50,5 +51,29 @@ class AdvisoryCoverageTest {
                 .containsExactlyInAnyOrder("Maven", "npm", "PyPI");
         assertThat(AdvisorySource.resolve(List.of(covering("Maven"), covering("Go"))).ecosystems())
                 .doesNotContain("conda");
+    }
+
+    @Test
+    void a_cached_copy_is_screened_through_the_enabled_feeds_covering_its_ecosystem_or_reads_unscreened() {
+        SequencedMap<String, AdvisorySource> enabled = new LinkedHashMap<>();
+        enabled.put("osv", covering("Maven", "npm"));
+        enabled.put("github", covering("npm"));
+
+        assertThat(ScreenedThrough.cached("npm", enabled))
+                .isEqualTo(new ScreenedThrough(ScreenedThrough.Basis.FEEDS, List.of("osv", "github")));
+        assertThat(ScreenedThrough.cached("maven", enabled).feeds()).as("the label matched as the feeds match it")
+                .containsExactly("osv");
+        assertThat(ScreenedThrough.cached("conda", enabled)).satisfies(screened -> {
+            assertThat(screened.basis()).isEqualTo(ScreenedThrough.Basis.UNCOVERED);
+            assertThat(screened.unscreened()).as("no finding from no feed is not clean").isTrue();
+        });
+        assertThat(ScreenedThrough.cached("npm", new LinkedHashMap<>()).unscreened()).isTrue();
+    }
+
+    @Test
+    void a_published_version_is_screened_through_its_closure_or_by_nothing() {
+        assertThat(ScreenedThrough.published(true).basis()).isEqualTo(ScreenedThrough.Basis.CLOSURE);
+        assertThat(ScreenedThrough.published(true).unscreened()).isFalse();
+        assertThat(ScreenedThrough.published(false).unscreened()).isTrue();
     }
 }

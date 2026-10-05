@@ -140,7 +140,13 @@ public final class ProvenanceClient extends ClientCalls {
     public record Closure(String repository, String ecosystem, String coordinate, String version, String state,
                           String resolved, String kind, String source, boolean truncated,
                           List<ClosureComponent> components,
-                          List<ClosureCut> cuts, ClosureExposure exposure) {
+                          List<ClosureCut> cuts, ClosureExposure exposure, ScreenedThrough screenedThrough) {
+    }
+
+    /** What a version was screened through: {@code basis} is {@code FEEDS} (a cached copy asked of {@code feeds}),
+     *  {@code UNCOVERED} (a cached copy no enabled feed covers), {@code CLOSURE} (a published version, through its
+     *  closure) or {@code NOTHING} (a published version with no closure). */
+    public record ScreenedThrough(String basis, List<String> feeds) {
     }
 
     /** One version a closure reaches that is held for review or carries findings: {@code repository} is empty where
