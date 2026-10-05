@@ -63,6 +63,11 @@
                             th:text="${document.label()}" download>CycloneDX JSON</a></li>
                 </ul></td>
             </tr>
+            <tr th:if="${detail.screenPending}">
+                <th scope="row">Screened</th>
+                <td><span class="app-badge app-badge--warn">incompletely</span>
+                    <small>served while an advisory feed could not answer; screened again once one does</small></td>
+            </tr>
             <tr th:if="${capabilities.findings()}">
                 <th scope="row">Findings</th>
                 <td><th:block th:replace="~{fragments :: findingsState(${detail.findings}, @{'/ui/repositories/' + ${repo} + '/findings'(coordinate=${detail.coordinate + ':' + detail.version})})}"></th:block></td>

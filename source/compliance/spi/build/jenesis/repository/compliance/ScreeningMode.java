@@ -1,6 +1,7 @@
 package build.jenesis.repository.compliance;
 
 import module java.base;
+import build.jenesis.repository.store.Checksums;
 
 /**
  * What a screen does with what it found and with what it could not find out: a repository's dial, read per screening
@@ -34,6 +35,16 @@ public enum ScreeningMode {
 
     /** The repository setting carrying the mode. */
     public static final String KEY = "screening-mode";
+
+    /** Where a repository marks a copy it served while a feed could not answer: one {@link Properties} document per
+     *  copy, named by the digest of its path and carrying the path under {@code path}, cleared or turned into a hold
+     *  once a feed answers. Every surface that shows a version reads it, so the key is composed here once. */
+    public static final String PENDING_ROOT = "screen-pending";
+
+    /** The marker of the copy at {@code path} - see {@link #PENDING_ROOT}. */
+    public static String pendingKey(String path) {
+        return PENDING_ROOT + "/" + Checksums.sha256(path);
+    }
 
     /** The mode with nothing set, in the form the setting catalogue publishes. */
     public static final String DEFAULT = "HOLD";
