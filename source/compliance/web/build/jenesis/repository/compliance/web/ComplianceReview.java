@@ -122,10 +122,12 @@ public class ComplianceReview extends TenantScope {
     }
 
     /** A held artifact as the console reviews it: when, path, coordinate, verdict, reasons and the rules that held it,
-     *  and the retroactive hold kinds on its coordinate as marks, orphaned for an uninstalled kind. {@code ecosystem}
-     *  and {@code bareCoordinate} open the coordinate's page, {@code null} for a path no installed layout places. */
+     *  the retroactive hold kinds on its coordinate as marks, orphaned for an uninstalled kind, and the queue's notes
+     *  on it. {@code ecosystem} and {@code bareCoordinate} open the coordinate's page, {@code null} for a path no
+     *  installed layout places. */
     public record QuarantineView(String when, String path, String coordinate, String verdict, List<String> reasons,
-                                 List<String> rules, List<Mark> holds, String ecosystem, String bareCoordinate) {
+                                 List<String> rules, List<Mark> holds, List<String> notes, String ecosystem,
+                                 String bareCoordinate) {
 
         /** Whether the row names a coordinate the console can open. */
         public boolean placed() {
@@ -165,7 +167,7 @@ public class ComplianceReview extends TenantScope {
         for (ReviewQueue.Row row : page.rows()) {
             Optional<ArtifactDescriptor> placed = placed(inventory, row.path());
             views.add(new QuarantineView(row.when(), row.path(), row.coordinate(), row.verdict(), row.reasons(),
-                    row.rules(), row.holds().stream().map(ComplianceReview::holdMark).toList(),
+                    row.rules(), row.holds().stream().map(ComplianceReview::holdMark).toList(), row.notes(),
                     placed.map(ArtifactDescriptor::ecosystem).orElse(null),
                     placed.map(ArtifactDescriptor::coordinate).orElse(null)));
         }
@@ -182,7 +184,8 @@ public class ComplianceReview extends TenantScope {
      * stands alone.
      */
     public record QuarantineVersion(String coordinate, List<String> rules, List<String> reasons, List<Mark> holds,
-                                    List<HeldFile> files, String ecosystem, String bareCoordinate) {
+                                    List<HeldFile> files, List<String> notes, String ecosystem,
+                                    String bareCoordinate) {
 
         /** The marks of the hold kinds no installed module answers to, which a reviewer must know before releasing:
          *  nothing could hold the version again for them. */
@@ -214,12 +217,14 @@ public class ComplianceReview extends TenantScope {
                 List<String> shared = new ArrayList<>(files.getFirst().reasons());
                 files.forEach(file -> shared.retainAll(file.reasons()));
                 Set<String> rules = new LinkedHashSet<>();
+                Set<String> notes = new LinkedHashSet<>();
                 Map<String, Mark> holds = new LinkedHashMap<>();
                 String ecosystem = null;
                 String bare = null;
                 List<HeldFile> held = new ArrayList<>();
                 for (QuarantineView file : files) {
                     rules.addAll(file.rules());
+                    notes.addAll(file.notes());
                     file.holds().forEach(mark -> holds.putIfAbsent(mark.name(), mark));
                     if (ecosystem == null && file.placed()) {
                         ecosystem = file.ecosystem();
@@ -230,7 +235,8 @@ public class ComplianceReview extends TenantScope {
                 }
                 held.sort(Comparator.comparing(HeldFile::path));
                 versions.add(new QuarantineVersion(files.getFirst().coordinate(), List.copyOf(rules),
-                        List.copyOf(shared), List.copyOf(holds.values()), List.copyOf(held), ecosystem, bare));
+                        List.copyOf(shared), List.copyOf(holds.values()), List.copyOf(held), List.copyOf(notes),
+                        ecosystem, bare));
             }
             return List.copyOf(versions);
         }
