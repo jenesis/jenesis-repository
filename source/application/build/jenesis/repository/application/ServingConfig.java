@@ -14,6 +14,7 @@ import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.BatchIngestion;
 import build.jenesis.repository.server.FixedTenantRouting;
 import build.jenesis.repository.server.FormatDispatcher;
+import build.jenesis.repository.server.PullThroughCache;
 import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.RoutedServing;
 import build.jenesis.repository.format.FetcherProvider;
@@ -112,12 +113,9 @@ public class ServingConfig {
         // per-artifact ceiling above it fails the boot rather than never firing.
         HardenedScreen.Bounds hardeningBounds = HardenedScreen.Bounds.fromConfig(config, spool.budget());
         // A local 404 over a withheld path is a refusal that ends the walk, not a miss that falls through to a weaker
-        // fallback. The review pointer is asked directly because a fresh quarantine has no serving pointer whose flag
-        // could say so - one read, only after a local 404.
-        List<PublishInterceptor> interceptors = PublishInterceptor.installed();
-        // An undeterminable answer propagates, so a store outage is a failed read rather than a serve.
-        RepositoryRouter.WithheldGuard withheld = (path, store) ->
-                PublishInterceptor.withheldByAny(path, store, interceptors) || Publication.reviewPending(store, path);
+        // fallback.
+        PullThroughCache.Withheld held = held();
+        RepositoryRouter.WithheldGuard withheld = held::withheld;
         RepositoryRouter router = new RepositoryRouter(definitions::definition, repositories::store, upstreamFetcher)
                 .gating(liveConfig::gate, liveConfig::holdDays, liveConfig::withholdIncompleteScreens)
                 // The scratch carries the store's bindings, so a pass-through is screened as a publish would be.
@@ -227,6 +225,16 @@ public class ServingConfig {
 
     /** Every discovered format the {@link Features} convention leaves enabled; {@code jenrepo.<format>=false} trims
      *  one at boot exactly like an absent module. */
+    /** Whether a path is held in a repository's store: withheld by an installed interceptor, or pending review. The
+     *  review pointer is asked directly because a fresh quarantine has no serving pointer whose flag could say so -
+     *  one read, only after a local 404. An undeterminable answer propagates, so a store outage is a failed read
+     *  rather than a serve. The router's walk and the dispatcher's pull-through both ask it. */
+    private static PullThroughCache.Withheld held() {
+        List<PublishInterceptor> interceptors = PublishInterceptor.installed();
+        return (path, store) ->
+                PublishInterceptor.withheldByAny(path, store, interceptors) || Publication.reviewPending(store, path);
+    }
+
     static List<RepositoryFormat> enabledFormats(Environment environment) {
         return RepositoryFormat.installed(Features.namespaced(environment::getProperty));
     }
@@ -242,7 +250,8 @@ public class ServingConfig {
         FormatDispatcher.Upstreams upstreams = new LiveUpstreams(liveConfig, formats);
         return new FormatDispatcher(formats, upstreams, upstreamFetcher, observations,
                 ProxyScreenHooks.perTenant(liveConfig::proxyGate, liveConfig::holdDays,
-                        liveConfig::withholdIncompleteScreens));
+                        liveConfig::withholdIncompleteScreens),
+                held());
     }
 
     @Bean

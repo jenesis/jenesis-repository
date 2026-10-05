@@ -115,6 +115,29 @@ public class PullThroughHooksTest {
         assertThat(miss.responseBody).isEqualTo(UPSTREAM);
     }
 
+    /** A local miss over a path held here is refused rather than fetched: the dispatcher asks its guard before the
+     *  miss leg, so a held path is neither fetched, screened and recorded again on every request nor served once the
+     *  screen stops holding it, while a path nothing holds is fetched as before. */
+    @Test
+    void the_dispatcher_refuses_a_held_path_rather_than_fetching_it_again() throws IOException {
+        SpyFormat format = new SpyFormat();
+        format.upstream.put(UPSTREAM_BASE + "spyproxy/held", UPSTREAM);
+        format.upstream.put(UPSTREAM_BASE + "spyproxy/free", UPSTREAM);
+        FormatDispatcher dispatcher = new FormatDispatcher(List.of(format),
+                (_, name) -> name.equals("spyproxy") ? UPSTREAM_BASE : null, format.fetcher, ObservationRegistry.NOOP,
+                PullThroughHooks.NONE, (path, _) -> path.equals("/spyproxy/held"));
+
+        FakeExchange held = new FakeExchange("GET", "/spyproxy/held");
+        dispatcher.dispatch("acme", held, store);
+        assertThat(held.status).as("a held path is refused").isEqualTo(404);
+        assertThat(format.fetches.get()).as("and never fetched").isZero();
+
+        FakeExchange free = new FakeExchange("GET", "/spyproxy/free");
+        dispatcher.dispatch("acme", free, store);
+        assertThat(free.responseBody).as("a path nothing holds is fetched as before").isEqualTo(UPSTREAM);
+        assertThat(format.fetches.get()).isEqualTo(1);
+    }
+
     @Test
     void an_answer_kept_under_another_path_is_screened_filled_and_served_under_it() throws IOException {
         SpyFormat format = new SpyFormat();
