@@ -1,0 +1,109 @@
+package build.jenesis.repository.closure.test;
+
+import module java.base;
+import module org.junit.jupiter.api;
+import build.jenesis.repository.closure.ClosureSection;
+import build.jenesis.repository.closure.ClosureTask;
+import build.jenesis.repository.compliance.QualityInspector;
+import build.jenesis.repository.inventory.DependencySection;
+import build.jenesis.repository.inventory.StoreRepositoryInventory;
+import build.jenesis.repository.maintenance.RepositoryContext;
+import build.jenesis.repository.maintenance.UnitFailures;
+import build.jenesis.repository.metadata.MetadataProvider;
+import build.jenesis.repository.metadata.MetadataStore;
+import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.Publication;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * The closure pass resolves a release that has no closure, once: its closure lands in the version's document, a later
+ * pass leaves it as resolved, and a repository that switched resolution off is left alone.
+ */
+class ClosureTaskTest {
+
+    private static final Instant NOW = Instant.parse("2026-10-05T00:00:00Z");
+    private static final String APP = "/maven/org/acme/app/1.0/app-1.0.pom";
+
+    @TempDir
+    Path root;
+
+    private ArtifactStore store;
+    private MetadataStore metadata;
+
+    @BeforeEach
+    void setUp() throws IOException {
+        store = ArtifactStoreProvider.resolve("filesystem",
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null).scope("default")
+                .scope("releases");
+        metadata = MetadataProvider.installed().over(store);
+        Publication publication = new Publication(store);
+        publication.link(APP, publication.storeBlob(new ByteArrayInputStream("<project/>".getBytes(StandardCharsets.UTF_8))));
+        new StoreRepositoryInventory(store).record(APP, NOW);
+        metadata.mutate("Maven", "org.acme:app", "1.0", DependencySection.TAG, DependencySection.record(APP,
+                List.of(new DependencySection.Declared("org.dep:missing", "1.0")), NOW));
+    }
+
+    @Test
+    void a_release_without_a_closure_is_resolved_once() throws IOException {
+        pass(null, NOW);
+        Optional<ClosureSection.Closure> first = closure();
+        assertThat(first).as("resolved on the first pass").isPresent();
+        assertThat(first.get().cuts()).singleElement()
+                .satisfies(cut -> assertThat(cut.coordinate()).isEqualTo("org.dep:missing"));
+
+        pass(null, NOW.plus(Duration.ofHours(1)));
+        assertThat(closure().orElseThrow().resolved()).as("a version is resolved once").isEqualTo(NOW);
+    }
+
+    @Test
+    void a_repository_that_switched_resolution_off_is_left_alone() throws IOException {
+        pass("false", NOW);
+        assertThat(closure()).isEmpty();
+    }
+
+    private Optional<ClosureSection.Closure> closure() throws IOException {
+        return ClosureSection.closure(metadata.section("Maven", "org.acme:app", "1.0", ClosureSection.TAG));
+    }
+
+    private void pass(String setting, Instant now) throws IOException {
+        UnitFailures failures = new UnitFailures("the closure pass", "nothing");
+        new ClosureTask(Duration.ofMinutes(5), QualityInspector.all()).repository(new RepositoryContext() {
+            @Override
+            public String tenant() {
+                return "default";
+            }
+
+            @Override
+            public String repository() {
+                return "releases";
+            }
+
+            @Override
+            public ArtifactStore store() {
+                return store;
+            }
+
+            @Override
+            public UnaryOperator<String> config() {
+                return key -> ClosureTask.SETTING.equals(key) ? setting : null;
+            }
+
+            @Override
+            public UnitFailures failures(String work, String consequence) {
+                return failures;
+            }
+
+            @Override
+            public Instant now() {
+                return now;
+            }
+
+            @Override
+            public void gauge(String name, String description, Map<String, String> tags, double value) {
+            }
+        });
+        failures.rethrow();
+    }
+}

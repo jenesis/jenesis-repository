@@ -75,6 +75,8 @@ open module build.jenesis.repository.bundle {
     requires build.jenesis.repository.findings.store;
     requires build.jenesis.repository.health.store;
     requires build.jenesis.repository.compliance.web;
+    // A version published here is screened through its closure, which this resolves from what the store holds.
+    requires build.jenesis.repository.closure;
     // Every hold, refusal and release as a signed, retried webhook, sent once an operator names an endpoint.
     requires build.jenesis.repository.webhook;
     requires build.jenesis.repository.webhook.web;
