@@ -26,10 +26,11 @@ public final class ProxyScreenHooks implements PullThroughHooks {
     /** A tenant's gate, by tenant; {@code tenant} names the one these hooks screen with. */
     private final Function<String, ComplianceGate> gates;
     private final String tenant;
-    private final int holdDays;
+    /** The immaturity window, read per fetch. */
+    private final IntSupplier holdDays;
 
-    /** Whether an incomplete screen withholds rather than serving with the fact recorded. */
-    private final boolean withholdIncomplete;
+    /** Whether an incomplete screen withholds rather than serving with the fact recorded, read per fetch. */
+    private final BooleanSupplier withholdIncomplete;
 
     /** One gate, whatever the tenant: {@code gate} is resolved per request (so a gate armed just before a seed is the
      *  one that screens) and {@code holdDays} is the deployment-wide immaturity window. The store the screen records
@@ -41,25 +42,26 @@ public final class ProxyScreenHooks implements PullThroughHooks {
 
     public ProxyScreenHooks(Supplier<ComplianceGate> gate, int holdDays, boolean withholdIncomplete) {
         Objects.requireNonNull(gate, "gate");
-        this(_ -> gate.get(), null, holdDays, withholdIncomplete);
+        this(_ -> gate.get(), null, () -> holdDays, () -> withholdIncomplete);
     }
 
-    private ProxyScreenHooks(Function<String, ComplianceGate> gates, String tenant, int holdDays,
-                             boolean withholdIncomplete) {
+    private ProxyScreenHooks(Function<String, ComplianceGate> gates, String tenant, IntSupplier holdDays,
+                             BooleanSupplier withholdIncomplete) {
         this.gates = Objects.requireNonNull(gates, "gates");
         this.tenant = tenant;
-        this.holdDays = holdDays;
-        this.withholdIncomplete = withholdIncomplete;
+        this.holdDays = Objects.requireNonNull(holdDays, "holdDays");
+        this.withholdIncomplete = Objects.requireNonNull(withholdIncomplete, "withholdIncomplete");
     }
 
     /**
      * Hooks that screen each request with its own tenant's gate: {@code gates} answers a tenant's proxy-path gate - its
      * own policy where it has one, the deployment's where it has overridden nothing - and {@link #forTenant} binds the
      * tenant a request is served in. What the serving dispatcher installs, since it serves every tenant; bound to no
-     * tenant, they screen with what {@code gates} answers for {@code null}.
+     * tenant, they screen with what {@code gates} answers for {@code null}. The immaturity window and the
+     * incomplete-screen dial are read per fetch, so a change to either applies without a restart.
      */
-    public static ProxyScreenHooks perTenant(Function<String, ComplianceGate> gates, int holdDays,
-                                             boolean withholdIncomplete) {
+    public static ProxyScreenHooks perTenant(Function<String, ComplianceGate> gates, IntSupplier holdDays,
+                                             BooleanSupplier withholdIncomplete) {
         return new ProxyScreenHooks(gates, null, holdDays, withholdIncomplete);
     }
 
@@ -79,6 +81,7 @@ public final class ProxyScreenHooks implements PullThroughHooks {
         ComplianceGate active = gates.apply(tenant);
         return active == null
                 ? upstream
-                : new ProxyScreen(active, store, holdDays, withholdIncomplete).wrap(upstream, path, companions);
+                : new ProxyScreen(active, store, holdDays.getAsInt(), withholdIncomplete.getAsBoolean())
+                        .wrap(upstream, path, companions);
     }
 }

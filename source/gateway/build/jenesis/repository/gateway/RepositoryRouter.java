@@ -128,6 +128,9 @@ public final class RepositoryRouter {
     private final ProxyFormat.Fetcher fetcher;
     private final BiFunction<String, GatePolicyProvider.Path, ComplianceGate> gate;
     private final IntSupplier holdDays;
+    /** Whether a default leg withholds an artifact no inspector could read whole, rather than serving it with the
+     *  fact recorded - read per fetch, so the setting applies without a restart. */
+    private final BooleanSupplier withholdIncomplete;
     private final Supplier<ArtifactStore> passThrough;
     private final HardenedScreen.Bounds hardeningBounds;
     private final WithheldGuard withheld;
@@ -172,7 +175,7 @@ public final class RepositoryRouter {
         // the discovered interceptor chain via withholding(...). The consolidated metadata store (verdict + origin
         // records) is resolved from the discovered persistence module (MetadataProvider.installed()) until a test
         // injects one via tracking(...).
-        this(definitions, stores, fetcher, (_, _) -> null, () -> 0,
+        this(definitions, stores, fetcher, (_, _) -> null, () -> 0, () -> false,
                 new SpoolStore(SpoolStore.Budget.standard())::acquire, HardenedScreen.Bounds.standard(),
                 WithheldGuard.NONE, INSTALLED_METADATA, REDIRECT_ABSENT);
     }
@@ -186,7 +189,7 @@ public final class RepositoryRouter {
                              BiFunction<String, String, ArtifactStore> stores,
                              ProxyFormat.Fetcher fetcher,
                              BiFunction<String, GatePolicyProvider.Path, ComplianceGate> gate,
-                             IntSupplier holdDays,
+                             IntSupplier holdDays, BooleanSupplier withholdIncomplete,
                              Supplier<ArtifactStore> passThrough, HardenedScreen.Bounds hardeningBounds,
                              WithheldGuard withheld, Function<ArtifactStore, MetadataStore> metadataOver,
                              RedirectHandler redirect) {
@@ -195,6 +198,7 @@ public final class RepositoryRouter {
         this.fetcher = fetcher;
         this.gate = gate;
         this.holdDays = holdDays;
+        this.withholdIncomplete = withholdIncomplete;
         this.passThrough = passThrough;
         this.hardeningBounds = hardeningBounds;
         this.withheld = withheld;
@@ -213,8 +217,15 @@ public final class RepositoryRouter {
      *  hybrid {@code writable} + hardened-fallback shape is not always the proxy one. */
     public RepositoryRouter gating(BiFunction<String, GatePolicyProvider.Path, ComplianceGate> gate,
                                    IntSupplier holdDays) {
-        return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, passThrough, hardeningBounds,
-                withheld, metadataOver, redirect);
+        return gating(gate, holdDays, withholdIncomplete);
+    }
+
+    /** As {@link #gating(BiFunction, IntSupplier)}, with whether a default leg withholds an artifact no inspector could
+     *  read whole rather than serving it with the fact recorded; both are read per fetch. */
+    public RepositoryRouter gating(BiFunction<String, GatePolicyProvider.Path, ComplianceGate> gate,
+                                   IntSupplier holdDays, BooleanSupplier withholdIncomplete) {
+        return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
+                hardeningBounds, withheld, metadataOver, redirect);
     }
 
     /** A tenant's proxy-flavour gate - what every leg that screens a body <em>arriving from an upstream</em> uses, and
@@ -234,8 +245,8 @@ public final class RepositoryRouter {
      *  ({@link MetadataProvider#installed()}); a test passes an in-test store so the router's records round-trip
      *  without installing the persistence module for every gateway test. */
     public RepositoryRouter tracking(Function<ArtifactStore, MetadataStore> metadataOver) {
-        return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, passThrough, hardeningBounds,
-                withheld, metadataOver, redirect);
+        return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
+                hardeningBounds, withheld, metadataOver, redirect);
     }
 
     /** Supply the scratch {@link ArtifactStore} the {@code nocache} pass-through leg fetches through, so a test can
@@ -245,16 +256,16 @@ public final class RepositoryRouter {
      *  exhausted. A returned store implementing {@link AutoCloseable} is closed after the request, the hook the default
      *  uses to reclaim its scratch. */
     public RepositoryRouter passingThrough(Supplier<ArtifactStore> passThrough) {
-        return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, passThrough, hardeningBounds,
-                withheld, metadataOver, redirect);
+        return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
+                hardeningBounds, withheld, metadataOver, redirect);
     }
 
     /** Set the untrusted-upstream fetch {@link HardenedScreen.Bounds} the hardened leg enforces (the per-artifact
      *  size ceiling, the fetch duration ceiling and the minimum throughput floor). A deployment sizes them from config;
      *  the default is {@link HardenedScreen.Bounds#standard()}. */
     public RepositoryRouter hardening(HardenedScreen.Bounds hardeningBounds) {
-        return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, passThrough, hardeningBounds,
-                withheld, metadataOver, redirect);
+        return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
+                hardeningBounds, withheld, metadataOver, redirect);
     }
 
     /** Wire the read-side {@link WithheldGuard} (the discovered publication-interceptor {@code withheld} chain), so a
@@ -262,8 +273,8 @@ public final class RepositoryRouter {
      *  the walk rather than falling through to a weaker fallback (the weakest-member closure, for locally-withheld
      *  content). */
     public RepositoryRouter withholding(WithheldGuard withheld) {
-        return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, passThrough, hardeningBounds,
-                withheld, metadataOver, redirect);
+        return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
+                hardeningBounds, withheld, metadataOver, redirect);
     }
 
     /** Inject the {@link RedirectHandler} a {@link RepositoryDefinition.Serve#REDIRECT} upstream leg delegates to (the
@@ -272,8 +283,8 @@ public final class RepositoryRouter {
      *  instance collaborator - {@link RepositoryDefinition#redirectHandlerInstalled(boolean)} controls whether the
      *  {@code redirect} token parses at all. */
     public RepositoryRouter redirecting(RedirectHandler redirect) {
-        return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, passThrough, hardeningBounds,
-                withheld, metadataOver, redirect);
+        return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
+                hardeningBounds, withheld, metadataOver, redirect);
     }
 
     /** The explicit definition of a repository as {@code tenant} sees it, or {@code null} when it is not configured
@@ -649,7 +660,8 @@ public final class RepositoryRouter {
             // proxy already did by omission.
             return raw;
         }
-        return new ProxyScreen(active, records, holdDays.getAsInt()).wrap(raw, path, companions);
+        return new ProxyScreen(active, records, holdDays.getAsInt(), withholdIncomplete.getAsBoolean())
+                .wrap(raw, path, companions);
     }
 
     /** Run one upstream fallback's pull-through: the fetched body passes through {@code body} (the durable cache on a
