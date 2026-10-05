@@ -35,7 +35,11 @@ public final class ScanSettingsContributor implements SettingsContributor {
                         "Every Nth scheduled pass of the advisory scan, and of every other pass that re-reads what the "
                                 + "repository holds, re-reads every published version; the passes between read only "
                                 + "what was published since the last full pass, and a changed catalogue asks for a "
-                                + "full pass at once. A full pass costs a store read per published version.",
+                                + "full pass at once. A full pass costs a store read per published version. Unset, "
+                                + "the advisory scan's full pass runs every "
+                                + VulnerabilityScanTask.CHANGE_DRIVEN_FULL_EVERY + " passes - a week at the hourly "
+                                + "cadence - where every enabled feed publishes what it changed, since those changes "
+                                + "drive its passes between.",
                         Setting.Kind.LONG, String.valueOf(IncrementalPasses.DEFAULT_FULL_EVERY), true).advanced(),
                 new Setting(IncrementalPasses.LOOKBACK, "Compliance", "Full pass lookback",
                         "How far before the last full pass's stamp an incremental pass still looks, so a version whose "

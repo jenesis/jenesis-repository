@@ -206,7 +206,7 @@ class GitHubAdvisorySourceTest {
             server.stubFor(get(urlPathEqualTo("/second-page")).willReturn(aResponse().withStatus(200)
                     .withBody("[{\"ghsa_id\":\"GHSA-page2\",\"severity\":\"critical\"}]")));
 
-            assertThat(GitHubAdvisorySource.over(URI.create(host), null, Clock.systemUTC()).advisories("npm", "lodash", "4.17.11"))
+            assertThat(GitHubAdvisorySource.over(URI.create(host), null, Clock.systemUTC(), () -> null).advisories("npm", "lodash", "4.17.11"))
                     .extracting(Advisory::id)
                     .as("the production RFC5988 parser extracts rel=next from a multi-relation header and follows it")
                     .containsExactly("GHSA-page1", "GHSA-page2");
@@ -227,7 +227,7 @@ class GitHubAdvisorySourceTest {
                             + "<" + host + "/advisories?page=9>; rel=\"last\"")
                     .withBody("[{\"ghsa_id\":\"GHSA-only\",\"severity\":\"moderate\"}]")));
 
-            assertThat(GitHubAdvisorySource.over(URI.create(host), null, Clock.systemUTC()).advisories("npm", "lodash", "4.17.11"))
+            assertThat(GitHubAdvisorySource.over(URI.create(host), null, Clock.systemUTC(), () -> null).advisories("npm", "lodash", "4.17.11"))
                     .extracting(Advisory::id)
                     .as("a header with only rel=prev/last names no next page, so the walk stops at one page")
                     .containsExactly("GHSA-only");

@@ -46,6 +46,6 @@ public final class GitHubAdvisorySourceProvider implements SignalSourceProvider 
         String endpoint = context.setting("github-endpoint");
         return Optional.of(GitHubAdvisorySource.over(
                 URI.create(endpoint == null || endpoint.isBlank() ? "https://api.github.com" : endpoint),
-                token, context.clock()));
+                token, context.clock(), context::snapshots));
     }
 }
