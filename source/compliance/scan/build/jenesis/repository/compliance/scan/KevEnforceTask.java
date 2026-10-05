@@ -6,6 +6,7 @@ import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.GatePolicyProvider;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.KnownExploitedSource;
+import build.jenesis.repository.compliance.ScreeningMode;
 import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.gate.KevHold;
 import build.jenesis.repository.gate.QuarantineLog;
@@ -69,7 +70,10 @@ public final class KevEnforceTask implements MaintenanceTask {
         }
         UnaryOperator<String> config = context.config();
         String flag = config == null ? null : config.apply("kev-auto-hold");
-        boolean autoHold = flag == null || flag.isBlank() || !"false".equalsIgnoreCase(flag.trim());
+        // A repository recording what the screen finds holds none of it: the reanalysis pass keeps the kev-active
+        // finding on every listed copy, which is the record.
+        boolean autoHold = (flag == null || flag.isBlank() || !"false".equalsIgnoreCase(flag.trim()))
+                && ScreeningMode.of(config) != ScreeningMode.RECORD;
         ArtifactStore store = context.store();
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
         Publication publication = new Publication(store);
