@@ -59,6 +59,9 @@ open module build.jenesis.repository.gateway.contract.test {
     requires build.jenesis.repository.observation;
     requires build.jenesis.repository.proxy;
     requires build.jenesis.repository.walk;
+    // The migration re-screen's two flavours, told apart by whether a feed is asked: OSV over a loopback server.
+    requires build.jenesis.repository.compliance.osv;
+    requires jdk.httpserver;
     requires org.apache.commons.compress;
     requires org.junit.jupiter;
     requires org.assertj.core;
