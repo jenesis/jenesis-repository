@@ -147,6 +147,47 @@
         </th:block>
     </article>
 
+    <!--/* What a build through this repository resolves for a release: every component its declared dependencies reach,
+         each the newest held version its requirement admits, and every dependency that did not resolve with why. A
+         cached copy has no closure of its own; it is screened by its own coordinate. */-->
+    <article th:if="${detail.closure != null or detail.awaitsClosure()}">
+        <h2>Resolved closure</h2>
+        <p th:if="${detail.closure == null}"><small>Resolving: the closure pass resolves a version published here from
+            what the repository holds, shortly after its publish. Nothing is resolved while the repository's closure
+            resolution is off.</small></p>
+        <th:block th:if="${detail.closure != null}">
+            <p><small th:text="|${detail.closure.components().size()} component(s) resolved from what this repository holds, ${detail.closure.cuts().size()} unresolved.|">12 components resolved, 1 unresolved.</small>
+                <span th:if="${detail.closure.status().name() == 'PARTIAL'}" class="app-badge app-badge--warn">partial</span></p>
+            <table class="app-list" th:unless="${detail.closure.components().isEmpty()}">
+                <thead>
+                <tr>
+                    <th scope="col">Coordinate</th>
+                    <th scope="col">Version</th>
+                    <th scope="col">Held as</th>
+                    <th scope="col">Depth</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="component : ${detail.closureShown()}">
+                    <td><th:block th:replace="~{base :: artifactLink(${component.coordinate()},
+                            @{/ui/repositories/{repo}/version(repo=${repo},ecosystem=${detail.ecosystem},coordinate=${component.coordinate()},version=${component.version()})})}"></th:block></td>
+                    <td><code th:text="${component.version()}">1.0</code></td>
+                    <td th:text="${component.cached()} ? 'a cached copy' : 'a release'">a cached copy</td>
+                    <td th:text="${component.depth()}">1</td>
+                </tr>
+                </tbody>
+            </table>
+            <p th:if="${detail.closure.components().size() > detail.closureShown().size()}"><small
+                    th:text="|Showing the first ${detail.closureShown().size()} of ${detail.closure.components().size()}.|">Showing the first 200 of 250.</small></p>
+            <p th:if="${detail.closure.truncated()}"><small>The closure stopped at its bound; what lies past it is not
+                listed.</small></p>
+            <ul th:unless="${detail.closure.cuts().isEmpty()}" class="app-reasons" aria-label="Unresolved">
+                <li th:each="cut : ${detail.closure.cuts()}"><small><code th:text="${cut.coordinate()}">org.acme:gone</code>
+                    <code th:text="${cut.requirement()}">1.0</code> &mdash; <span th:text="${cut.reason()}">not held</span></small></li>
+            </ul>
+        </th:block>
+    </article>
+
     <article th:unless="${detail.dependencies.isEmpty()}">
         <h2>Dependencies</h2>
         <table class="app-list">
