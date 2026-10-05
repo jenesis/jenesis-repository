@@ -230,6 +230,59 @@ public interface GatePolicyProvider {
     }
 
     /**
+     * {@link #resolve} with what it read: the dimensions, the flavour they were resolved for, and every setting the
+     * resolution asked {@code config} for - an enablement switch, a required key, a dimension's own dials - with the
+     * value it got. That is everything a dimension may be built from, since {@link #create} reads configuration only,
+     * so two resolutions that read the same values built the same dimensions.
+     */
+    static Resolution resolution(UnaryOperator<String> config, Path path) {
+        Map<String, String> read = new ConcurrentSkipListMap<>();
+        List<GatePolicy> policies = resolve(key -> {
+            String value = config.apply(key);
+            read.put(key, value == null ? Resolution.UNSET : value);
+            return value;
+        }, path);
+        return new Resolution(path, policies, read);
+    }
+
+    /** The dimensions one {@link #resolution} built, the flavour it was for, and the settings it read with the values
+     *  it got - {@link #UNSET} for one that has none, and a credential-shaped key's as whether it is set, so no secret
+     *  is carried. */
+    record Resolution(Path path, List<GatePolicy> policies, Map<String, String> read) {
+
+        /** The value a setting read as unset is carried as. */
+        public static final String UNSET = "<unset>";
+
+        /** Fragments of a key whose value is a credential rather than a dial. */
+        private static final List<String> CREDENTIAL = List.of("token", "secret", "password", "credential",
+                "api-key", "apikey", "private-key");
+
+        public Resolution {
+            policies = List.copyOf(policies);
+            SortedMap<String, String> carried = new TreeMap<>();
+            read.forEach((key, value) -> carried.put(key, carried(key, value)));
+            read = Collections.unmodifiableSortedMap(carried);
+        }
+
+        /** The form {@code value} of {@code key} is carried in: itself, or for a credential whether it is set. */
+        private static String carried(String key, String value) {
+            String lower = key.toLowerCase(Locale.ROOT);
+            boolean unset = value == null || value.isBlank() || UNSET.equals(value);
+            if (CREDENTIAL.stream().anyMatch(lower::contains)) {
+                return unset ? UNSET : "<set>";
+            }
+            return value == null ? UNSET : value;
+        }
+
+        /** The flavour and every setting read, one per line in key order: what a gate's policy digest takes. */
+        public String describe() {
+            StringBuilder described = new StringBuilder("flavour=").append(path).append('\n');
+            read.forEach((key, value) -> described.append(key).append('=').append(value).append('\n'));
+            return described.toString();
+        }
+    }
+
+    /**
      * Every dimension provider installed on this deployment, whatever its configuration, name-sorted - the discovery
      * seam {@link #resolve} deliberately does not expose, because {@code resolve} answers with anonymous
      * {@link GatePolicy} products and a caller that needs to know <em>which</em> dimensions a deployment carries

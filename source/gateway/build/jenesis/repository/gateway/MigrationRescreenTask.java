@@ -189,13 +189,15 @@ public final class MigrationRescreenTask implements MaintenanceTask {
         // Hoisted out of the per-artifact loop: constructing an inventory runs a ServiceLoader scan, and the flavour
         // question below is asked once per cached artifact.
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
+        // The policies a verdict may have been reached under and still stand: a gate changed since re-screens.
+        Set<String> policies = HardenedHitVerify.policies(gates);
         long[] screened = {0};
         long[] evicted = {0};
         try {
             // Stream the cached artifacts rather than buffering the whole cache: each is screened and its handle released
             // before the next is enumerated, so a hardened proxy with a very large pre-harden cache stays heap-bounded.
             source.cached(store, cached -> {
-                if (currentlyVerdicted(metadata, cached)) {
+                if (currentlyVerdicted(metadata, cached, policies)) {
                     return;   // a current digest-pinned ALLOW already pins these exact bytes - needs no screening
                 }
                 screened[0]++;
@@ -255,10 +257,10 @@ public final class MigrationRescreenTask implements MaintenanceTask {
     }
 
     /** Whether a current digest-pinned {@code ALLOW} verdict already pins exactly the cached bytes - the lookup
-     *  that decides an artifact needs no screening. An absent verdict, a verdict over different bytes, or a
-     *  withholding/refusal all read as "needs screening" (fail-closed), so the sweep re-screens
-     *  rather than trusting an unverified or stale cache. A read failure re-screens too. */
-    private static boolean currentlyVerdicted(MetadataStore metadata, Cached cached) {
+     *  that decides an artifact needs no screening. An absent verdict, a verdict over different bytes, one reached
+     *  under a policy no gate now has, or a withholding/refusal all read as "needs screening" (fail-closed), so the
+     *  sweep re-screens rather than trusting an unverified or stale cache. A read failure re-screens too. */
+    private static boolean currentlyVerdicted(MetadataStore metadata, Cached cached, Set<String> policies) {
         HardenedScreen.Coordinate coordinate = HardenedScreen.coordinate(cached.path());
         try {
             // The completeness test applies here too, and this is the surface an operator reaches for after
@@ -266,7 +268,7 @@ public final class MigrationRescreenTask implements MaintenanceTask {
             // short would skip precisely the artifacts the raise was meant to inspect.
             return VerdictSection.allows(metadata.section(coordinate.ecosystem(), coordinate.coordinate(),
                     coordinate.version(), VerdictSection.TAG), cached.digest(),
-                    QualityInspector.fullBodyInspectionLimit());
+                    QualityInspector.fullBodyInspectionLimit(), policies);
         } catch (IOException read) {
             LOGGER.warn("Could not read the verdict record for " + cached.path() + "; re-screening", read);
             return false;

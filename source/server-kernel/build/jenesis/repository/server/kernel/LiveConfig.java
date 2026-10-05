@@ -192,9 +192,9 @@ public final class LiveConfig implements SettingsEditor.Resolution {
         // could only disclose an internal name and hold a release while a feed is down. What it depends on is screened
         // where a build fetches it, and a cached copy is asked by its own coordinate.
         ComplianceGate publishGate = gate(threshold, vulnerable, malware, denied, denyAction,
-                GatePolicyProvider.resolve(config, GatePolicyProvider.Path.PUBLISH), AdvisorySource.none());
+                GatePolicyProvider.resolution(config, GatePolicyProvider.Path.PUBLISH), AdvisorySource.none());
         ComplianceGate proxyGate = gate(threshold, vulnerable, malware, denied, denyAction,
-                GatePolicyProvider.resolve(config, GatePolicyProvider.Path.PROXY), advisories.get());
+                GatePolicyProvider.resolution(config, GatePolicyProvider.Path.PROXY), advisories.get());
         int holdDays = Integer.parseInt(
                 get.apply("immaturity-hold-days", Integer.toString(defaults.getImmaturityHoldDays())));
         boolean proxy = Boolean.parseBoolean(get.apply("proxy-enabled", Boolean.toString(defaults.isProxyEnabled())));
@@ -447,7 +447,8 @@ public final class LiveConfig implements SettingsEditor.Resolution {
     }
 
     private static ComplianceGate gate(Severity threshold, Verdict vulnerable, Verdict malware, List<String> denied,
-                                       Verdict denyAction, List<GatePolicy> policies, AdvisorySource advisories) {
+                                       Verdict denyAction, GatePolicyProvider.Resolution policies,
+                                       AdvisorySource advisories) {
         return new ComplianceGate(new VulnerabilityPolicy(threshold, vulnerable), advisories)
                 .malicious(new MaliciousPackagePolicy().action(malware))
                 .denyList(new DenyListPolicy(denied).action(denyAction))

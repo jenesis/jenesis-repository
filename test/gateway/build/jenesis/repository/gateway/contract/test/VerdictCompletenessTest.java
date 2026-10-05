@@ -20,10 +20,11 @@ class VerdictCompletenessTest {
     private static final String DIGEST = "a".repeat(64);
     private static final long SMALL = 64L * 1024 * 1024;
     private static final long RAISED = 256L * 1024 * 1024;
+    private static final String POLICY = "sha256:" + "c".repeat(64);
 
     private static VerdictSection.Recorded allowedAt(long limit) {
         return new VerdictSection.Recorded("sha256:" + DIGEST, Verdict.ALLOW, null, Instant.EPOCH,
-                "hardened/full-body", "http://upstream/x", List.of(), limit);
+                "hardened/full-body", "http://upstream/x", List.of(), limit, POLICY);
     }
 
     @Test
@@ -63,10 +64,23 @@ class VerdictCompletenessTest {
     void completeness_never_rescues_a_verdict_that_was_not_an_allow_over_these_bytes() {
         // The completeness test is an extra condition, not a replacement: it must not widen reuse.
         VerdictSection.Recorded refused = new VerdictSection.Recorded("sha256:" + DIGEST, Verdict.REJECT, "why",
-                Instant.EPOCH, "hardened/full-body", "http://upstream/x", List.of(), RAISED);
+                Instant.EPOCH, "hardened/full-body", "http://upstream/x", List.of(), RAISED, POLICY);
         assertThat(refused.allows(DIGEST, SMALL)).as("a refusal is never reused, however completely it looked")
                 .isFalse();
         assertThat(allowedAt(RAISED).allows("b".repeat(64), SMALL))
                 .as("nor is an allow over different bytes").isFalse();
+    }
+
+    @Test
+    void a_verdict_reached_under_a_policy_no_gate_now_has_is_not_reused() {
+        assertThat(allowedAt(SMALL).allows(DIGEST, SMALL, Set.of(POLICY)))
+                .as("reached under the policy a gate still has").isTrue();
+        assertThat(allowedAt(SMALL).allows(DIGEST, SMALL, Set.of("sha256:" + "d".repeat(64))))
+                .as("a policy changed since - a deny-list entry, a tightened action - decides the bytes again")
+                .isFalse();
+        assertThat(new VerdictSection.Recorded("sha256:" + DIGEST, Verdict.ALLOW, null, Instant.EPOCH,
+                "hardened/full-body", "http://upstream/x", List.of(), SMALL, null)
+                .allows(DIGEST, SMALL, Set.of(POLICY)))
+                .as("a verdict naming no policy is compared with none, and re-screens once").isFalse();
     }
 }

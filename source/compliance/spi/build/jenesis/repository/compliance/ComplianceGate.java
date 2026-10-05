@@ -42,9 +42,13 @@ public final class ComplianceGate {
     private final Vex vex;
     private final Waivers waivers;
 
+    /** What the discovered dimensions were resolved from - their flavour and every setting their resolution read
+     *  ({@link GatePolicyProvider.Resolution#describe}) - and empty for a gate given its dimensions directly. */
+    private final String dimensions;
+
     public ComplianceGate(VulnerabilityPolicy vulnerabilityPolicy, AdvisorySource advisories) {
         this(vulnerabilityPolicy, new MaliciousPackagePolicy(), new DenyListPolicy(List.of()), List.of(),
-                advisories, Vex.NONE, Waivers.NONE);
+                advisories, Vex.NONE, Waivers.NONE, "");
     }
 
     private ComplianceGate(VulnerabilityPolicy vulnerabilityPolicy,
@@ -53,7 +57,8 @@ public final class ComplianceGate {
                            List<GatePolicy> policies,
                            AdvisorySource advisories,
                            Vex vex,
-                           Waivers waivers) {
+                           Waivers waivers,
+                           String dimensions) {
         this.vulnerabilityPolicy = vulnerabilityPolicy;
         this.maliciousPolicy = maliciousPolicy;
         this.denyListPolicy = denyListPolicy;
@@ -61,16 +66,17 @@ public final class ComplianceGate {
         this.advisories = advisories;
         this.vex = vex;
         this.waivers = waivers;
+        this.dimensions = dimensions;
     }
 
     public ComplianceGate malicious(MaliciousPackagePolicy maliciousPolicy) {
         return new ComplianceGate(vulnerabilityPolicy, maliciousPolicy, denyListPolicy, policies, advisories, vex,
-                waivers);
+                waivers, dimensions);
     }
 
     public ComplianceGate denyList(DenyListPolicy denyListPolicy) {
         return new ComplianceGate(vulnerabilityPolicy, maliciousPolicy, denyListPolicy, policies, advisories, vex,
-                waivers);
+                waivers, dimensions);
     }
 
     /** This gate asking {@code advisories} instead of the feeds it was built over, every dimension and overlay
@@ -78,13 +84,50 @@ public final class ComplianceGate {
      *  by exactly the threshold, action, VEX and waivers a feed's advisory would be. */
     public ComplianceGate advisories(AdvisorySource advisories) {
         return new ComplianceGate(vulnerabilityPolicy, maliciousPolicy, denyListPolicy, policies, advisories, vex,
-                waivers);
+                waivers, dimensions);
     }
 
-    /** The discovered gate dimensions (see {@link GatePolicyProvider}), run alongside the core ones. */
+    /** The discovered gate dimensions (see {@link GatePolicyProvider}), run alongside the core ones. A gate given its
+     *  dimensions this way knows them only by class in its {@link #policy()}; one given a
+     *  {@link #policies(GatePolicyProvider.Resolution) resolution} knows the settings they were built from. */
     public ComplianceGate policies(List<GatePolicy> policies) {
         return new ComplianceGate(vulnerabilityPolicy, maliciousPolicy, denyListPolicy, List.copyOf(policies),
-                advisories, vex, waivers);
+                advisories, vex, waivers, "");
+    }
+
+    /** The dimensions {@code resolution} resolved, with what they were resolved from, so the gate's {@link #policy()}
+     *  changes when a setting any of them read does. */
+    public ComplianceGate policies(GatePolicyProvider.Resolution resolution) {
+        return new ComplianceGate(vulnerabilityPolicy, maliciousPolicy, denyListPolicy, resolution.policies(),
+                advisories, vex, waivers, resolution.describe());
+    }
+
+    /**
+     * A digest of what this gate decides by: its vulnerability threshold and action, its malicious-package action, its
+     * deny list and action, and its discovered dimensions - by class, and where it was given a
+     * {@link GatePolicyProvider.Resolution}, by the flavour and every setting their resolution read. Two gates with
+     * the same digest reach the same verdict on the same subject and advisories, so a verdict recorded under one may
+     * stand under the other; a verdict recorded under a different digest is decided again.
+     *
+     * <p>It does not cover the advisories, the VEX statements or the waivers: those change what is known about a
+     * subject rather than how it is judged, and a stored verdict meets them where the advisories are re-asked.
+     */
+    public String policy() {
+        StringBuilder described = new StringBuilder()
+                .append("vulnerability=").append(vulnerabilityPolicy.describe()).append('\n')
+                .append("malicious=").append(maliciousPolicy.describe()).append('\n')
+                .append("deny=").append(denyListPolicy.describe()).append('\n')
+                .append("dimensions=");
+        for (GatePolicy policy : policies) {
+            described.append(policy.getClass().getName()).append(',');
+        }
+        described.append('\n').append(dimensions);
+        try {
+            return "sha256:" + HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(described.toString().getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 is a required algorithm of every JVM", impossible);
+        }
     }
 
     /** This gate reading maintainer-health from {@code health} rather than each health-aware dimension's own source:
@@ -101,7 +144,7 @@ public final class ComplianceGate {
             rebound.add(policy instanceof HealthAware aware ? aware.withHealth(health) : policy);
         }
         return new ComplianceGate(vulnerabilityPolicy, maliciousPolicy, denyListPolicy, List.copyOf(rebound),
-                advisories, vex, waivers);
+                advisories, vex, waivers, dimensions);
     }
 
     /** This gate bound to one stored artifact: every discovered dimension is rebound through
@@ -115,7 +158,7 @@ public final class ComplianceGate {
             rebound.add(policy.bound(repository, artifact));
         }
         return new ComplianceGate(vulnerabilityPolicy, maliciousPolicy, denyListPolicy, List.copyOf(rebound),
-                advisories, vex, waivers);
+                advisories, vex, waivers, dimensions);
     }
 
     /** This gate reading the tenant's ingested VEX statements: an advisory a statement marks non-applicable to the
@@ -124,7 +167,7 @@ public final class ComplianceGate {
      *  quarantining the upload. {@link Vex#NONE} (the default) suppresses nothing. */
     public ComplianceGate vex(Vex vex) {
         return new ComplianceGate(vulnerabilityPolicy, maliciousPolicy, denyListPolicy, policies, advisories, vex,
-                waivers);
+                waivers, dimensions);
     }
 
     /** This gate reading the tenant's active accept-risk waivers: an advisory an operator has recorded a still-standing
@@ -134,7 +177,7 @@ public final class ComplianceGate {
      *  waiver only defers a flaw that does apply). {@link Waivers#NONE} (the default) accepts nothing. */
     public ComplianceGate waivers(Waivers waivers) {
         return new ComplianceGate(vulnerabilityPolicy, maliciousPolicy, denyListPolicy, policies, advisories, vex,
-                waivers);
+                waivers, dimensions);
     }
 
     /** A license an artifact declares: a name and/or URL from its POM, or its jar Bundle-License header. */

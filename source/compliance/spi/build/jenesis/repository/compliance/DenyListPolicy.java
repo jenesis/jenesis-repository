@@ -36,6 +36,11 @@ public final class DenyListPolicy {
         return new DenyListPolicy(denied, action);
     }
 
+    /** The entries and the action, as {@link ComplianceGate#policy()} digests them. */
+    String describe() {
+        return String.join(",", denied) + "/" + action;
+    }
+
     List<ComplianceGate.Finding> assess(ComplianceGate.Subject subject) {
         // An empty list is "nothing configured to gate on" and reports nothing. The ACTION never short-circuits the
         // match: ALLOW reports the permit rather than hiding it.

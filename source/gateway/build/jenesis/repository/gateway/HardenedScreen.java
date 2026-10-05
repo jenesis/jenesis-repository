@@ -444,6 +444,10 @@ public final class HardenedScreen {
     }
 
     private final ProxyScreen screen;
+
+    /** The digest of the policy of the gate this screen decides through, recorded beside every verdict it reaches and
+     *  required of every verdict it reuses; {@code null} with no gate, so nothing it records is ever reused. */
+    private final String policy;
     private final ArtifactStore spool;
     private final MetadataStore metadata;
     private final Bounds bounds;
@@ -501,6 +505,7 @@ public final class HardenedScreen {
     public HardenedScreen(ComplianceGate gate, ArtifactStore records, int holdDays, ArtifactStore spool,
                           MetadataStore metadata, Bounds bounds, LongSupplier nanoTime, boolean reuseVerdict) {
         this.screen = new ProxyScreen(gate, records, holdDays);
+        this.policy = gate == null ? null : gate.policy();
         this.spool = Objects.requireNonNull(spool, "spool");
         this.metadata = Objects.requireNonNull(metadata, "metadata");
         this.bounds = Objects.requireNonNull(bounds, "bounds");
@@ -601,7 +606,7 @@ public final class HardenedScreen {
         // reuseVerdict: a transient `harden nocache` leg disables it so every fetch re-screens the full body
         // (nothing is durably cached to reuse-serve), while still recording the verdict and enforcing drift below.
         if (reuseVerdict && prior.map(recorded -> recorded.allows(digest,
-                QualityInspector.fullBodyInspectionLimit())).orElse(false)) {
+                QualityInspector.fullBodyInspectionLimit(), current())).orElse(false)) {
             return Optional.of(new ProxyFormat.Download(200, spool.open(key), response.headers()));
         }
         // Drift detection: an immutable coordinate whose previously-recorded verdict pins DIFFERENT bytes than
@@ -685,6 +690,11 @@ public final class HardenedScreen {
         return Optional.empty();
     }
 
+    /** The policies a reused verdict may have been reached under: this screen's gate's, or none without a gate. */
+    private Set<String> current() {
+        return policy == null ? Set.of() : Set.of(policy);
+    }
+
     /** Whether a recorded {@code ALLOW} verdict pins exactly these bytes at this coordinate - the digest-exact reuse
      *  check, and the completeness check with it: a verdict reached under a lower full-body ceiling than the one now
      *  in force is not reused, because raising that ceiling is exactly the change that would have let the screen
@@ -693,7 +703,7 @@ public final class HardenedScreen {
      *  too. */
     private boolean reuseAllows(Coordinate coordinate, String digest) {
         return priorVerdict(coordinate)
-                .map(recorded -> recorded.allows(digest, QualityInspector.fullBodyInspectionLimit()))
+                .map(recorded -> recorded.allows(digest, QualityInspector.fullBodyInspectionLimit(), current()))
                 .orElse(false);
     }
 
@@ -747,7 +757,7 @@ public final class HardenedScreen {
         try {
             metadata.mutate(coordinate.ecosystem(), coordinate.coordinate(), coordinate.version(), VerdictSection.TAG,
                     VerdictSection.record(digest, verdict, refusal == null ? null : refusal.name(), PROFILE, source,
-                            validators, Instant.now(), QualityInspector.fullBodyInspectionLimit()));
+                            validators, Instant.now(), QualityInspector.fullBodyInspectionLimit(), policy));
         } catch (IOException | RuntimeException e) {
             LOGGER.warn("Could not record the hardened screening verdict for " + coordinate.coordinate(), e);
         }
