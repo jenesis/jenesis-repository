@@ -318,11 +318,7 @@ public final class ProxyScreen {
             // HardenedScreen, which inspects the body itself and lets this exception surface.)
             LOGGER.warn("Could not parse proxied artifact " + path
                     + "; screening it from its path coordinate rather than serving it unscreened", malformed);
-            try {
-                return assessUnclaimed(path, lastModified);
-            } catch (RuntimeException failure) {
-                return feedFailed(path, List.of(), failure);
-            }
+            return assessUnclaimed(path, lastModified);
         }
         // On the byte[] tier every claiming inspector is handed the same bounded prefix and can read nothing else, so
         // the caller's one-byte lookahead past that prefix IS each inspector's own completeness - there is no report
@@ -386,12 +382,12 @@ public final class ProxyScreen {
             // fallback subject is APPENDED to the content findings rather than assessed beside them.
             if (inspection.complete()) {
                 if (subjects.isEmpty()) {
-                    return assessUnclaimed(path, lastModified);
+                    return decideUnclaimed(path, lastModified);
                 }
                 // Content findings and no package subject - a bundle fetched beside a file nothing parsed as a
                 // package. The file is still screened from its path, and what was found beside it is assessed with
                 // it; the stronger verdict decides and both sets of reasons are recorded.
-                Screening beside = assessUnclaimed(path, lastModified);
+                Screening beside = decideUnclaimed(path, lastModified);
                 ComplianceGate.Assessment scanned = gate.assess(subjects);
                 List<String> reasons = new ArrayList<>(beside.reasons());
                 for (ComplianceGate.Finding finding : scanned.findings()) {
@@ -504,8 +500,18 @@ public final class ProxyScreen {
      *  from a path-derived subject, WITHOUT reading the body - {@link ComplianceGate#assessUnclaimed} deliberately
      *  skips the license/discovered dimensions, so an ordinary raw fetch is NOT over-quarantined as unknown-license
      *  while a deny-listed coordinate delivered as raw content is still withheld. The immaturity hold still applies on
-     *  top, exactly as it does for a claimed subject. */
+     *  top, exactly as it does for a claimed subject. A feed that cannot answer holds the copy, as it does on the
+     *  claimed legs, so the metadata and raw-download legs that screen from the path alone fail closed too. */
     private Screening assessUnclaimed(String path, Instant lastModified) {
+        try {
+            return decideUnclaimed(path, lastModified);
+        } catch (RuntimeException failure) {
+            return feedFailed(path, List.of(), failure);
+        }
+    }
+
+    /** {@link #assessUnclaimed}'s decision, which raises when an advisory feed does. */
+    private Screening decideUnclaimed(String path, Instant lastModified) {
         ComplianceGate.Assessment assessment = gate.assessUnclaimed(pathDerivedSubject(path));
         Verdict verdict = assessment.verdict();
         List<String> reasons = new ArrayList<>();
