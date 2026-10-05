@@ -12,7 +12,7 @@ import tools.jackson.databind.node.ObjectNode;
 /**
  * The {@code closure} section codec of the consolidated metadata document: a published version's transitive closure as
  * the repository could resolve it from what it holds, when it was resolved, and every subtree that could not be.
- * Absent for a version not yet resolved. The {@code data} payload is {@code {"status":<RESOLVED|PARTIAL>,
+ * Absent for a version not yet resolved. The {@code data} payload is {@code {"status":<RESOLVED|PARTIAL|UNDECLARED>,
  * "components":[{"coordinate","version","cached","depth"}], "cuts":[{"coordinate","requirement","reason"}],
  * "truncated":<bool>}}, every component in the version's own ecosystem.
  */
@@ -29,9 +29,10 @@ public final class ClosureSection {
     private ClosureSection() {
     }
 
-    /** Whether every subtree resolved, or some were cut. */
+    /** Whether every subtree resolved, some were cut, or the version declares nothing this repository can read - a
+     *  recipe that is a program, a format whose artifacts declare no dependencies - which is not an empty closure. */
     public enum Status {
-        RESOLVED, PARTIAL
+        RESOLVED, PARTIAL, UNDECLARED
     }
 
     /** One held version the closure reaches: a cached copy where {@code cached}, a release of the repository otherwise,
@@ -73,7 +74,11 @@ public final class ClosureSection {
             cuts.add(new Cut(entry.path("coordinate").asString(""), entry.path("requirement").asString(""),
                     entry.path("reason").asString("")));
         }
-        Status status = "PARTIAL".equals(data.path("status").asString("")) ? Status.PARTIAL : Status.RESOLVED;
+        Status status = switch (data.path("status").asString("")) {
+            case "PARTIAL" -> Status.PARTIAL;
+            case "UNDECLARED" -> Status.UNDECLARED;
+            default -> Status.RESOLVED;
+        };
         return new Closure(status, components, cuts, data.path("truncated").asBoolean(false), updated);
     }
 
