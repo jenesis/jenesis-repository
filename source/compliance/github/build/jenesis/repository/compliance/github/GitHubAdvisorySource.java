@@ -192,7 +192,8 @@ public final class GitHubAdvisorySource implements AdvisorySource {
                 if (id != null) {
                     advisories.add(new Advisory(id, severityOf(advisory),
                             "malware".equals(advisory.path("type").asString(null)),
-                            fixedOf(advisory, coordinate), cvesOf(advisory), descriptionOf(advisory)));
+                            fixedOf(advisory, coordinate), cvesOf(advisory), descriptionOf(advisory),
+                            aliasesOf(advisory, id)));
                 }
             }
             String next = nextLink(response.header("Link").orElse(null));
@@ -248,6 +249,19 @@ public final class GitHubAdvisorySource implements AdvisorySource {
             }
         }
         return fixed.isEmpty() ? null : String.join(", ", fixed);
+    }
+
+    /** Every identifier the advisory names beside its own id - its GHSA id where a CVE stood as the id, and each of its
+     *  {@code identifiers} - what two feeds' records of one flaw are merged on. */
+    private static List<String> aliasesOf(JsonNode advisory, String id) {
+        List<String> aliases = new ArrayList<>();
+        for (JsonNode identifier : advisory.path("identifiers")) {
+            String value = identifier.path("value").asString(null);
+            if (value != null && !value.isBlank() && !value.equals(id) && !aliases.contains(value)) {
+                aliases.add(value);
+            }
+        }
+        return aliases;
     }
 
     private static List<String> cvesOf(JsonNode advisory) {

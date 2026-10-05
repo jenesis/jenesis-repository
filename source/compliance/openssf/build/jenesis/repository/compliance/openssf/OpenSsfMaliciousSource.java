@@ -121,7 +121,7 @@ public final class OpenSsfMaliciousSource implements AdvisorySource {
             return Optional.empty();
         }
         return Optional.of(new Advisory(id, severityOf(vuln), true, Osv.fixedVersions(vuln, coordinate),
-                cvesOf(vuln), descriptionOf(vuln)));
+                cvesOf(vuln), descriptionOf(vuln), aliasesOf(vuln)));
     }
 
     // The record's one-line summary, falling back to a bounded prefix of the long-form details - carried so the
@@ -136,7 +136,19 @@ public final class OpenSsfMaliciousSource implements AdvisorySource {
         return Severity.ofWord(vuln.path("database_specific").path("severity").asString(null), Severity.NONE);
     }
 
-    // The advisory's CVE aliases, the keys the known-exploited catalogue uses and combined() de-duplicates by.
+    // Every alias the record names, whatever its namespace - what combined() merges two feeds' records of one flaw on.
+    private static List<String> aliasesOf(JsonNode vuln) {
+        List<String> aliases = new ArrayList<>();
+        for (JsonNode alias : vuln.path("aliases")) {
+            String value = alias.asString(null);
+            if (value != null && !value.isBlank() && !aliases.contains(value)) {
+                aliases.add(value);
+            }
+        }
+        return aliases;
+    }
+
+    // The advisory's CVE aliases, the keys the known-exploited catalogue uses.
     private static List<String> cvesOf(JsonNode vuln) {
         List<String> cves = new ArrayList<>();
         for (JsonNode alias : vuln.path("aliases")) {

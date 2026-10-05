@@ -72,7 +72,7 @@ import module java.base;
  *     the shape this forbids: it leaves a feed that has failed every lookup for three days rendering as authoritative
  *     beside a three-day-old instant, which is exactly the ambiguity a view's last-fetch instant exists to remove.
  *     {@link FreshnessTracker} is where an implementation takes this rather than re-deriving it.</p></li>
- * <li><b>Ordering / determinism.</b> {@link #combined} merges feeds by advisory id and CVE alias, keeping the richer
+ * <li><b>Ordering / determinism.</b> {@link #combined} merges feeds by advisory id and alias, keeping the richer
  *     record when two feeds report the same vulnerability, and is order-insensitive by construction - so which feeds
  *     a deployment installs changes what is reported, but the order they were discovered in never does.</li>
  * <li><b>Tenant scoping.</b> None, deliberately: an advisory about a package is the same fact for every
@@ -90,9 +90,12 @@ public interface AdvisorySource extends SignalSource {
      * the advisory's CVE aliases (empty when it has none), used to cross-reference the known-exploited catalogue.
      * {@code description} is the feed's human-readable summary (empty when it records none) - carried so the
      * findings ledger can persist what the advisory says without a display surface re-fetching the feed.
+     * {@code aliases} are every other identifier the feed records the flaw under - a {@code GHSA-}, {@code PYSEC-},
+     * {@code RUSTSEC-} or {@code GO-} id beside or instead of a CVE - so two feeds' records of one flaw are merged
+     * however they name it ({@link #combined}).
      */
     record Advisory(String id, Severity severity, boolean malicious, String fixed, List<String> cves,
-                    String description) {
+                    String description, List<String> aliases) {
 
         /**
          * The bound on the long-form text a feed carries into the findings ledger. Every feed answers with both a
@@ -104,6 +107,14 @@ public interface AdvisorySource extends SignalSource {
 
         public Advisory {
             description = description == null ? "" : description;
+            cves = cves == null ? List.of() : List.copyOf(cves);
+            aliases = aliases == null ? List.of() : List.copyOf(aliases);
+        }
+
+        /** An advisory recording no identifier beyond its id and CVEs. */
+        public Advisory(String id, Severity severity, boolean malicious, String fixed, List<String> cves,
+                        String description) {
+            this(id, severity, malicious, fixed, cves, description, List.of());
         }
 
         public Advisory(String id, Severity severity) {
@@ -241,7 +252,7 @@ public interface AdvisorySource extends SignalSource {
         };
     }
 
-    /** {@code advisories} with every report of one vulnerability - one id, or a shared CVE alias - folded into one
+    /** {@code advisories} with every report of one vulnerability - one id, or a shared alias - folded into one
      *  record in first-seen order, each field taking the richer value: the higher severity, a fixed version where the
      *  first knew none, the fuller description, the union of aliases, the malicious flag if either sets it. */
     static List<Advisory> merged(List<Advisory> advisories) {
@@ -249,6 +260,7 @@ public interface AdvisorySource extends SignalSource {
         Map<String, Integer> known = new HashMap<>();
         for (Advisory advisory : advisories) {
             Set<String> identifiers = new LinkedHashSet<>(advisory.cves());
+            identifiers.addAll(advisory.aliases());
             identifiers.add(advisory.id());
             Integer at = identifiers.stream().map(known::get).filter(Objects::nonNull).findFirst().orElse(null);
             if (at == null) {
@@ -267,12 +279,11 @@ public interface AdvisorySource extends SignalSource {
     // The field-wise merge of two reports of one vulnerability: the id stays the first feed's (stable however the
     // later feeds answer), every other field prefers the richer value.
     private static Advisory enriched(Advisory first, Advisory addition) {
-        List<String> cves = new ArrayList<>(first.cves());
-        for (String cve : addition.cves()) {
-            if (!cves.contains(cve)) {
-                cves.add(cve);
-            }
-        }
+        List<String> cves = union(first.cves(), addition.cves());
+        // The later report's id is one more name of the flaw the first id now stands for.
+        List<String> aliases = union(first.aliases(),
+                union(addition.id().equals(first.id()) ? List.of() : List.of(addition.id()), addition.aliases()));
+        aliases.remove(first.id());
         return new Advisory(first.id(),
                 // strongest(), not compareTo: UNKNOWN sorts above CRITICAL so a policy floor fails
                 // closed against it, but a merge must not let a source that could not score an
@@ -283,6 +294,17 @@ public interface AdvisorySource extends SignalSource {
                 cves,
                 addition.description().length() > first.description().length()
                         ? addition.description()
-                        : first.description());
+                        : first.description(),
+                aliases);
+    }
+
+    private static List<String> union(List<String> first, List<String> addition) {
+        List<String> union = new ArrayList<>(first);
+        for (String value : addition) {
+            if (!union.contains(value)) {
+                union.add(value);
+            }
+        }
+        return union;
     }
 }
