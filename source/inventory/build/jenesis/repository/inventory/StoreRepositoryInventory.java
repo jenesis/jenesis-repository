@@ -398,6 +398,32 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return browse.describe(path);
     }
 
+    /**
+     * The cached copies asked about under {@code coordinate} of {@code ecosystem} rather than under their own name - a
+     * Debian binary under its source package - at most {@code limit}, from the reverse index the record of the name
+     * writes: what a feed's change log naming {@code coordinate} reaches beyond {@link #holdings}. A row whose copy no
+     * longer records that name, or is gone, is passed over. One listing of the name's level and two reads a row.
+     */
+    public List<Coordinate> askedAs(String ecosystem, String coordinate, int limit) throws IOException {
+        String root = AdvisedSection.indexRoot(ecosystem, coordinate);
+        List<String> rows = new ArrayList<>();
+        store.page(root, "", limit, rows::add);
+        List<Coordinate> copies = new ArrayList<>();
+        for (String row : rows) {
+            Optional<Coordinate> copy = store.readVersioned(root + "/" + row)
+                    .flatMap(versioned -> AdvisedSection.copy(versioned.content()));
+            if (copy.isEmpty()) {
+                continue;
+            }
+            Optional<Holding> held = holding(copy.get().ecosystem(), copy.get().coordinate(), copy.get().version());
+            if (held.isPresent() && held.get().cached() && held.get().advised() != null
+                    && held.get().advised().coordinate().equals(coordinate)) {
+                copies.add(held.get().asCoordinate());
+            }
+        }
+        return copies;
+    }
+
     /** What the repository holds of {@code coordinate} at {@code version} - a release or a cached copy, with what its
      *  document records beside it - or empty where it holds neither. One read of the version's document. */
     public Optional<Holding> holding(String ecosystem, String coordinate, String version) throws IOException {
