@@ -30,6 +30,9 @@ public interface Findings {
     /** The key of the {@linkplain #scanned freshness stamp}, inside the ledger's key-space. */
     String SCANNED = PREFIX + "/scanned";
 
+    /** The {@link #changed change epoch}'s key. */
+    String CHANGED = PREFIX + "/changed";
+
     /** Record (or refresh) a finding against a coordinate. An existing row with the same {@code (source, id)} keeps
      *  its {@code firstSeen}, labels and supersession mark while the mutable facts and {@code lastSeen} update; a new
      *  row is appended beside its siblings, never replacing one. */
@@ -265,5 +268,15 @@ public interface Findings {
      */
     static Epoch evictions(ArtifactStore store) {
         return new Epoch(store, EVICTED);
+    }
+
+    /**
+     * The change epoch, bumped by a pass that changed the repository's advisory findings - recorded one it did not
+     * hold at that severity, or superseded one - whether or not it was a full pass, so a view built from the ledger
+     * sees a finding the moment a pass records it rather than at the next full pass, which is all {@link #scanned}
+     * moves on.
+     */
+    static Epoch changed(ArtifactStore store) {
+        return new Epoch(store, CHANGED);
     }
 }
