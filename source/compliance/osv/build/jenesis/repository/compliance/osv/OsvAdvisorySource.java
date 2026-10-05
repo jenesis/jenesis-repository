@@ -134,7 +134,19 @@ public final class OsvAdvisorySource implements AdvisorySource {
         }
         boolean malicious = id.startsWith("MAL-");
         return Optional.of(new Advisory(id, severityOf(vuln, malicious), malicious,
-                Osv.fixedVersions(vuln, coordinate), cvesOf(vuln, id), descriptionOf(vuln)));
+                Osv.fixedVersions(vuln, coordinate), cvesOf(vuln, id), descriptionOf(vuln), aliasesOf(vuln)));
+    }
+
+    /** Every alias the record names, whatever its namespace - what two feeds' records of one flaw are merged on. */
+    static List<String> aliasesOf(JsonNode vuln) {
+        List<String> aliases = new ArrayList<>();
+        for (JsonNode alias : vuln.path("aliases")) {
+            String value = alias.asString(null);
+            if (value != null && !value.isBlank() && !aliases.contains(value)) {
+                aliases.add(value);
+            }
+        }
+        return aliases;
     }
 
     // The summary, else a bounded prefix of the details, so the findings ledger keeps what the advisory says without

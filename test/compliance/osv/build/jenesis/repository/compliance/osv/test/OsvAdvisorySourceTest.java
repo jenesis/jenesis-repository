@@ -140,6 +140,18 @@ class OsvAdvisorySourceTest {
     }
 
     @Test
+    void every_alias_a_record_names_is_carried_for_the_merge() {
+        String response = """
+                {"vulns":[{"id":"PYSEC-2026-1","aliases":["GHSA-aaaa-bbbb-cccc","CVE-2026-0001"]}]}""";
+        assertThat(new OsvAdvisorySource(_ -> response).advisories("PyPI", "requests", "2.31.0")).singleElement()
+                .satisfies(advisory -> {
+                    assertThat(advisory.aliases()).containsExactly("GHSA-aaaa-bbbb-cccc", "CVE-2026-0001");
+                    assertThat(advisory.cves()).as("the CVE stays what the catalogue keys on")
+                            .containsExactly("CVE-2026-0001");
+                });
+    }
+
+    @Test
     void a_mal_prefixed_advisory_is_flagged_malicious() {
         // OSV carries the OpenSSF malicious-packages dataset too; a MAL- id is a deliberately harmful publication and
         // must set the malicious flag (the gate acts on the flag, not the severity), while an ordinary GHSA/CVE id does
