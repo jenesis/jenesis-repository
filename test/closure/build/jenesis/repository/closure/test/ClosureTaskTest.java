@@ -6,8 +6,15 @@ import build.jenesis.repository.closure.ClosureSection;
 import build.jenesis.repository.closure.ClosureSource;
 import build.jenesis.repository.closure.ClosureTask;
 import build.jenesis.repository.closure.ClosureWalk;
+import build.jenesis.repository.closure.ExposureSection;
+import build.jenesis.repository.compliance.Severity;
+import build.jenesis.repository.findings.Finding;
+import build.jenesis.repository.findings.Findings;
+import build.jenesis.repository.findings.FindingsProvider;
 import build.jenesis.repository.definitions.RoutingSettingsContributor;
 import build.jenesis.repository.inventory.DependencySection;
+import build.jenesis.repository.inventory.HeldSubjects;
+import build.jenesis.repository.inventory.IncrementalPasses;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.maintenance.RepositoryContext;
 import build.jenesis.repository.maintenance.UnitFailures;
@@ -79,6 +86,10 @@ class ClosureTaskTest {
         groupMetadata.mutate("Maven", "org.acme:web", "1.0", DependencySection.TAG, DependencySection.record(path,
                 List.of(new DependencySection.Declared("org.acme:app", "1.0")), NOW));
 
+        // What the group's release relies on carries a finding where the fallback's repository holds it.
+        FindingsProvider.installed().orElseThrow().over(store).record("Maven", "org.acme:app", "1.0", Finding.of(
+                "CVE-2026-0002", "osv", Finding.Kind.VULNERABILITY, "advisory", Severity.HIGH, "recorded", NOW));
+
         pass("group", Map.of(RoutingSettingsContributor.KEY, "writable fallback releases"), null, NOW);
 
         ClosureSection.Closure closure = ClosureSection.closure(groupMetadata.section("Maven", "org.acme:web", "1.0",
@@ -87,6 +98,9 @@ class ClosureTaskTest {
                 .containsExactly(new ClosureSection.Component("org.acme:app", "1.0", false, 1, "releases"));
         assertThat(closure.cuts()).as("and walked past it, into what app declares")
                 .singleElement().satisfies(cut -> assertThat(cut.coordinate()).isEqualTo("org.dep:missing"));
+        assertThat(ExposureSection.exposure(groupMetadata.section("Maven", "org.acme:web", "1.0", ExposureSection.TAG))
+                .orElseThrow().reached()).as("the finding, read where the fallback's repository holds the copy")
+                .containsExactly(new ExposureSection.Reached("org.acme:app", "1.0", "releases", false, 1, "HIGH"));
     }
 
     @Test
@@ -163,6 +177,64 @@ class ClosureTaskTest {
         assertThat(asked).as("a source not serving Maven is never asked, and none after the first answer")
                 .containsExactly("no-bill", "resolver");
         assertThat(closure().orElseThrow().source()).isEqualTo("resolver");
+    }
+
+    @Test
+    void a_release_inherits_the_state_of_what_its_closure_reaches_and_follows_it_on_the_next_full_pass()
+            throws IOException {
+        // app 2.0 asks for a cached copy carrying a critical finding, a copy the screen held at its fill, and a clean
+        // cached copy, which it reaches and inherits nothing from.
+        String path = "/maven/org/acme/app/2.0/app-2.0.pom";
+        Publication publication = new Publication(store);
+        publication.link(path, publication.storeBlob(new ByteArrayInputStream("<project/>".getBytes(
+                StandardCharsets.UTF_8))));
+        StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
+        inventory.record(path, NOW);
+        metadata.mutate("Maven", "org.acme:app", "2.0", DependencySection.TAG, DependencySection.record(path,
+                List.of(new DependencySection.Declared("org.dep:vulnerable", "1.0"),
+                        new DependencySection.Declared("org.dep:held", "1.0"),
+                        new DependencySection.Declared("org.dep:clean", "1.0")), NOW));
+        cached("vulnerable", "1.0");
+        cached("clean", "1.0");
+        String held = "/maven/org/dep/held/1.0/held-1.0.pom";
+        HeldSubjects.hold(publication, store, held, publication.storeBlob(new ByteArrayInputStream(
+                "<project/>".getBytes(StandardCharsets.UTF_8))), "Maven", "org.dep:held", "1.0");
+        Findings ledger = FindingsProvider.installed().orElseThrow().over(store);
+        ledger.record("Maven", "org.dep:vulnerable", "1.0", Finding.of("CVE-2026-0001", "osv",
+                Finding.Kind.VULNERABILITY, "advisory", Severity.CRITICAL, "a recorded advisory", NOW));
+
+        pass(null, NOW);
+
+        ExposureSection.Exposure first = exposure("2.0").orElseThrow();
+        assertThat(first.reached()).as("the cached copy's finding and the held copy's hold, inherited")
+                .containsExactlyInAnyOrder(
+                        new ExposureSection.Reached("org.dep:vulnerable", "1.0", "", false, 1, "CRITICAL"),
+                        new ExposureSection.Reached("org.dep:held", "1.0", "", true, 0, ""));
+        assertThat(first.examined()).as("the clean copy was looked at too").isEqualTo(3);
+
+        // The finding is superseded: the next full pass follows the copy, with no feed asked and no closure re-resolved.
+        ledger.supersede("Maven", "org.dep:vulnerable", "1.0", "osv", "CVE-2026-0001", "withdrawn");
+        pass("releases", Map.of(IncrementalPasses.FULL_EVERY, "1"), null, NOW.plus(Duration.ofHours(1)));
+
+        assertThat(exposure("2.0").orElseThrow().reached()).as("only the hold is inherited now")
+                .containsExactly(new ExposureSection.Reached("org.dep:held", "1.0", "", true, 0, ""));
+        assertThat(ClosureSection.closure(metadata.section("Maven", "org.acme:app", "2.0", ClosureSection.TAG))
+                .orElseThrow().resolved()).as("the closure itself is resolved once").isEqualTo(NOW);
+    }
+
+    private Optional<ExposureSection.Exposure> exposure(String version) throws IOException {
+        return ExposureSection.exposure(metadata.section("Maven", "org.acme:app", version, ExposureSection.TAG));
+    }
+
+    /** A copy of {@code org.dep:<artifact>} the repository cached, its POM declaring nothing. */
+    private void cached(String artifact, String version) throws IOException {
+        String path = "/maven/org/dep/" + artifact + "/" + version + "/" + artifact + "-" + version + ".pom";
+        Publication publication = new Publication(store);
+        publication.link(path, publication.storeBlob(new ByteArrayInputStream(("<project><modelVersion>4.0.0"
+                + "</modelVersion><groupId>org.dep</groupId><artifactId>" + artifact + "</artifactId><version>"
+                + version + "</version></project>").getBytes(StandardCharsets.UTF_8))));
+        new StoreRepositoryInventory(store).cache("Maven", "org.dep:" + artifact, version,
+                "https://repo.example/maven2/", NOW);
     }
 
     private Optional<ClosureSection.Closure> closure() throws IOException {

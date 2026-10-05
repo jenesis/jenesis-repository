@@ -135,11 +135,24 @@ public final class ProvenanceClient extends ClientCalls {
      *  {@code UNDECLARED}, {@code PENDING} (a release not yet resolved) or {@code CACHED} (a copy with no closure of its
      *  own); {@code resolved}, {@code kind} - {@code BILL} the bill the version carries, {@code RESOLVER} an ecosystem's
      *  resolver, {@code SCANNER} a scanner, {@code DECLARATIONS} the walk over declarations - and {@code source}, the
-     *  producing source's name, are {@code null} where nothing is resolved. */
+     *  producing source's name, are {@code null} where nothing is resolved; {@code exposure} is what the closure reaches
+     *  that is held for review or carries findings. */
     public record Closure(String repository, String ecosystem, String coordinate, String version, String state,
                           String resolved, String kind, String source, boolean truncated,
                           List<ClosureComponent> components,
-                          List<ClosureCut> cuts) {
+                          List<ClosureCut> cuts, ClosureExposure exposure) {
+    }
+
+    /** One version a closure reaches that is held for review or carries findings: {@code repository} is empty where
+     *  the version's own repository holds it, and {@code worst} the worst severity among {@code findings}. */
+    public record ClosureReached(String coordinate, String version, String repository, boolean held, int findings,
+                                 String worst) {
+    }
+
+    /** What a closure reaches that is held or carries findings, as the closure pass derived it at {@code derived};
+     *  {@code null} in a {@link Closure} until it did. */
+    public record ClosureExposure(String derived, int examined, long held, long vulnerable,
+                                  List<ClosureReached> reached) {
     }
 
     /** The transitive closure the closure pass resolved for one version, as the version's document records it. */

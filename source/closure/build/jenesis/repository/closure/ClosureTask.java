@@ -2,11 +2,14 @@ package build.jenesis.repository.closure;
 
 import module java.base;
 import module org.slf4j;
+import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.inventory.IncrementalPasses;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.RepositoryContext;
 import build.jenesis.repository.maintenance.UnitFailures;
+import build.jenesis.repository.settings.CoreDefaults;
+import build.jenesis.repository.metadata.MetadataDocument;
 import build.jenesis.repository.metadata.MetadataProvider;
 import build.jenesis.repository.metadata.MetadataStore;
 
@@ -16,7 +19,12 @@ import build.jenesis.repository.metadata.MetadataStore;
  * release - which is how a version published before the setting was on is resolved. A closure resolves through the
  * repository and the repositories its fallbacks name ({@link ClosureWalk}), by the first {@link ClosureSource} serving
  * the release's ecosystem that answers. A version is resolved once: its
- * closure is a section of its document ({@link ClosureSection}), and a version that has one is passed by.
+ * closure is a section of its document ({@link ClosureSection}), and a version that has one is not resolved again.
+ *
+ * <p>What the closure reaches is followed beside it: the {@link ExposureSection} records each version it reaches that
+ * is held for review or carries findings, derived when the closure is resolved and again on every pass that visits the
+ * release - every full pass - so a release inherits a later finding or hold on a copy it relies on, and loses one
+ * withdrawn or released, without any lookup of its own. It is written only where it changed.
  *
  * <p>Lease-owned, since it writes the version documents; idempotent, since a crash leaves the versions it had not
  * reached without a section, which the next pass reaches. A version whose resolution fails is contained, reported, and
@@ -67,6 +75,18 @@ public final class ClosureTask implements MaintenanceTask {
         return Optional.empty();
     }
 
+    /** The band from which a finding of a version the closure reaches counts against it, as the deployment's
+     *  {@code vulnerability-risk-threshold} names it. */
+    private static Severity riskBand(UnaryOperator<String> config) {
+        String band = config == null ? null : config.apply("vulnerability-risk-threshold");
+        try {
+            return Severity.valueOf((band == null || band.isBlank() ? CoreDefaults.VULNERABILITY_RISK_THRESHOLD
+                    : band).strip().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException unknown) {
+            return Severity.valueOf(CoreDefaults.VULNERABILITY_RISK_THRESHOLD);
+        }
+    }
+
     @Override
     public String name() {
         return NAME;
@@ -90,25 +110,37 @@ public final class ClosureTask implements MaintenanceTask {
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(context.store());
         MetadataStore metadata = MetadataProvider.installed().over(context.store());
         ClosureWalk through = ClosureWalk.of(context);
+        Severity risk = riskBand(context.config());
         UnitFailures failed = context.failures("The closure pass of " + context.tenant() + "/" + context.repository(),
-                "Those versions have no closure yet; the next pass resolves them.");
+                "Those versions have no closure or exposure yet; the next pass resolves them.");
         IncrementalPasses cadence = IncrementalPasses.over(context.store(), NAME, "closure/resolve",
                 context.config());
         long[] resolved = {0};
+        long[] exposed = {0};
         cadence.coordinates(inventory, release -> {
-            if (metadata.section(release.ecosystem(), release.coordinate(), release.version(), ClosureSection.TAG)
-                    .isPresent()) {
-                return;
-            }
             try {
-                Optional<ClosureSection.Closure> answered = resolve(through, release, context.now());
-                if (answered.isEmpty()) {
-                    return;     // nothing installed serves the ecosystem; a source installed later resolves it
+                Optional<MetadataDocument> document = metadata.read(release.ecosystem(), release.coordinate(),
+                        release.version());
+                Optional<ClosureSection.Closure> closure = document.flatMap(read -> ClosureSection.closure(
+                        read.section(ClosureSection.TAG)));
+                if (closure.isEmpty()) {
+                    closure = resolve(through, release, context.now());
+                    if (closure.isEmpty()) {
+                        return;     // nothing installed serves the ecosystem; a source installed later resolves it
+                    }
+                    metadata.mutate(release.ecosystem(), release.coordinate(), release.version(), ClosureSection.TAG,
+                            ClosureSection.record(closure.get()));
+                    resolved[0]++;
                 }
-                ClosureSection.Closure closure = answered.get();
-                metadata.mutate(release.ecosystem(), release.coordinate(), release.version(), ClosureSection.TAG,
-                        ClosureSection.record(closure));
-                resolved[0]++;
+                ExposureSection.Exposure derived = Exposures.derive(through, release.ecosystem(), closure.get(), risk,
+                        context.now());
+                Optional<ExposureSection.Exposure> was = document.flatMap(read -> ExposureSection.exposure(
+                        read.section(ExposureSection.TAG)));
+                if (was.isEmpty() || !was.get().sameAs(derived)) {
+                    metadata.mutate(release.ecosystem(), release.coordinate(), release.version(),
+                            ExposureSection.TAG, ExposureSection.record(derived));
+                    exposed[0]++;
+                }
             } catch (IOException | RuntimeException e) {
                 LOGGER.warn("Could not resolve the closure of {} {}:{} in {}/{}", release.ecosystem(),
                         release.coordinate(), release.version(), context.tenant(), context.repository(), e);
@@ -116,8 +148,9 @@ public final class ClosureTask implements MaintenanceTask {
             }
         });
         cadence.completed(context.now(), !failed.any());
-        if (resolved[0] > 0) {
-            LOGGER.info("Resolved {} closure(s) in {}/{}", resolved[0], context.tenant(), context.repository());
+        if (resolved[0] > 0 || exposed[0] > 0) {
+            LOGGER.info("Resolved {} closure(s) and re-derived {} exposure(s) in {}/{}", resolved[0], exposed[0],
+                    context.tenant(), context.repository());
         }
     }
 }
