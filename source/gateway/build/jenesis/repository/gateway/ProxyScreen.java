@@ -229,7 +229,7 @@ public final class ProxyScreen {
                 // assessed exactly as the UNCLAIMED download leg assesses them without reading a body. A withheld
                 // metadata answer is the same empty miss the other two legs return; a denied coordinate must not be
                 // answerable as "exists, N bytes" just because the client asked without a body.
-                Screening screening = assessUnclaimed(path, lastModified(head.get().header("last-modified")));
+                Screening screening = assessUnclaimed(path, released(path, head.get().header("last-modified")));
                 return screening.verdict() == Verdict.ALLOW ? head : Optional.empty();
             }
 
@@ -246,7 +246,8 @@ public final class ProxyScreen {
                         return pulled;   // an upstream miss - nothing to screen or withhold
                     }
                     ProxyFormat.Download rawResponse = pulled.get();
-                    Screening screening = assessUnclaimed(path, lastModified(rawResponse.header("last-modified")));
+                    Screening screening = unversioned(path,
+                            assessUnclaimed(path, released(path, rawResponse.header("last-modified"))));
                     if (screening.verdict() == Verdict.ALLOW) {
                         log(path, screening);
                         return pulled;
@@ -279,7 +280,8 @@ public final class ProxyScreen {
                 InputStream continued = truncated
                         ? new SequenceInputStream(new ByteArrayInputStream(new byte[]{(byte) next}), body)
                         : body;
-                Screening screening = assess(path, prefix, lastModified(response.header("last-modified")), truncated);
+                Screening screening = unversioned(path,
+                        assess(path, prefix, released(path, response.header("last-modified")), truncated));
                 if (screening.verdict() == Verdict.ALLOW) {
                     log(path, screening);
                     return Optional.of(new ProxyFormat.Download(response.status(),
@@ -312,24 +314,41 @@ public final class ProxyScreen {
     }
 
     Verdict screen(String path, byte[] body, Instant lastModified, String upstream) throws IOException {
-        // The buffered fetch body is the COMPLETE document, never a bounded prefix, so it is never truncated. A
-        // document naming no version - a packument, a maven-metadata.xml, a project page - is about a package rather
-        // than a release of it: its dates move with every release, so the immaturity hold does not read them, and a
-        // withholding refuses it rather than keeping a copy for review, since a copy released later would serve a
-        // document the upstream has moved past and no version would have been reviewed.
-        boolean versioned = !pathDerivedSubject(path).version().isEmpty();
-        Screening screening = assess(path, body, versioned ? lastModified : null, false);
-        if (!versioned && screening.verdict() == Verdict.QUARANTINE) {
-            List<String> reasons = new ArrayList<>(screening.reasons());
-            reasons.add(UNVERSIONED_REASON);
-            screening = new Screening(Verdict.REJECT, screening.coordinate(), reasons, screening.rules(),
-                    screening.complete());
-        }
+        // The buffered fetch body is the COMPLETE document, never a bounded prefix, so it is never truncated.
+        Screening screening = unversioned(path, assess(path, body, versioned(path) ? lastModified : null, false));
         if (screening.verdict() == Verdict.QUARANTINE) {
             quarantine(path, new ByteArrayInputStream(body), upstream);
         }
         log(path, screening);
         return screening.verdict();
+    }
+
+    /**
+     * Whether {@code path} names a release rather than a document about a package. A document naming no version - a
+     * packument, a {@code maven-metadata.xml}, a project page, a compact index's {@code versions} - is about a package:
+     * its dates move with every release, so the immaturity hold does not read them, and a withholding refuses it rather
+     * than keeping a copy for review, since a copy released later would serve a document the upstream has moved past
+     * and no version would have been reviewed. Every leg of the screen applies both, the streaming and the
+     * body-free ones as the buffered one does.
+     */
+    private boolean versioned(String path) {
+        return !pathDerivedSubject(path).version().isEmpty();
+    }
+
+    /** The upstream's {@code Last-Modified} for a path that names a release, and nothing for a document naming no
+     *  version, which the immaturity hold does not read. */
+    private Instant released(String path, String lastModified) {
+        return versioned(path) ? lastModified(lastModified) : null;
+    }
+
+    /** {@code screening} with a hold for review on a document naming no version made a refusal, saying why. */
+    private Screening unversioned(String path, Screening screening) {
+        if (screening.verdict() != Verdict.QUARANTINE || versioned(path)) {
+            return screening;
+        }
+        List<String> reasons = new ArrayList<>(screening.reasons());
+        reasons.add(UNVERSIONED_REASON);
+        return new Screening(Verdict.REJECT, screening.coordinate(), reasons, screening.rules(), screening.complete());
     }
 
     /** Why a withheld document naming no version was refused rather than held for review. */
