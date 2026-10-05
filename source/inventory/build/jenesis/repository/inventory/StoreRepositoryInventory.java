@@ -5,6 +5,7 @@ import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.store.Clocks;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.blobs.BlobRoots;
+import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.format.EcosystemLayout;
 import build.jenesis.repository.store.ArtifactDescriptor;
@@ -466,6 +467,29 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      *  maps to no live pointer. */
     public List<String> paths(String ecosystem, String coordinate, String version) throws IOException {
         return browse.paths(ecosystem, coordinate, version);
+    }
+
+    /**
+     * The store key of each file {@code coordinate} at {@code version} serves, as a reader opens its bytes: a file a
+     * layout publishes under its served path through that path's pointer, a file a format keeps in the shared
+     * {@code Blobs} namespace through its pointer there - a version's metadata pointer among them, so a reader tells
+     * the files apart by what they hold. A withheld or vanished file is left out. One point read per file, over the
+     * paths and pointers {@link #paths} and the formats' blob layouts name.
+     */
+    public List<String> contentKeys(String ecosystem, String coordinate, String version) throws IOException {
+        List<String> keys = new ArrayList<>();
+        Publication publication = new Publication(store);
+        for (String path : paths(ecosystem, coordinate, version)) {
+            publication.located(path).ifPresent(keys::add);
+        }
+        Blobs blobs = new Blobs(store);
+        for (BlobLayout layout : blobLayoutsFor(ecosystem)) {
+            for (String key : layout.blobKeys(coordinate, version, store)) {
+                blobs.locate(key).map(located -> "blobs/" + located.hash()).filter(found -> !keys.contains(found))
+                        .ifPresent(keys::add);
+            }
+        }
+        return List.copyOf(keys);
     }
 
     /**

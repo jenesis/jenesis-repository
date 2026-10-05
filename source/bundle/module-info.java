@@ -79,6 +79,8 @@ open module build.jenesis.repository.bundle {
     requires build.jenesis.repository.closure;
     // A Maven release's closure as Maven resolves it, over the POMs the repository holds.
     requires build.jenesis.repository.closure.maven;
+    // A lock file an npm package or a crate carries, taken as its closure as written.
+    requires build.jenesis.repository.closure.lock;
     // How a requirement in a Maven, npm, Cargo or Composer manifest is read, for the closure and the dependents index.
     requires build.jenesis.repository.dependents.requirements;
     // Every hold, refusal and release as a signed, retried webhook, sent once an operator names an endpoint.
