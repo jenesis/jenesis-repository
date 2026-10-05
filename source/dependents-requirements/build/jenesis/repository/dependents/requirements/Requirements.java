@@ -29,11 +29,20 @@ public final class Requirements {
         Verdict admits(String requirement, String version);
     }
 
-    private static final Map<String, Grammar> GRAMMARS = Map.of(
-            "Maven", new MavenRequirement(),
-            "npm", new NpmRequirement(),
-            "crates.io", new CargoRequirement(),
-            "Packagist", new ComposerRequirement());
+    private static final Map<String, Grammar> GRAMMARS = Map.ofEntries(
+            Map.entry("Maven", new MavenRequirement()),
+            Map.entry("npm", new NpmRequirement()),
+            Map.entry("crates.io", new CargoRequirement()),
+            Map.entry("Packagist", new ComposerRequirement()),
+            Map.entry("PyPI", new PyPiRequirement()),
+            Map.entry("NuGet", new NuGetRequirement()),
+            Map.entry("RubyGems", new RubyGemsRequirement()),
+            Map.entry("Go", new GoRequirement()),
+            Map.entry("Debian", new DebianRequirement()),
+            Map.entry("RPM", new RpmRequirement()),
+            Map.entry("Alpine", new AlpineRequirement()),
+            Map.entry("conda", new CondaRequirement()),
+            Map.entry("Helm", new HelmRequirement()));
 
     private Requirements() {
     }
