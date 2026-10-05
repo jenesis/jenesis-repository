@@ -40,7 +40,8 @@ module build.jenesis.repository.gateway {
     provides build.jenesis.repository.observation.ObservabilitySource
             with build.jenesis.repository.gateway.HardeningObservability;
     provides build.jenesis.repository.maintenance.MaintenanceTaskProvider
-            with build.jenesis.repository.gateway.MigrationRescreenTaskProvider;
+            with build.jenesis.repository.gateway.MigrationRescreenTaskProvider,
+                    build.jenesis.repository.gateway.PendingScreenTaskProvider;
     provides build.jenesis.repository.settings.SettingsContributor
             with build.jenesis.repository.gateway.HardeningSettingsContributor;
 }

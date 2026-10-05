@@ -36,6 +36,10 @@ public final class ProxyScreenHooks implements PullThroughHooks {
     /** The screening mode of the repository these hooks are bound to; the default where they are bound to none. */
     private final ScreeningMode mode;
 
+    /** The request these hooks are bound to, told when its fill is served with the screen pending; {@code null} where
+     *  they are bound to none. */
+    private final FormatExchange exchange;
+
     /** The immaturity window, read per fetch. */
     private final IntSupplier holdDays;
 
@@ -52,17 +56,18 @@ public final class ProxyScreenHooks implements PullThroughHooks {
 
     public ProxyScreenHooks(Supplier<ComplianceGate> gate, int holdDays, boolean withholdIncomplete) {
         Objects.requireNonNull(gate, "gate");
-        this((_, _) -> gate.get(), null, GatePolicyProvider.Path.PROXY, ScreeningMode.of(null), () -> holdDays,
-                () -> withholdIncomplete);
+        this((_, _) -> gate.get(), null, GatePolicyProvider.Path.PROXY, ScreeningMode.of(null), null,
+                () -> holdDays, () -> withholdIncomplete);
     }
 
     private ProxyScreenHooks(BiFunction<String, GatePolicyProvider.Path, ComplianceGate> gates, String tenant,
-                             GatePolicyProvider.Path flavour, ScreeningMode mode, IntSupplier holdDays,
-                             BooleanSupplier withholdIncomplete) {
+                             GatePolicyProvider.Path flavour, ScreeningMode mode, FormatExchange exchange,
+                             IntSupplier holdDays, BooleanSupplier withholdIncomplete) {
         this.gates = Objects.requireNonNull(gates, "gates");
         this.tenant = tenant;
         this.flavour = Objects.requireNonNull(flavour, "flavour");
         this.mode = Objects.requireNonNull(mode, "mode");
+        this.exchange = exchange;
         this.holdDays = Objects.requireNonNull(holdDays, "holdDays");
         this.withholdIncomplete = Objects.requireNonNull(withholdIncomplete, "withholdIncomplete");
     }
@@ -76,20 +81,20 @@ public final class ProxyScreenHooks implements PullThroughHooks {
      */
     public static ProxyScreenHooks perTenant(BiFunction<String, GatePolicyProvider.Path, ComplianceGate> gates,
                                              IntSupplier holdDays, BooleanSupplier withholdIncomplete) {
-        return new ProxyScreenHooks(gates, null, GatePolicyProvider.Path.PROXY, ScreeningMode.of(null), holdDays,
-                withholdIncomplete);
+        return new ProxyScreenHooks(gates, null, GatePolicyProvider.Path.PROXY, ScreeningMode.of(null), null,
+                holdDays, withholdIncomplete);
     }
 
     @Override
     public PullThroughHooks forTenant(String tenant) {
-        return new ProxyScreenHooks(gates, tenant, GatePolicyProvider.Path.PROXY, ScreeningMode.of(null), holdDays,
-                withholdIncomplete);
+        return new ProxyScreenHooks(gates, tenant, GatePolicyProvider.Path.PROXY, ScreeningMode.of(null), null,
+                holdDays, withholdIncomplete);
     }
 
     @Override
     public PullThroughHooks forRequest(String tenant, FormatExchange exchange) {
         return new ProxyScreenHooks(gates, tenant, GatePolicyProvider.Path.fetched(exchange::setting),
-                ScreeningMode.of(exchange::setting), holdDays, withholdIncomplete);
+                ScreeningMode.of(exchange::setting), exchange, holdDays, withholdIncomplete);
     }
 
     @Override
@@ -101,9 +106,11 @@ public final class ProxyScreenHooks implements PullThroughHooks {
     public ProxyFormat.Fetcher screenFetch(String path, ProxyFormat.Fetcher upstream, ArtifactStore store,
                                            Map<String, byte[]> companions) {
         ComplianceGate active = gates.apply(tenant, flavour);
-        return active == null
-                ? upstream
-                : new ProxyScreen(active, store, holdDays.getAsInt(), withholdIncomplete.getAsBoolean())
-                        .screening(mode).wrap(upstream, path, companions);
+        if (active == null) {
+            return upstream;
+        }
+        ProxyScreen screen = new ProxyScreen(active, store, holdDays.getAsInt(), withholdIncomplete.getAsBoolean())
+                .screening(mode);
+        return (exchange == null ? screen : screen.noticing(exchange)).wrap(upstream, path, companions);
     }
 }
