@@ -162,4 +162,36 @@ class OpenSsfMaliciousSourceTest {
                 .as("a feed that keeps handing back a token fails closed at the page cap, never spins unbounded")
                 .isThrownBy(() -> source.advisories("npm", "evil-package", "1.0.0"));
     }
+
+    @Test
+    void a_batch_fetches_only_the_malicious_records_it_names() {
+        List<String> exchanged = new ArrayList<>();
+        OpenSsfMaliciousSource batched = OpenSsfMaliciousSource.exchanging(request -> {
+            exchanged.add(request.uri().getPath());
+            return switch (request.uri().getPath()) {
+                case "/v1/querybatch" -> """
+                        {"results":[
+                          {"vulns":[{"id":"MAL-2024-1234","modified":"m"},{"id":"GHSA-aaaa","modified":"m"}]},
+                          {},
+                          {"vulns":[{"id":"MAL-2024-1234","modified":"m"}]}
+                        ]}""";
+                case "/v1/vulns/MAL-2024-1234" -> "{\"id\":\"MAL-2024-1234\",\"summary\":\"steals tokens\"}";
+                default -> throw new AssertionError("asked " + request.uri());
+            };
+        });
+
+        List<List<AdvisorySource.Advisory>> answers = batched.advisories(List.of(
+                new AdvisorySource.Query("npm", "evil-package", "1.0.0"),
+                new AdvisorySource.Query("npm", "left-pad", "1.3.0"),
+                new AdvisorySource.Query("npm", "evil-package", "1.0.1")));
+
+        assertThat(answers.get(0)).singleElement().satisfies(advisory -> {
+            assertThat(advisory.id()).isEqualTo("MAL-2024-1234");
+            assertThat(advisory.malicious()).isTrue();
+        });
+        assertThat(answers.get(1)).isEmpty();
+        assertThat(answers.get(2)).extracting(AdvisorySource.Advisory::id).containsExactly("MAL-2024-1234");
+        assertThat(exchanged).as("a record the dataset does not curate is never fetched, and a curated one once")
+                .containsExactly("/v1/querybatch", "/v1/vulns/MAL-2024-1234");
+    }
 }

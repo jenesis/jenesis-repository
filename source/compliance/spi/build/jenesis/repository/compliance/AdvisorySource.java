@@ -153,6 +153,34 @@ public interface AdvisorySource extends SignalSource {
 
     List<Advisory> advisories(String ecosystem, String coordinate, String version);
 
+    /** One version a {@link Batched} source is asked about. */
+    record Query(String ecosystem, String coordinate, String version) {
+    }
+
+    /**
+     * The role of a source whose vendor answers many versions in one exchange, which a caller asking about many at
+     * once - the scheduled re-scan - takes instead of a query per version. A source opts in by implementing it; a
+     * caller holding any other source asks it per version, which is the same answer at a higher cost.
+     *
+     * <h2>Contract</h2>
+     * <ol>
+     * <li><b>Equivalence.</b> The answer at each position is the one {@link #advisories(String, String, String)}
+     *     would give for that query - same advisories, same fail-closed position - so a caller may batch or not
+     *     without changing a verdict; every clause of the source's own contract holds per query.</li>
+     * <li><b>Ordering.</b> One answer per query, in the order the queries were given; a repeated query answers
+     *     equally at each position.</li>
+     * <li><b>Error visibility - fail closed.</b> A batch that cannot answer every query raises, as a single query
+     *     would; it never answers an empty list for a query nobody screened, and never a shorter list of answers.</li>
+     * <li><b>Bounded work.</b> The implementation splits the queries to its vendor's own limit and draws every page of
+     *     every answer; the caller bounds how many it hands over at once.</li>
+     * </ol>
+     */
+    interface Batched extends AdvisorySource {
+
+        /** The advisories for each of {@code queries}, in their order. */
+        List<List<Advisory>> advisories(List<Query> queries);
+    }
+
     /** The shared source that reports nothing, for deployments that gate on licenses only. It is a singleton so a
      *  caller can tell "no advisory feed is active" by identity ({@code source == AdvisorySource.none()}). Its
      *  freshness is {@link Freshness#NEVER}: no feed was consulted, so the empty list confirms nothing. */

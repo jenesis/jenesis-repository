@@ -10,6 +10,7 @@ import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.feed.FeedClient;
 import build.jenesis.repository.feed.FeedException;
 import build.jenesis.repository.feed.FeedPolicy;
+import build.jenesis.repository.feed.FeedRequest;
 import build.jenesis.repository.feed.FeedResponse;
 import build.jenesis.repository.feed.FeedTransport;
 import build.jenesis.repository.feed.Osv;
@@ -33,8 +34,13 @@ import us.springett.cvss.Cvss;
  * the window answers from memory, a cold burst on one coordinate is one query, and a failed refresh past the window
  * raises. OSV meters nothing, so the hour-long window buys burst collapsing and outage isolation while a new advisory
  * reaches the gate within the hour.
+ *
+ * <p>Asked about many versions at once ({@link AdvisorySource.Batched}), it posts {@code /v1/querybatch} for those
+ * the cache does not hold, a thousand to a request, and fetches each record the answers name once from
+ * {@code /v1/vulns/<id>}, keyed by its modification instant so a revised record is fetched again; every answer lands in
+ * the same cache a single query fills. A query OSV answers only in part is asked on its own.
  */
-public final class OsvAdvisorySource implements AdvisorySource {
+public final class OsvAdvisorySource implements AdvisorySource.Batched {
 
     /** How long one coordinate version's answer is served before OSV is asked again. */
     private static final Duration TTL = Duration.ofHours(1);
@@ -61,9 +67,18 @@ public final class OsvAdvisorySource implements AdvisorySource {
      *  50 pages, 3 attempts with backoff honouring {@code Retry-After}, a capped body, and a same-origin cursor. */
     private static final FeedPolicy POLICY = FeedPolicy.closed();
 
+    /** A test's stand-in for OSV's endpoints: the body of the answer to {@code request}. */
+    @FunctionalInterface
+    public interface Exchange {
+        String answer(FeedRequest request) throws IOException;
+    }
+
     private final FeedClient client;
     private final URI query;
+    private final URI querybatch;
+    private final URI vulns;
     private final FeedCache<List<Advisory>> cache;
+    private final FeedCache<JsonNode> records;
 
     public OsvAdvisorySource() {
         this(FeedClient.of(FEED, FeedTransport.jdk(CONNECT_TIMEOUT), POLICY), DEFAULT_ENDPOINT, Clock.systemUTC());
@@ -76,7 +91,17 @@ public final class OsvAdvisorySource implements AdvisorySource {
     private OsvAdvisorySource(FeedClient client, URI base, Clock clock) {
         this.client = client;
         this.query = base.resolve("/v1/query");
+        this.querybatch = base.resolve("/v1/querybatch");
+        this.vulns = base.resolve("/v1/vulns/");
         this.cache = FeedCache.failClosed("OSV", this::query, TTL, clock);
+        this.records = FeedCache.failClosed("OSV", this::record, TTL, clock);
+    }
+
+    /** A source answering every request through {@code exchange}, as a 200 the client bounds and pages as a live
+     *  one. */
+    public static OsvAdvisorySource exchanging(Exchange exchange) {
+        return new OsvAdvisorySource(FeedClient.of(FEED, (request, timeout) -> FeedResponse.of(200,
+                exchange.answer(request)), POLICY), DEFAULT_ENDPOINT, Clock.systemUTC());
     }
 
     /** The production form, over the deployment clock the reading's retry window is measured on. */
@@ -90,6 +115,56 @@ public final class OsvAdvisorySource implements AdvisorySource {
             return List.of();
         }
         return cache.get(key(ecosystem, coordinate, version));
+    }
+
+    @Override
+    public List<List<Advisory>> advisories(List<AdvisorySource.Query> queries) {
+        List<List<Advisory>> answers = new ArrayList<>(Collections.nCopies(queries.size(), List.<Advisory>of()));
+        List<Integer> asked = new ArrayList<>();
+        Set<String> pending = new HashSet<>();
+        for (int at = 0; at < queries.size(); at++) {
+            AdvisorySource.Query query = queries.get(at);
+            if (!OsvQuery.covers(query.ecosystem())) {
+                continue;
+            }
+            String key = key(query.ecosystem(), query.coordinate(), query.version());
+            if (cache.fresh(key).isEmpty() && pending.add(key)) {
+                asked.add(at);
+            }
+        }
+        for (int from = 0; from < asked.size(); from += OsvQuery.BATCH_LIMIT) {
+            List<Integer> chunk = asked.subList(from, Math.min(asked.size(), from + OsvQuery.BATCH_LIMIT));
+            List<OsvQuery.Listed> listed = OsvQuery.ask(client, querybatch, chunk.stream().map(queries::get).toList());
+            for (int i = 0; i < chunk.size(); i++) {
+                AdvisorySource.Query query = queries.get(chunk.get(i));
+                String key = key(query.ecosystem(), query.coordinate(), query.version());
+                if (listed.get(i).more()) {
+                    // More records than a batch answer carries: the query's own pages are drawn instead.
+                    cache.get(key);
+                    continue;
+                }
+                List<Advisory> found = new ArrayList<>();
+                for (OsvQuery.Record named : listed.get(i).records()) {
+                    advisory(records.get(named.id() + " " + named.modified()), query.coordinate())
+                            .ifPresent(found::add);
+                }
+                cache.put(key, List.copyOf(found));
+            }
+        }
+        // Every query asked is now held, a repeated one included, so each position reads its answer back.
+        for (int at = 0; at < queries.size(); at++) {
+            AdvisorySource.Query query = queries.get(at);
+            if (OsvQuery.covers(query.ecosystem())) {
+                answers.set(at, cache.get(key(query.ecosystem(), query.coordinate(), query.version())));
+            }
+        }
+        return List.copyOf(answers);
+    }
+
+    /** One record in full, the record cache's loader; the key is the id and the modification instant the batch named,
+     *  so a revised record is a different key. */
+    private JsonNode record(String key) throws IOException {
+        return OsvQuery.fetch(client, vulns, key.substring(0, key.indexOf(' ')));
     }
 
     /** The cache key: the three coordinates joined by spaces, so it reads well in the cache's failure. A coordinate

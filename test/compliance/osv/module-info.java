@@ -11,6 +11,7 @@
 open module build.jenesis.repository.compliance.osv.test {
     requires build.jenesis.repository.compliance.osv;
     requires build.jenesis.repository.compliance;
+    requires build.jenesis.repository.feed;
     requires build.jenesis.repository.settings;
     requires org.junit.jupiter;
     requires org.assertj.core;

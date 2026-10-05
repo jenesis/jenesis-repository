@@ -10,6 +10,7 @@ import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.feed.FeedClient;
 import build.jenesis.repository.feed.FeedException;
 import build.jenesis.repository.feed.FeedPolicy;
+import build.jenesis.repository.feed.FeedRequest;
 import build.jenesis.repository.feed.FeedResponse;
 import build.jenesis.repository.feed.FeedTransport;
 import build.jenesis.repository.feed.Osv;
@@ -34,9 +35,14 @@ import build.jenesis.repository.compliance.osv.OsvQuery;
  *
  * <p>The network operation sits behind an {@link Endpoint} seam, so recorded payloads travel through the same client,
  * caps and pagination as a live answer. A failed query throws, so the gate fails closed. This source holds no
- * {@code FeedCache}, so every lookup reaches the feed.
+ * {@code FeedCache} of answers, so every lookup reaches the feed.
+ *
+ * <p>Asked about many versions at once ({@link AdvisorySource.Batched}), it posts {@code /v1/querybatch}, a thousand to
+ * a request, and fetches in full only the {@code MAL-} records the answers name - each once per batch, keyed by its
+ * modification instant - so a clean package costs a share of one request rather than a query of its own. A query OSV
+ * answers only in part is asked on its own.
  */
-public final class OpenSsfMaliciousSource implements AdvisorySource {
+public final class OpenSsfMaliciousSource implements AdvisorySource.Batched {
 
     /** The single network operation, isolated so a test can answer with a fixed response. The argument is the
      *  request body the feed built (the JSON query, carrying {@code page_token} from the second page on). */
@@ -57,8 +63,16 @@ public final class OpenSsfMaliciousSource implements AdvisorySource {
     /** A malicious-package feed gates, so it takes the client's fail-closed defaults unchanged. */
     private static final FeedPolicy POLICY = FeedPolicy.closed();
 
+    /** A test's stand-in for OSV's endpoints: the body of the answer to {@code request}. */
+    @FunctionalInterface
+    public interface Exchange {
+        String answer(FeedRequest request) throws IOException;
+    }
+
     private final FeedClient client;
     private final URI query;
+    private final URI querybatch;
+    private final URI vulns;
     private final FreshnessTracker fetches;
 
     public OpenSsfMaliciousSource() {
@@ -72,7 +86,16 @@ public final class OpenSsfMaliciousSource implements AdvisorySource {
     private OpenSsfMaliciousSource(FeedClient client, URI base, Clock clock) {
         this.client = client;
         this.query = base.resolve("/v1/query");
+        this.querybatch = base.resolve("/v1/querybatch");
+        this.vulns = base.resolve("/v1/vulns/");
         this.fetches = new FreshnessTracker(clock);
+    }
+
+    /** A source answering every request through {@code exchange}, as a 200 the client bounds and pages as a live
+     *  one. */
+    public static OpenSsfMaliciousSource exchanging(Exchange exchange) {
+        return new OpenSsfMaliciousSource(FeedClient.of(FEED, (request, timeout) -> FeedResponse.of(200,
+                exchange.answer(request)), POLICY), DEFAULT_ENDPOINT, Clock.systemUTC());
     }
 
     /** The production form, over the deployment clock the reading's retry window is measured on. */
@@ -97,6 +120,64 @@ public final class OpenSsfMaliciousSource implements AdvisorySource {
             throw new UncheckedIOException("Failed to query the malicious-package feed for "
                     + ecosystem + " " + coordinate + " " + version + " (" + OsvQuery.reason(e) + ")", e);
         }
+    }
+
+    @Override
+    public List<List<Advisory>> advisories(List<AdvisorySource.Query> queries) {
+        List<List<Advisory>> answers = new ArrayList<>(Collections.nCopies(queries.size(), List.<Advisory>of()));
+        List<Integer> asked = new ArrayList<>();
+        for (int at = 0; at < queries.size(); at++) {
+            if (OsvQuery.covers(queries.get(at).ecosystem())) {
+                asked.add(at);
+            }
+        }
+        Map<String, JsonNode> fetched = new HashMap<>();
+        for (int from = 0; from < asked.size(); from += OsvQuery.BATCH_LIMIT) {
+            List<Integer> chunk = asked.subList(from, Math.min(asked.size(), from + OsvQuery.BATCH_LIMIT));
+            List<AdvisorySource.Query> batch = chunk.stream().map(queries::get).toList();
+            List<OsvQuery.Listed> listed;
+            try {
+                listed = OsvQuery.ask(client, querybatch, batch);
+            } catch (RuntimeException failed) {
+                batch.forEach(query -> fetches.failed(query.ecosystem() + '|' + query.coordinate() + '|'
+                        + query.version()));
+                throw failed;
+            }
+            for (int i = 0; i < chunk.size(); i++) {
+                AdvisorySource.Query query = batch.get(i);
+                if (listed.get(i).more()) {
+                    // More records than a batch answer carries: the query's own pages are drawn instead.
+                    answers.set(chunk.get(i), advisories(query.ecosystem(), query.coordinate(), query.version()));
+                    continue;
+                }
+                List<Advisory> found = new ArrayList<>();
+                for (OsvQuery.Record named : listed.get(i).records()) {
+                    if (named.id().startsWith("MAL-")) {
+                        malicious(record(fetched, named, query), query.coordinate()).ifPresent(found::add);
+                    }
+                }
+                fetches.fetched(query.ecosystem() + '|' + query.coordinate() + '|' + query.version());
+                answers.set(chunk.get(i), List.copyOf(found));
+            }
+        }
+        return List.copyOf(answers);
+    }
+
+    /** The record a batch named, fetched once per batch; a failed fetch raises, so the batch fails closed. */
+    private JsonNode record(Map<String, JsonNode> fetched, OsvQuery.Record named, AdvisorySource.Query query) {
+        String key = named.id() + ' ' + named.modified();
+        JsonNode record = fetched.get(key);
+        if (record == null) {
+            try {
+                record = OsvQuery.fetch(client, vulns, named.id());
+            } catch (IOException e) {
+                fetches.failed(query.ecosystem() + '|' + query.coordinate() + '|' + query.version());
+                throw new UncheckedIOException("Failed to fetch the malicious-package record " + named.id()
+                        + " for " + query.ecosystem() + " " + query.coordinate() + " " + query.version(), e);
+            }
+            fetched.put(key, record);
+        }
+        return record;
     }
 
     /** Display-only for this feed, which fails closed, but derived per coordinate as every feed's is: while a
