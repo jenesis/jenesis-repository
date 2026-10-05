@@ -310,7 +310,7 @@ public final class IvyFormat implements RepositoryFormat, ArtifactLayout, Artifa
         }
         Optional<ProxyFormat.Download> fetched = fetcher.download(target, Map.of());
         if (fetched.isEmpty()) {
-            return descriptor && undecided(target, exchange, "the upstream could not be reached");
+            return descriptor && undecided(target, exchange, ProxyFormat.Fetcher.NO_ANSWER);
         }
         try (ProxyFormat.Download download = fetched.get()) {
             if (download.status() != 200) {

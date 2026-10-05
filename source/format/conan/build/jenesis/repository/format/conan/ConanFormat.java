@@ -548,7 +548,7 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
                      fetcher.download(target, ProxyRelay.conditionalHeaders(exchange)).orElse(null)) {
             if (download == null) {
                 return ProxyRelay.unanswered(target, exchange, ProxyRelay.Document.ENUMERATION,
-                        "the upstream could not be reached");
+                        ProxyFormat.Fetcher.NO_ANSWER);
             }
             if (download.status() == 304) {
                 ProxyRelay.relayValidators(download, exchange);

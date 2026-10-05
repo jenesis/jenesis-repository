@@ -287,10 +287,16 @@ public interface ProxyFormat {
     /**
      * The upstream HTTP fetch, isolated behind an interface so a test answers from a fixed upstream without the
      * network. {@code requestHeaders} are sent upstream (e.g. {@code Accept} for OCI manifest negotiation, an
-     * {@code Authorization} bearer token). An empty result is a transport failure; an HTTP error is a
-     * {@link Fetched} carrying its status, so the adapter can act on a {@code 401} challenge or a {@code 404}.
+     * {@code Authorization} bearer token). An empty result is a transport failure, or a screen decorating the fetcher
+     * withholding what the upstream answered; an HTTP error is a {@link Fetched} carrying its status, so the adapter
+     * can act on a {@code 401} challenge or a {@code 404}. Either way an empty result is no answer, and a leg that says
+     * so names both causes ({@link #NO_ANSWER}).
      */
     interface Fetcher {
+
+        /** Why a leg got no answer from an empty result: the transport failed, or a screen withheld what came back -
+         *  which one, the screen's own record says. */
+        String NO_ANSWER = "the upstream could not be reached, or a screen withheld its answer";
 
         /** The shared fetcher standing in when no upstream-fetcher module is installed: every leg reports a
          *  transport failure. It is a singleton, so a dispatcher can tell "no upstream connectivity" by identity

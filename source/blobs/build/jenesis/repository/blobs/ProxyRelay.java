@@ -535,7 +535,7 @@ public final class ProxyRelay {
             FormatExchange exchange, Document document, Tap tap, ArtifactStore remembering) throws IOException {
         try (ProxyFormat.Download download = fetcher.download(url, conditionalHeaders(exchange)).orElse(null)) {
             if (download == null) {
-                return unanswered(url, exchange, document, "the upstream could not be reached");
+                return unanswered(url, exchange, document, ProxyFormat.Fetcher.NO_ANSWER);
             }
             if (download.status() == 304) {
                 relayValidators(download, exchange);
@@ -651,7 +651,7 @@ public final class ProxyRelay {
             FormatExchange exchange, Document document) throws IOException {
         Optional<ProxyFormat.Fetched> fetched = fetcher.fetch(url, requestHeaders);
         if (fetched.isEmpty()) {
-            return new Answer(null, unanswered(url, exchange, document, "the upstream could not be reached"));
+            return new Answer(null, unanswered(url, exchange, document, ProxyFormat.Fetcher.NO_ANSWER));
         }
         ProxyFormat.Fetched response = fetched.get();
         if (response.status() == 304) {
