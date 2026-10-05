@@ -1,8 +1,8 @@
 /**
  * The compliance-review HTTP surface and console screens as a removable module: a
  * {@link build.jenesis.repository.server.kernel.ServerModuleProvider} and a console module over the gate, advisory and
- * findings SPIs - quarantine review, vulnerabilities, findings, health, provenance, signatures. Without it the server
- * carries none of the surface. Open for Spring's reflection.
+ * findings SPIs - quarantine review, vulnerabilities, findings, health, provenance, signatures, a version's resolved
+ * closure. Without it the server carries none of the surface. Open for Spring's reflection.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -12,6 +12,7 @@ open module build.jenesis.repository.compliance.web {
     exports build.jenesis.repository.compliance.web;
     requires build.jenesis.repository.server.kernel;
     requires build.jenesis.repository.server;
+    requires build.jenesis.repository.closure;
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.compliance.scan;
     requires build.jenesis.repository.compliance.signatures;
@@ -28,6 +29,7 @@ open module build.jenesis.repository.compliance.web {
     requires build.jenesis.repository.dependents.spi;
     requires build.jenesis.repository.audit;
     requires build.jenesis.repository.maintenance;
+    requires build.jenesis.repository.metadata;
     requires build.jenesis.repository.settings;
     // The console seam this module's screens are contributed through.
     requires build.jenesis.repository.ui;

@@ -6,8 +6,8 @@ import module tools.jackson.databind;
 
 /**
  * Where what a repository holds came from and what depends on it: signers and signatures, the signed build
- * attestation, the reverse dependencies, the bill of materials, the origin of a served path, the attribution
- * notices and the VEX statements.
+ * attestation, a published version's resolved closure, the reverse dependencies, the bill of materials, the origin of
+ * a served path, the attribution notices and the VEX statements.
  *
  * <p>Reached through {@link RepositoryClient#provenance()}.
  */
@@ -120,6 +120,32 @@ public final class ProvenanceClient extends ClientCalls {
         }
         require(response, 200, "read the signature of " + repo + path);
         return JSON.readValue(response.body(), Signature.class);
+    }
+
+    /** One component of a version's closure: {@code repository} is empty where the version's own repository holds it,
+     *  and names the repository a fallback reached otherwise. */
+    public record ClosureComponent(String coordinate, String version, boolean cached, int depth, String repository) {
+    }
+
+    /** A dependency whose subtree did not resolve, and why. */
+    public record ClosureCut(String coordinate, String requirement, String reason) {
+    }
+
+    /** A version's closure as the API answers it: {@code state} is {@code RESOLVED}, {@code PARTIAL},
+     *  {@code UNDECLARED}, {@code PENDING} (a release not yet resolved) or {@code CACHED} (a copy with no closure of its
+     *  own); {@code resolved} is {@code null} where nothing is resolved. */
+    public record Closure(String repository, String ecosystem, String coordinate, String version, String state,
+                          String resolved, boolean truncated, List<ClosureComponent> components,
+                          List<ClosureCut> cuts) {
+    }
+
+    /** The transitive closure the closure pass resolved for one version, as the version's document records it. */
+    public Closure closure(String repo, String ecosystem, String coordinate, String version)
+            throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/repository/closure?repo=" + enc(repo) + "&ecosystem="
+                + enc(ecosystem) + "&coordinate=" + enc(coordinate) + "&version=" + enc(version), null, null);
+        require(response, 200, "read the closure of " + ecosystem + " " + coordinate + " " + version + " in " + repo);
+        return JSON.readValue(response.body(), Closure.class);
     }
 
     /** The signed provenance attestation (a DSSE envelope) for a published artifact at a path within the repository. */

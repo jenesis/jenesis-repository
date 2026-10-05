@@ -426,7 +426,7 @@ public class RepositoryBrowse extends TenantScope implements AutoCloseable {
                 paths, !inventory.locate(ecosystem, coordinate, version).isEmpty(),
                 FindingsState.of(FindingsProvider.installed().map(provider -> provider.over(store)),
                         riskThreshold(), ecosystem, coordinate, version), screenPending,
-                ClosureSection.closure(document.section(ClosureSection.TAG)).orElse(null)));
+                ClosureSection.answer(document).map(ClosureSection.Answer::closure).orElse(null)));
     }
 
     /** One version as its own page shows it - see {@link #version}. {@code about}, {@code signature} and

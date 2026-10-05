@@ -163,6 +163,8 @@ public class CliRequestShapeTest {
             action("signers <repo> <signer>", "signers releases pgp:abc",
                     get("/api/signers/signed", "repo", "signer")),
             action("signature <repo> <path>", "signature releases /a/b.jar", get("/api/signature", "repo", "path")),
+            action("closure <repo> <ecosystem> <coordinate> <version>", "closure releases Maven org.acme:app 1.0",
+                    get("/api/repository/closure", "repo", "ecosystem", "coordinate", "version")),
             action("provenance <repo> <path> [--material]", "provenance releases /a/b.jar --material",
                     get("/api/provenance", "repo", "path", "material")),
             action("provenance key", "provenance key", get("/api/provenance/key")),
