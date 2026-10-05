@@ -231,7 +231,7 @@ public final class GitHubAdvisorySource implements AdvisorySource {
         if (score.isNumber() && score.asDouble() > 0) {
             return Severity.ofScore(score.asDouble());
         }
-        return Severity.ofWord(advisory.path("severity").asString(null), Severity.NONE);
+        return Severity.ofWord(advisory.path("severity").asString(null), Severity.UNKNOWN);
     }
 
     // The versions fixing this advisory for the queried package: each matching vulnerability's first_patched_version.
