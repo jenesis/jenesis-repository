@@ -128,10 +128,12 @@ public final class HardenedHitVerify implements PullThroughHooks {
         }
         String digest = key.get().substring(BLOB_PREFIX.length());
         Optional<VerdictSection.Recorded> prior = recorded(store, path);
-        // A valid recorded ALLOW pinning EXACTLY these cached bytes: the amortized cheap path (one metadata read, no
-        // re-screen, no re-fetch) - the MigrationRescreenTask sweep pre-writes this verdict so a steady-state hit is
-        // this branch. Serve through so the format's own handle streams the hit with its real headers.
-        if (prior.isPresent() && prior.get().allows(digest)) {
+        // A valid recorded ALLOW pinning EXACTLY these cached bytes, reached by a screen that looked as far as this
+        // deployment now looks: the amortized cheap path (one metadata read, no re-screen, no re-fetch) - the
+        // MigrationRescreenTask sweep pre-writes this verdict so a steady-state hit is this branch. Serve through so
+        // the format's own handle streams the hit with its real headers. An ALLOW reached under a lower full-body
+        // ceiling re-screens from the local bytes below, as the miss leg and the sweep treat it.
+        if (prior.isPresent() && prior.get().allows(digest, QualityInspector.fullBodyInspectionLimit())) {
             return HitDecision.serveThrough();
         }
         // A recorded non-ALLOW verdict pinning these exact bytes (a retro re-verdict, or a policy flip already
