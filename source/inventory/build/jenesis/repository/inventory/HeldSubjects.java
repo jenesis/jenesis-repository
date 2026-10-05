@@ -191,8 +191,11 @@ public final class HeldSubjects {
      *  path that resolves to no coordinate is recorded as carrying none rather than not recorded at all. A
      *  {@code null} upstream records a held body whose origin is unknown, which a release treats as published here. */
     public static void recordFetched(ArtifactStore store, String path, String upstream) throws IOException {
+        // The version the path is a file of, so a hold on a metadata file beside an archive - Go's .info, read before
+        // the archive and the file its version list is built from - is found by the version's coordinate.
+        StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
         Optional<build.jenesis.repository.store.ArtifactDescriptor> described =
-                new StoreRepositoryInventory(store).describe(path);
+                inventory.versionOf(path).or(() -> inventory.describe(path));
         record(store, path,
                 described.map(build.jenesis.repository.store.ArtifactDescriptor::ecosystem).orElse(null),
                 described.map(build.jenesis.repository.store.ArtifactDescriptor::coordinate).orElse(null),

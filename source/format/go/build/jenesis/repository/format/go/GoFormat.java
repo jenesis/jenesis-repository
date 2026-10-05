@@ -68,8 +68,8 @@ import build.jenesis.repository.format.Semver;
  *       is served whole for the same reason.</li>
  * </ol>
  */
-public final class GoFormat implements RepositoryFormat, ProxyLeg, ComposedLayout, RepositoryImporter.Delegating,
-        RepositoryExporter {
+public final class GoFormat implements RepositoryFormat, ProxyLeg, ComposedLayout, BlobLayout.VersionMembers,
+        RepositoryImporter.Delegating, RepositoryExporter {
 
     @Override
     public String name() {
@@ -152,10 +152,6 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, ComposedLayou
         return store.readVersioned(zip).isPresent() ? List.of("/" + zip) : List.of();
     }
 
-    /** The coordinate a module-archive path carries ({@code /go/<module>/@v/<version>.zip}), the module path verbatim
-     *  as {@link #blobKeys} keys it. The {@code .info}/{@code .mod} and the version queries name no archive and stay
-     *  empty. A {@code -} in the version marks a prerelease, a pseudo-version included, as {@link Semver#compare} ranks
-     *  it. */
     /** A version's {@code .info}, {@code .mod} and {@code .zip} are each served from the key their path names. */
     @Override
     public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
@@ -180,6 +176,20 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, ComposedLayou
     /** The files of a module version, in the order a version is laid down. */
     private static final List<String> VERSION_FILES = List.of(".info", ".mod", ".zip");
 
+    /** The version a {@code .info}, {@code .mod} or {@code .zip} is one of the files of: the archive's beside it. */
+    @Override
+    public Optional<ArtifactDescriptor> versionOf(String path) {
+        int dot = path.lastIndexOf('.');
+        if (dot < 0 || !VERSION_FILES.contains(path.substring(dot))) {
+            return Optional.empty();
+        }
+        return describe(path.substring(0, dot) + ".zip");
+    }
+
+    /** The coordinate a module-archive path carries ({@code /go/<module>/@v/<version>.zip}), the module path verbatim
+     *  as {@link #blobKeys} keys it. The {@code .info}/{@code .mod} and the version queries name no archive and stay
+     *  empty. A {@code -} in the version marks a prerelease, a pseudo-version included, as {@link Semver#compare} ranks
+     *  it. */
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith("/go/") || !path.endsWith(".zip")) {

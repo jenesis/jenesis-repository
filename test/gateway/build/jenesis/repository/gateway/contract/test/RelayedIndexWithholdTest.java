@@ -157,6 +157,19 @@ class RelayedIndexWithholdTest {
     }
 
     @Test
+    void a_go_version_held_at_its_info_is_left_out_of_the_list() throws IOException {
+        // go reads a version's .info before its archive, and the screen holds the version there: the hold is recorded
+        // under the version the .info sits beside, so the list the .info files are listed from leaves it out.
+        byte[] list = "v1.0.0\nv1.1.0\n".getBytes(StandardCharsets.UTF_8);
+        String info = "/go/example.com/acme/mod/@v/v1.1.0.info";
+        Publication publication = new Publication(store);
+        HeldSubjects.recordFetched(store, info, "https://upstream.example/");
+        publication.link("/quarantine" + info, publication.storeBlob(new ByteArrayInputStream(new byte[]{1})));
+
+        assertThat(relay("go", "/go/example.com/acme/mod/@v/list", list).body()).isEqualTo("v1.0.0\n");
+    }
+
+    @Test
     void a_terraform_version_list_leaves_out_a_held_version() throws IOException {
         byte[] versions = ("{\"versions\":[{\"version\":\"1.0.0\",\"protocols\":[\"5.0\"]},"
                 + "{\"version\":\"1.1.0\",\"protocols\":[\"5.0\"]}]}").getBytes(StandardCharsets.UTF_8);

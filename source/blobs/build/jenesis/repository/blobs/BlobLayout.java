@@ -267,6 +267,47 @@ public interface BlobLayout extends BlobRoots {
      * @param store the repository the path was addressed to, which a layout configured per repository needs; or
      *              {@code null} where there is none, when such a layout describes nothing.
      */
+    /**
+     * The role of a layout that publishes a version as several files of which only one is its artifact - Go's
+     * {@code .info} and {@code .mod} beside its {@code .zip} - and screens each of them: {@link #describe} names the
+     * version of the artifact alone, so a hold placed on another of the version's files is recorded under the version
+     * this names, and the version's holds are found by coordinate whichever of its files was fetched first.
+     *
+     * <h2>Contract</h2>
+     * <ol>
+     *   <li><b>Read purity.</b> From the path alone: no store read.</li>
+     *   <li><b>Absence sentinel.</b> Empty for a path that is no file of a version - an index, a version query - and
+     *       the same answer {@link #describe} gives for the artifact itself.</li>
+     *   <li><b>Fidelity.</b> The coordinate in the spelling {@link #describe} gives the version's artifact, since that is
+     *       the spelling the coordinate face is keyed by.</li>
+     *   <li><b>Selection.</b> Opt-in: a layout whose versions are one file each does not implement it.</li>
+     * </ol>
+     */
+    interface VersionMembers {
+
+        /** The version {@code path} is one of the files of, or empty. */
+        Optional<ArtifactDescriptor> versionOf(String path);
+    }
+
+    /** The version {@code path} is one of the files of: what {@link #claimed} describes it as, and otherwise what a
+     *  {@link VersionMembers} layout claiming it names it the file of. */
+    static Optional<ArtifactDescriptor> versionOf(String path, ArtifactStore store) {
+        Optional<ArtifactDescriptor> described = claimed(path, store)
+                .filter(artifact -> artifact.coordinate() != null && artifact.version() != null);
+        if (described.isPresent()) {
+            return described;
+        }
+        for (RepositoryFormat format : RepositoryFormat.installed()) {
+            if (format.handles(path) && format instanceof VersionMembers files) {
+                Optional<ArtifactDescriptor> named = files.versionOf(path);
+                if (named.isPresent()) {
+                    return named;
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
     static Optional<ArtifactDescriptor> claimed(String path, ArtifactStore store) {
         List<RepositoryFormat> installed = RepositoryFormat.installed();
         for (RepositoryFormat format : installed) {

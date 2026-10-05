@@ -437,8 +437,12 @@ public final class ProxyScreen {
                     || subject.version().isBlank()) {
                 continue;
             }
+            // Under the layout's spelling of the coordinate, which every read of the version's document resolves to.
+            StoreRepositoryInventory.Coordinate copy = inventory.canonical(subject.ecosystem(), subject.coordinate(),
+                    subject.version()).orElse(new StoreRepositoryInventory.Coordinate(subject.ecosystem(),
+                    subject.coordinate(), subject.version()));
             try {
-                inventory.advised(subject.ecosystem(), subject.coordinate(), subject.version(), subject.advised(),
+                inventory.advised(copy.ecosystem(), copy.coordinate(), copy.version(), subject.advised(),
                         Instant.now());
             } catch (IOException failure) {
                 throw new UncheckedIOException("Could not record the name the advisory databases know "
