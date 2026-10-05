@@ -19,7 +19,7 @@ import build.jenesis.repository.store.Publication;
  * outage ({@link ScreeningMode#ADMIT}, {@link ScreeningMode#RECORD}) closes the window once the feed answers, on its
  * own cadence rather than that of the passes that read the feeds.
  *
- * <p>A fill admitted that way leaves a marker under {@value ProxyScreen#PENDING_ROOT} naming the copy's path. Per
+ * <p>A fill admitted that way leaves a marker under {@value ScreeningMode#PENDING_ROOT} naming the copy's path. Per
  * repository, this pass pages the markers and re-screens each copy from its stored bytes through the same decision a
  * fill makes, under the repository's current mode and gate:
  * <ul>
@@ -80,7 +80,7 @@ public final class PendingScreenTask implements MaintenanceTask {
         String after = "";
         while (true) {
             List<String> page = new ArrayList<>();
-            store.page(ProxyScreen.PENDING_ROOT, after, PAGE, page::add);
+            store.page(ScreeningMode.PENDING_ROOT, after, PAGE, page::add);
             markers.addAll(page);
             if (page.size() < PAGE) {
                 break;
@@ -98,7 +98,7 @@ public final class PendingScreenTask implements MaintenanceTask {
         long pending = 0;
         long held = 0;
         for (String marker : markers) {
-            String key = ProxyScreen.PENDING_ROOT + "/" + marker;
+            String key = ScreeningMode.PENDING_ROOT + "/" + marker;
             Optional<String> path = path(store, key);
             Optional<String> blob = path.isEmpty() ? Optional.empty() : publication.located(path.get());
             if (blob.isEmpty()) {

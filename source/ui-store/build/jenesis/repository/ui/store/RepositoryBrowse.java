@@ -2,6 +2,7 @@ package build.jenesis.repository.ui.store;
 
 import module java.base;
 
+import build.jenesis.repository.compliance.ScreeningMode;
 import build.jenesis.repository.settings.CoreDefaults;
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.index.keys.PublishedIndexKeys;
@@ -394,6 +395,17 @@ public class RepositoryBrowse extends TenantScope implements AutoCloseable {
             return Optional.empty();
         }
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
+        List<String> paths = inventory.paths(ecosystem, coordinate, version);
+        // A cached copy served while a feed could not answer carries a marker until a feed does: a point read per file.
+        boolean screenPending = false;
+        if (cached.isPresent()) {
+            for (String path : paths) {
+                if (store.readVersioned(ScreeningMode.pendingKey(path)).isPresent()) {
+                    screenPending = true;
+                    break;
+                }
+            }
+        }
         Optional<DownloadsSection.Facts> downloads = DownloadsSection.facts(document.section(DownloadsSection.TAG));
         Optional<AboutSection.About> about = AboutSection.about(document.section(AboutSection.TAG));
         List<DependencySection.Declared> dependencies = DependencySection.declared(
@@ -410,22 +422,22 @@ public class RepositoryBrowse extends TenantScope implements AutoCloseable {
                 SignatureSection.summary(document.section(SignatureSection.TAG)).orElse(null),
                 ProvenanceSection.summary(document.section(ProvenanceSection.TAG)).orElse(null),
                 dependencies.stream().limit(DEPENDENCIES_SHOWN).toList(), dependencies.size(),
-                inventory.paths(ecosystem, coordinate, version),
-                !inventory.locate(ecosystem, coordinate, version).isEmpty(),
+                paths, !inventory.locate(ecosystem, coordinate, version).isEmpty(),
                 FindingsState.of(FindingsProvider.installed().map(provider -> provider.over(store)),
-                        riskThreshold(), ecosystem, coordinate, version)));
+                        riskThreshold(), ecosystem, coordinate, version), screenPending));
     }
 
     /** One version as its own page shows it - see {@link #version}. {@code about}, {@code signature} and
      *  {@code provenance} are {@code null} where the document records none; {@code dependencies} holds at most
-     *  {@link #DEPENDENCIES_SHOWN} of the {@code dependencyCount} declared. */
+     *  {@link #DEPENDENCIES_SHOWN} of the {@code dependencyCount} declared; {@code screenPending} says a file of a
+     *  cached copy was served while an advisory feed could not answer, and no feed has answered for it since. */
     public record VersionDetail(String ecosystem, String coordinate, String version, String published, boolean cached,
                                 String upstream, boolean prerelease, boolean pinned, boolean served, long downloads,
                                 String lastDownloaded, AboutSection.About about,
                                 List<LicenseInventory.Declared> licenses, SignatureSection.Summary signature,
                                 ProvenanceSection.Summary provenance, List<DependencySection.Declared> dependencies,
                                 int dependencyCount, List<String> paths, boolean browsable,
-                                FindingsState findings) {
+                                FindingsState findings, boolean screenPending) {
 
         /** The folder every file lies in - see {@link RepositoryBrowse#folder(List)}. */
         public String folder() {

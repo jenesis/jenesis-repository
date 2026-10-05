@@ -22,7 +22,6 @@ import build.jenesis.repository.inventory.HeldSubjects;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.Checksums;
 
 /**
  * The proxy fetch firewall for any format's proxy leg, so a fetched artifact is screened rather than served unchecked -
@@ -90,16 +89,6 @@ public final class ProxyScreen {
     /** The reason an artifact served while a feed could not answer carries, beside the outage itself. */
     static final String ADMITTED_REASON = "Admitted on the checks that could answer, as the repository's screening "
             + "mode says, while an advisory feed cannot";
-
-    /** Where a copy served while a feed could not answer is marked: one {@link Properties} document per copy, named
-     *  by the digest of its path and carrying the path, so {@link PendingScreenTask} pages them without walking the
-     *  layout. */
-    static final String PENDING_ROOT = "screen-pending";
-
-    /** The marker of the copy at {@code path}. */
-    static String pendingKey(String path) {
-        return PENDING_ROOT + "/" + Checksums.sha256(path);
-    }
 
     /** The response header a fill served while a feed could not answer carries, valued {@value #SCREEN_PENDING}: the
      *  client is told the copy it was handed has not been asked of every feed yet. */
@@ -572,7 +561,7 @@ public final class ProxyScreen {
             marker.setProperty("path", path);
             ByteArrayOutputStream body = new ByteArrayOutputStream();
             marker.store(new OutputStreamWriter(body, StandardCharsets.UTF_8), null);
-            store.write(pendingKey(path), new ByteArrayInputStream(body.toByteArray()));
+            store.write(ScreeningMode.pendingKey(path), new ByteArrayInputStream(body.toByteArray()));
             pendingNotice.run();
         }
     }
