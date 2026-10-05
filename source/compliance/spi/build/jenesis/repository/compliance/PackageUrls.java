@@ -32,6 +32,11 @@ public final class PackageUrls {
             Map.entry(Ecosystems.CONDA, "conda"),
             Map.entry(Ecosystems.HUGGING_FACE, "huggingface")));
 
+    /** The ecosystems a package URL is made for, so a purl-keyed feed covers exactly these. */
+    public static Set<String> covered() {
+        return TYPES.covered();
+    }
+
     /** The reverse-domain lead-ins a Maven group starts with; the segment after one names the organization the CPE
      *  vendor field wants ({@code org.apache.logging.log4j} - {@code apache}). */
     private static final Set<String> DOMAIN_PREFIXES = Set.of("com", "org", "net", "io", "dev", "me", "co", "us");

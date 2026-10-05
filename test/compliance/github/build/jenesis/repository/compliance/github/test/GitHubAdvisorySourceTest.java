@@ -4,6 +4,7 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.AdvisorySource.Advisory;
+import build.jenesis.repository.compliance.Ecosystems;
 import build.jenesis.repository.compliance.github.GitHubAdvisorySource;
 import build.jenesis.repository.compliance.Severity;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -267,5 +268,20 @@ class GitHubAdvisorySourceTest {
         assertThatThrownBy(() -> source.advisories("npm", "lodash", "4.17.11"))
                 .as("a feed that keeps advertising a next page fails closed at the cap, never spins unbounded")
                 .isInstanceOf(UncheckedIOException.class);
+    }
+
+    @Test
+    void the_declared_coverage_is_what_is_asked_and_nothing_else_is() {
+        List<String> asked = new ArrayList<>();
+        GitHubAdvisorySource source = new GitHubAdvisorySource((ecosystem, affects, next) -> {
+            asked.add(ecosystem);
+            return new GitHubAdvisorySource.Endpoint.Page("[]", null);
+        });
+        assertThat(source.ecosystems()).contains("Maven", "PyPI", "crates.io").doesNotContain("Debian", "conda");
+        for (String ecosystem : Ecosystems.canonical()) {
+            asked.clear();
+            source.advisories(ecosystem, "acme-" + ecosystem.length(), "1.0");
+            assertThat(asked).as(ecosystem).hasSize(source.ecosystems().contains(ecosystem) ? 1 : 0);
+        }
     }
 }

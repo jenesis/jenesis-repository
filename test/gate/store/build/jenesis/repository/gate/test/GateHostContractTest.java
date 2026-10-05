@@ -2,6 +2,7 @@ package build.jenesis.repository.gate.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import build.jenesis.repository.compliance.Ecosystems;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.Freshness;
@@ -202,6 +203,11 @@ class GateHostContractTest {
         AdvisorySource healthy = AdvisorySource.of(Map.of(
                 "org.clean:lib", List.of(new AdvisorySource.Advisory("GHSA-0000-0000", Severity.LOW, false))));
         AdvisorySource down = new AdvisorySource() {
+            @Override
+            public Set<String> ecosystems() {
+                return Ecosystems.canonical();
+            }
+
 
             @Override
             public List<AdvisorySource.Advisory> advisories(String ecosystem, String coordinate, String version) {

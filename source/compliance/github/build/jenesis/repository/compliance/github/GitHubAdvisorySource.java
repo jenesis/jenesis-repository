@@ -279,6 +279,12 @@ public final class GitHubAdvisorySource implements AdvisorySource.Changes {
         }
     }
 
+    /** The ecosystems GitHub tracks advisories in. */
+    @Override
+    public Set<String> ecosystems() {
+        return ECOSYSTEMS.covered();
+    }
+
     /** Display-only for this fail-closed feed, so no caller misreads a degraded value. It is the cache's own account:
      *  while a coordinate this feed could not screen is in its retry window the reading is not authoritative, clearing
      *  when it screens again or the window lapses. */

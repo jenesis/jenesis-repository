@@ -180,6 +180,12 @@ public final class OpenSsfMaliciousSource implements AdvisorySource.Batched {
         return record;
     }
 
+    /** The ecosystems OSV serves the curated dataset in. */
+    @Override
+    public Set<String> ecosystems() {
+        return OsvQuery.covered();
+    }
+
     /** Display-only for this feed, which fails closed, but derived per coordinate as every feed's is: while a
      *  coordinate this feed could not screen is inside its retry window the reading is not authoritative. It clears
      *  when that coordinate screens again or its window lapses; another coordinate answering says nothing about it. */

@@ -2,6 +2,7 @@ package build.jenesis.repository.gate.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import build.jenesis.repository.compliance.Ecosystems;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.DenyListPolicy;
@@ -123,6 +124,11 @@ class ComplianceScreenTest {
         // the screen must fail closed - HOLD the upload (could not fully screen ⇒ do not serve), never admit the
         // unscreened bytes as a silent clean and never let a raw error escape to the publisher as a 500.
         AdvisorySource failing = new AdvisorySource() {
+            @Override
+            public Set<String> ecosystems() {
+                return Ecosystems.canonical();
+            }
+
 
             @Override
             public List<AdvisorySource.Advisory> advisories(String ecosystem, String coordinate, String version) {
@@ -184,6 +190,11 @@ class ComplianceScreenTest {
         // Nothing claims these bytes, so the screen asks the feeds about the coordinate the edge described the upload
         // as - and a feed that cannot answer there holds the upload as it does a parsed one.
         AdvisorySource failing = new AdvisorySource() {
+            @Override
+            public Set<String> ecosystems() {
+                return Ecosystems.canonical();
+            }
+
 
             @Override
             public List<AdvisorySource.Advisory> advisories(String ecosystem, String coordinate, String version) {
