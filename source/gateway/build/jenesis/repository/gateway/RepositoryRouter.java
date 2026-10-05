@@ -658,7 +658,8 @@ public final class RepositoryRouter {
      *  reads before it decides on the artifact they cover. */
     private ProxyFormat.Fetcher screening(String tenant, String repository, String path, ArtifactStore records,
                                           RepositoryDefinition.Fallback fallback, ArtifactStore spool,
-                                          ProxyFormat.Fetcher raw, Map<String, byte[]> companions) {
+                                          ProxyFormat.Fetcher raw, Map<String, byte[]> companions,
+                                          FormatExchange exchange) {
         ComplianceGate active = fetchGate(tenant, repository);
         if (fallback.screening() == RepositoryDefinition.Screening.HARDEN) {
             // Selected-but-unsatisfiable stays loud (like store=s3 without its module): a hardened fallback is
@@ -690,6 +691,7 @@ public final class RepositoryRouter {
         }
         return new ProxyScreen(active, records, holdDays.getAsInt(), withholdIncomplete.getAsBoolean())
                 .screening(ScreeningMode.of(repositorySettings.apply(tenant, repository)))
+                .noticing(exchange)
                 .wrap(raw, path, companions);
     }
 
@@ -713,9 +715,9 @@ public final class RepositoryRouter {
             // only when step-1 missed - idempotent, never a double serve.
             // Composed eagerly for the requested path, so an unsatisfiable hardened leg fails at resolution; a format
             // that keeps its answer under another path (ProxyFormat.keptAs) is screened under that one.
-            screening(tenant, repository, exchange.path(), records, fallback, spool, probe, Map.of());
+            screening(tenant, repository, exchange.path(), records, fallback, spool, probe, Map.of(), exchange);
             BiFunction<String, Map<String, byte[]>, ProxyFormat.Fetcher> screen = (path, companions) ->
-                    screening(tenant, repository, path, records, fallback, spool, probe, companions);
+                    screening(tenant, repository, path, records, fallback, spool, probe, companions, exchange);
             HardenedHitVerify hooks = new HardenedHitVerify(fallback.screening() == RepositoryDefinition.Screening.HARDEN,
                     gates(tenant, repository), holdDays.getAsInt(), hardeningBounds, passThrough, metadataOver, screen);
             new PullThroughCache(probe, hooks).serve(format, proxy, upstream, exchange, body);

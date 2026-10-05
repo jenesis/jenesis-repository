@@ -141,6 +141,24 @@ class ScreeningModeTest {
                 .as("one that sets no mode holds").isEmpty();
     }
 
+    @Test
+    void a_fill_served_through_an_outage_tells_the_client_its_screen_is_pending() throws IOException {
+        ComplianceGate gate = gate(UNREACHABLE, List.of());
+        ProxyScreenHooks hooks = ProxyScreenHooks.perTenant((_, _) -> gate, () -> 0, () -> false);
+        Map<String, String> admitted = new HashMap<>();
+        Map<String, String> clean = new HashMap<>();
+
+        hooks.forRequest("acme", exchange("ADMIT", admitted)).screenFetch(PATH, upstream(), store)
+                .fetch(URI.create("http://up" + PATH), Map.of());
+        ComplianceGate answering = gate(AdvisorySource.none(), List.of());
+        ProxyScreenHooks.perTenant((_, _) -> answering, () -> 0, () -> false)
+                .forRequest("acme", exchange("ADMIT", clean)).screenFetch(PATH, upstream(), store)
+                .fetch(URI.create("http://up" + PATH), Map.of());
+
+        assertThat(admitted).containsEntry(ProxyScreen.SCREEN_HEADER, ProxyScreen.SCREEN_PENDING);
+        assertThat(clean).as("a fill every feed answered for says nothing").doesNotContainKey(ProxyScreen.SCREEN_HEADER);
+    }
+
     private Optional<ProxyFormat.Fetched> fetch(ScreeningMode mode, ComplianceGate gate) throws IOException {
         return new ProxyScreen(gate, store, 0).screening(mode).wrap(upstream(), PATH)
                 .fetch(URI.create("http://up" + PATH), Map.of());
@@ -161,6 +179,11 @@ class ScreeningModeTest {
 
     /** A request into a repository whose screening mode is {@code mode}, or that sets none. */
     private static FormatExchange exchange(String mode) {
+        return exchange(mode, new HashMap<>());
+    }
+
+    /** As {@link #exchange(String)}, recording the response headers set on it into {@code headers}. */
+    private static FormatExchange exchange(String mode, Map<String, String> headers) {
         return new DetachedExchange() {
             @Override
             public String method() {
@@ -189,6 +212,7 @@ class ScreeningModeTest {
 
             @Override
             public void setResponseHeader(String name, String value) {
+                headers.put(name, value);
             }
 
             @Override

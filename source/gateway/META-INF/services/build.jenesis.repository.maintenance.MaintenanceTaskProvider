@@ -1,1 +1,2 @@
 build.jenesis.repository.gateway.MigrationRescreenTaskProvider
+build.jenesis.repository.gateway.PendingScreenTaskProvider

@@ -16,11 +16,13 @@ import build.jenesis.repository.compliance.MalformedArtifactException;
 import build.jenesis.repository.compliance.QualityInspector;
 import build.jenesis.repository.compliance.ScreeningMode;
 import build.jenesis.repository.compliance.Verdict;
+import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.inventory.HeldSubjects;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Checksums;
 
 /**
  * The proxy fetch firewall for any format's proxy leg, so a fetched artifact is screened rather than served unchecked -
@@ -89,6 +91,23 @@ public final class ProxyScreen {
     static final String ADMITTED_REASON = "Admitted on the checks that could answer, as the repository's screening "
             + "mode says, while an advisory feed cannot";
 
+    /** Where a copy served while a feed could not answer is marked: one {@link Properties} document per copy, named
+     *  by the digest of its path and carrying the path, so {@link PendingScreenTask} pages them without walking the
+     *  layout. */
+    static final String PENDING_ROOT = "screen-pending";
+
+    /** The marker of the copy at {@code path}. */
+    static String pendingKey(String path) {
+        return PENDING_ROOT + "/" + Checksums.sha256(path);
+    }
+
+    /** The response header a fill served while a feed could not answer carries, valued {@value #SCREEN_PENDING}: the
+     *  client is told the copy it was handed has not been asked of every feed yet. */
+    public static final String SCREEN_HEADER = "Jenesis-Screen";
+
+    /** The {@link #SCREEN_HEADER} value of a fill served while a feed could not answer. */
+    public static final String SCREEN_PENDING = "pending";
+
     /** The reason a finding the screen did not act on carries, under {@link ScreeningMode#RECORD}. */
     static final String RECORDED_REASON = "Recorded, not held: the repository's screening mode records what the "
             + "screen finds and holds none of it";
@@ -100,6 +119,9 @@ public final class ProxyScreen {
 
     /** What this screen does with what it could not find out and with what it found. */
     private final ScreeningMode mode;
+
+    /** Told when a copy is served while a feed could not answer - the request's response, where there is one. */
+    private final Runnable pendingNotice;
 
     /** Whether to withhold on an incomplete screen rather than serve with the fact recorded. */
     private final boolean withholdIncomplete;
@@ -116,22 +138,32 @@ public final class ProxyScreen {
     }
 
     public ProxyScreen(ComplianceGate gate, ArtifactStore store, int holdDays, boolean withholdIncomplete) {
-        this(gate, store, holdDays, withholdIncomplete, ScreeningMode.of(null));
+        this(gate, store, holdDays, withholdIncomplete, ScreeningMode.of(null), () -> {
+        });
     }
 
     private ProxyScreen(ComplianceGate gate, ArtifactStore store, int holdDays, boolean withholdIncomplete,
-                        ScreeningMode mode) {
+                        ScreeningMode mode, Runnable pendingNotice) {
         this.gate = gate;
         this.store = store;
         this.publication = new Publication(store);
         this.holdDays = holdDays;
         this.withholdIncomplete = withholdIncomplete;
         this.mode = Objects.requireNonNull(mode, "mode");
+        this.pendingNotice = Objects.requireNonNull(pendingNotice, "pendingNotice");
     }
 
     /** This screen deciding under {@code mode}, the screened repository's {@link ScreeningMode}. */
     public ProxyScreen screening(ScreeningMode mode) {
-        return new ProxyScreen(gate, store, holdDays, withholdIncomplete, mode);
+        return new ProxyScreen(gate, store, holdDays, withholdIncomplete, mode, pendingNotice);
+    }
+
+    /** This screen telling {@code exchange}'s response when it serves a copy a feed could not answer for, through
+     *  {@link #SCREEN_HEADER} - set before the fill's response commits, so it reaches the client with the copy. */
+    public ProxyScreen noticing(FormatExchange exchange) {
+        Objects.requireNonNull(exchange, "exchange");
+        return new ProxyScreen(gate, store, holdDays, withholdIncomplete, mode,
+                () -> exchange.setResponseHeader(SCREEN_HEADER, SCREEN_PENDING));
     }
 
     /** Wrap an upstream fetcher to screen its fetched artifact: a non-{@link Verdict#ALLOW} verdict becomes an empty
@@ -403,7 +435,7 @@ public final class ProxyScreen {
         List<String> reasons = new ArrayList<>(decided.reasons());
         reasons.add(ADMITTED_REASON + ": " + cause.getMessage());
         return new Screening(decided.verdict(), decided.coordinate(), reasons, decided.rules(), decided.complete(),
-                decided.floor(), true);
+                decided.floor(), true, true);
     }
 
     /** {@link ScreeningMode#RECORD}'s rule over a reached decision: it is lowered to its {@link Screening#floor} -
@@ -418,7 +450,7 @@ public final class ProxyScreen {
         List<String> reasons = new ArrayList<>(screening.reasons());
         reasons.add(RECORDED_REASON);
         return new Screening(screening.floor(), screening.coordinate(), reasons, screening.rules(),
-                screening.complete(), screening.floor(), true);
+                screening.complete(), screening.floor(), true, screening.pending());
     }
 
     /**
@@ -532,6 +564,26 @@ public final class ProxyScreen {
             new QuarantineLog(store).record(Instant.now(), path, screening.coordinate(), screening.verdict(),
                     screening.reasons(), screening.rules());
         }
+        if (screening.pending() && screening.verdict() == Verdict.ALLOW) {
+            // Served without the feed's answer: marked, so the pending re-screen asks again whatever the cadence of
+            // the passes that read the feeds. Written before the copy is cached, so no served copy lacks its marker; a
+            // marker whose copy never landed is cleared by the pass.
+            Properties marker = new Properties();
+            marker.setProperty("path", path);
+            ByteArrayOutputStream body = new ByteArrayOutputStream();
+            marker.store(new OutputStreamWriter(body, StandardCharsets.UTF_8), null);
+            store.write(pendingKey(path), new ByteArrayInputStream(body.toByteArray()));
+            pendingNotice.run();
+        }
+    }
+
+    /** Screen again the copy at {@code path} from its stored bytes, as a fill would have had the feeds answered:
+     *  for {@link PendingScreenTask}. Nothing is written - the caller acts on the decision - and a feed still unable
+     *  to answer leaves it {@link Screening#pending}. */
+    Screening rescreen(String path, InputStream body) throws IOException {
+        byte[] prefix = body.readNBytes(inspectionLimit());
+        boolean truncated = body.read() != -1;
+        return assess(path, prefix, null, truncated);
     }
 
     /** A screening outcome: the verdict, the coordinate the log names, the reasons behind a withholding and the rules
@@ -539,9 +591,9 @@ public final class ProxyScreen {
      *  allowed. Reused by the hardened proxy leg to carry its own decision and its named structural refusals. The
      *  {@code floor} is the verdict {@link ScreeningMode#RECORD} still enforces - what the deny-list decided - and
      *  {@code governed} says the repository's mode decided where the screen alone would not have, which is recorded
-     *  even when it serves. */
+     *  even when it serves, and {@code pending} that it was decided without a feed that could not answer. */
     record Screening(Verdict verdict, String coordinate, List<String> reasons, List<String> rules, boolean complete,
-                     Verdict floor, boolean governed) {
+                     Verdict floor, boolean governed, boolean pending) {
 
         Screening {
             reasons = List.copyOf(reasons);
@@ -550,7 +602,13 @@ public final class ProxyScreen {
 
         /** A screening no {@link ScreeningMode} lowers: its floor is its verdict. */
         Screening(Verdict verdict, String coordinate, List<String> reasons, List<String> rules, boolean complete) {
-            this(verdict, coordinate, reasons, rules, complete, verdict, false);
+            this(verdict, coordinate, reasons, rules, complete, verdict, false, false);
+        }
+
+        /** A screening reached with every feed answering, lowered by no mode until {@link #governed} says so. */
+        Screening(Verdict verdict, String coordinate, List<String> reasons, List<String> rules, boolean complete,
+                  Verdict floor, boolean governed) {
+            this(verdict, coordinate, reasons, rules, complete, floor, governed, false);
         }
 
         /** A screening reached over the whole artifact - a structural refusal or a drift alarm, which are decisions

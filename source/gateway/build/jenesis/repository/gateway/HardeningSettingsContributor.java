@@ -9,7 +9,8 @@ import build.jenesis.repository.settings.SettingsContributor;
  * Surfaces the hardening proxy's runtime dials so they render on the settings screens, {@code /api/settings} and the
  * CLI exactly when the gateway module is installed, and apply live (the next pass reads the current values). It is
  * the late-enablement migration re-screen sweep ({@link MigrationRescreenTaskProvider}): a switch that turns the
- * back-fill on and the cadence that paces it - and the repository mark that a repository's upstreams are internal
+ * back-fill on and the cadence that paces it - the cadence of the pending re-screen ({@link PendingScreenTaskProvider})
+ * - and the repository mark that a repository's upstreams are internal
  * ({@link GatePolicyProvider.Path#UPSTREAM_INTERNAL}), which decides the gate flavour its fetches are screened through.
  * The sweep's untrusted-upstream fetch bounds and the spool budget are
  * deploy-time resource dials bound from the environment (the {@code spool.*} keys), not UI settings, so they are not
@@ -33,6 +34,12 @@ public final class HardeningSettingsContributor implements SettingsContributor {
                                 + "hardened repository, and a late-flipped repository is verified fail-closed on every "
                                 + "read until the sweep reaches it.",
                         Setting.Kind.DURATION, MigrationRescreenTaskProvider.INTERVAL.fallbackText(), true).advanced(),
+                new Setting(PendingScreenTaskProvider.INTERVAL.key(), "Compliance", "Pending re-screen interval",
+                        "How often a copy served while an advisory feed could not answer is screened again. Only a "
+                                + "repository whose screening mode admits through an outage has such copies, and a "
+                                + "pass over one that has none is a single listing; the interval is how long a "
+                                + "recovered feed's answer waits to hold what it flags.",
+                        Setting.Kind.DURATION, PendingScreenTaskProvider.INTERVAL.fallbackText(), true).advanced(),
                 new Setting(GatePolicyProvider.Path.UPSTREAM_INTERNAL, "Proxy", "Internal upstream",
                         "Treat what this repository fetches from its upstreams as the organisation's own: another "
                                 + "instance it publishes to, reached over HTTP. A copy it fetches is judged as a "
