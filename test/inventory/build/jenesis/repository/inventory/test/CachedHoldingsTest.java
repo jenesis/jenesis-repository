@@ -152,6 +152,27 @@ class CachedHoldingsTest {
     }
 
     @Test
+    void every_holding_is_walked_as_the_kind_it_is_on_a_full_and_an_incremental_pass() throws IOException {
+        Stamp lastFull = new Stamp(store, "sweep-full");
+        lastFull.mark(NOW);
+        inventory().cache(ECO, "before", "1.0", UPSTREAM, NOW.minus(Duration.ofDays(1)));
+        inventory().cache(ECO, "after", "1.0", UPSTREAM, NOW.plus(Duration.ofHours(1)));
+        inventory().record(ECO, "released", "1.0", NOW.plus(Duration.ofHours(2)));
+
+        Map<String, Boolean> walked = new TreeMap<>();
+        inventory().eachHolding(held -> walked.put(held.coordinate(), held.cached()));
+        assertThat(walked).as("the whole-store walk yields every version with its kind")
+                .containsExactlyInAnyOrderEntriesOf(Map.of("before", true, "after", true, "released", false));
+
+        IncrementalPasses cadence = IncrementalPasses.over(store, "sweep", "sweep-passes", lastFull, key -> null);
+        assertThat(cadence.full()).isFalse();
+        Map<String, Boolean> recent = new TreeMap<>();
+        cadence.eachHolding(inventory(), held -> recent.put(held.coordinate(), held.cached()));
+        assertThat(recent).as("an incremental pass yields what was published or cached since, with its kind")
+                .containsExactlyInAnyOrderEntriesOf(Map.of("after", true, "released", false));
+    }
+
+    @Test
     void the_forward_repair_records_an_unrecorded_fill_as_a_copy_and_an_unrecorded_publish_as_a_release()
             throws IOException {
         link("cached-before", "1.0");

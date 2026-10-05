@@ -205,6 +205,12 @@ public final class IncrementalPasses {
     /** The copies cached since the last full pass, less the lookback, out of their newest-first index. */
     private void recentlyCached(StoreRepositoryInventory inventory, StoreRepositoryInventory.CoordinateVisitor visitor)
             throws IOException {
+        recentlyCachedHoldings(inventory, holding -> visitor.accept(new StoreRepositoryInventory.Coordinate(
+                holding.ecosystem(), holding.coordinate(), holding.version())));
+    }
+
+    private void recentlyCachedHoldings(StoreRepositoryInventory inventory,
+                                        StoreRepositoryInventory.HoldingVisitor visitor) throws IOException {
         Instant floor = since.orElseThrow().minus(lookback);
         String after = null;
         do {
@@ -213,11 +219,26 @@ public final class IncrementalPasses {
                 if (holding.at() != null && holding.at().isBefore(floor)) {
                     return;
                 }
-                visitor.accept(new StoreRepositoryInventory.Coordinate(
-                        holding.ecosystem(), holding.coordinate(), holding.version()));
+                visitor.accept(holding);
             }
             after = page.next();
         } while (after != null);
+    }
+
+    /**
+     * Every version the repository holds, as the {@link StoreRepositoryInventory.Holding} it is, on a full pass; the
+     * releases published and the copies cached since the last full pass otherwise. The leg a pass rides that judges a
+     * release and a cached copy through different gate flavours, in one walk where {@link #releases} and
+     * {@link #cached} would take two.
+     */
+    public void eachHolding(StoreRepositoryInventory inventory, StoreRepositoryInventory.HoldingVisitor visitor)
+            throws IOException {
+        if (full) {
+            inventory.eachHolding(visitor);
+            return;
+        }
+        recent(inventory, release -> visitor.accept(StoreRepositoryInventory.Holding.of(release)));
+        recentlyCachedHoldings(inventory, visitor);
     }
 
     /**
