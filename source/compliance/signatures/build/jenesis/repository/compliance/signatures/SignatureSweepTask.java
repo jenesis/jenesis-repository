@@ -3,6 +3,7 @@ package build.jenesis.repository.compliance.signatures;
 import module java.base;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.GatePolicyProvider;
+import build.jenesis.repository.compliance.ScreeningMode;
 import build.jenesis.repository.compliance.SignatureQuality;
 import build.jenesis.repository.compliance.SignerIdentity;
 import build.jenesis.repository.compliance.Verdict;
@@ -72,6 +73,9 @@ public final class SignatureSweepTask implements MaintenanceTask {
     public void repository(RepositoryContext context) throws IOException {
         if (!enabled(context.config())) {
             return;   // switched off since it was scheduled: write nothing this pass
+        }
+        if (ScreeningMode.of(context.config()) == ScreeningMode.RECORD) {
+            return;   // the repository records what the screen finds and holds none of it
         }
         ArtifactStore store = context.store();
         SignaturePolicy published = SignaturePolicy.from(context.config());

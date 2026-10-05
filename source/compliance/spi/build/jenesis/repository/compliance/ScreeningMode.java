@@ -25,7 +25,9 @@ public enum ScreeningMode {
     ADMIT,
 
     /** Never hold on what the screen found or could not find: every finding is recorded and the artifact is served,
-     *  the audit mode a repository runs while screening is rolled out over what it already serves. Only the deny-list
+     *  the audit mode a repository runs while screening is rolled out over what it already serves. The passes that
+     *  hold retroactively - the known-exploited enforcement, the licence and signature sweeps - place no hold either,
+     *  leaving what they found to the findings it is recorded as. Only the deny-list
      *  still bites, so an artifact no check could decide at all - the deny-list's answer unknown with the rest - is
      *  held as in {@link #ADMIT}. */
     RECORD;
