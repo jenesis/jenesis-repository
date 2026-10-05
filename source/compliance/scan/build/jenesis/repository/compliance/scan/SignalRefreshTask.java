@@ -2,6 +2,7 @@ package build.jenesis.repository.compliance.scan;
 
 import module java.base;
 import module org.slf4j;
+import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.Freshness;
 import build.jenesis.repository.compliance.RefreshableSource;
 import build.jenesis.repository.store.Requests;
@@ -20,6 +21,10 @@ import build.jenesis.repository.maintenance.RepositoryContext;
  * draws. A source inside its own refresh window returns without a request, so a short interval costs a store read
  * rather than a vendor call.
  *
+ * <p>It also draws what each advisory feed that publishes its changes ({@link AdvisorySource.Changes}) changed since its
+ * last draw into that feed's change log, which the scan pass reads to ask again about the packages whose records
+ * changed.
+ *
  * <p><strong>A failed draw fails the pass</strong> (clause 4): the source is named in an {@link IOException} the
  * scheduler logs and counts, while the prior-good catalogue keeps serving.
  */
@@ -33,10 +38,18 @@ public final class SignalRefreshTask implements MaintenanceTask {
     private final Duration interval;
     /** The enabled mirroring sources, keyed by signal name, resolved once since a signal source carries no tenant. */
     private final Map<String, RefreshableSource> sources;
+    /** The enabled advisory feeds that publish their changes, keyed by signal name. */
+    private final Map<String, AdvisorySource.Changes> changes;
 
     public SignalRefreshTask(Duration interval, Map<String, RefreshableSource> sources) {
+        this(interval, sources, Map.of());
+    }
+
+    public SignalRefreshTask(Duration interval, Map<String, RefreshableSource> sources,
+                             Map<String, AdvisorySource.Changes> changes) {
         this.interval = interval;
         this.sources = Map.copyOf(sources);
+        this.changes = Map.copyOf(changes);
     }
 
     @Override
@@ -95,6 +108,18 @@ public final class SignalRefreshTask implements MaintenanceTask {
                 // below.
                 LOGGER.warn("Could not commit the {} signal's snapshot", source.getKey(), e);
                 failed.add(source.getKey() + " (" + e + ")");
+            }
+        }
+        for (Map.Entry<String, AdvisorySource.Changes> feed : new TreeMap<>(changes).entrySet()) {
+            try {
+                int named = feed.getValue().drawChanges();
+                if (named > 0) {
+                    LOGGER.info("The {} feed changed records of {} package(s) since its last draw", feed.getKey(),
+                            named);
+                }
+            } catch (Throwable e) {
+                LOGGER.warn("Could not draw what the {} feed changed", feed.getKey(), e);
+                failed.add(feed.getKey() + " changes (" + e + ")");
             }
         }
         if (!failed.isEmpty()) {

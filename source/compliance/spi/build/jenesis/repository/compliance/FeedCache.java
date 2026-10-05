@@ -160,6 +160,11 @@ public final class FeedCache<T> {
         return cached != null && clock.millis() < cached.until() ? Optional.of((T) cached.value()) : Optional.empty();
     }
 
+    /** Drop every held answer whose key {@code stale} matches, so the next ask for it loads afresh. */
+    public void forget(Predicate<String> stale) {
+        cache.keySet().removeIf(stale);
+    }
+
     /** Hold {@code value} as {@code key}'s answer, drawn by a load that answered several keys at once: it is served
      *  for the window exactly as a load of that key would be, and stamps the key as fetched. */
     public void put(String key, T value) {

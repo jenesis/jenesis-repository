@@ -14,6 +14,7 @@ import build.jenesis.repository.feed.FeedRequest;
 import build.jenesis.repository.feed.FeedResponse;
 import build.jenesis.repository.feed.FeedTransport;
 import build.jenesis.repository.feed.Osv;
+import build.jenesis.repository.store.ArtifactStore;
 import us.springett.cvss.Cvss;
 
 /**
@@ -39,8 +40,12 @@ import us.springett.cvss.Cvss;
  * the cache does not hold, a thousand to a request, and fetches each record the answers name once from
  * {@code /v1/vulns/<id>}, keyed by its modification instant so a revised record is fetched again; every answer lands in
  * the same cache a single query fills. A query OSV answers only in part is asked on its own.
+ *
+ * <p>It publishes what changed ({@link AdvisorySource.Changes}): each ecosystem's change list in OSV's export, drawn
+ * into a log in the feed's signal space ({@link OsvChanges}), from which a scan asks again only about the packages
+ * whose records changed.
  */
-public final class OsvAdvisorySource implements AdvisorySource.Batched {
+public final class OsvAdvisorySource implements AdvisorySource.Batched, AdvisorySource.Changes {
 
     /** How long one coordinate version's answer is served before OSV is asked again. */
     private static final Duration TTL = Duration.ofHours(1);
@@ -58,6 +63,14 @@ public final class OsvAdvisorySource implements AdvisorySource.Batched {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private static final URI DEFAULT_ENDPOINT = URI.create("https://api.osv.dev");
+
+    /** Where OSV publishes its export, each ecosystem's change list among it. */
+    static final URI DEFAULT_EXPORT = URI.create("https://osv-vulnerabilities.storage.googleapis.com/");
+
+    /** The space of a source built with none: a draw or a read of the log is a wiring error there. */
+    private static final Supplier<ArtifactStore> NO_SPACE = () -> {
+        throw new IllegalStateException("This OSV source was built without a signal space to keep its change log in");
+    };
 
     /** A connect timeout, so a black-holed host (a dropped SYN, no RST) fails the fetch rather than parking the gate
      *  thread. */
@@ -79,34 +92,44 @@ public final class OsvAdvisorySource implements AdvisorySource.Batched {
     private final URI vulns;
     private final FeedCache<List<Advisory>> cache;
     private final FeedCache<JsonNode> records;
+    private final OsvChanges changes;
 
     public OsvAdvisorySource() {
-        this(FeedClient.of(FEED, FeedTransport.jdk(CONNECT_TIMEOUT), POLICY), DEFAULT_ENDPOINT, Clock.systemUTC());
+        this(FeedClient.of(FEED, FeedTransport.jdk(CONNECT_TIMEOUT), POLICY), DEFAULT_ENDPOINT, DEFAULT_EXPORT,
+                NO_SPACE, Clock.systemUTC());
     }
 
     public OsvAdvisorySource(Endpoint endpoint) {
-        this(FeedClient.of(FEED, transport(endpoint), POLICY), DEFAULT_ENDPOINT, Clock.systemUTC());
+        this(FeedClient.of(FEED, transport(endpoint), POLICY), DEFAULT_ENDPOINT, DEFAULT_EXPORT, NO_SPACE,
+                Clock.systemUTC());
     }
 
-    private OsvAdvisorySource(FeedClient client, URI base, Clock clock) {
+    private OsvAdvisorySource(FeedClient client, URI base, URI export, Supplier<ArtifactStore> space, Clock clock) {
         this.client = client;
         this.query = base.resolve("/v1/query");
         this.querybatch = base.resolve("/v1/querybatch");
         this.vulns = base.resolve("/v1/vulns/");
         this.cache = FeedCache.failClosed("OSV", this::query, TTL, clock);
         this.records = FeedCache.failClosed("OSV", this::record, TTL, clock);
+        this.changes = new OsvChanges(client, export, vulns, space, clock);
     }
 
     /** A source answering every request through {@code exchange}, as a 200 the client bounds and pages as a live
      *  one. */
     public static OsvAdvisorySource exchanging(Exchange exchange) {
+        return exchanging(exchange, NO_SPACE, Clock.systemUTC());
+    }
+
+    /** As {@link #exchanging(Exchange)}, keeping its change log in {@code space} on {@code clock}. */
+    public static OsvAdvisorySource exchanging(Exchange exchange, Supplier<ArtifactStore> space, Clock clock) {
         return new OsvAdvisorySource(FeedClient.of(FEED, (request, timeout) -> FeedResponse.of(200,
-                exchange.answer(request)), POLICY), DEFAULT_ENDPOINT, Clock.systemUTC());
+                exchange.answer(request)), POLICY), DEFAULT_ENDPOINT, DEFAULT_EXPORT, space, clock);
     }
 
     /** The production form, over the deployment clock the reading's retry window is measured on. */
-    public static OsvAdvisorySource over(URI base, Clock clock) {
-        return new OsvAdvisorySource(FeedClient.of(FEED, FeedTransport.jdk(CONNECT_TIMEOUT), POLICY), base, clock);
+    public static OsvAdvisorySource over(URI base, URI export, Supplier<ArtifactStore> space, Clock clock) {
+        return new OsvAdvisorySource(FeedClient.of(FEED, FeedTransport.jdk(CONNECT_TIMEOUT), POLICY), base, export,
+                space, clock);
     }
 
     @Override
@@ -159,6 +182,24 @@ public final class OsvAdvisorySource implements AdvisorySource.Batched {
             }
         }
         return List.copyOf(answers);
+    }
+
+    @Override
+    public int drawChanges() throws IOException {
+        return changes.draw();
+    }
+
+    @Override
+    public AdvisorySource.ChangeLog changes(long after) throws IOException {
+        return changes.changes(after);
+    }
+
+    /** Every held answer for a version of {@code packages} - the key's ecosystem and coordinate, ahead of its version. */
+    @Override
+    public void forget(Set<AdvisorySource.Package> packages) {
+        Set<String> stale = new HashSet<>();
+        packages.forEach(named -> stale.add(named.ecosystem() + " " + named.coordinate()));
+        cache.forget(key -> stale.contains(key.substring(0, Math.max(0, key.lastIndexOf(' ')))));
     }
 
     /** One record in full, the record cache's loader; the key is the id and the modification instant the batch named,
