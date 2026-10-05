@@ -508,6 +508,11 @@ public interface QualityInspector {
         }
 
         @Override
+        public Optional<URI> origin() {
+            return delegate.origin();
+        }
+
+        @Override
         public Optional<ArtifactDescriptor> described(String path) throws IOException {
             return delegate.described(path);
         }
@@ -737,6 +742,11 @@ public interface QualityInspector {
             default Optional<Bounded> fetchRecorded(String key, int limit) throws IOException {
                 return Optional.empty();
             }
+
+            @Override
+            default Optional<URI> origin() {
+                return Optional.empty();
+            }
         }
 
         /**
@@ -747,6 +757,14 @@ public interface QualityInspector {
          * decorating another its delegate's.
          */
         UnaryOperator<String> settings();
+
+        /**
+         * Where the bytes under inspection were fetched from: the upstream URL of a proxied fill, which can say what the
+         * request path does not - the release an Alpine repository directory belongs to - and empty for a publish, a
+         * re-inspection of stored bytes whose origin is not recorded, or a lookup with no fetch behind it. Read only
+         * for what a name means; never fetched.
+         */
+        Optional<URI> origin();
 
         /**
          * The coordinate the format claiming {@code path} gives it, in the repository this inspection reads from - or

@@ -165,6 +165,12 @@ public final class LicenseDerivation {
             return ComplianceSettings.lookup(store);
         }
 
+        /** Stored bytes, whose origin this derivation does not read. */
+        @Override
+        public Optional<URI> origin() {
+            return Optional.empty();
+        }
+
         /** The coordinate the claiming format gives the path in this repository. */
         @Override
         public Optional<ArtifactDescriptor> described(String path) {

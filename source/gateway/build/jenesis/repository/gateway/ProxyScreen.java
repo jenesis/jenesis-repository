@@ -114,7 +114,7 @@ public final class ProxyScreen {
 
     /** Whether to withhold on an incomplete screen rather than serve with the fact recorded. */
     private final boolean withholdIncomplete;
-    private final QualityInspector.Lookup siblings = new SiblingLookup();
+    private final QualityInspector.Lookup siblings = new SiblingLookup(null);
 
     /** What the pull-through fetched beside the artifact being screened, by the path it is kept at; empty on every
      *  leg that fetched none. Read by {@link SiblingLookup} ahead of the store. */
@@ -281,7 +281,7 @@ public final class ProxyScreen {
                         ? new SequenceInputStream(new ByteArrayInputStream(new byte[]{(byte) next}), body)
                         : body;
                 Screening screening = unversioned(path,
-                        assess(path, prefix, released(path, response.header("last-modified")), truncated));
+                        assess(path, prefix, released(path, response.header("last-modified")), truncated, url));
                 if (screening.verdict() == Verdict.ALLOW) {
                     log(path, screening);
                     return Optional.of(new ProxyFormat.Download(response.status(),
@@ -315,7 +315,8 @@ public final class ProxyScreen {
 
     Verdict screen(String path, byte[] body, Instant lastModified, String upstream) throws IOException {
         // The buffered fetch body is the COMPLETE document, never a bounded prefix, so it is never truncated.
-        Screening screening = unversioned(path, assess(path, body, versioned(path) ? lastModified : null, false));
+        Screening screening = unversioned(path, assess(path, body, versioned(path) ? lastModified : null, false,
+                upstream == null ? null : URI.create(upstream)));
         if (screening.verdict() == Verdict.QUARANTINE) {
             quarantine(path, new ByteArrayInputStream(body), upstream);
         }
@@ -371,10 +372,11 @@ public final class ProxyScreen {
 
     /** Inspect a bounded body and reach a verdict - the decision half of screening, without any store write, so the
      *  streaming {@code download} path can act on the verdict (stream through, quarantine, or reject) itself. */
-    private Screening assess(String path, byte[] body, Instant lastModified, boolean truncated) throws IOException {
+    private Screening assess(String path, byte[] body, Instant lastModified, boolean truncated, URI origin)
+            throws IOException {
         List<ComplianceGate.Subject> subjects;
         try {
-            subjects = inspect(path, body);
+            subjects = inspect(path, body, origin);
         } catch (MalformedArtifactException malformed) {
             // A proxied artifact an inspector claimed but could not parse (a corrupt .nupkg/.gem/.rpm/.deb pulled from
             // upstream) must never 500 the fetch nor be served silently. Screen it from its
@@ -623,7 +625,7 @@ public final class ProxyScreen {
     Screening rescreen(String path, InputStream body) throws IOException {
         byte[] prefix = body.readNBytes(inspectionLimit());
         boolean truncated = body.read() != -1;
-        return assess(path, prefix, null, truncated);
+        return assess(path, prefix, null, truncated, null);
     }
 
     /** A screening outcome: the verdict, the coordinate the log names, the reasons behind a withholding and the rules
@@ -765,7 +767,8 @@ public final class ProxyScreen {
                 : inspector;
     }
 
-    List<ComplianceGate.Subject> inspect(String path, byte[] body) throws IOException {
+    List<ComplianceGate.Subject> inspect(String path, byte[] body, URI origin) throws IOException {
+        QualityInspector.Lookup lookup = origin == null ? siblings : new SiblingLookup(origin);
         // Every inspector that claims the path screens the fetched body, not just the first to match, so the content
         // scanner (the embedded-secret dimension) composes with the format inspector; InspectionMerge keeps the
         // package subject ahead of any content-scan subject so the quarantine log names the coordinate.
@@ -773,7 +776,7 @@ public final class ProxyScreen {
         for (QualityInspector claimed : INSPECTORS) {
             if (claimed.handles(path)) {
                 QualityInspector inspector = trusting(claimed);
-                subjects.addAll(attributed(inspector, path, () -> inspector.inspectArtifact(path, body, siblings)));
+                subjects.addAll(attributed(inspector, path, () -> inspector.inspectArtifact(path, body, lookup)));
             }
         }
         return InspectionMerge.order(subjects);
@@ -784,7 +787,7 @@ public final class ProxyScreen {
      * inspector screens the whole body via {@link QualityInspector#inspectArtifact(String, QualityInspector.Content,
      * QualityInspector.Lookup)} - a full-body-tier inspector (the secret content scanner) reading past the bounded
      * prefix so a secret sitting beyond the 32 MiB window is still caught, a format inspector default-bridged to the
-     * same front prefix the {@code byte[]} leg hands it. Mirrors {@link #inspect(String, byte[])} but over a
+     * same front prefix the {@code byte[]} leg hands it. Mirrors {@link #inspect(String, byte[], URI)} but over a
      * re-openable spool handle rather than a heap {@code byte[]}; a {@link MalformedArtifactException} still surfaces
      * for the hardened leg to refuse (fail-closed), exactly as on the {@code byte[]} path.
      *
@@ -802,14 +805,16 @@ public final class ProxyScreen {
      * inspectors stopped is named in the log line, because "the screen was partial" is a fact an operator can only act
      * on once they know which dimension went blind.
      */
-    QualityInspector.Inspection inspectFullBody(String path, QualityInspector.Content body) throws IOException {
+    QualityInspector.Inspection inspectFullBody(String path, QualityInspector.Content body, URI origin)
+            throws IOException {
+        QualityInspector.Lookup lookup = origin == null ? siblings : new SiblingLookup(origin);
         List<ComplianceGate.Subject> subjects = new ArrayList<>();
         List<String> boundStopped = new ArrayList<>();
         for (QualityInspector claimed : INSPECTORS) {
             if (claimed.handles(path)) {
                 QualityInspector inspector = trusting(claimed);
                 QualityInspector.Inspection inspection = attributed(inspector, path,
-                        () -> inspector.inspectArtifact(path, body, siblings));
+                        () -> inspector.inspectArtifact(path, body, lookup));
                 subjects.addAll(inspection.subjects());
                 if (!inspection.complete()) {
                     boundStopped.add(inspector.getClass().getSimpleName());
@@ -868,6 +873,18 @@ public final class ProxyScreen {
      *  {@code AttestationInspector}'s bounded call is written to avoid. Both legs are implemented against the store;
      *  neither is derived from the other. */
     private final class SiblingLookup implements QualityInspector.Lookup {
+
+        /** The upstream URL the screened bytes were fetched from, or {@code null} where none is known. */
+        private final URI origin;
+
+        SiblingLookup(URI origin) {
+            this.origin = origin;
+        }
+
+        @Override
+        public Optional<URI> origin() {
+            return Optional.ofNullable(origin);
+        }
 
         /** The settings the screened repository's store carries. */
         @Override

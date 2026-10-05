@@ -661,7 +661,8 @@ public final class HardenedScreen {
         List<VerdictSection.Validator> validators = screen.validators(path);
         QualityInspector.Inspection inspection;
         try {
-            inspection = screen.inspectFullBody(path, body);
+            inspection = screen.inspectFullBody(path, body, LOCAL_SOURCE.equals(source) || source == null ? null
+                    : URI.create(source));
         } catch (MalformedArtifactException unparseable) {
             // Hardened posture: an inspector claimed the body but could not parse it is REFUSED (recorded, named), not
             // waved down to a path-derived deny-list check the way the lenient proxy screen falls back.

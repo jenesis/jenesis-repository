@@ -95,13 +95,42 @@ public final class AdvisedNameBackfill implements WalkConsumer {
                 continue;
             }
             for (ComplianceGate.Subject subject : inspector.inspectArtifact(served.get(), content,
-                    QualityInspector.Lookup.none())) {
+                    fetchedFrom(holding.get().upstream()))) {
                 if (!subject.contentScan() && subject.advised() != null) {
                     asked = subject.advised();
                 }
             }
         }
         inventory.advised(version.ecosystem(), version.coordinate(), version.version(), asked, Instant.now());
+    }
+
+    /** A lookup with no siblings whose origin is the upstream the copy was cached from, which can name what its path
+     *  does not - an Alpine copy's release. */
+    private static QualityInspector.Lookup fetchedFrom(String upstream) {
+        Optional<URI> origin;
+        try {
+            origin = upstream == null || upstream.isBlank() ? Optional.empty() : Optional.of(URI.create(upstream));
+        } catch (IllegalArgumentException unreadable) {
+            origin = Optional.empty();
+        }
+        Optional<URI> from = origin;
+        return new QualityInspector.Lookup.Detached() {
+
+            @Override
+            public Optional<byte[]> fetch(String path) {
+                return Optional.empty();
+            }
+
+            @Override
+            public Optional<Bounded> fetchBounded(String path, int limit) {
+                return Optional.empty();
+            }
+
+            @Override
+            public Optional<URI> origin() {
+                return from;
+            }
+        };
     }
 
     /** The version a delivered path is a file of: a blobs-namespace pointer key as its layout names it, a served path
