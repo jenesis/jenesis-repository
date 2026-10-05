@@ -133,10 +133,12 @@ public final class ProvenanceClient extends ClientCalls {
 
     /** A version's closure as the API answers it: {@code state} is {@code RESOLVED}, {@code PARTIAL},
      *  {@code UNDECLARED}, {@code PENDING} (a release not yet resolved) or {@code CACHED} (a copy with no closure of its
-     *  own); {@code resolved} and {@code source} - {@code RESOLVED} from what the repositories hold, {@code BILL} from
-     *  the bill the version carries - are {@code null} where nothing is resolved. */
+     *  own); {@code resolved}, {@code kind} - {@code BILL} the bill the version carries, {@code RESOLVER} an ecosystem's
+     *  resolver, {@code SCANNER} a scanner, {@code DECLARATIONS} the walk over declarations - and {@code source}, the
+     *  producing source's name, are {@code null} where nothing is resolved. */
     public record Closure(String repository, String ecosystem, String coordinate, String version, String state,
-                          String resolved, String source, boolean truncated, List<ClosureComponent> components,
+                          String resolved, String kind, String source, boolean truncated,
+                          List<ClosureComponent> components,
                           List<ClosureCut> cuts) {
     }
 

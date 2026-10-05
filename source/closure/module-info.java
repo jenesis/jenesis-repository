@@ -9,12 +9,12 @@
  * <p>The closure is a section of the version's document ({@link build.jenesis.repository.closure.ClosureSection}),
  * resolved off the request path by a pass ({@link build.jenesis.repository.closure.ClosureTask}) that visits every
  * release without one, a release published late and one published before the setting was on alike, and asked for
- * per repository by {@code closure-resolution}. What differs per ecosystem is evaluating a requirement, which a
- * discovered {@link build.jenesis.repository.closure.RequirementGrammar} does, and - for an ecosystem whose
- * dependencies are not read off one manifest - the walk itself, which a discovered
- * {@link build.jenesis.repository.closure.EcosystemClosure} takes over. A release carrying a bill of materials that
- * names its closure - published beside it or embedded in its archive - is taken as its build resolved it
- * ({@link build.jenesis.repository.closure.CarriedBill}) before either walk.
+ * per repository by {@code closure-resolution}. How a closure is produced is a discovered
+ * {@link build.jenesis.repository.closure.ClosureSource}, each serving the ecosystems it declares and asked in order -
+ * the bill a release carries ({@link build.jenesis.repository.closure.CarriedBill}), an ecosystem's own resolver, a
+ * scanner, and last the walk over declarations ({@link build.jenesis.repository.closure.DeclaredClosure}), the first
+ * answer winning; this module provides the first and the last. Evaluating a requirement in the walk is a discovered
+ * {@link build.jenesis.repository.closure.RequirementGrammar}.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -33,7 +33,9 @@ module build.jenesis.repository.closure {
     requires org.slf4j;
     exports build.jenesis.repository.closure;
     uses build.jenesis.repository.closure.RequirementGrammar;
-    uses build.jenesis.repository.closure.EcosystemClosure;
+    uses build.jenesis.repository.closure.ClosureSource;
+    provides build.jenesis.repository.closure.ClosureSource
+            with build.jenesis.repository.closure.CarriedBill, build.jenesis.repository.closure.DeclaredClosure;
     provides build.jenesis.repository.maintenance.MaintenanceTaskProvider
             with build.jenesis.repository.closure.ClosureTaskProvider;
     provides build.jenesis.repository.settings.SettingsContributor

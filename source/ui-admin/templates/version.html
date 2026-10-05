@@ -161,8 +161,8 @@
             in a recipe that is a program - so it has no closure to resolve, which is not the same as an empty
             one.</small></p>
         <th:block th:if="${detail.closure != null and detail.closure.status().name() != 'UNDECLARED'}">
-            <p><small th:if="${detail.closure.source().name() == 'BILL'}" th:text="|${detail.closure.components().size()} component(s) the bill of materials this version carries names, as its build resolved them, ${detail.closure.cuts().size()} not held here.|">12 components from the version's bill, 1 not held here.</small><small
-                    th:unless="${detail.closure.source().name() == 'BILL'}" th:text="|${detail.closure.components().size()} component(s) resolved from what this repository and the repositories its fallbacks name hold, ${detail.closure.cuts().size()} unresolved.|">12 components resolved, 1 unresolved.</small>
+            <p><small th:if="${detail.closure.kind().name() == 'BILL'}" th:text="|${detail.closure.components().size()} component(s) the bill of materials this version carries names, as its build resolved them, ${detail.closure.cuts().size()} not held here.|">12 components from the version's bill, 1 not held here.</small><small
+                    th:unless="${detail.closure.kind().name() == 'BILL'}" th:text="|${detail.closure.components().size()} component(s) resolved from what this repository and the repositories its fallbacks name hold, ${detail.closure.cuts().size()} unresolved.|">12 components resolved, 1 unresolved.</small>
                 <span th:if="${detail.closure.status().name() == 'PARTIAL'}" class="app-badge app-badge--warn">partial</span></p>
             <table class="app-list" th:unless="${detail.closure.components().isEmpty()}">
                 <thead>

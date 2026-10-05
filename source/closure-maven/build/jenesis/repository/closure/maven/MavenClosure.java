@@ -4,7 +4,7 @@ import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.closure.ClosureSection;
 import build.jenesis.repository.closure.ClosureWalk;
-import build.jenesis.repository.closure.EcosystemClosure;
+import build.jenesis.repository.closure.ClosureSource;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
@@ -47,7 +47,10 @@ import org.eclipse.aether.util.repository.SimpleArtifactDescriptorPolicy;
  * never asked. A POM the repository does not hold, or holds only for review, is a cut, and so is a range no held
  * version satisfies; what was collected besides is kept. A release with no POM is not this resolver's to answer.
  */
-public final class MavenClosure implements EcosystemClosure {
+public final class MavenClosure implements ClosureSource {
+
+    /** The source's name. */
+    public static final String NAME = "maven-resolver";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MavenClosure.class);
 
@@ -64,13 +67,24 @@ public final class MavenClosure implements EcosystemClosure {
     static final int LARGEST_POM = 4 * 1024 * 1024;
 
     @Override
-    public String ecosystem() {
-        return "Maven";
+    public String name() {
+        return NAME;
+    }
+
+    /** Maven alone: the resolver reads POMs, and no other ecosystem's releases are described by one. */
+    @Override
+    public Set<String> ecosystems() {
+        return Set.of("Maven");
     }
 
     @Override
-    public Optional<ClosureSection.Closure> resolve(ClosureWalk walk, String coordinate, String version,
-                                                    Instant now) throws IOException {
+    public Kind kind() {
+        return Kind.RESOLVER;
+    }
+
+    @Override
+    public Optional<ClosureSection.Closure> resolve(ClosureWalk walk, String ecosystem, String coordinate,
+                                                    String version, Instant now) throws IOException {
         String[] ga = coordinate.split(":");
         if (ga.length != 2) {
             return Optional.empty();
@@ -130,7 +144,7 @@ public final class MavenClosure implements EcosystemClosure {
             return new ClosureSection.Closure(ClosureSection.Status.PARTIAL, List.of(),
                     List.of(new ClosureSection.Cut(root.getGroupId() + ":" + root.getArtifactId(), root.getVersion(),
                             "its POM could not be read: " + unreadable.getMessage())), false, now,
-                    ClosureSection.Source.RESOLVED);
+                    Kind.RESOLVER, NAME);
         } finally {
             system.shutdown();
         }
@@ -170,7 +184,7 @@ public final class MavenClosure implements EcosystemClosure {
         }
         return new ClosureSection.Closure(cuts.isEmpty() && !truncated ? ClosureSection.Status.RESOLVED
                 : ClosureSection.Status.PARTIAL, components, cuts, truncated, now,
-                ClosureSection.Source.RESOLVED);
+                Kind.RESOLVER, NAME);
     }
 
     /** A collection failure as the cut it is: an unsatisfied range names its dependency and its range. */

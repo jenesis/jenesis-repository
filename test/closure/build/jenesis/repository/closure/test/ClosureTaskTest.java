@@ -3,8 +3,9 @@ package build.jenesis.repository.closure.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.closure.ClosureSection;
+import build.jenesis.repository.closure.ClosureSource;
 import build.jenesis.repository.closure.ClosureTask;
-import build.jenesis.repository.compliance.QualityInspector;
+import build.jenesis.repository.closure.ClosureWalk;
 import build.jenesis.repository.definitions.RoutingSettingsContributor;
 import build.jenesis.repository.inventory.DependencySection;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
@@ -110,11 +111,58 @@ class ClosureTaskTest {
         pass(null, NOW);
 
         assertThat(closure().orElseThrow()).satisfies(closure -> {
-            assertThat(closure.source()).as("the bill, not the declared dependencies")
-                    .isEqualTo(ClosureSection.Source.BILL);
+            assertThat(closure.kind()).as("the bill, not the declared dependencies")
+                    .isEqualTo(ClosureSource.Kind.BILL);
             assertThat(closure.cuts()).extracting(ClosureSection.Cut::coordinate)
                     .containsExactlyInAnyOrder("org.dep:a", "org.dep:b");
         });
+    }
+
+    /** A source of {@code kind} serving {@code ecosystems} that records being asked and answers {@code answer}. */
+    private static ClosureSource source(String name, ClosureSource.Kind kind, Set<String> ecosystems,
+                                        Optional<ClosureSection.Closure> answer, List<String> asked) {
+        return new ClosureSource() {
+            @Override
+            public String name() {
+                return name;
+            }
+
+            @Override
+            public Set<String> ecosystems() {
+                return ecosystems;
+            }
+
+            @Override
+            public Kind kind() {
+                return kind;
+            }
+
+            @Override
+            public Optional<ClosureSection.Closure> resolve(ClosureWalk walk, String ecosystem, String coordinate,
+                                                            String version, Instant now) {
+                asked.add(name);
+                return answer;
+            }
+        };
+    }
+
+    @Test
+    void the_first_source_serving_the_ecosystem_that_answers_is_the_closure() throws IOException {
+        List<String> asked = new ArrayList<>();
+        ClosureSection.Closure resolved = new ClosureSection.Closure(ClosureSection.Status.RESOLVED, List.of(),
+                List.of(), false, NOW, ClosureSource.Kind.RESOLVER, "resolver");
+        UnitFailures failures = new UnitFailures("the closure pass", "nothing");
+        new ClosureTask(Duration.ofMinutes(5), List.of(
+                source("npm-only", ClosureSource.Kind.BILL, Set.of("npm"), Optional.of(resolved), asked),
+                source("no-bill", ClosureSource.Kind.BILL, Set.of("Maven"), Optional.empty(), asked),
+                source("resolver", ClosureSource.Kind.RESOLVER, Set.of("Maven"), Optional.of(resolved), asked),
+                source("walk", ClosureSource.Kind.DECLARATIONS, Set.of("Maven"), Optional.of(resolved), asked)))
+                .repository(context("releases", Map.of(), null, NOW, failures));
+        failures.rethrow();
+
+        assertThat(asked).as("a source not serving Maven is never asked, and none after the first answer")
+                .containsExactly("no-bill", "resolver");
+        assertThat(closure().orElseThrow().source()).isEqualTo("resolver");
     }
 
     private Optional<ClosureSection.Closure> closure() throws IOException {
@@ -127,7 +175,7 @@ class ClosureTaskTest {
 
     private void pass(String repository, Map<String, String> config, String setting, Instant now) throws IOException {
         UnitFailures failures = new UnitFailures("the closure pass", "nothing");
-        new ClosureTask(Duration.ofMinutes(5), QualityInspector.all()).repository(context(repository, config, setting,
+        new ClosureTask(Duration.ofMinutes(5), ClosureSource.installed()).repository(context(repository, config, setting,
                 now, failures));
         failures.rethrow();
     }

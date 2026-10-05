@@ -3,6 +3,7 @@ package build.jenesis.repository.closure.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.closure.ClosureSection;
+import build.jenesis.repository.closure.ClosureSource;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.metadata.MetadataProvider;
 import build.jenesis.repository.metadata.MetadataStore;
@@ -46,7 +47,7 @@ class ClosureAnswerTest {
         ClosureSection.Closure partial = new ClosureSection.Closure(ClosureSection.Status.PARTIAL,
                 List.of(new ClosureSection.Component("org.dep:a", "1.1", true, 1, "releases")),
                 List.of(new ClosureSection.Cut("org.dep:gone", "2.0", "not held by this repository")), false, NOW,
-                ClosureSection.Source.RESOLVED);
+                ClosureSource.Kind.DECLARATIONS, "declarations");
         metadata.mutate("Maven", "org.acme:app", "1.0", ClosureSection.TAG, ClosureSection.record(partial));
 
         assertThat(answer("org.acme:app", "1.0")).hasValueSatisfying(answer -> {
@@ -61,7 +62,7 @@ class ClosureAnswerTest {
         inventory.record("Maven", "org.acme:blob", "1.0", NOW);
         metadata.mutate("Maven", "org.acme:blob", "1.0", ClosureSection.TAG, ClosureSection.record(
                 new ClosureSection.Closure(ClosureSection.Status.UNDECLARED, List.of(), List.of(), false, NOW,
-                        ClosureSection.Source.RESOLVED)));
+                        ClosureSource.Kind.DECLARATIONS, "declarations")));
 
         assertThat(answer("org.acme:blob", "1.0")).map(ClosureSection.Answer::state)
                 .hasValue(ClosureSection.State.UNDECLARED);

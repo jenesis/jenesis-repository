@@ -19,6 +19,6 @@ module build.jenesis.repository.closure.maven {
     requires org.apache.maven.resolver.util;
     requires org.apache.maven.resolver.supplier;
     requires org.slf4j;
-    provides build.jenesis.repository.closure.EcosystemClosure
+    provides build.jenesis.repository.closure.ClosureSource
             with build.jenesis.repository.closure.maven.MavenClosure;
 }
