@@ -13,6 +13,10 @@
 open module build.jenesis.repository.compliance.github.test {
     requires build.jenesis.repository.compliance.github;
     requires build.jenesis.repository.compliance;
+    requires build.jenesis.repository.feed;
+    // The change log is drawn into a real filesystem store, the store contract's reference backend.
+    requires build.jenesis.repository.store;
+    requires build.jenesis.repository.store.filesystem;
     requires org.junit.jupiter;
     requires org.assertj.core;
     requires wiremock.core;
