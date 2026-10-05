@@ -150,8 +150,8 @@ public final class SignatureSweepTask implements MaintenanceTask {
                     + "signature dials no longer admit");
         }
         context.gauge("jenrepo.signatures.sweep.held",
-                "Published versions a repository is retroactively holding because the signature outcome or grade "
-                        + "recorded at publish is one the current signature dials no longer admit",
+                "Versions a repository is retroactively holding because the signature outcome or grade recorded "
+                        + "when they arrived is one the current signature dials no longer admit",
                 Map.of("tenant", context.tenant(), "repository", context.repository()), held[0]);
     }
 
