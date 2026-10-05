@@ -19,6 +19,7 @@ import build.jenesis.repository.icon.IconResource;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
+import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
@@ -311,6 +312,29 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, ComposedLayou
             }
             ProxyRelay.relayValidators(answer.document(), exchange);
             exchange.setResponseHeader("Content-Type", rest.endsWith("/@latest") ? "application/json" : "text/plain");
+            String module = rest.substring(0, rest.lastIndexOf(rest.endsWith("/@latest") ? "/@latest" : "/@v/list"));
+            Set<String> held = HeldVersions.of(store, "Go", module);
+            if (held.isEmpty()) {
+                exchange.respond(200, answer.document().body());
+                return true;
+            }
+            if (rest.endsWith("/@v/list")) {
+                // A version this repository holds for review is left out, so go never selects a module answering 404.
+                StringBuilder kept = new StringBuilder();
+                for (String line : new String(answer.document().body(), StandardCharsets.UTF_8).split("\n")) {
+                    if (!line.isBlank() && !held.contains(line.strip())) {
+                        kept.append(line.strip()).append('\n');
+                    }
+                }
+                exchange.respond(200, kept.toString().getBytes(StandardCharsets.UTF_8));
+                return true;
+            }
+            // @latest naming a held version answers as no version: go then resolves from the list, which leaves it out.
+            String latest = new String(answer.document().body(), StandardCharsets.UTF_8);
+            if (held.stream().anyMatch(version -> latest.contains("\"" + version + "\""))) {
+                exchange.respond(404, new byte[0]);
+                return true;
+            }
             exchange.respond(200, answer.document().body());
             return true;
         }

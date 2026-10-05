@@ -5,9 +5,8 @@ import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.findings.Finding;
 import build.jenesis.repository.findings.Findings;
 import build.jenesis.repository.findings.FindingsProvider;
-import build.jenesis.repository.inventory.HeldSubjects;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
-import build.jenesis.repository.store.Publication;
+import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.store.ServableNames;
 
 /**
@@ -70,12 +69,7 @@ final class Exposures {
                 || inventory.cachedAt(ecosystem, coordinate, version).isPresent()) {
             return !inventory.disclosable(ecosystem, coordinate, version, ServableNames.Policy.HIDE_WITHHELD);
         }
-        for (String path : HeldSubjects.paths(member.store(), ecosystem, coordinate, version)) {
-            if (Publication.reviewPending(member.store(), path)) {
-                return true;
-            }
-        }
-        return false;
+        return HeldVersions.held(member.store(), ecosystem, coordinate, version);
     }
 
     /** Add the version to {@code reached} where it is held or carries findings at or above {@code risk}. */

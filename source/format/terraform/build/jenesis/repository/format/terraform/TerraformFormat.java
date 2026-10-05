@@ -21,6 +21,7 @@ import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.format.signing.OpenPgpSigner;
 import build.jenesis.repository.format.signing.SigningKeys;
+import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
@@ -430,13 +431,14 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         boolean allowInternal = ProxyLeg.allowInternalTargets(exchange);
         Services services = services(upstream, fetcher, allowInternal);
         if (path.length == 5 && path[0].equals("v1") && path[1].equals("providers") && path[4].equals("versions")) {
-            return relay(exchange, store, fetcher, services.providers().resolve(path[2] + "/" + path[3] + "/versions"),
-                    "application/json", ProxyRelay.Document.ENUMERATION);
+            return versions(exchange, store, fetcher, services.providers().resolve(path[2] + "/" + path[3] + "/versions"),
+                    HeldVersions.of(store, ECOSYSTEM, TerraformCoordinates.providerCoordinate(path[2], path[3])));
         }
         if (path.length == 6 && path[0].equals("v1") && path[1].equals("modules") && path[5].equals("versions")) {
-            return relay(exchange, store, fetcher,
+            return versions(exchange, store, fetcher,
                     services.modules().resolve(path[2] + "/" + path[3] + "/" + path[4] + "/versions"),
-                    "application/json", ProxyRelay.Document.ENUMERATION);
+                    HeldVersions.of(store, ECOSYSTEM,
+                            TerraformCoordinates.moduleCoordinate(path[2], path[3], path[4])));
         }
         if (path.length == 8 && path[0].equals("v1") && path[1].equals("providers") && path[5].equals("download")) {
             return proxiedPackage(exchange, store, fetcher, services, repo, path[2], path[3], path[4], path[6], path[7]);
@@ -745,6 +747,53 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         exchange.setResponseHeader("Content-Type", contentType);
         exchange.respond(200, answer.document().body());
         return true;
+    }
+
+    /**
+     * Relay a provider's or a module's version list, every version in {@code held} - a copy this repository holds for
+     * review - left out, so terraform never selects a version whose package answers {@code 404}: a provider list's
+     * {@code versions} entries, a module list's {@code modules[].versions} entries.
+     */
+    private static boolean versions(FormatExchange exchange, ArtifactStore store, ProxyFormat.Fetcher fetcher, URI url,
+                                    Set<String> held) throws IOException {
+        if (held.isEmpty()) {
+            return relay(exchange, store, fetcher, url, "application/json", ProxyRelay.Document.ENUMERATION);
+        }
+        ProxyRelay.Answer answer = ProxyRelay.fetchRemembered(fetcher, url, Map.of(), exchange,
+                ProxyRelay.Document.ENUMERATION, store);
+        if (!answer.answered()) {
+            return answer.served();
+        }
+        byte[] body = answer.document().body();
+        JsonNode document;
+        try {
+            document = MAPPER.readTree(body);
+        } catch (RuntimeException unreadable) {
+            document = null;
+        }
+        if (document instanceof ObjectNode listing) {
+            withhold(listing.get("versions"), held);
+            if (listing.get("modules") instanceof ArrayNode modules) {
+                for (JsonNode module : modules) {
+                    withhold(module.get("versions"), held);
+                }
+            }
+            body = MAPPER.writeValueAsBytes(listing);
+        }
+        exchange.setResponseHeader("Content-Type", "application/json");
+        exchange.respond(200, body);
+        return true;
+    }
+
+    /** Remove from a {@code versions} array every entry whose {@code version} is in {@code held}. */
+    private static void withhold(JsonNode versions, Set<String> held) {
+        if (versions instanceof ArrayNode entries) {
+            for (int i = entries.size() - 1; i >= 0; i--) {
+                if (held.contains(entries.get(i).path("version").asString(""))) {
+                    entries.remove(i);
+                }
+            }
+        }
     }
 
     /** Fetch an artifact into the store under {@code key}, held to {@code declared}, and serve it. */

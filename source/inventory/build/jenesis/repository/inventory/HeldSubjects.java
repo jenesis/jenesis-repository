@@ -4,6 +4,7 @@ import module java.base;
 import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.walk.Traversal;
@@ -85,7 +86,7 @@ public final class HeldSubjects {
      *  coordinate segments URL-encoded for the reason {@link HoldMarkers#key} states - an un-encoded segment carrying a
      *  {@code /} (or empty) splices extra segments into the key and lets one version's rows collide with another's, and
      *  a reader that cannot predict the spelling cannot construct the key at all. */
-    private static final String VERSIONS = ROOT + "/version";
+    private static final String VERSIONS = HeldVersions.ROOT;
 
     /** The version face's bounds. One level per held version - the paths of a single coordinate version that are
      *  currently under review - so no upload can grow it and the caps are never near. They are still declared and
@@ -140,7 +141,7 @@ public final class HeldSubjects {
     /** The version face's container for one coordinate version - the level {@link #paths} lists and {@link #forget}
      *  reaps. */
     private static String versionRoot(String ecosystem, String coordinate, String version) {
-        return VERSIONS + "/" + encode(ecosystem) + "/" + encode(coordinate) + "/" + encode(version);
+        return HeldVersions.versionRoot(ecosystem, coordinate, version);
     }
 
     /**
@@ -250,19 +251,6 @@ public final class HeldSubjects {
                     + "short path list reads as 'no held path belongs to this version'");
         }
         return paths;
-    }
-
-    /**
-     * The versions of {@code coordinate} a hold recorded a path of, in key order, at most {@code limit}: one page of the
-     * version face's coordinate level, where a proxied copy the screen held at its fill is found before any holding
-     * records it. A row a crash left behind outlives its hold, so a caller acting on a version probes its paths' live
-     * review pointers.
-     */
-    public static List<String> versions(ArtifactStore store, String ecosystem, String coordinate, int limit) {
-        List<String> versions = new ArrayList<>();
-        store.page(VERSIONS + "/" + encode(ecosystem) + "/" + encode(coordinate), "", limit,
-                name -> versions.add(StoreRepositoryInventory.decode(name)));
-        return List.copyOf(versions);
     }
 
     /** Whether a path of a version other than {@code path} is held for review: one page of at most two names of its

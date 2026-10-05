@@ -7,9 +7,9 @@ import build.jenesis.repository.dependency.ArtifactSbom;
 import build.jenesis.repository.dependency.DependencyComponent;
 import build.jenesis.repository.dependency.DependencyEdge;
 import build.jenesis.repository.dependency.DependencyGraph;
-import build.jenesis.repository.inventory.HeldSubjects;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ServableNames;
 
@@ -200,12 +200,7 @@ public final class CarriedBill implements ClosureSource {
         /** Whether this repository holds {@code version} of {@code coordinate} for review as no holding yet: a
          *  proxied copy the screen held at its fill, found through its hold's subject and live review pointer. */
         boolean heldAtFill(String ecosystem, String coordinate, String version) throws IOException {
-            for (String path : HeldSubjects.paths(store, ecosystem, coordinate, version)) {
-                if (Publication.reviewPending(store, path)) {
-                    return true;
-                }
-            }
-            return false;
+            return HeldVersions.held(store, ecosystem, coordinate, version);
         }
     }
 

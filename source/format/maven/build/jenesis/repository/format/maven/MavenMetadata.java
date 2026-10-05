@@ -11,6 +11,7 @@ import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.walk.ScreenedNames;
 import build.jenesis.repository.walk.Traversal;
 import build.jenesis.repository.store.Checksums;
+import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.format.jvm.MavenMetadataSettingsContributor;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
@@ -365,10 +366,60 @@ public final class MavenMetadata {
     /**
      * The answer to a metadata request in a repository that proxies, under the computation option: one document listing
      * the versions the upstream's {@code maven-metadata.xml} lists and the ones published here, in Maven version order,
-     * or one of its checksums. {@code upstream} is the upstream's document, empty when it answered that it has none.
+     * or one of its checksums. {@code upstream} is the upstream's document, empty when it answered that it has none. A
+     * version an operator yanked, or a copy this repository holds for review, is left out whichever side lists it.
      * Empty when neither lists a version.
      */
     public Optional<byte[]> merged(String requestPath, Optional<byte[]> upstream) throws IOException {
+        return merged(requestPath, upstream, held(requestPath));
+    }
+
+    /**
+     * The versions of the coordinate a metadata request names that this repository holds for review - copies its
+     * proxy fetched and held - which a relayed or merged document leaves out, since their {@code GET} answers
+     * {@code 404}. One listing for a coordinate with no hold; empty for a request that names no coordinate.
+     */
+    public Set<String> held(String requestPath) throws IOException {
+        if (!isMetadataRequest(requestPath)) {
+            return Set.of();
+        }
+        String coordinatePath = coordinatePath(requestPath);
+        return coordinatePath.indexOf('/') < 0 ? Set.of()
+                : HeldVersions.of(store, "Maven", mavenCoordinate(coordinatePath));
+    }
+
+    /**
+     * The answer to a metadata request relayed from an upstream that lists a version this repository holds for
+     * review: the upstream's document listing the versions it lists but {@code held}, in Maven version order, or one
+     * of its checksums - computed over that document, so a client checking it against the document finds them equal.
+     * Empty when no version is left.
+     */
+    public Optional<byte[]> relayed(String requestPath, byte[] upstream, Set<String> held) throws IOException {
+        String coordinatePath = coordinatePath(requestPath);
+        int slash = coordinatePath.lastIndexOf('/');
+        String document = new String(upstream, StandardCharsets.UTF_8);
+        int open = document.indexOf("<versions>");
+        int close = open < 0 ? -1 : document.indexOf("</versions>", open);
+        if (slash < 0 || close <= open) {
+            return Optional.of(upstream);
+        }
+        List<String> ordered = new ArrayList<>(listedVersions(document.substring(open + "<versions>".length(), close)));
+        ordered.removeIf(held::contains);
+        if (ordered.isEmpty()) {
+            return Optional.empty();
+        }
+        ordered.sort(MavenMetadata::compareVersions);
+        byte[] xml = metadata(coordinatePath.substring(0, slash).replace('/', '.'), coordinatePath.substring(slash + 1),
+                ordered);
+        Optional<String> algorithm = algorithm(requestPath);
+        return Optional.of(algorithm.isPresent()
+                ? Checksums.hex(algorithm.get(), xml).getBytes(StandardCharsets.UTF_8)
+                : xml);
+    }
+
+    /** {@link #merged(String, Optional)}, leaving out {@code held}. */
+    Optional<byte[]> merged(String requestPath, Optional<byte[]> upstream, Set<String> held)
+            throws IOException {
         if (!isMetadataRequest(requestPath)) {
             return Optional.empty();
         }
@@ -390,6 +441,8 @@ public final class MavenMetadata {
         // A version an operator yanked leaves the list whichever side lists it: a retraction from resolution.
         SortedMap<String, Lifecycle.Flag> marks = Lifecycle.versions(store, mavenCoordinate(coordinatePath));
         versions.removeIf(version -> yanked(marks, version));
+        // And so does a copy held for review, whose GET answers 404.
+        versions.removeIf(held::contains);
         if (versions.isEmpty()) {
             return Optional.empty();
         }

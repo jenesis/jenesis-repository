@@ -396,7 +396,8 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
     /**
      * Proxy a {@code /maven/} miss to the upstream Maven repository. Artifacts are immutable and cached, a modular jar
      * cross-published like a local one; {@code maven-metadata.xml} is mutable, relayed as the upstream serves it and
-     * never stored, and remembered in the node's {@link UpstreamMemory} for its ttl.
+     * never stored, and remembered in the node's {@link UpstreamMemory} for its ttl - less any version this repository
+     * holds for review, whose {@code GET} answers {@code 404}.
      *
      * <p>A cached artifact is stored as the upstream serves it, and its checksum sidecars are relayed beside it as the
      * upstream serves them: a checksum is the publisher's to provide and a client's to check, never verified here.
@@ -418,7 +419,12 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
             // option the answer is merged with the versions published here, so the upstream's document is what is
             // fetched whichever was asked - the document or one of its checksums.
             boolean merging = metadataCompute(exchange);
-            String asked = merging ? rest.substring(0, rest.lastIndexOf(METADATA) + METADATA.length()) : rest;
+            // A version this repository holds for review is left out of what it relays, so a checksum is then
+            // computed over the document served rather than relayed: the document is what is fetched.
+            MavenMetadata metadata = new MavenMetadata(store);
+            Set<String> held = metadata.held(path);
+            boolean whole = merging || !held.isEmpty();
+            String asked = whole ? rest.substring(0, rest.lastIndexOf(METADATA) + METADATA.length()) : rest;
             URI document = URI.create(prefix + asked);
             UpstreamMemory memory = UpstreamMemory.node();
             Optional<byte[]> body = memory.get(store, document).map(UpstreamMemory.Remembered::body);
@@ -443,11 +449,19 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                     return false;
                 }
             }
-            if (!merging) {
+            if (!merging && held.isEmpty()) {
                 exchange.respond(200, body.get());
                 return true;
             }
-            Optional<byte[]> merged = new MavenMetadata(store).merged(path, body);
+            if (!merging) {
+                Optional<byte[]> relayed = metadata.relayed(path, body.get(), held);
+                if (relayed.isEmpty()) {
+                    return false;
+                }
+                exchange.respond(200, relayed.get());
+                return true;
+            }
+            Optional<byte[]> merged = metadata.merged(path, body, held);
             if (merged.isEmpty()) {
                 return false;
             }
