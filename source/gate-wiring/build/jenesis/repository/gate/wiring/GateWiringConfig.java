@@ -42,16 +42,12 @@ public class GateWiringConfig {
                 // A re-assessment off any request - a scan report landing in a maintenance pass - names its tenant
                 // and is answered by that tenant's publish gate.
                 .tenantGates(tenant -> liveConfig.getObject().publishGate(tenant))
-                // Re-queried at commit to persist an accepted coordinate's advisory findings before the next sweep.
-                .advisoryFeeds(() -> sources.getObject().advisoryFeeds())
                 // Probed at commit to persist an accepted coordinate's maintainer health before the next sweep.
                 .healthSource(() -> sources.getObject().health())
                 // Whether a failed hold-mapping round trip fails the publish or only alarms (strict-hold-mapping),
                 // off by default so a broken blobs-namespace format cannot stop publishes.
                 .strictHoldMapping(() -> liveConfig.getObject().strictHoldMapping())
                 // Meters handed over as callbacks, so the gate module stays registry-free.
-                .advisoryFeedMisses(feed -> meterRegistry.getObject()
-                        .counter("jenrepo.gate.advisory.persist.miss", "feed", feed).increment())
                 .verdicts((format, verdict) -> meterRegistry.getObject()
                         .counter("jenrepo.gate.verdicts", "format", format, "verdict", verdict).increment())
                 .holdMappingBroken(eco -> meterRegistry.getObject()

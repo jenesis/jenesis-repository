@@ -2,7 +2,6 @@ package build.jenesis.repository.compliance.scan;
 
 import module java.base;
 import module org.slf4j;
-import build.jenesis.repository.cleanup.Release;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.Freshness;
 import build.jenesis.repository.compliance.KnownExploitedSource;
@@ -26,14 +25,14 @@ import build.jenesis.repository.store.Publication;
 
 /**
  * The continuous re-analysis sweep, the counterpart to {@link KevEnforceTask}: enforcement only tightens, so a hold
- * could outlive the intel that justified it. For a release the enforcement pass held (a {@link KevHold} record beside
- * its {@code /quarantine} pointers) whose every known-exploited CVE has since cleared - delisted, or its advisory
- * retracted - this pass auto-releases: it re-points the held blob back into the release view and clears the pointer. It
- * writes no override ({@link KevHold#cleared}), so a later re-listing holds the release again, while a human's release
- * still sticks. Only this sweep's own KEV holds are released; a gate hold or a licence hold carries no {@link KevHold}
- * record.
+ * could outlive the intel that justified it. For a cached copy the enforcement pass held (a {@link KevHold} record
+ * beside its {@code /quarantine} pointers) whose every known-exploited CVE has since cleared - delisted, or its
+ * advisory retracted - this pass auto-releases: it re-points the held blob back into the release view and clears the
+ * pointer. It writes no override ({@link KevHold#cleared}), so a later re-listing holds the copy again, while a human's
+ * release still sticks. Only this sweep's own KEV holds are released; a gate hold or a licence hold carries no
+ * {@link KevHold} record.
  *
- * <p>Over the same walk it keeps a {@link Finding.Kind#GATE} {@code kev-active} finding on every served release a
+ * <p>Over the same walk it keeps a {@link Finding.Kind#GATE} {@code kev-active} finding on every served cached copy a
  * catalogue lists, superseded (never discarded) by the auto-release. With no findings module installed the writes
  * degrade to nothing; a refused write is contained so the release convergence still runs, then raised before the unit
  * returns, so the pass counts as failed (clause 4).
@@ -111,17 +110,18 @@ public final class ReanalysisTask implements MaintenanceTask {
                 "The findings substrate misses this pass's known-exploited status for those coordinates - a "
                 + "reviewer and the AI applicability pass read that row, so a silent gap in it is a signal read as "
                 + "an answer - and the pass is counted as failed rather than reading as a clean convergence.");
-        // Every release every Nth pass, the releases published since between; a changed catalogue asks for a full pass
-        // by name, since a delisting clears holds on old releases the incremental leg cannot see.
+        // Every cached copy every Nth pass, the copies cached since between; a changed catalogue asks for a full pass
+        // by name, since a delisting clears holds on old copies the incremental leg cannot see. A version published
+        // here is asked of no feed, so the copies an upstream served are what this pass re-analyses.
         IncrementalPasses cadence = IncrementalPasses.over(store, name(), "findings/reanalysis", context.config());
-        cadence.releases(inventory, release -> {
-            String eco = release.ecosystem();
-            String coordinate = release.coordinate();
-            String version = release.version();
+        cadence.cached(inventory, copy -> {
+            String eco = copy.ecosystem();
+            String coordinate = copy.coordinate();
+            String version = copy.version();
             List<String> kevCves = knownExploited.listed(advisories.advisories(eco, coordinate, version));
             if (!kevCves.isEmpty()) {
                 // still actively exploited: keep the finding current
-                raiseActive(ledger, context, release, kevCves, failed);
+                raiseActive(ledger, context, copy, kevCves, failed);
                 return;                                            // kev-enforce owns holding; nothing to release
             }
             // Delisted only if the catalogue actually answered. The contains() probes update the source's health
@@ -143,7 +143,7 @@ public final class ReanalysisTask implements MaintenanceTask {
             // Supersede the finding only when the coordinate genuinely cleared. If it is still listed but a feed gap
             // left knownExploitedCves empty, the finding stays active, as the hold does below.
             if (!stillListed) {
-                supersedeActive(ledger, context, release, failed);
+                supersedeActive(ledger, context, copy, failed);
             }
             if (record.isEmpty()) {
                 return;   // no KEV auto-hold here - a gate or license hold is not this sweep's to release
@@ -179,7 +179,7 @@ public final class ReanalysisTask implements MaintenanceTask {
                         context.tenant(), context.repository(), coordinate, version);
                 return;
             }
-            releaseHeld(store, publication, inventory, context.now(), release, served);
+            releaseHeld(store, publication, inventory, context.now(), copy, served);
             KevHold.cleared(store, eco, coordinate, version);      // drop the record (no override) so a re-listing re-holds
             LOGGER.info("Auto-released {}/{} {}:{}: its known-exploited intel cleared", context.tenant(),
                     context.repository(), coordinate, version);
@@ -203,16 +203,17 @@ public final class ReanalysisTask implements MaintenanceTask {
      * answer empty if the format left the graph between the two calls.
      */
     private void releaseHeld(ArtifactStore store, Publication publication, StoreRepositoryInventory inventory,
-                             Instant now, Release release, List<String> servedPaths) throws IOException {
+                             Instant now, StoreRepositoryInventory.Coordinate copy, List<String> servedPaths)
+            throws IOException {
         // The version's own paths are what the cross-alias guard excludes: the withhold marker is keyed by content hash
         // and the blobs-namespace serve gate reads it, so clearing a hash a byte-identical sibling still holds would
         // release that sibling too.
         Set<String> ownPaths = new HashSet<>(servedPaths);
-        ArtifactDescriptor released = new ArtifactDescriptor(release.ecosystem(), release.coordinate(),
-                release.version(), null, null, false, null, -1L);
+        ArtifactDescriptor released = new ArtifactDescriptor(copy.ecosystem(), copy.coordinate(),
+                copy.version(), null, null, false, null, -1L);
         // Lift the blobs-namespace markers the enforce pass wrote, so a dual-layout format serves again, unless a
         // sibling outside this version still holds the hash.
-        for (String hash : inventory.blobHashes(release.ecosystem(), release.coordinate(), release.version())) {
+        for (String hash : inventory.blobHashes(copy.ecosystem(), copy.coordinate(), copy.version())) {
             HoldClears.clearReleased(store, hash, ownPaths, "kev-auto-release", released);
         }
         for (String path : servedPaths) {
@@ -228,7 +229,7 @@ public final class ReanalysisTask implements MaintenanceTask {
             HoldClears.clearReleased(store, hash.get(), ownPaths, "kev-auto-release", released.withPath(path));
             // Re-link only when the release pointer is absent: bytes re-published while held keep serving rather than
             // being rolled back to the quarantined blob.
-            if (publication.blob(path).isEmpty() && !inventory.servesFromBlobs(release.ecosystem())) {
+            if (publication.blob(path).isEmpty() && !inventory.servesFromBlobs(copy.ecosystem())) {
                 // A pure blobs-namespace format has no publish/ pointer and already serves again through clearReleased
                 // above. A publish/ pointer written here would be a phantom entry the format never serves and retention
                 // never reclaims.
@@ -242,9 +243,11 @@ public final class ReanalysisTask implements MaintenanceTask {
         }
     }
 
-    /** Raise or refresh the sweep's known-exploited finding for a served release a catalogue lists. A refused write is
+    /** Raise or refresh the sweep's known-exploited finding for a served cached copy a catalogue lists. A refused write
+     * is
      *  contained and named on {@code failed}, so the unit still raises it (clause 4). */
-    private void raiseActive(Optional<Findings> ledger, RepositoryContext context, Release release,
+    private void raiseActive(Optional<Findings> ledger, RepositoryContext context,
+                             StoreRepositoryInventory.Coordinate copy,
                              List<String> kevCves, UnitFailures failed) {
         if (ledger.isEmpty()) {
             return;
@@ -254,37 +257,38 @@ public final class ReanalysisTask implements MaintenanceTask {
                             "Actively exploited: a known-exploited catalogue lists this coordinate's CVE ("
                                     + String.join(", ", kevCves) + ")", context.now())
                     .withReferences(kevCves).withProvenance("reanalysis");
-            ledger.get().record(release.ecosystem(), release.coordinate(), release.version(), finding);
+            ledger.get().record(copy.ecosystem(), copy.coordinate(), copy.version(), finding);
         } catch (IOException | RuntimeException e) {
             LOGGER.warn("Failed to record the known-exploited finding for {}/{} {}:{}; the ledger misses this pass's row "
                             + "and the sweep is reported FAILED", context.tenant(), context.repository(),
-                    release.coordinate(), release.version(), e);
-            failed.record("raise " + release.ecosystem() + ' ' + release.coordinate() + ':' + release.version(), e);
+                    copy.coordinate(), copy.version(), e);
+            failed.record("raise " + copy.ecosystem() + ' ' + copy.coordinate() + ':' + copy.version(), e);
         }
     }
 
     /** Supersede the sweep's known-exploited finding once its coordinate has cleared, keeping the row as history. A
      *  no-op when no active {@code kev-active} row exists, so {@link Findings#supersede}'s absent-finding guard never
      *  trips. Contained and raised like {@link #raiseActive}. */
-    private void supersedeActive(Optional<Findings> ledger, RepositoryContext context, Release release,
+    private void supersedeActive(Optional<Findings> ledger, RepositoryContext context,
+                                 StoreRepositoryInventory.Coordinate copy,
                                  UnitFailures failed) {
         if (ledger.isEmpty()) {
             return;
         }
         try {
             Findings substrate = ledger.get();
-            boolean active = substrate.of(release.ecosystem(), release.coordinate(), release.version()).stream()
+            boolean active = substrate.of(copy.ecosystem(), copy.coordinate(), copy.version()).stream()
                     .anyMatch(finding -> SOURCE.equals(finding.source()) && KEV_ACTIVE.equals(finding.id())
                             && finding.active());
             if (active) {
-                substrate.supersede(release.ecosystem(), release.coordinate(), release.version(), SOURCE, KEV_ACTIVE,
+                substrate.supersede(copy.ecosystem(), copy.coordinate(), copy.version(), SOURCE, KEV_ACTIVE,
                         CLEARED);
             }
         } catch (IOException | RuntimeException e) {
             LOGGER.warn("Failed to supersede the cleared known-exploited finding for {}/{} {}:{}; it stays active in the "
                             + "ledger until the next pass and the sweep is reported FAILED", context.tenant(),
-                    context.repository(), release.coordinate(), release.version(), e);
-            failed.record("supersede " + release.ecosystem() + ' ' + release.coordinate() + ':' + release.version(), e);
+                    context.repository(), copy.coordinate(), copy.version(), e);
+            failed.record("supersede " + copy.ecosystem() + ' ' + copy.coordinate() + ':' + copy.version(), e);
         }
     }
 }

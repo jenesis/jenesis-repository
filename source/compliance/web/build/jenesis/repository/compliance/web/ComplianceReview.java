@@ -539,8 +539,9 @@ public class ComplianceReview extends TenantScope {
         }
         int[] scanned = {0};
         int[] flagged = {0};
-        // Everything the repository holds, as the scheduled scan reads it: a proxied copy is served to the same builds.
-        inventory(repository).holdings(held -> {
+        // The repository's cached copies, as the scheduled scan reads them: a version published here is asked of no
+        // feed.
+        inventory(repository).cachedCopies(held -> {
             scanned[0]++;
             if (AdvisoryFindings.record(ledger.get(), feeds, held.ecosystem(), held.coordinate(), held.version(),
                     "console-report", Instant.now())) {

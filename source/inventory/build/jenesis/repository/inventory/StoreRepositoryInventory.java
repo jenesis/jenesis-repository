@@ -767,6 +767,16 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         enumeration.holdings(visitor);
     }
 
+    /**
+     * Stream every copy the repository cached from an upstream and holds as no release of its own, without buffering
+     * the set: the enumeration a pass about upstream artifacts rides (the advisory scan, the known-exploited
+     * enforcement), where {@link #coordinates(CoordinateVisitor)} is the published set and {@link #holdings} both. The
+     * same walk of the version documents, one read per document.
+     */
+    public void cachedCopies(CoordinateVisitor visitor) throws IOException {
+        enumeration.cachedCopies(visitor);
+    }
+
     /** One bounded page of a coordinate's holdings, releases and cached copies alike, in version-key order and
      *  resumable from the bare version name the previous page ended on: the page a coordinate's screen reads. One
      *  document read per version returned. */
