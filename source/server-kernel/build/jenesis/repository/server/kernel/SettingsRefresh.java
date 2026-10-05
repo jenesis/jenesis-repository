@@ -2,6 +2,7 @@ package build.jenesis.repository.server.kernel;
 
 import module java.base;
 import module org.slf4j;
+import build.jenesis.repository.store.UpstreamMemory;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.scheduling.annotation.Scheduled;
 
@@ -68,6 +69,14 @@ public final class SettingsRefresh {
             }
             epochSeen = epoch;
             settings.refresh();
+            // A document relayed from an upstream is remembered for its ttl and served from memory without passing
+            // the proxy screen again, so a change to what the screen decides - a deny-list entry, a private name, a
+            // tenant's own policy - would reach a remembered enumeration only once the memory forgot it. Forgetting
+            // on a change to the store makes the next read of each fetch, and so screen, afresh. A store nothing has
+            // written to has no epoch and is re-read every tick, and has changed nothing the memory could be stale on.
+            if (!epoch.isEmpty()) {
+                UpstreamMemory.node().clear();
+            }
         } catch (IOException e) {
             LOGGER.warn("Could not read the settings epoch; keeping the last known values", e);
             return;
