@@ -164,6 +164,37 @@
             <p><small th:if="${detail.closure.kind().name() == 'BILL'}" th:text="|${detail.closure.components().size()} component(s) the bill of materials this version carries names, as its build resolved them, ${detail.closure.cuts().size()} not held here.|">12 components from the version's bill, 1 not held here.</small><small
                     th:unless="${detail.closure.kind().name() == 'BILL'}" th:text="|${detail.closure.components().size()} component(s) resolved from what this repository and the repositories its fallbacks name hold, ${detail.closure.cuts().size()} unresolved.|">12 components resolved, 1 unresolved.</small>
                 <span th:if="${detail.closure.status().name() == 'PARTIAL'}" class="app-badge app-badge--warn">partial</span></p>
+            <!--/* What the closure reaches that is held for review or carries findings, as the closure pass last looked:
+                 the state this version inherits from the copies it relies on, with no lookup of its own. */-->
+            <th:block th:if="${detail.exposure != null}">
+                <p th:if="${detail.exposure.reached().isEmpty()}"><small
+                        th:text="|Nothing it reaches is held for review or carries findings, as of ${detail.exposureAt()}.|">Nothing
+                    it reaches is held for review or carries findings.</small></p>
+                <th:block th:unless="${detail.exposure.reached().isEmpty()}">
+                    <p><small th:text="|It relies on ${detail.exposure.held()} version(s) held for review and ${detail.exposure.vulnerable()} carrying findings, as of ${detail.exposureAt()}.|">It
+                        relies on 1 version held for review and 1 carrying findings.</small></p>
+                    <table class="app-list" aria-label="Versions it relies on that are held or carry findings">
+                        <thead>
+                        <tr>
+                            <th scope="col">Coordinate</th>
+                            <th scope="col">Version</th>
+                            <th scope="col">Standing</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="reached : ${detail.exposure.reached()}">
+                            <td class="app-list__lead"><th:block th:replace="~{base :: artifactLink(${reached.coordinate()},
+                                    @{/ui/repositories/{repo}/version(repo=${reached.repository().isEmpty() ? repo : reached.repository()},ecosystem=${detail.ecosystem},coordinate=${reached.coordinate()},version=${reached.version()})})}"></th:block></td>
+                            <td><code th:text="${reached.version()}">2.14.1</code></td>
+                            <td><span th:if="${reached.held()}" class="app-badge app-badge--warn">held for review</span>
+                                <th:block th:if="${reached.findings() > 0}"><span
+                                        th:replace="~{base :: severity(${reached.worst()})}"></span>
+                                    <small th:text="|${reached.findings()} finding(s)|">1 finding</small></th:block></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </th:block>
+            </th:block>
             <table class="app-list" th:unless="${detail.closure.components().isEmpty()}">
                 <thead>
                 <tr>

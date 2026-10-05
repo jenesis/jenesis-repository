@@ -390,6 +390,22 @@ final class ComplianceCommands {
         if (closure.truncated()) {
             System.out.println("    the closure stopped at its bound; what lies past it is not listed");
         }
+        ProvenanceClient.ClosureExposure exposure = closure.exposure();
+        if (exposure != null) {
+            List<ProvenanceClient.ClosureReached> reached = exposure.reached() == null ? List.of()
+                    : exposure.reached();
+            System.out.println("  relies on " + exposure.held() + " version(s) held for review and "
+                    + exposure.vulnerable() + " carrying findings, as of " + exposure.derived());
+            for (ProvenanceClient.ClosureReached version : reached) {
+                String repository = version.repository() == null || version.repository().isBlank() ? ""
+                        : " of " + version.repository();
+                System.out.println("    " + version.coordinate() + " " + version.version() + repository + "  "
+                        + (version.held() ? "held for review" : "")
+                        + (version.held() && version.findings() > 0 ? ", " : "")
+                        + (version.findings() > 0 ? version.findings() + " finding(s), the worst "
+                        + version.worst().toLowerCase(Locale.ROOT) : ""));
+            }
+        }
         return 0;
     }
 

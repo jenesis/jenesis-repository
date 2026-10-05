@@ -3,6 +3,7 @@ package build.jenesis.repository.ui.store;
 import module java.base;
 
 import build.jenesis.repository.closure.ClosureSection;
+import build.jenesis.repository.closure.ExposureSection;
 import build.jenesis.repository.compliance.ScreeningMode;
 import build.jenesis.repository.settings.CoreDefaults;
 import build.jenesis.repository.ui.CurrentTenant;
@@ -426,21 +427,29 @@ public class RepositoryBrowse extends TenantScope implements AutoCloseable {
                 paths, !inventory.locate(ecosystem, coordinate, version).isEmpty(),
                 FindingsState.of(FindingsProvider.installed().map(provider -> provider.over(store)),
                         riskThreshold(), ecosystem, coordinate, version), screenPending,
-                ClosureSection.answer(document).map(ClosureSection.Answer::closure).orElse(null)));
+                ClosureSection.answer(document).map(ClosureSection.Answer::closure).orElse(null),
+                ExposureSection.exposure(document.section(ExposureSection.TAG)).orElse(null)));
     }
 
     /** One version as its own page shows it - see {@link #version}. {@code about}, {@code signature} and
      *  {@code provenance} are {@code null} where the document records none; {@code dependencies} holds at most
      *  {@link #DEPENDENCIES_SHOWN} of the {@code dependencyCount} declared; {@code screenPending} says a file of a
      *  cached copy was served while an advisory feed could not answer, and no feed has answered for it since;
-     *  {@code closure} is the transitive closure resolved for a release, {@code null} until it is. */
+     *  {@code closure} is the transitive closure resolved for a release, {@code null} until it is; {@code exposure} is
+     *  what that closure reaches that is held for review or carries findings, {@code null} until the pass derived it. */
     public record VersionDetail(String ecosystem, String coordinate, String version, String published, boolean cached,
                                 String upstream, boolean prerelease, boolean pinned, boolean served, long downloads,
                                 String lastDownloaded, AboutSection.About about,
                                 List<LicenseInventory.Declared> licenses, SignatureSection.Summary signature,
                                 ProvenanceSection.Summary provenance, List<DependencySection.Declared> dependencies,
                                 int dependencyCount, List<String> paths, boolean browsable,
-                                FindingsState findings, boolean screenPending, ClosureSection.Closure closure) {
+                                FindingsState findings, boolean screenPending, ClosureSection.Closure closure,
+                                ExposureSection.Exposure exposure) {
+
+        /** When the closure pass last derived {@link #exposure}, as the page dates it. */
+        public String exposureAt() {
+            return exposure == null ? "" : stamp(exposure.derived());
+        }
 
         /** Whether this is a release still waiting for its closure: a cached copy has none of its own. */
         public boolean awaitsClosure() {

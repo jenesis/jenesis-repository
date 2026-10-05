@@ -18,6 +18,8 @@ open module build.jenesis.repository.closure.test {
     requires build.jenesis.repository.dependents.requirements;
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.format.maven;
+    requires build.jenesis.repository.findings;
+    requires build.jenesis.repository.findings.store;
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.maintenance;
     requires build.jenesis.repository.metadata;

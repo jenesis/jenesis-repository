@@ -14,7 +14,9 @@
  * the bill a release carries ({@link build.jenesis.repository.closure.CarriedBill}), an ecosystem's own resolver, a
  * scanner, and last the walk over declarations ({@link build.jenesis.repository.closure.DeclaredClosure}), the first
  * answer winning; this module provides the first and the last. Evaluating a requirement in the walk is a discovered
- * {@link build.jenesis.repository.closure.RequirementGrammar}.
+ * {@link build.jenesis.repository.closure.RequirementGrammar}. Beside the closure the pass keeps what it reaches that
+ * is held for review or carries findings ({@link build.jenesis.repository.closure.ExposureSection}), re-derived on each
+ * full pass, which is the state a published version inherits from the copies it relies on.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -25,6 +27,7 @@ module build.jenesis.repository.closure {
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.definitions;
     requires build.jenesis.repository.dependency;
+    requires build.jenesis.repository.findings;
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.maintenance;
     requires build.jenesis.repository.metadata;
