@@ -3,6 +3,7 @@ package build.jenesis.repository.compliance.openssf;
 import module java.base;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.SignalContext;
+import build.jenesis.repository.compliance.osv.OsvAdvisorySource;
 import build.jenesis.repository.compliance.SignalSource;
 import build.jenesis.repository.compliance.SignalSourceProvider;
 
@@ -30,7 +31,12 @@ public final class OpenSsfMaliciousSourceProvider implements SignalSourceProvide
             return Optional.empty();
         }
         String endpoint = context.setting("openssf-endpoint");
+        // Its change lists are OSV's export, the one the OSV feed reads; the signal space is asked for when the log is
+        // drawn or read, not here.
+        String export = context.setting("osv-export");
         return Optional.of(OpenSsfMaliciousSource.over(URI.create(
-                endpoint == null || endpoint.isBlank() ? "https://api.osv.dev" : endpoint), context.clock()));
+                endpoint == null || endpoint.isBlank() ? "https://api.osv.dev" : endpoint),
+                export == null || export.isBlank() ? OsvAdvisorySource.DEFAULT_EXPORT : URI.create(export),
+                context::snapshots, context.clock()));
     }
 }

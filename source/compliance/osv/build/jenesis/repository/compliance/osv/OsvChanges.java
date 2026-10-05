@@ -17,11 +17,15 @@ import java.time.format.DateTimeParseException;
  * affect as one entry of the feed's {@link FeedChanges change log}, which every node's scan reads from its own position;
  * each list's position is the instant of the last line it was read to.
  *
+ * <p>A feed that publishes a part of OSV's records - the malicious-package feed, its {@code MAL-} ones - draws the same
+ * lists into a log of its own, keeping only the ids it {@linkplain #of keeps}: a line it does not keep moves the
+ * position and fetches nothing.
+ *
  * <p>Bounded: a draw reads at most {@link #WINDOW} bytes of each list and fetches at most {@link #RECORDS} records,
  * oldest first, resuming where it stopped; a list whose position lies past the window is recorded as a gap, never as a
  * shorter list. The first draw of an ecosystem only records where its list stands.
  */
-final class OsvChanges {
+public final class OsvChanges {
 
     /** The most of one change list a draw reads. */
     static final int WINDOW = 1 << 20;
@@ -34,8 +38,15 @@ final class OsvChanges {
     private final URI vulns;
     private final Supplier<ArtifactStore> space;
     private final Clock clock;
+    private final Predicate<String> kept;
 
     OsvChanges(FeedClient client, URI export, URI vulns, Supplier<ArtifactStore> space, Clock clock) {
+        this(client, export, vulns, space, clock, _ -> true);
+    }
+
+    private OsvChanges(FeedClient client, URI export, URI vulns, Supplier<ArtifactStore> space, Clock clock,
+                       Predicate<String> kept) {
+        this.kept = kept;
         this.client = client;
         this.export = export.toString().endsWith("/") ? export : URI.create(export + "/");
         this.vulns = vulns;
@@ -43,11 +54,19 @@ final class OsvChanges {
         this.clock = clock;
     }
 
+    /** OSV's change lists at {@code export}, each record named fetched from {@code vulns} through {@code client} and
+     *  committed to the log in {@code space} on {@code clock}, keeping the records whose id {@code kept} accepts. */
+    public static OsvChanges of(FeedClient client, URI export, URI vulns, Supplier<ArtifactStore> space, Clock clock,
+                                Predicate<String> kept) {
+        return new OsvChanges(client, export, vulns, space, clock, kept);
+    }
+
     /** One line of a change list. */
     private record Line(Instant modified, String id) {
     }
 
-    int draw() throws IOException {
+    /** Draw what changed since the last draw into the log, answering how many packages it named. */
+    public int draw() throws IOException {
         ArtifactStore store = space.get();
         FeedChanges.Opened log = FeedChanges.open(store);
         Map<String, String> positions = new TreeMap<>(log.positions());
@@ -74,8 +93,10 @@ final class OsvChanges {
                 if (budget <= 0 && !line.modified().equals(reached)) {
                     break;
                 }
-                named.addAll(affected(line.id()));
-                budget--;
+                if (kept.test(line.id())) {
+                    named.addAll(affected(line.id()));
+                    budget--;
+                }
                 reached = line.modified();
             }
             positions.put(ecosystem, reached.toString());
@@ -83,7 +104,8 @@ final class OsvChanges {
         return FeedChanges.commit(store, log, new FeedChanges.Draw(positions, named, gap), clock.instant());
     }
 
-    AdvisorySource.ChangeLog changes(long after) throws IOException {
+    /** What the log holds after sequence {@code after}. */
+    public AdvisorySource.ChangeLog changes(long after) throws IOException {
         return FeedChanges.read(space.get(), after);
     }
 

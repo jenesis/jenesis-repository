@@ -3,7 +3,8 @@
  * {@link build.jenesis.repository.compliance.SignalSourceProvider} (an advisory feed) answering to {@code openssf}. The
  * dataset (github.com/ossf/malicious-packages, Apache-2.0) is
  * consumed through the OSV.dev API that serves it, filtered to its {@code MAL-} records, each flagged malicious, and
- * composed with every other enabled feed, de-duplicated.
+ * composed with every other enabled feed, de-duplicated. It publishes what it changed from OSV's change lists, kept in
+ * its own signal space ({@code OpenSsfStorageNamespace}).
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -15,10 +16,14 @@ module build.jenesis.repository.compliance.openssf {
     requires build.jenesis.repository.feed;
     requires build.jenesis.repository.compliance.osv;
     requires build.jenesis.repository.settings;
+    requires build.jenesis.repository.maintenance;
+    requires build.jenesis.repository.store;
     requires tools.jackson.databind;
     exports build.jenesis.repository.compliance.openssf;
     provides build.jenesis.repository.compliance.SignalSourceProvider
             with build.jenesis.repository.compliance.openssf.OpenSsfMaliciousSourceProvider;
     provides build.jenesis.repository.settings.SettingsContributor
             with build.jenesis.repository.compliance.openssf.OpenSsfSettingsContributor;
+    provides build.jenesis.repository.maintenance.StorageNamespace
+            with build.jenesis.repository.compliance.openssf.OpenSsfStorageNamespace;
 }

@@ -13,6 +13,8 @@ open module build.jenesis.repository.compliance.openssf.test {
     requires build.jenesis.repository.compliance.osv;
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.feed;
+    requires build.jenesis.repository.store;
+    requires build.jenesis.repository.store.filesystem;
     requires org.junit.jupiter;
     requires org.assertj.core;
 }
