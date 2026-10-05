@@ -410,6 +410,10 @@ final class ComplianceCommands {
                             .forEach(event -> rules.addAll(event.rules()));
                     System.out.printf("%s  %s%s%n", first.when(), version.getKey(),
                             rules.isEmpty() ? "" : "  held for " + String.join(", ", rules));
+                    Set<String> notes = new LinkedHashSet<>();
+                    version.getValue().stream().filter(event -> event.notes() != null)
+                            .forEach(event -> notes.addAll(event.notes()));
+                    notes.forEach(note -> System.out.println("    note: " + note));
                     for (ReviewClient.QuarantineEvent event : version.getValue()) {
                         System.out.println("    " + event.path());
                         if (event.reasons() != null) {

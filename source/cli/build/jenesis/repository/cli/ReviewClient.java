@@ -56,9 +56,9 @@ public final class ReviewClient extends ClientCalls {
     }
 
     /** One quarantine hold: when it was recorded, the path within the repository and coordinate, the gate verdict, the
-     *  reasons, and the rules it is held for. */
+     *  reasons, the rules it is held for, and the queue's notes on it. */
     public record QuarantineEvent(String when, String path, String coordinate, String verdict, List<String> reasons,
-                                  List<String> rules) {
+                                  List<String> rules, List<String> notes) {
     }
 
     private record QuarantineView(List<QuarantineEvent> events) {

@@ -68,6 +68,9 @@
                 </tr>
                 <tr class="app-list__detail">
                     <td th:colspan="${isEditor} ? 3 : 2">
+                        <ul th:unless="${q.notes.isEmpty()}" class="app-reasons" aria-label="Notes">
+                            <li th:each="note : ${q.notes}"><small th:text="${note}">note</small></li>
+                        </ul>
                         <ul th:unless="${q.reasons.isEmpty()}" class="app-reasons" aria-label="Reasons">
                             <li th:each="reason : ${q.reasons}"><small th:text="${reason}">reason</small></li>
                         </ul>
