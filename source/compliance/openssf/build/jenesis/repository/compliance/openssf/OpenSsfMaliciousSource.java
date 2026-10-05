@@ -35,7 +35,9 @@ import build.jenesis.repository.compliance.osv.OsvQuery;
  *
  * <p>The network operation sits behind an {@link Endpoint} seam, so recorded payloads travel through the same client,
  * caps and pagination as a live answer. A failed query throws, so the gate fails closed. This source holds no
- * {@code FeedCache} of answers, so every lookup reaches the feed.
+ * {@code FeedCache} of answers; a query the vulnerability feed asked the same endpoint within
+ * {@link OsvQuery#SHARED_FOR} is answered from its answer ({@link OsvQuery.Shared}), so a copy screened by both
+ * costs OSV one query.
  *
  * <p>Asked about many versions at once ({@link AdvisorySource.Batched}), it posts {@code /v1/querybatch}, a thousand to
  * a request, and fetches in full only the {@code MAL-} records the answers name - each once per batch, keyed by its
@@ -74,17 +76,21 @@ public final class OpenSsfMaliciousSource implements AdvisorySource.Batched {
     private final URI querybatch;
     private final URI vulns;
     private final FreshnessTracker fetches;
+    private final OsvQuery.Shared shared;
 
     public OpenSsfMaliciousSource() {
-        this(FeedClient.of(FEED, FeedTransport.jdk(CONNECT_TIMEOUT), POLICY), DEFAULT_ENDPOINT, Clock.systemUTC());
+        this(FeedClient.of(FEED, FeedTransport.jdk(CONNECT_TIMEOUT), POLICY), DEFAULT_ENDPOINT, Clock.systemUTC(),
+                OsvQuery.Shared.none());
     }
 
     public OpenSsfMaliciousSource(Endpoint endpoint) {
-        this(FeedClient.of(FEED, transport(endpoint), POLICY), DEFAULT_ENDPOINT, Clock.systemUTC());
+        this(FeedClient.of(FEED, transport(endpoint), POLICY), DEFAULT_ENDPOINT, Clock.systemUTC(),
+                OsvQuery.Shared.none());
     }
 
-    private OpenSsfMaliciousSource(FeedClient client, URI base, Clock clock) {
+    private OpenSsfMaliciousSource(FeedClient client, URI base, Clock clock, OsvQuery.Shared shared) {
         this.client = client;
+        this.shared = shared;
         this.query = base.resolve("/v1/query");
         this.querybatch = base.resolve("/v1/querybatch");
         this.vulns = base.resolve("/v1/vulns/");
@@ -94,13 +100,19 @@ public final class OpenSsfMaliciousSource implements AdvisorySource.Batched {
     /** A source answering every request through {@code exchange}, as a 200 the client bounds and pages as a live
      *  one. */
     public static OpenSsfMaliciousSource exchanging(Exchange exchange) {
+        return exchanging(exchange, OsvQuery.Shared.none());
+    }
+
+    /** As {@link #exchanging(Exchange)}, sharing its answers through {@code shared}. */
+    public static OpenSsfMaliciousSource exchanging(Exchange exchange, OsvQuery.Shared shared) {
         return new OpenSsfMaliciousSource(FeedClient.of(FEED, (request, timeout) -> FeedResponse.of(200,
-                exchange.answer(request)), POLICY), DEFAULT_ENDPOINT, Clock.systemUTC());
+                exchange.answer(request)), POLICY), DEFAULT_ENDPOINT, Clock.systemUTC(), shared);
     }
 
     /** The production form, over the deployment clock the reading's retry window is measured on. */
     public static OpenSsfMaliciousSource over(URI base, Clock clock) {
-        return new OpenSsfMaliciousSource(FeedClient.of(FEED, FeedTransport.jdk(CONNECT_TIMEOUT), POLICY), base, clock);
+        return new OpenSsfMaliciousSource(FeedClient.of(FEED, FeedTransport.jdk(CONNECT_TIMEOUT), POLICY), base, clock,
+                OsvQuery.Shared.node());
     }
 
     @Override
@@ -110,9 +122,10 @@ public final class OpenSsfMaliciousSource implements AdvisorySource.Batched {
         }
         String key = ecosystem + '|' + coordinate + '|' + version;
         try {
-            List<Advisory> advisories = client.fetch(OsvQuery.request(query, ecosystem, coordinate, version, null),
-                    () -> new OsvQuery.Pages(query, ecosystem, coordinate, version,
-                            vuln -> malicious(vuln, coordinate))).orElse(List.of());
+            List<Advisory> advisories = new ArrayList<>();
+            for (JsonNode vuln : shared.answered(client, query, ecosystem, coordinate, version)) {
+                malicious(vuln, coordinate).ifPresent(advisories::add);
+            }
             fetches.fetched(key);
             return advisories;
         } catch (FeedException e) {
