@@ -115,6 +115,21 @@ class VexSuppressionTest {
     }
 
     @Test
+    void a_wildcard_product_names_nothing() {
+        assertThat(verdict(FEED, statement(VexStatus.NOT_AFFECTED, null, "*", "urn:acme:vex:7",
+                Instant.parse("2026-07-13T00:00:00Z"))))
+                .as("a statement says what it covers").isEqualTo(Verdict.REJECT);
+    }
+
+    @Test
+    void a_bare_name_does_not_clear_a_package_that_has_a_purl() {
+        // A bare name carries no ecosystem, so it could equally be another ecosystem's package of that name; where the
+        // subject has a purl, the statement has to name it.
+        assertThat(verdict(FEED, statement(VexStatus.NOT_AFFECTED, null, LOG4J.coordinate(), "urn:acme:vex:8",
+                Instant.parse("2026-07-13T00:00:00Z")))).isEqualTo(Verdict.REJECT);
+    }
+
+    @Test
     void a_version_pinned_product_only_matches_that_version() {
         // The statement pins 2.13.0; the subject is 2.14.1, so it does not apply and the advisory still bites.
         assertThat(verdict(FEED, statement(VexStatus.NOT_AFFECTED, null, LOG4J_PURL + "@2.13.0", "urn:acme:vex:6",

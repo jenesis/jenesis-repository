@@ -11,9 +11,10 @@ import module java.base;
  * through {@link Vex}, decoupled from either interchange format's wire schema.
  *
  * <p>Matching is two independent questions the gate asks: {@link #covers} - does this statement speak to the advisory
- * (by id or a shared alias) - and {@link #appliesTo} - does it speak to the subject coordinate (by purl or bare
- * coordinate, honouring a version when the product pins one). Both are pure and case-insensitive on identifiers; a
- * statement with no products applies to nothing, so a malformed VEX can never blanket-suppress a tenant's advisories.
+ * (by id or a shared alias) - and {@link #appliesTo} - does it speak to the subject coordinate (by purl, or by bare
+ * coordinate in an ecosystem that has no purl, honouring a version when the product pins one). Both are pure and
+ * case-insensitive on identifiers; a statement with no products, or naming {@code *}, applies to nothing, so a
+ * malformed VEX can never blanket-suppress a tenant's advisories.
  */
 public record VexStatement(String vulnerability, List<String> aliases, List<String> products,
                            VexStatus status, String justification, String statement,
@@ -39,8 +40,10 @@ public record VexStatement(String vulnerability, List<String> aliases, List<Stri
     }
 
     /** Whether this statement applies to a subject coordinate: one of its products matches the subject's purl (built
-     *  through {@link PackageUrls}) or its bare coordinate, and - when the product identifier pins a version - that
-     *  version equals the subject's. A statement with no products applies to nothing. */
+     *  through {@link PackageUrls}) - or, in an ecosystem that has no purl, its bare coordinate - and, when the product
+     *  identifier pins a version, that version equals the subject's. Where a purl exists a bare name is not enough,
+     *  since a name alone carries no ecosystem and would match another ecosystem's package of the same name. A
+     *  statement with no products applies to nothing. */
     public boolean appliesTo(String ecosystem, String coordinate, String version) {
         if (products.isEmpty()) {
             return false;
@@ -55,15 +58,13 @@ public record VexStatement(String vulnerability, List<String> aliases, List<Stri
         return false;
     }
 
-    /** Whether one product identifier (a purl, a bare coordinate, or {@code *}) names this subject. */
+    /** Whether one product identifier - a purl, or a bare coordinate where the subject has no purl - names this
+     *  subject. {@code *} names nothing: a statement says what it covers. */
     private static boolean matches(String product, String purlName, String coordinate, String version) {
         if (product == null || product.isBlank()) {
             return false;
         }
         String trimmed = product.strip();
-        if (trimmed.equals("*")) {
-            return true;
-        }
         // Strip purl qualifiers (?a=b) and subpath (#sub) before splitting off the version, so pinning does not defeat
         // the name comparison.
         String bare = trimmed;
@@ -82,7 +83,7 @@ public record VexStatement(String vulnerability, List<String> aliases, List<Stri
             name = bare.substring(0, at);
             pinnedVersion = bare.substring(at + 1);
         }
-        boolean nameMatches = (purlName != null && name.equalsIgnoreCase(purlName)) || name.equalsIgnoreCase(coordinate);
+        boolean nameMatches = purlName != null ? name.equalsIgnoreCase(purlName) : name.equalsIgnoreCase(coordinate);
         if (!nameMatches) {
             return false;
         }
