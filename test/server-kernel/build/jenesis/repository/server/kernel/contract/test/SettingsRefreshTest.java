@@ -12,6 +12,7 @@ import build.jenesis.repository.server.kernel.Settings;
 import build.jenesis.repository.server.kernel.SettingsRefresh;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.UpstreamMemory;
 import org.springframework.core.env.StandardEnvironment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -63,6 +64,24 @@ class SettingsRefreshTest {
         settings.refresh();
         assertThat(settings.getOrDefault("tenant-quota", "0")).as("the re-read converged this instance")
                 .isEqualTo("1024");
+    }
+
+    /** A relayed upstream document is served from memory without passing the proxy screen again, so a change to the
+     *  settings forgets what the memory holds and the next read is fetched, and screened, afresh; a tick over an
+     *  unchanged store keeps it. */
+    @Test
+    void a_settings_change_forgets_the_remembered_upstream_documents() throws IOException {
+        URI packument = URI.create("https://registry.example/lodash");
+        UpstreamMemory memory = UpstreamMemory.node();
+        refresh.refresh();
+        memory.put(store, packument, "{}".getBytes(StandardCharsets.UTF_8), _ -> null);
+
+        refresh.refresh();
+        assertThat(memory.get(store, packument)).as("an unchanged store keeps the memory").isPresent();
+
+        new Settings(store).set("deny-list", "lodash");   // another node writes
+        refresh.refresh();
+        assertThat(memory.get(store, packument)).as("a changed store forgets it").isEmpty();
     }
 
     @Test
