@@ -66,15 +66,17 @@ public final class GitHubAdvisorySource implements AdvisorySource {
 
     private static final URI DEFAULT_ENDPOINT = URI.create("https://api.github.com");
 
-    /** GitHub's ecosystem name per canonical ecosystem; absent where GitHub tracks none (Rust, Packagist, CocoaPods,
-     *  Conan, Linux distributions), so those coordinates spend no request. */
+    /** GitHub's ecosystem name per canonical ecosystem, as its {@code /advisories} filter spells it; absent where
+     *  GitHub tracks none (CocoaPods, Conan, conda, Linux distributions), so those coordinates spend no request. */
     private static final Ecosystems.Vocabulary ECOSYSTEMS = Ecosystems.vocabulary(Map.of(
             Ecosystems.MAVEN, "maven",
             Ecosystems.NPM, "npm",
             Ecosystems.PYPI, "pip",
             Ecosystems.GO, "go",
             Ecosystems.NUGET, "nuget",
-            Ecosystems.RUBYGEMS, "rubygems"));
+            Ecosystems.RUBYGEMS, "rubygems",
+            Ecosystems.CRATES_IO, "rust",
+            Ecosystems.PACKAGIST, "composer"));
 
     /** A connect timeout, so a black-holed host fails the fetch rather than parking the gate thread. */
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
