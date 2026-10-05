@@ -60,4 +60,17 @@ class PublishTenantScopeTest {
         }
         assertThat(PublishTenant.current()).isNull();
     }
+
+    @Test
+    void a_scope_binds_the_repository_beside_the_tenant_and_a_nested_one_restores_both() {
+        try (PublishTenant.Scope _ = PublishTenant.open("acme", "releases")) {
+            assertThat(PublishTenant.current()).isEqualTo("acme");
+            assertThat(PublishTenant.repository()).as("the repository the request addresses").isEqualTo("releases");
+            try (PublishTenant.Scope _ = PublishTenant.open("acme")) {
+                assertThat(PublishTenant.repository()).as("an operation names no repository").isNull();
+            }
+            assertThat(PublishTenant.repository()).as("the outer repository is restored").isEqualTo("releases");
+        }
+        assertThat(PublishTenant.repository()).isNull();
+    }
 }

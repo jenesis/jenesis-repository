@@ -106,12 +106,14 @@ public class SignalsConfig {
     }
 
     /**
-     * Binds the publishing tenant's effective settings to the store, so a signature inspector reads the keys
-     * configured at runtime. Resolved through a provider because {@link LiveConfig} is itself built over this store.
+     * Binds the publishing repository's effective settings to the store, so a signature inspector reads the keys
+     * configured at runtime and a screen reads its repository's own dials. Resolved through a provider because
+     * {@link LiveConfig} is itself built over this store.
      */
     @Bean
     public StoreBindings complianceSettingsStoreBindings(ObjectProvider<LiveConfig> liveConfig) {
-        return ComplianceSettings.bindings(() -> liveConfig.getObject().settings(PublishTenant.current()));
+        return ComplianceSettings.bindings(() -> liveConfig.getObject().settings(PublishTenant.current(),
+                PublishTenant.repository()));
     }
 
 }

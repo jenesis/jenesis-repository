@@ -1,6 +1,7 @@
 package build.jenesis.repository.gateway;
 
 import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ComplianceSettings;
 import module java.base;
 import module org.slf4j;
@@ -13,6 +14,7 @@ import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.MalformedArtifactException;
 import build.jenesis.repository.compliance.QualityInspector;
+import build.jenesis.repository.compliance.ScreeningMode;
 import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.inventory.HeldSubjects;
@@ -83,10 +85,21 @@ public final class ProxyScreen {
         return INCOMPLETE_SCREENS.get();
     }
 
+    /** The reason an artifact served while a feed could not answer carries, beside the outage itself. */
+    static final String ADMITTED_REASON = "Admitted on the checks that could answer, as the repository's screening "
+            + "mode says, while an advisory feed cannot";
+
+    /** The reason a finding the screen did not act on carries, under {@link ScreeningMode#RECORD}. */
+    static final String RECORDED_REASON = "Recorded, not held: the repository's screening mode records what the "
+            + "screen finds and holds none of it";
+
     private final ComplianceGate gate;
     private final ArtifactStore store;
     private final Publication publication;
     private final int holdDays;
+
+    /** What this screen does with what it could not find out and with what it found. */
+    private final ScreeningMode mode;
 
     /** Whether to withhold on an incomplete screen rather than serve with the fact recorded. */
     private final boolean withholdIncomplete;
@@ -103,11 +116,22 @@ public final class ProxyScreen {
     }
 
     public ProxyScreen(ComplianceGate gate, ArtifactStore store, int holdDays, boolean withholdIncomplete) {
+        this(gate, store, holdDays, withholdIncomplete, ScreeningMode.of(null));
+    }
+
+    private ProxyScreen(ComplianceGate gate, ArtifactStore store, int holdDays, boolean withholdIncomplete,
+                        ScreeningMode mode) {
         this.gate = gate;
         this.store = store;
         this.publication = new Publication(store);
         this.holdDays = holdDays;
         this.withholdIncomplete = withholdIncomplete;
+        this.mode = Objects.requireNonNull(mode, "mode");
+    }
+
+    /** This screen deciding under {@code mode}, the screened repository's {@link ScreeningMode}. */
+    public ProxyScreen screening(ScreeningMode mode) {
+        return new ProxyScreen(gate, store, holdDays, withholdIncomplete, mode);
     }
 
     /** Wrap an upstream fetcher to screen its fetched artifact: a non-{@link Verdict#ALLOW} verdict becomes an empty
@@ -203,6 +227,7 @@ public final class ProxyScreen {
                     ProxyFormat.Download rawResponse = pulled.get();
                     Screening screening = assessUnclaimed(path, lastModified(rawResponse.header("last-modified")));
                     if (screening.verdict() == Verdict.ALLOW) {
+                        log(path, screening);
                         return pulled;
                     }
                     try (rawResponse) {
@@ -235,6 +260,7 @@ public final class ProxyScreen {
                         : body;
                 Screening screening = assess(path, prefix, lastModified(response.header("last-modified")), truncated);
                 if (screening.verdict() == Verdict.ALLOW) {
+                    log(path, screening);
                     return Optional.of(new ProxyFormat.Download(response.status(),
                             new SequenceInputStream(new ByteArrayInputStream(prefix), continued), response.headers()));
                 }
@@ -343,11 +369,56 @@ public final class ProxyScreen {
      * inspector produced a subject.
      */
     Screening assessSubjects(String path, QualityInspector.Inspection inspection, Instant lastModified) {
+        Screening screening;
         try {
-            return decide(path, inspection, lastModified);
+            screening = decide(gate, path, inspection, lastModified);
         } catch (RuntimeException failure) {
-            return feedFailed(path, inspection.subjects(), failure);
+            screening = outage(path, inspection.subjects(), failure,
+                    () -> decide(gate.advisories(AdvisorySource.none()), path, inspection, lastModified));
         }
+        return governed(path, screening);
+    }
+
+    /**
+     * What a feed that could not answer leaves the copy to: held under {@link ScreeningMode#HOLD}; otherwise decided
+     * again by every dimension but the feed - so the deny-list, the licence and the immaturity hold still bite - and
+     * served if they allow it, the outage among its reasons. A re-decision that fails too has nothing left to decide
+     * by, and holds.
+     */
+    private Screening outage(String path, List<ComplianceGate.Subject> subjects, RuntimeException failure,
+                             Supplier<Screening> withoutFeed) {
+        if (!mode.admitsOutage()) {
+            return feedFailed(path, subjects, failure);
+        }
+        Screening decided;
+        try {
+            decided = withoutFeed.get();
+        } catch (RuntimeException again) {
+            failure.addSuppressed(again);
+            return feedFailed(path, subjects, failure);
+        }
+        Throwable cause = failure.getCause() != null ? failure.getCause() : failure;
+        LOGGER.warn("Screening the proxied " + path + " without the advisory feeds, one of which cannot answer ("
+                + cause.getMessage() + "); the repository's screening mode is " + mode, failure);
+        List<String> reasons = new ArrayList<>(decided.reasons());
+        reasons.add(ADMITTED_REASON + ": " + cause.getMessage());
+        return new Screening(decided.verdict(), decided.coordinate(), reasons, decided.rules(), decided.complete(),
+                decided.floor(), true);
+    }
+
+    /** {@link ScreeningMode#RECORD}'s rule over a reached decision: it is lowered to its {@link Screening#floor} -
+     *  what the deny-list decided - and what it found is kept among the reasons. Every other mode acts on the decision
+     *  as reached. */
+    private Screening governed(String path, Screening screening) {
+        if (mode != ScreeningMode.RECORD || screening.verdict().compareTo(screening.floor()) <= 0) {
+            return screening;
+        }
+        LOGGER.warn("Serving the proxied " + path + " the screen would have answered " + screening.verdict()
+                + ": the repository's screening mode is RECORD - " + String.join("; ", screening.reasons()));
+        List<String> reasons = new ArrayList<>(screening.reasons());
+        reasons.add(RECORDED_REASON);
+        return new Screening(screening.floor(), screening.coordinate(), reasons, screening.rules(),
+                screening.complete(), screening.floor(), true);
     }
 
     /**
@@ -369,8 +440,9 @@ public final class ProxyScreen {
                 List.of(ComplianceGate.FEED_UNAVAILABLE_RULE), true);
     }
 
-    /** {@link #assessSubjects}'s decision, which raises when an advisory feed does. */
-    private Screening decide(String path, QualityInspector.Inspection inspection, Instant lastModified) {
+    /** {@link #assessSubjects}'s decision through {@code gate}, which raises when an advisory feed does. */
+    private Screening decide(ComplianceGate gate, String path, QualityInspector.Inspection inspection,
+                             Instant lastModified) {
         List<ComplianceGate.Subject> subjects = inspection.subjects();
         if (InspectionMerge.noPackageSubject(subjects)) {
             // No package subject came back, so no parsed coordinate ever reached the gate, and the path's own
@@ -382,12 +454,12 @@ public final class ProxyScreen {
             // fallback subject is APPENDED to the content findings rather than assessed beside them.
             if (inspection.complete()) {
                 if (subjects.isEmpty()) {
-                    return decideUnclaimed(path, lastModified);
+                    return decideUnclaimed(gate, path, lastModified);
                 }
                 // Content findings and no package subject - a bundle fetched beside a file nothing parsed as a
                 // package. The file is still screened from its path, and what was found beside it is assessed with
                 // it; the stronger verdict decides and both sets of reasons are recorded.
-                Screening beside = decideUnclaimed(path, lastModified);
+                Screening beside = decideUnclaimed(gate, path, lastModified);
                 ComplianceGate.Assessment scanned = gate.assess(subjects);
                 List<String> reasons = new ArrayList<>(beside.reasons());
                 for (ComplianceGate.Finding finding : scanned.findings()) {
@@ -398,7 +470,8 @@ public final class ProxyScreen {
                         : beside.verdict();
                 List<String> rules = new ArrayList<>(beside.rules());
                 scanned.rules().stream().filter(rule -> !rules.contains(rule)).forEach(rules::add);
-                return new Screening(verdict, beside.coordinate(), reasons, rules, true);
+                Verdict floor = scanned.denied().compareTo(beside.floor()) > 0 ? scanned.denied() : beside.floor();
+                return new Screening(verdict, beside.coordinate(), reasons, rules, true, floor, false);
             } else {
                 // A bound stopped some inspector's read and nothing licensable came back. The fallback subject is
                 // APPENDED rather than substituted, so a content finding made over the truncated head is still
@@ -446,13 +519,16 @@ public final class ProxyScreen {
                 }
             }
         }
-        return new Screening(verdict, coordinate(subjects), reasons, rules, inspection.complete());
+        return new Screening(verdict, coordinate(subjects), reasons, rules, inspection.complete(),
+                assessment.denied(), false);
     }
 
-    /** Record a non-{@code ALLOW} verdict in the durable {@link QuarantineLog}; a clean artifact records nothing.
+    /** Record a non-{@code ALLOW} verdict in the durable {@link QuarantineLog}, and an {@code ALLOW} the repository's
+     *  screening mode reached that the screen alone would not have, with what it found; a clean artifact records
+     *  nothing.
      *  Shared with the hardened proxy leg, which records both a policy withholding and a structural refusal here. */
     void log(String path, Screening screening) throws IOException {
-        if (screening.verdict() != Verdict.ALLOW) {
+        if (screening.verdict() != Verdict.ALLOW || screening.governed()) {
             new QuarantineLog(store).record(Instant.now(), path, screening.coordinate(), screening.verdict(),
                     screening.reasons(), screening.rules());
         }
@@ -460,12 +536,21 @@ public final class ProxyScreen {
 
     /** A screening outcome: the verdict, the coordinate the log names, the reasons behind a withholding and the rules
      *  that decided it, and whether the decision was reached over the WHOLE artifact or over as much of it as a bound
-     *  allowed. Reused by the hardened proxy leg to carry its own decision and its named structural refusals. */
-    record Screening(Verdict verdict, String coordinate, List<String> reasons, List<String> rules, boolean complete) {
+     *  allowed. Reused by the hardened proxy leg to carry its own decision and its named structural refusals. The
+     *  {@code floor} is the verdict {@link ScreeningMode#RECORD} still enforces - what the deny-list decided - and
+     *  {@code governed} says the repository's mode decided where the screen alone would not have, which is recorded
+     *  even when it serves. */
+    record Screening(Verdict verdict, String coordinate, List<String> reasons, List<String> rules, boolean complete,
+                     Verdict floor, boolean governed) {
 
         Screening {
             reasons = List.copyOf(reasons);
             rules = List.copyOf(rules);
+        }
+
+        /** A screening no {@link ScreeningMode} lowers: its floor is its verdict. */
+        Screening(Verdict verdict, String coordinate, List<String> reasons, List<String> rules, boolean complete) {
+            this(verdict, coordinate, reasons, rules, complete, verdict, false);
         }
 
         /** A screening reached over the whole artifact - a structural refusal or a drift alarm, which are decisions
@@ -503,15 +588,18 @@ public final class ProxyScreen {
      *  top, exactly as it does for a claimed subject. A feed that cannot answer holds the copy, as it does on the
      *  claimed legs, so the metadata and raw-download legs that screen from the path alone fail closed too. */
     private Screening assessUnclaimed(String path, Instant lastModified) {
+        Screening screening;
         try {
-            return decideUnclaimed(path, lastModified);
+            screening = decideUnclaimed(gate, path, lastModified);
         } catch (RuntimeException failure) {
-            return feedFailed(path, List.of(), failure);
+            screening = outage(path, List.of(), failure,
+                    () -> decideUnclaimed(gate.advisories(AdvisorySource.none()), path, lastModified));
         }
+        return governed(path, screening);
     }
 
-    /** {@link #assessUnclaimed}'s decision, which raises when an advisory feed does. */
-    private Screening decideUnclaimed(String path, Instant lastModified) {
+    /** {@link #assessUnclaimed}'s decision through {@code gate}, which raises when an advisory feed does. */
+    private Screening decideUnclaimed(ComplianceGate gate, String path, Instant lastModified) {
         ComplianceGate.Assessment assessment = gate.assessUnclaimed(pathDerivedSubject(path));
         Verdict verdict = assessment.verdict();
         List<String> reasons = new ArrayList<>();
@@ -524,7 +612,8 @@ public final class ProxyScreen {
             reasons.add("Immature: upstream published within the " + holdDays + "-day hold");
             rules.add(IMMATURE_RULE);
         }
-        return new Screening(verdict, coordinate(List.of(pathDerivedSubject(path))), reasons, rules);
+        return new Screening(verdict, coordinate(List.of(pathDerivedSubject(path))), reasons, rules, true,
+                assessment.denied(), false);
     }
 
     /** The stand-in subject for an artifact screened from its path alone rather than from parsed content on the proxy

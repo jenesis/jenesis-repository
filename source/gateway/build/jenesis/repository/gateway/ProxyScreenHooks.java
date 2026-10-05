@@ -3,6 +3,7 @@ package build.jenesis.repository.gateway;
 import module java.base;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.GatePolicyProvider;
+import build.jenesis.repository.compliance.ScreeningMode;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.server.PullThroughHooks;
@@ -20,7 +21,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * <p>The gate is resolved lazily per request, so the one in force when a fetch runs is the one that screens, and on
  * the serving dispatcher it is the requesting tenant's own ({@link #perTenant}, bound per request through
  * {@link #forRequest}, which also reads whether the request's repository marks its upstreams internal and screens its
- * fetch through the publishing flavour if so); a {@code null} gate (an ungated tenant) leaves the fetcher unwrapped -
+ * fetch through the publishing flavour if so, and the repository's {@link ScreeningMode}); a {@code null} gate (an ungated tenant) leaves the fetcher unwrapped -
  * the honest name for what
  * an ungated proxy already did by omission, matching the router's own {@code screening()} for an ungated tenant.
  * {@code verifyHit} is the serve-through default.
@@ -31,6 +32,10 @@ public final class ProxyScreenHooks implements PullThroughHooks {
     private final BiFunction<String, GatePolicyProvider.Path, ComplianceGate> gates;
     private final String tenant;
     private final GatePolicyProvider.Path flavour;
+
+    /** The screening mode of the repository these hooks are bound to; the default where they are bound to none. */
+    private final ScreeningMode mode;
+
     /** The immaturity window, read per fetch. */
     private final IntSupplier holdDays;
 
@@ -47,15 +52,17 @@ public final class ProxyScreenHooks implements PullThroughHooks {
 
     public ProxyScreenHooks(Supplier<ComplianceGate> gate, int holdDays, boolean withholdIncomplete) {
         Objects.requireNonNull(gate, "gate");
-        this((_, _) -> gate.get(), null, GatePolicyProvider.Path.PROXY, () -> holdDays, () -> withholdIncomplete);
+        this((_, _) -> gate.get(), null, GatePolicyProvider.Path.PROXY, ScreeningMode.of(null), () -> holdDays,
+                () -> withholdIncomplete);
     }
 
     private ProxyScreenHooks(BiFunction<String, GatePolicyProvider.Path, ComplianceGate> gates, String tenant,
-                             GatePolicyProvider.Path flavour, IntSupplier holdDays,
+                             GatePolicyProvider.Path flavour, ScreeningMode mode, IntSupplier holdDays,
                              BooleanSupplier withholdIncomplete) {
         this.gates = Objects.requireNonNull(gates, "gates");
         this.tenant = tenant;
         this.flavour = Objects.requireNonNull(flavour, "flavour");
+        this.mode = Objects.requireNonNull(mode, "mode");
         this.holdDays = Objects.requireNonNull(holdDays, "holdDays");
         this.withholdIncomplete = Objects.requireNonNull(withholdIncomplete, "withholdIncomplete");
     }
@@ -69,18 +76,20 @@ public final class ProxyScreenHooks implements PullThroughHooks {
      */
     public static ProxyScreenHooks perTenant(BiFunction<String, GatePolicyProvider.Path, ComplianceGate> gates,
                                              IntSupplier holdDays, BooleanSupplier withholdIncomplete) {
-        return new ProxyScreenHooks(gates, null, GatePolicyProvider.Path.PROXY, holdDays, withholdIncomplete);
+        return new ProxyScreenHooks(gates, null, GatePolicyProvider.Path.PROXY, ScreeningMode.of(null), holdDays,
+                withholdIncomplete);
     }
 
     @Override
     public PullThroughHooks forTenant(String tenant) {
-        return new ProxyScreenHooks(gates, tenant, GatePolicyProvider.Path.PROXY, holdDays, withholdIncomplete);
+        return new ProxyScreenHooks(gates, tenant, GatePolicyProvider.Path.PROXY, ScreeningMode.of(null), holdDays,
+                withholdIncomplete);
     }
 
     @Override
     public PullThroughHooks forRequest(String tenant, FormatExchange exchange) {
-        return new ProxyScreenHooks(gates, tenant, GatePolicyProvider.Path.fetched(exchange::setting), holdDays,
-                withholdIncomplete);
+        return new ProxyScreenHooks(gates, tenant, GatePolicyProvider.Path.fetched(exchange::setting),
+                ScreeningMode.of(exchange::setting), holdDays, withholdIncomplete);
     }
 
     @Override
@@ -95,6 +104,6 @@ public final class ProxyScreenHooks implements PullThroughHooks {
         return active == null
                 ? upstream
                 : new ProxyScreen(active, store, holdDays.getAsInt(), withholdIncomplete.getAsBoolean())
-                        .wrap(upstream, path, companions);
+                        .screening(mode).wrap(upstream, path, companions);
     }
 }

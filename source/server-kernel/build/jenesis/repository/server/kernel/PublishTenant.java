@@ -17,21 +17,39 @@ package build.jenesis.repository.server.kernel;
  */
 public final class PublishTenant {
 
-    private static final ThreadLocal<String> CURRENT = new ThreadLocal<>();
+    /** The tenant and, where the request named one, the repository. */
+    private record Bound(String tenant, String repository) {
+    }
+
+    private static final ThreadLocal<Bound> CURRENT = new ThreadLocal<>();
 
     private PublishTenant() {
     }
 
     /** The tenant of the publish running on this thread, or {@code null} when none is in scope. */
     public static String current() {
-        return CURRENT.get();
+        Bound bound = CURRENT.get();
+        return bound == null ? null : bound.tenant();
+    }
+
+    /** The repository the request on this thread addresses, or {@code null} where it names none - an operation, or a
+     *  publish off any request - so a repository's own setting is read only where the repository is known, and the
+     *  tenant's answers otherwise. */
+    public static String repository() {
+        Bound bound = CURRENT.get();
+        return bound == null ? null : bound.repository();
     }
 
     /** Bind {@code tenant} to this thread for the duration of the returned scope, restoring the previous binding on
      *  close - so a nested publish or a reused thread is left as it was found. */
     public static Scope open(String tenant) {
-        String previous = CURRENT.get();
-        CURRENT.set(tenant);
+        return open(tenant, null);
+    }
+
+    /** As {@link #open(String)}, with the repository the request addresses. */
+    public static Scope open(String tenant, String repository) {
+        Bound previous = CURRENT.get();
+        CURRENT.set(new Bound(tenant, repository));
         return () -> {
             if (previous == null) {
                 CURRENT.remove();

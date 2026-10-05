@@ -4,10 +4,13 @@ import module java.base;
 import module org.slf4j;
 
 import build.jenesis.repository.store.Clocks;
+import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ComplianceGate;
+import build.jenesis.repository.compliance.ComplianceSettings;
 import build.jenesis.repository.compliance.HealthSource;
 import build.jenesis.repository.compliance.MalformedArtifactException;
 import build.jenesis.repository.compliance.QualityInspector;
+import build.jenesis.repository.compliance.ScreeningMode;
 import build.jenesis.repository.compliance.SignerTrustProvider;
 import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.findings.Finding;
@@ -145,6 +148,18 @@ public final class ComplianceScreen implements PublishInterceptor {
      *  publishing thread so the fail-closed hold names why the screen could not complete. Null when assessment ran to a
      *  verdict - the ordinary case. */
     private final ThreadLocal<String> feedFailure = new ThreadLocal<>();
+
+    /** Why the repository's {@link ScreeningMode} decided this upload where the screen alone would not have - an
+     *  outage it was admitted through, findings it recorded rather than held - or {@code null} where it did not. */
+    private final ThreadLocal<String> governed = new ThreadLocal<>();
+
+    /** The reason an upload screened while a feed could not answer carries, beside the outage itself. */
+    static final String ADMITTED_REASON = "Admitted on the checks that could answer, as the repository's screening "
+            + "mode says, while an advisory feed cannot";
+
+    /** The reason an upload the screen would have withheld carries when the repository records instead. */
+    static final String RECORDED_REASON = "Recorded, not held: the repository's screening mode records what the "
+            + "screen finds and holds none of it";
 
     /** The {@code ServiceLoader} constructor: the screen judges each call by the {@link Binding} its store carries. */
     public ComplianceScreen() {
@@ -479,6 +494,7 @@ public final class ComplianceScreen implements PublishInterceptor {
         unparseable.remove();
         inspectionCode.remove();
         feedFailure.remove();
+        governed.remove();
         if (RELEASING.get()) {
             // A review release is replaying this upload's own dispatch: the hold was already reviewed and released, so
             // accept the re-publish rather than re-screening the released bytes into a fresh quarantine.
@@ -489,6 +505,7 @@ public final class ComplianceScreen implements PublishInterceptor {
         if (current == null) {
             return Disposition.ACCEPT;
         }
+        ScreeningMode mode = ScreeningMode.of(ComplianceSettings.lookup(content.store()));
         List<ComplianceGate.Subject> inspected;
         try {
             inspected = INSPECTION.inspect(artifact, content);
@@ -521,35 +538,83 @@ public final class ComplianceScreen implements PublishInterceptor {
             // declares a sidecar convention, and derives no subject when the publisher signed nothing - so taking
             // "claimed and found nothing" for "already screened" would admit a jar carrying a CRITICAL advisory
             // against its own coordinate.
-            return screenFromPath(artifact, current);
+            return screenFromPath(artifact, current, mode);
         }
         if (InspectionMerge.noPackageSubject(inspected)) {
             // Content findings and no package subject - a Sigstore bundle beside a file nothing parsed as a package.
             // The file is still screened from its path against the deny-list, and what was found beside it is
             // assessed with it: a bundle beside a deny-listed name neither switches the deny-list off nor goes
             // unexamined.
-            return screenFromPath(artifact, overlaid(current, content.store(), inspected, artifact), inspected);
+            return screenFromPath(artifact, overlaid(current, content.store(), inspected, artifact), inspected, mode);
         }
         current = overlaid(current, content.store(), inspected, artifact);
-        ComplianceGate.Assessment assessment;
-        try {
-            assessment = current.assess(inspected);
-        } catch (RuntimeException failure) {
-            // An advisory feed (license/vulnerability/health) failed closed while assessing this upload: a real feed
-            // throws UncheckedIOException on a non-200 (a rate limit, a mirror outage) rather than reporting an empty
-            // "clean" answer, and the gate assesses THROUGH the feed, so its assess raises here. Could-not-fully-screen
-            // fails closed exactly as an unparseable body does - HOLD the upload in quarantine with a legible reason,
-            // never admit the unscreened bytes as a silent clean and never let the raw error escape to the publisher as
-            // a 500.
-            return screenFeedFailure(artifact, inspected, failure);
+        // An advisory feed (license/vulnerability/health) that cannot answer raises rather than reporting an empty
+        // "clean" answer - a rate limit, a mirror outage - and the gate assesses THROUGH the feed, so its assess
+        // raises here. What that means for the upload is the repository's screening mode: held in quarantine with a
+        // legible reason by default, never admitted as a silent clean and never escaping to the publisher as a 500.
+        Decided decided = decide(mode, current, gate -> gate.assess(inspected));
+        if (decided.assessment() == null) {
+            return screenFeedFailure(artifact, inspected, decided.failure());
         }
-        assessed.set(assessment);
+        assessed.set(decided.assessment());
         subjects.set(inspected);
-        return switch (assessment.verdict()) {
+        return disposition(mode, decided);
+    }
+
+    /** An assessment, the outage it was reached around where a feed could not answer, or - where nothing could
+     *  decide - no assessment and the failure. */
+    private record Decided(ComplianceGate.Assessment assessment, String outage, RuntimeException failure) {
+    }
+
+    /** Assess through {@code current}; where a feed could not answer and the repository's mode admits an outage,
+     *  through {@code current} without its feeds, so the deny-list and every other dimension still decide. A
+     *  re-assessment that fails too has nothing left to decide by. */
+    private static Decided decide(ScreeningMode mode, ComplianceGate current,
+                                  Function<ComplianceGate, ComplianceGate.Assessment> assess) {
+        try {
+            return new Decided(assess.apply(current), null, null);
+        } catch (RuntimeException failure) {
+            if (mode.admitsOutage()) {
+                try {
+                    ComplianceGate.Assessment withoutFeed = assess.apply(current.advisories(AdvisorySource.none()));
+                    LOGGER.warn("Screened an upload without the advisory feeds, one of which cannot answer; the "
+                            + "repository's screening mode is " + mode, failure);
+                    return new Decided(withoutFeed, message(failure), null);
+                } catch (RuntimeException again) {
+                    failure.addSuppressed(again);
+                }
+            }
+            return new Decided(null, null, failure);
+        }
+    }
+
+    /** The disposition a decided assessment comes to under the repository's mode: as assessed, except that
+     *  {@link ScreeningMode#RECORD} lowers it to what the deny-list decided. Either departure from the screen alone
+     *  is noted for {@link #committed} to record. */
+    private Disposition disposition(ScreeningMode mode, Decided decided) {
+        ComplianceGate.Assessment assessment = decided.assessment();
+        Verdict verdict = assessment.verdict();
+        List<String> notes = new ArrayList<>();
+        if (decided.outage() != null) {
+            notes.add(ADMITTED_REASON + ": " + decided.outage());
+        }
+        if (mode == ScreeningMode.RECORD && verdict.compareTo(assessment.denied()) > 0) {
+            verdict = assessment.denied();
+            notes.add(RECORDED_REASON);
+        }
+        if (!notes.isEmpty()) {
+            governed.set(String.join("; ", notes));
+        }
+        return switch (verdict) {
             case ALLOW -> Disposition.ACCEPT;
             case QUARANTINE -> Disposition.QUARANTINE;
             case REJECT -> Disposition.REJECT;
         };
+    }
+
+    private static String message(RuntimeException failure) {
+        Throwable cause = failure.getCause() != null ? failure.getCause() : failure;
+        return cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
     }
 
     /** The reasons the review screens and the publisher's answer both carry - see {@link #reasonsOf}. */
@@ -655,11 +720,13 @@ public final class ComplianceScreen implements PublishInterceptor {
         String malformed = unparseable.get();
         String code = inspectionCode.get();
         String feedFailed = feedFailure.get();
+        String governedBy = governed.get();
         assessed.remove();
         subjects.remove();
         unparseable.remove();
         inspectionCode.remove();
         feedFailure.remove();
+        governed.remove();
         Binding binding = binding(store);
         PublishRecorder recorder = (binding == null ? NO_BINDING : binding).recorder();
         if (malformed != null) {
@@ -680,7 +747,12 @@ public final class ComplianceScreen implements PublishInterceptor {
                 StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
                 // One recording per publish, then the derived facts it closes the between-sweeps window for.
                 recorder.accepted(store, inventory, artifact, inspected);
-                if (assessment != null && assessment.verdict() == Verdict.QUARANTINE) {
+                if (governedBy != null) {
+                    // Served where the screen alone would not have, or screened around an outage: the decision and
+                    // what was found are recorded as a withholding's are, so nothing the screen saw is lost.
+                    PublishHolds.logGoverned(store, artifact, inspected, assessment, governedBy);
+                    recorder.recordGateFindings(store, artifact, assessment);
+                } else if (assessment != null && assessment.verdict() == Verdict.QUARANTINE) {
                     PublishHolds.logSuperseded(store, artifact, inspected, assessment);
                 }
                 PublishHolds.retireStale(store, inventory, artifact);
@@ -694,7 +766,10 @@ public final class ComplianceScreen implements PublishInterceptor {
                     recorder.recordMaintainers(store, inspected, artifact.path());
                 }
                 recorder.reportSigners(store, inspected, artifact.path(), false);
-                List<String> reasons = reasonsOf(artifact, assessment, malformed, feedFailed);
+                List<String> reasons = new ArrayList<>(reasonsOf(artifact, assessment, malformed, feedFailed));
+                if (governedBy != null) {
+                    reasons.add(governedBy);
+                }
                 // The path a reviewer will meet this hold at, which is not always the path the screen was handed. A
                 // format whose coordinate lives INSIDE the artifact commits under the only descriptor it
                 // can build before the bytes are down - its push endpoint, one path every push of that format shares
@@ -763,36 +838,28 @@ public final class ComplianceScreen implements PublishInterceptor {
     }
 
     /**
-     * As {@link #screenFromPath(ArtifactDescriptor, ComplianceGate)}, with the content findings an inspector made
+     * As {@link #screenFromPath(ArtifactDescriptor, ComplianceGate, ScreeningMode)}, with the content findings an inspector made
      * beside content that derived no package subject: the path-derived subject goes through the unclaimed
      * assessment, the content-scan subjects through the full one (whose licence dimension skips them), and the
      * stronger verdict decides, every finding recorded.
      */
     private Disposition screenFromPath(ArtifactDescriptor artifact, ComplianceGate current,
-                                       List<ComplianceGate.Subject> content) {
+                                       List<ComplianceGate.Subject> content, ScreeningMode mode) {
         ComplianceGate.Subject subject = PublishInspection.pathDerivedSubject(artifact);
-        ComplianceGate.Assessment unclaimed;
-        ComplianceGate.Assessment scanned;
-        try {
-            unclaimed = current.assessUnclaimed(subject);
-            scanned = current.assess(content);
-        } catch (RuntimeException failure) {
-            return screenFeedFailure(artifact, List.of(), failure);
+        Decided decided = decide(mode, current, gate -> {
+            List<ComplianceGate.Finding> findings = new ArrayList<>(gate.assessUnclaimed(subject).findings());
+            findings.addAll(gate.assess(content).findings());
+            return new ComplianceGate.Assessment(ComplianceGate.strongest(findings), List.copyOf(findings));
+        });
+        if (decided.assessment() == null) {
+            return screenFeedFailure(artifact, List.of(), decided.failure());
         }
-        List<ComplianceGate.Finding> findings = new ArrayList<>(unclaimed.findings());
-        findings.addAll(scanned.findings());
-        ComplianceGate.Assessment assessment =
-                new ComplianceGate.Assessment(ComplianceGate.strongest(findings), List.copyOf(findings));
-        assessed.set(assessment);
+        assessed.set(decided.assessment());
         List<ComplianceGate.Subject> all = new ArrayList<>();
         all.add(subject);
         all.addAll(content);
         subjects.set(List.copyOf(all));
-        Disposition disposition = switch (assessment.verdict()) {
-            case ALLOW -> Disposition.ACCEPT;
-            case QUARANTINE -> Disposition.QUARANTINE;
-            case REJECT -> Disposition.REJECT;
-        };
+        Disposition disposition = disposition(mode, decided);
         LOGGER.info(disposition == Disposition.ACCEPT
                 ? "Admitting content screened from its path with what was found beside it (deny-list clear): "
                         + artifact.path()
@@ -810,21 +877,15 @@ public final class ComplianceScreen implements PublishInterceptor {
      *  one, so a non-ACCEPT outcome records its reasons in the quarantine log; an admitted (or withheld) upload is
      *  also logged for the observability the audit asks for. A feed that cannot answer holds the upload as it does
      *  for a parsed one. */
-    private Disposition screenFromPath(ArtifactDescriptor artifact, ComplianceGate current) {
+    private Disposition screenFromPath(ArtifactDescriptor artifact, ComplianceGate current, ScreeningMode mode) {
         ComplianceGate.Subject subject = PublishInspection.pathDerivedSubject(artifact);
-        ComplianceGate.Assessment assessment;
-        try {
-            assessment = current.assessUnclaimed(subject);
-        } catch (RuntimeException failure) {
-            return screenFeedFailure(artifact, List.of(), failure);
+        Decided decided = decide(mode, current, gate -> gate.assessUnclaimed(subject));
+        if (decided.assessment() == null) {
+            return screenFeedFailure(artifact, List.of(), decided.failure());
         }
-        assessed.set(assessment);
+        assessed.set(decided.assessment());
         subjects.set(List.of(subject));
-        Disposition disposition = switch (assessment.verdict()) {
-            case ALLOW -> Disposition.ACCEPT;
-            case QUARANTINE -> Disposition.QUARANTINE;
-            case REJECT -> Disposition.REJECT;
-        };
+        Disposition disposition = disposition(mode, decided);
         LOGGER.info(disposition == Disposition.ACCEPT
                 ? "Admitting content screened from its path (nothing derived a package subject, deny-list clear): "
                         + artifact.path()

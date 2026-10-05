@@ -49,7 +49,10 @@ public final class PublishTenantFilter extends OncePerRequestFilter {
         // tenancy the tenant comes from the path/host (a keyless CDN write names a non-default tenant), which the key
         // header alone could not see; the key-must-agree precedence in those routings still confines a keyed request.
         // A routing refusal is the controller's to answer: leave the tenant unbound and let the request proceed.
+        // The repository is bound beside it where the route names one, so a repository's own compliance setting is
+        // read for its publishes; an operation names none and reads the tenant's.
         Optional<String> tenant;
+        String repository = null;
         if (request.getRequestURI().startsWith(RepositoryRouting.OPERATIONS)) {
             try {
                 tenant = Optional.of(routing.tenant(request));
@@ -57,13 +60,15 @@ public final class PublishTenantFilter extends OncePerRequestFilter {
                 tenant = Optional.empty();
             }
         } else {
-            tenant = routing.resolve(request).map(RepositoryRouting.Route::tenant);
+            Optional<RepositoryRouting.Route> route = routing.resolve(request);
+            tenant = route.map(RepositoryRouting.Route::tenant);
+            repository = route.map(RepositoryRouting.Route::repository).orElse(null);
         }
         if (tenant.isEmpty()) {
             chain.doFilter(request, response);
             return;
         }
-        try (PublishTenant.Scope _ = PublishTenant.open(tenant.get())) {
+        try (PublishTenant.Scope _ = PublishTenant.open(tenant.get(), repository)) {
             chain.doFilter(request, response);
         }
     }

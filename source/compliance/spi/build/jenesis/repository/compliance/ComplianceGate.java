@@ -701,6 +701,12 @@ public final class ComplianceGate {
             return verdict == Verdict.ALLOW;
         }
 
+        /** The verdict the operator's deny list reached on its own, {@link Verdict#ALLOW} where it named nothing: what
+         *  a screen that holds none of its own findings still enforces ({@link ScreeningMode#RECORD}). */
+        public Verdict denied() {
+            return strongest(findings.stream().filter(finding -> DENY_LIST_RULE.equals(finding.rule())).toList());
+        }
+
         /** The rules of the findings that reached this verdict, each once, in the order they were raised. */
         public List<String> rules() {
             return findings.stream()
