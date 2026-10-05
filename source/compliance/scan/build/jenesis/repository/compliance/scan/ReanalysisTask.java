@@ -123,7 +123,9 @@ public final class ReanalysisTask implements MaintenanceTask {
             String eco = copy.ecosystem();
             String coordinate = copy.coordinate();
             String version = copy.version();
-            List<String> kevCves = knownExploited.listed(advisories.advisories(eco, coordinate, version));
+            AdvisorySource.Query asked = copy.asked();
+            List<String> kevCves = knownExploited.listed(
+                    advisories.advisories(asked.ecosystem(), asked.coordinate(), asked.version()));
             if (!kevCves.isEmpty()) {
                 // still actively exploited: keep the finding current
                 raiseActive(ledger, context, copy, kevCves, failed);

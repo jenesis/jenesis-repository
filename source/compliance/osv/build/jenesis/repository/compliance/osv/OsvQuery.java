@@ -38,13 +38,19 @@ public final class OsvQuery {
             Map.entry("Alpine", "Alpine"),
             Map.entry("Homebrew", "Homebrew"));
 
+    /** The ecosystems OSV also publishes per distribution release, as {@code <name>:<release>} ({@code Alpine:v3.19},
+     *  {@code Debian:12}): a query naming one asks that release. Alpine's advisories are published only that way. */
+    private static final Set<String> RELEASED = Set.of("Alpine", Ecosystems.DEBIAN);
+
     private OsvQuery() {
     }
 
     /** Whether OSV publishes {@code ecosystem}, so a query of it is answered rather than refused. A source answers
      *  no advisories for an ecosystem it does not cover. */
     public static boolean covers(String ecosystem) {
-        return OSV_NAMES.containsKey(ecosystem);
+        int release = ecosystem.indexOf(':');
+        return release < 0 ? OSV_NAMES.containsKey(ecosystem)
+                : RELEASED.contains(ecosystem.substring(0, release)) && release < ecosystem.length() - 1;
     }
 
     /** Every ecosystem name OSV publishes that the product asks it about, in OSV's spelling. */
@@ -63,13 +69,15 @@ public final class OsvQuery {
         return OSV_NAMES.keySet();
     }
 
-    /** The name OSV knows the product's {@code ecosystem} by, which is the one a query carries. */
+    /** The name OSV knows the product's {@code ecosystem} by, which is the one a query carries: a release-qualified
+     *  one keeps its release. */
     private static String name(String ecosystem) {
-        String name = OSV_NAMES.get(ecosystem);
-        if (name == null) {
+        if (!covers(ecosystem)) {
             throw new IllegalArgumentException("OSV publishes no ecosystem named " + ecosystem);
         }
-        return name;
+        int release = ecosystem.indexOf(':');
+        return release < 0 ? OSV_NAMES.get(ecosystem)
+                : OSV_NAMES.get(ecosystem.substring(0, release)) + ecosystem.substring(release);
     }
 
     /** One page's request to {@code query} for {@code coordinate} at {@code version}, with the cursor token OSV handed

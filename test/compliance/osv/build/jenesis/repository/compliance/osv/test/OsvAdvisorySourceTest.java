@@ -53,9 +53,21 @@ class OsvAdvisorySourceTest {
         OsvAdvisorySource source = new OsvAdvisorySource(body -> {
             throw new AssertionError("asked " + body);
         });
-        for (String ecosystem : List.of("Hugging Face", "conda", "CocoaPods", "RPM", "Jenesis")) {
+        for (String ecosystem : List.of("Hugging Face", "conda", "CocoaPods", "RPM", "Jenesis", "Maven:3", "Alpine:")) {
             assertThat(source.advisories(ecosystem, "acme/model", "1.0")).as(ecosystem).isEmpty();
         }
+    }
+
+    @Test
+    void a_release_qualified_ecosystem_is_asked_for_that_release() {
+        // OSV publishes Alpine's advisories only per release: asked as bare "Alpine", it answers nothing.
+        StringBuilder seen = new StringBuilder();
+        OsvAdvisorySource source = new OsvAdvisorySource(body -> {
+            seen.append(body);
+            return "{\"vulns\":[]}";
+        });
+        source.advisories("Alpine:v3.18", "openssl", "3.1.4-r0");
+        assertThat(seen.toString()).contains("\"ecosystem\":\"Alpine:v3.18\"").contains("\"name\":\"openssl\"");
     }
 
     @Test

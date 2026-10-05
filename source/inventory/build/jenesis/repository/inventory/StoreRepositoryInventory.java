@@ -1,6 +1,7 @@
 package build.jenesis.repository.inventory;
 
 import module java.base;
+import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.store.Clocks;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.blobs.BlobRoots;
@@ -637,7 +638,18 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
 
     /** A published coordinate version as its format-neutral triple, without the publish-time / pin metadata a full
      *  {@link Release} carries - the shape a coordinate-only request path needs. */
-    public record Coordinate(String ecosystem, String coordinate, String version) {
+    public record Coordinate(String ecosystem, String coordinate, String version, AdvisorySource.Query advised) {
+
+        /** A coordinate version the advisory databases know by its own name. */
+        public Coordinate(String ecosystem, String coordinate, String version) {
+            this(ecosystem, coordinate, version, null);
+        }
+
+        /** The question an advisory database answers about this version: under {@link #advised} where a screen
+         *  recorded one, its own coordinate otherwise. */
+        public AdvisorySource.Query asked() {
+            return advised != null ? advised : new AdvisorySource.Query(ecosystem, coordinate, version);
+        }
     }
 
     /** The published releases of a single coordinate - the sibling versions the console's artifact-detail view lists -
@@ -736,6 +748,13 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return recording.cache(ecosystem, coordinate, version, upstream, at);
     }
 
+    /** Record the name an advisory database knows {@code coordinate} at {@code version} by ({@link AdvisedSection}), as
+     *  of {@code at}: one compare-and-set of its document, none where it already records that name. */
+    public void advised(String ecosystem, String coordinate, String version, AdvisorySource.Query advised,
+                        Instant at) throws IOException {
+        recording.advised(ecosystem, coordinate, version, advised, at);
+    }
+
     /** When a coordinate version was first cached from an upstream and where from, or empty when it is not held as a
      *  cached copy. A point read of its document. */
     public Optional<CachedSection.Facts> cachedAt(String ecosystem, String coordinate, String version)
@@ -750,7 +769,19 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      * retention decision and retention keeps to releases.
      */
     public record Holding(String ecosystem, String coordinate, String version, Instant at, boolean cached,
-                          String upstream, boolean pinned, Long downloads, Instant downloadedAt) {
+                          String upstream, boolean pinned, Long downloads, Instant downloadedAt,
+                          AdvisorySource.Query advised) {
+
+        /** A holding the advisory databases know by its own name. */
+        public Holding(String ecosystem, String coordinate, String version, Instant at, boolean cached,
+                       String upstream, boolean pinned, Long downloads, Instant downloadedAt) {
+            this(ecosystem, coordinate, version, at, cached, upstream, pinned, downloads, downloadedAt, null);
+        }
+
+        /** This holding as the coordinate version it is, with the name an advisory database knows it by. */
+        public Coordinate asCoordinate() {
+            return new Coordinate(ecosystem, coordinate, version, advised);
+        }
 
         /** A release as the holding it is. */
         public static Holding of(Release release) {
