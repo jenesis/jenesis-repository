@@ -50,6 +50,16 @@ public interface PullThroughHooks {
     }
 
     /**
+     * These hooks as they apply to {@code exchange}, served in {@code tenant}: what the dispatcher binds per request,
+     * where a hook that decides per repository reads the request's repository settings through
+     * {@link FormatExchange#setting}. The default is {@link #forTenant}, right for hooks that decide nothing per
+     * repository.
+     */
+    default PullThroughHooks forRequest(String tenant, FormatExchange exchange) {
+        return forTenant(tenant);
+    }
+
+    /**
      * Verify a locally cached artifact against the current gate BEFORE a pull-through hit serves it, returning how the
      * cache should proceed. The default returns {@link HitDecision#serveThrough()} - the local-first serve runs
      * unchanged, and (because the cache treats "nothing durably local" as serve-through too) a path with no

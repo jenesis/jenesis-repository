@@ -4,6 +4,9 @@ import build.jenesis.repository.ui.store.ConsoleActor;
 import build.jenesis.repository.ui.store.RepositoryBrowse;
 import build.jenesis.repository.ui.store.TenantScope;
 import module java.base;
+import build.jenesis.repository.settings.Setting;
+import build.jenesis.repository.settings.StoredSettings;
+import build.jenesis.repository.compliance.GatePolicyProvider;
 
 import build.jenesis.repository.server.kernel.RepositoryRequests;
 import build.jenesis.repository.ui.CurrentTenant;
@@ -527,6 +530,16 @@ public class ComplianceReview extends TenantScope {
         return vulnerabilities(repository);
     }
 
+    /** Whether {@code repository} marks its upstreams internal ({@link GatePolicyProvider.Path#UPSTREAM_INTERNAL}):
+     *  its own stored value where it has one, else the deployment's. */
+    private boolean internal(String repository, Properties settings) throws IOException {
+        String own = StoredSettings.read(StoredSettings.repository(root, tenant(), repository), Setting.Scope.REPOSITORY)
+                .get(GatePolicyProvider.Path.UPSTREAM_INTERNAL);
+        UnaryOperator<String> deployment = effective(settings);
+        return GatePolicyProvider.Path.internal(key ->
+                own != null && GatePolicyProvider.Path.UPSTREAM_INTERNAL.equals(key) ? own : deployment.apply(key));
+    }
+
     private StoredReport.Rows rescanNow(String repository) throws IOException {
         Properties settings = settings();
         SequencedMap<String, AdvisorySource> feeds = AdvisorySource.named(effective(settings));
@@ -536,6 +549,10 @@ public class ComplianceReview extends TenantScope {
         Optional<Findings> ledger = findingsLedger.map(provider -> provider.over(store));
         if (ledger.isEmpty()) {
             return StoredReport.Rows.of(List.of("no findings module installed - the report is assembled live"));
+        }
+        if (internal(repository, settings)) {
+            return StoredReport.Rows.of(List.of("its upstreams are marked internal - what it caches is judged as a "
+                    + "version published here is, and asked of no feed"));
         }
         int[] scanned = {0};
         int[] flagged = {0};
