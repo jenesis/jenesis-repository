@@ -85,9 +85,9 @@ class OsvAdvisorySourceTest {
 
     @Test
     void scores_severity_from_a_cvss_v2_vector() {
-        // The presence of an `Au:` metric selects the hand-rolled CVSS v2 base-score formula, distinct from the v3
-        // path. Full network/low-complexity/complete-impact scores 10.0 -> CRITICAL; the classic partial-impact
-        // vector scores 7.5 -> HIGH. The formula is pinned to these reference scores.
+        // A vector with an `Au:` metric and no version prefix is CVSS v2. Full network/low-complexity/complete-
+        // impact scores 10.0 -> CRITICAL; the classic partial-impact vector scores 7.5 -> HIGH. The formula is
+        // pinned to these reference scores.
         String response = """
                 {"vulns":[
                   {"id":"CVE-v2-crit","severity":[{"type":"CVSS_V2","score":"AV:N/AC:L/Au:N/C:C/I:C/A:C"}]},
@@ -96,14 +96,14 @@ class OsvAdvisorySourceTest {
         OsvAdvisorySource source = new OsvAdvisorySource(_ -> response);
         assertThat(source.advisories("Maven", "org.example:lib", "1.0"))
                 .extracting(AdvisorySource.Advisory::severity)
-                .as("the hand-rolled CVSS v2 formula bands map onto the reference scores")
+                .as("the CVSS v2 reference scores band as CRITICAL and HIGH")
                 .containsExactly(Severity.CRITICAL, Severity.HIGH);
     }
 
     @Test
     void scores_scope_changed_cvss3_vectors_at_their_reference_scores() {
-        // The existing CVSS v3 test pins only S:U (scope-unchanged) vectors; the hand-rolled changed-scope branch (the
-        // 1.08 multiplier, the changed PR weights, and the distinct changed-impact formula) went unexercised. Two
+        // The CVSS v3 test above pins only S:U (scope-unchanged) vectors; the changed-scope arithmetic (the 1.08
+        // multiplier, the changed PR weights, and the distinct changed-impact formula) is pinned here. Two
         // universally-published S:C reference vectors pin it to their exact scores:
         //   - the canonical reflected-XSS vector CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N scores exactly 6.1 -> MEDIUM
         //   - Log4Shell's CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H scores 10.72 pre-clamp, capped at 10.0 -> CRITICAL,
@@ -124,7 +124,7 @@ class OsvAdvisorySourceTest {
     void the_scope_change_flag_alone_crosses_a_severity_boundary() {
         // The same metrics differ only in S:C vs S:U. The scope-changed formula (1.08 * (impact + exploitability))
         // scores 7.2 -> HIGH; the scope-unchanged formula over identical C/I/A/AV/AC/PR/UI scores 6.5 -> MEDIUM. Pinning
-        // the pair at the 7.0 band boundary proves the hand-rolled scope-change arithmetic is live: were the 1.08
+        // the pair at the 7.0 band boundary proves the scope-change arithmetic is live: were the 1.08
         // multiplier (or the changed-scope impact path) dropped, the S:C vector would fall back under 7.0 into MEDIUM
         // and this assertion would fail. A single mid-band check could not tell the two scopes apart.
         String changed = "{\"vulns\":[{\"id\":\"OSV-sc\",\"severity\":[{\"type\":\"CVSS_V3\","
@@ -306,24 +306,36 @@ class OsvAdvisorySourceTest {
     }
 
     /**
-     * A CVSS v4 vector is UNKNOWN, not NONE - the distinction a severity floor turns on.
-     *
-     * <p>The scorer reads v2 and v3 only, so a {@code CVSS:4.0} vector scores nothing. Falling through to the GitHub
-     * severity word, which OSV entries from PyPA, RustSec and the Go database do not carry, would land on
-     * {@code NONE}: {@code severityRank} 0, and an operator's {@code reject #severityRank >= 4} would admit a critical
-     * advisory. v4 is in production use in OSV and GHSA.
-     *
-     * <p>Scoring v4 was the alternative and was rejected - table-based, substantially more code, and it leaves
-     * {@code NONE} meaning two things for the next vendor field the scorer cannot read. Saying UNKNOWN is the
-     * answer {@code AdvisorySource} clause 4 already requires: a source must never answer clean when it means it
-     * does not know.
+     * A CVSS v4.0 vector is scored as v2 and v3 vectors are, at the specification's reference scores: v4 is in
+     * production use in OSV and GHSA, and the entries from PyPA, RustSec and the Go database carry no GitHub severity
+     * word to fall back on. The first vector is the specification's network-reachable, high-impact example at 9.3; the
+     * second scores 1.0.
+     */
+    @Test
+    void scores_cvss4_vectors_at_their_reference_scores() {
+        String response = """
+                {"vulns":[
+                  {"id":"OSV-v4-crit","severity":[{"type":"CVSS_V4",
+                   "score":"CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"}]},
+                  {"id":"OSV-v4-low","severity":[{"type":"CVSS_V4",
+                   "score":"CVSS:4.0/AV:L/AC:H/AT:P/PR:H/UI:A/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N"}]}
+                ]}""";
+        assertThat(new OsvAdvisorySource(_ -> response).advisories("Maven", "org.example:lib", "1.0"))
+                .extracting(AdvisorySource.Advisory::severity)
+                .containsExactly(Severity.CRITICAL, Severity.LOW);
+    }
+
+    /**
+     * A vector that parses as no CVSS version is UNKNOWN, not NONE - the distinction a severity floor turns on. With
+     * no GitHub severity word beside it, NONE would be {@code severityRank} 0, and an operator's
+     * {@code reject #severityRank >= 4} would admit an advisory nobody scored. {@code AdvisorySource} clause 4 requires
+     * the unknown answer: a source never answers clean when it means it does not know.
      */
     @Test
     void an_unscorable_vector_is_unknown_rather_than_none() {
         String response = """
                 {"vulns":[
-                  {"id":"OSV-v4","severity":[{"type":"CVSS_V4",
-                   "score":"CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"}]}
+                  {"id":"OSV-v9","severity":[{"type":"CVSS_V4","score":"CVSS:9.9/AV:N/AC:L"}]}
                 ]}""";
         assertThat(new OsvAdvisorySource(_ -> response).advisories("Maven", "org.example:lib", "1.0"))
                 .extracting(AdvisorySource.Advisory::severity)

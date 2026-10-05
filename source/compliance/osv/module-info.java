@@ -5,6 +5,7 @@
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
+ * @jenesis.alias us.springett.cvss us.springett/cvss-calculator
  */
 module build.jenesis.repository.compliance.osv {
     requires build.jenesis.repository.compliance;
@@ -12,6 +13,7 @@ module build.jenesis.repository.compliance.osv {
     requires build.jenesis.repository.feed;
     requires build.jenesis.repository.settings;
     requires tools.jackson.databind;
+    requires us.springett.cvss;
     exports build.jenesis.repository.compliance.osv;
     provides build.jenesis.repository.compliance.SignalSourceProvider
             with build.jenesis.repository.compliance.osv.OsvAdvisorySourceProvider;

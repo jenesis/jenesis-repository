@@ -13,6 +13,7 @@ import build.jenesis.repository.feed.FeedPolicy;
 import build.jenesis.repository.feed.FeedResponse;
 import build.jenesis.repository.feed.FeedTransport;
 import build.jenesis.repository.feed.Osv;
+import us.springett.cvss.Cvss;
 
 /**
  * An {@link AdvisorySource} over OSV (osv.dev). For each coordinate it posts {@code /v1/query} for the package at the
@@ -178,128 +179,20 @@ public final class OsvAdvisorySource implements AdvisorySource {
         if (malicious) {
             return Severity.NONE;
         }
-        // Severity vectors none of which scored (a CVSS:4.0 vector; the scorer reads v2 and v3), or no severity at all:
+        // Severity vectors none of which scored (a vector in no CVSS version the scorer reads), or no severity at all:
         // unknown, since NONE would be the clean answer clause 4 forbids and a reject-at-or-above floor would admit a
         // critical advisory. NONE means a feed scored it zero (ofScore(0.0) above).
         return Severity.UNKNOWN;
     }
 
-    // CVSS v2 and v3.0/v3.1 are closed-form base-score formulas; v4.0, table-based, is left unscored and falls through
-    // to the GitHub severity word.
+    // The base score of a CVSS v2, v3.0, v3.1 or v4.0 vector, or -1 for one that does not parse as any of them, which
+    // leaves the advisory UNKNOWN rather than scored.
     private static double cvss(String vector) {
-        String trimmed = vector.trim();
-        if (trimmed.startsWith("CVSS:3.")) {
-            return cvss3(trimmed);
-        }
-        return trimmed.contains("Au:") ? cvss2(trimmed) : -1.0;
-    }
-
-    private static double cvss3(String vector) {
-        Map<String, String> metric = metrics(vector);
-        boolean changed = "C".equals(metric.get("S"));
-        double av = switch (metric.getOrDefault("AV", "")) {
-            case "N" -> 0.85;
-            case "A" -> 0.62;
-            case "L" -> 0.55;
-            case "P" -> 0.2;
-            default -> -1;
-        };
-        double ac = switch (metric.getOrDefault("AC", "")) {
-            case "L" -> 0.77;
-            case "H" -> 0.44;
-            default -> -1;
-        };
-        double pr = switch (metric.getOrDefault("PR", "")) {
-            case "N" -> 0.85;
-            case "L" -> changed ? 0.68 : 0.62;
-            case "H" -> changed ? 0.5 : 0.27;
-            default -> -1;
-        };
-        double ui = switch (metric.getOrDefault("UI", "")) {
-            case "N" -> 0.85;
-            case "R" -> 0.62;
-            default -> -1;
-        };
-        double c = impact3(metric.getOrDefault("C", ""));
-        double i = impact3(metric.getOrDefault("I", ""));
-        double a = impact3(metric.getOrDefault("A", ""));
-        if (av < 0 || ac < 0 || pr < 0 || ui < 0 || c < 0 || i < 0 || a < 0) {
+        try {
+            Cvss parsed = Cvss.fromVector(vector.trim());
+            return parsed == null ? -1.0 : parsed.calculateScore().getBaseScore();
+        } catch (RuntimeException unreadable) {
             return -1.0;
         }
-        double iss = 1 - (1 - c) * (1 - i) * (1 - a);
-        double impact = changed
-                ? 7.52 * (iss - 0.029) - 3.25 * Math.pow(iss - 0.02, 15)
-                : 6.42 * iss;
-        if (impact <= 0) {
-            return 0.0;
-        }
-        double exploitability = 8.22 * av * ac * pr * ui;
-        return roundUp(Math.min((changed ? 1.08 : 1.0) * (impact + exploitability), 10));
-    }
-
-    private static double impact3(String value) {
-        return switch (value) {
-            case "H" -> 0.56;
-            case "L" -> 0.22;
-            case "N" -> 0.0;
-            default -> -1;
-        };
-    }
-
-    private static double cvss2(String vector) {
-        Map<String, String> metric = metrics(vector);
-        double av = switch (metric.getOrDefault("AV", "")) {
-            case "L" -> 0.395;
-            case "A" -> 0.646;
-            case "N" -> 1.0;
-            default -> -1;
-        };
-        double ac = switch (metric.getOrDefault("AC", "")) {
-            case "H" -> 0.35;
-            case "M" -> 0.61;
-            case "L" -> 0.71;
-            default -> -1;
-        };
-        double au = switch (metric.getOrDefault("Au", "")) {
-            case "M" -> 0.45;
-            case "S" -> 0.56;
-            case "N" -> 0.704;
-            default -> -1;
-        };
-        double c = impact2(metric.getOrDefault("C", ""));
-        double i = impact2(metric.getOrDefault("I", ""));
-        double a = impact2(metric.getOrDefault("A", ""));
-        if (av < 0 || ac < 0 || au < 0 || c < 0 || i < 0 || a < 0) {
-            return -1.0;
-        }
-        double impact = 10.41 * (1 - (1 - c) * (1 - i) * (1 - a));
-        double exploitability = 20 * av * ac * au;
-        double base = ((0.6 * impact) + (0.4 * exploitability) - 1.5) * (impact == 0 ? 0 : 1.176);
-        return Math.round(base * 10.0) / 10.0;
-    }
-
-    private static double impact2(String value) {
-        return switch (value) {
-            case "N" -> 0.0;
-            case "P" -> 0.275;
-            case "C" -> 0.660;
-            default -> -1;
-        };
-    }
-
-    private static double roundUp(double input) {
-        long scaled = Math.round(input * 100_000);
-        return scaled % 10_000 == 0 ? scaled / 100_000.0 : (Math.floorDiv(scaled, 10_000) + 1) / 10.0;
-    }
-
-    private static Map<String, String> metrics(String vector) {
-        Map<String, String> metric = new HashMap<>();
-        for (String part : vector.split("/")) {
-            int colon = part.indexOf(':');
-            if (colon > 0) {
-                metric.put(part.substring(0, colon), part.substring(colon + 1));
-            }
-        }
-        return metric;
     }
 }
