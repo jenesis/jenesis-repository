@@ -119,7 +119,7 @@ public class ServingConfig {
         RepositoryRouter.WithheldGuard withheld = (path, store) ->
                 PublishInterceptor.withheldByAny(path, store, interceptors) || Publication.reviewPending(store, path);
         RepositoryRouter router = new RepositoryRouter(definitions::definition, repositories::store, upstreamFetcher)
-                .gating(liveConfig::gate, liveConfig::holdDays)
+                .gating(liveConfig::gate, liveConfig::holdDays, liveConfig::withholdIncompleteScreens)
                 // The scratch carries the store's bindings, so a pass-through is screened as a publish would be.
                 .passingThrough(() -> spool.acquire(root.bindings()))
                 .hardening(hardeningBounds)
@@ -241,8 +241,8 @@ public class ServingConfig {
         // which the dispatcher binds each request's tenant and store, so a tenant's own proxy policy screens it.
         FormatDispatcher.Upstreams upstreams = new LiveUpstreams(liveConfig, formats);
         return new FormatDispatcher(formats, upstreams, upstreamFetcher, observations,
-                ProxyScreenHooks.perTenant(liveConfig::proxyGate, liveConfig.holdDays(),
-                        liveConfig.withholdIncompleteScreens()));
+                ProxyScreenHooks.perTenant(liveConfig::proxyGate, liveConfig::holdDays,
+                        liveConfig::withholdIncompleteScreens));
     }
 
     @Bean

@@ -57,6 +57,12 @@ public final class CoreSettingsContributor implements SettingsContributor {
                                 + "window in which a typosquat or compromised release is usually yanked. Fail-open: it "
                                 + "only bites on an upstream Last-Modified date.",
                         Setting.Kind.INTEGER, "2", true).essential(),
+                new Setting("withhold-incomplete-screens", "Proxy", "Withhold incompletely screened artifacts",
+                        "Hold for review a proxied artifact no inspector could read whole - one whose read stopped at "
+                                + "a size bound before the end - rather than serving it with the incomplete screen "
+                                + "recorded. Serving is the default, since nothing was found wrong; holding is the "
+                                + "strict posture.",
+                        Setting.Kind.BOOLEAN, "false", true).advanced(),
                 new Setting("proxy-allow-internal", "Proxy", "Allow internal proxy targets",
                         "Permit proxy upstreams, and the download URLs an upstream document advertises, that are plain "
                                 + "http or resolve to a loopback, private, link-local or cloud-metadata address. A "
