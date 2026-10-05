@@ -6,6 +6,7 @@ import build.jenesis.repository.closure.CarriedBill;
 import build.jenesis.repository.closure.ClosureSection;
 import build.jenesis.repository.closure.ClosureSource;
 import build.jenesis.repository.closure.ClosureWalk;
+import build.jenesis.repository.inventory.HeldSubjects;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
@@ -51,10 +52,15 @@ class CarriedBillTest {
                    {"bom-ref":"a","group":"org.dep","name":"a","version":"1.1","purl":"pkg:maven/org.dep/a@1.1"},
                    {"bom-ref":"b","group":"org.dep","name":"b","version":"2.0","purl":"pkg:maven/org.dep/b@2.0"},
                    {"bom-ref":"c","group":"org.dep","name":"c","version":"3.0","purl":"pkg:maven/org.dep/c@3.0"},
+                   {"bom-ref":"d","group":"org.dep","name":"d","version":"4.0","purl":"pkg:maven/org.dep/d@4.0"},
                    {"bom-ref":"n","name":"left-pad","version":"1.3.0","purl":"pkg:npm/left-pad@1.3.0"}],
-                 "dependencies":[{"ref":"root","dependsOn":["a"]},{"ref":"a","dependsOn":["b","c","n"]}]}"""));
+                 "dependencies":[{"ref":"root","dependsOn":["a"]},{"ref":"a","dependsOn":["b","c","d","n"]}]}"""));
         inventory.cache("Maven", "org.dep:a", "1.1", "https://repo.example/maven2/", NOW);
         inventory.record("Maven", "org.dep:b", "2.0", NOW);
+        // c is a copy the screen held at its fill: no holding, its hold's subject and review pointer alone.
+        String held = "/maven/org/dep/c/3.0/c-3.0.jar";
+        HeldSubjects.hold(publication, store, held, publication.storeBlob(new ByteArrayInputStream(new byte[]{1})),
+                "Maven", "org.dep:c", "3.0");
 
         ClosureSection.Closure closure = new CarriedBill().resolve(ClosureWalk.of(store), "Maven", "org.acme:app", "1.0",
                 NOW).orElseThrow();
@@ -66,7 +72,8 @@ class CarriedBillTest {
                         new ClosureSection.Component("org.dep:b", "2.0", false, 2, ""));
         assertThat(closure.cuts()).extracting(ClosureSection.Cut::coordinate, ClosureSection.Cut::reason)
                 .containsExactlyInAnyOrder(
-                        tuple("org.dep:c", "named by the version's bill, not held by this repository"),
+                        tuple("org.dep:c", "held for review"),
+                        tuple("org.dep:d", "named by the version's bill, not held by this repository"),
                         tuple("left-pad", "named by the version's bill in npm, another ecosystem"));
         assertThat(closure.status()).isEqualTo(ClosureSection.Status.PARTIAL);
     }

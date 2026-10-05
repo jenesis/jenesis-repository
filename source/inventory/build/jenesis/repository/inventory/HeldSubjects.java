@@ -252,6 +252,19 @@ public final class HeldSubjects {
         return paths;
     }
 
+    /**
+     * The versions of {@code coordinate} a hold recorded a path of, in key order, at most {@code limit}: one page of the
+     * version face's coordinate level, where a proxied copy the screen held at its fill is found before any holding
+     * records it. A row a crash left behind outlives its hold, so a caller acting on a version probes its paths' live
+     * review pointers.
+     */
+    public static List<String> versions(ArtifactStore store, String ecosystem, String coordinate, int limit) {
+        List<String> versions = new ArrayList<>();
+        store.page(VERSIONS + "/" + encode(ecosystem) + "/" + encode(coordinate), "", limit,
+                name -> versions.add(StoreRepositoryInventory.decode(name)));
+        return List.copyOf(versions);
+    }
+
     /** Whether a path of a version other than {@code path} is held for review: one page of at most two names of its
      *  version face. */
     public static boolean heldBesides(ArtifactStore store, String ecosystem, String coordinate, String version,

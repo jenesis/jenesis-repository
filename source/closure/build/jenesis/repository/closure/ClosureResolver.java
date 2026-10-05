@@ -4,6 +4,7 @@ import module java.base;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.QualityInspector;
 import build.jenesis.repository.inventory.DependencySection;
+import build.jenesis.repository.inventory.HeldSubjects;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
@@ -126,6 +127,32 @@ public final class ClosureResolver {
     private record Candidate(StoreRepositoryInventory.Holding holding, Reader reader) {
     }
 
+    /** The cut of a dependency whose every admitted version is held for review. */
+    private static final String ALL_HELD = "every held version it admits is held for review";
+
+    /**
+     * Whether a version {@code dependency} admits is held for review by a repository of the walk although no holding
+     * records it: a proxied copy the screen held at its fill becomes a holding only once released, and until then it
+     * is found through its hold's subject, its review pointer still in place.
+     */
+    private boolean heldForReview(String ecosystem, RequirementGrammar grammar, ComplianceGate.Dependency dependency)
+            throws IOException {
+        for (Reader reader : readers) {
+            for (String version : HeldSubjects.versions(reader.store(), ecosystem, dependency.coordinate(),
+                    MAX_VERSIONS)) {
+                if (grammar.admits(dependency.requirement(), version) != RequirementGrammar.Admission.ADMITS) {
+                    continue;
+                }
+                for (String path : HeldSubjects.paths(reader.store(), ecosystem, dependency.coordinate(), version)) {
+                    if (Publication.reviewPending(reader.store(), path)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     private Choice choose(String ecosystem, RequirementGrammar grammar, ComplianceGate.Dependency dependency)
             throws IOException {
         List<Candidate> admitted = new ArrayList<>();
@@ -156,8 +183,9 @@ public final class ClosureResolver {
             }
         }
         if (!anyHeld) {
-            return Choice.cut(readers.size() == 1 ? "not held by this repository"
-                    : "not held by this repository or a repository its fallbacks name", false);
+            return heldForReview(ecosystem, grammar, dependency) ? Choice.cut(ALL_HELD, false)
+                    : Choice.cut(readers.size() == 1 ? "not held by this repository"
+                            : "not held by this repository or a repository its fallbacks name", false);
         }
         // Newest first; a stable sort keeps the walk's order among repositories holding the same version.
         admitted.sort((left, right) -> grammar.compare(right.holding().version(), left.holding().version()));
@@ -167,8 +195,8 @@ public final class ClosureResolver {
                 return new Choice(candidate.holding(), candidate.reader(), null, false);
             }
         }
-        if (!admitted.isEmpty()) {
-            return Choice.cut("every held version it admits is held for review", false);
+        if (!admitted.isEmpty() || heldForReview(ecosystem, grammar, dependency)) {
+            return Choice.cut(ALL_HELD, false);
         }
         if (unknown) {
             return Choice.cut("the requirement could not be evaluated", false);

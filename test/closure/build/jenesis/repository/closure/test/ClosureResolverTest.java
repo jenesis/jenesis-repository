@@ -7,6 +7,7 @@ import build.jenesis.repository.closure.ClosureSection;
 import build.jenesis.repository.closure.ClosureWalk;
 import build.jenesis.repository.compliance.QualityInspector;
 import build.jenesis.repository.inventory.DependencySection;
+import build.jenesis.repository.inventory.HeldSubjects;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.metadata.MetadataProvider;
 import build.jenesis.repository.metadata.Section;
@@ -74,6 +75,29 @@ class ClosureResolverTest {
                         tuple("org.dep:c", "every held version it admits is held for review"),
                         tuple("org.dep:d", "not held by this repository"));
         assertThat(closure.status()).as("a closure with a cut is partial").isEqualTo(ClosureSection.Status.PARTIAL);
+    }
+
+    @Test
+    void a_copy_held_at_its_fill_is_a_hold_although_no_holding_records_it() throws IOException {
+        // A proxied copy the screen held as it was fetched is no holding until a reviewer releases it: what records it
+        // is the hold's own subject, and the review pointer at its path.
+        release("org.acme", "app", "1.0", List.of(new DependencySection.Declared("org.dep:held", "1.0"),
+                new DependencySection.Declared("org.dep:ranged", "[1.0,2.0)"),
+                new DependencySection.Declared("org.dep:released", "1.0")));
+        hold("org.dep", "held", "1.0");
+        hold("org.dep", "ranged", "1.5");
+        // A row a crash left behind once its hold was released holds nothing.
+        String released = "/maven/org/dep/released/1.0/released-1.0.pom";
+        HeldSubjects.record(store, released, "Maven", "org.dep:released", "1.0");
+
+        ClosureSection.Closure closure = new ClosureResolver(store, QualityInspector.all())
+                .resolve("Maven", "org.acme:app", "1.0", NOW);
+
+        assertThat(closure.cuts()).extracting(ClosureSection.Cut::coordinate, ClosureSection.Cut::reason)
+                .containsExactlyInAnyOrder(
+                        tuple("org.dep:held", "every held version it admits is held for review"),
+                        tuple("org.dep:ranged", "every held version it admits is held for review"),
+                        tuple("org.dep:released", "not held by this repository"));
     }
 
     @Test
@@ -174,6 +198,16 @@ class ClosureResolverTest {
         inventory.record(path, NOW);
         MetadataProvider.installed().over(store).mutate("Maven", group + ":" + artifact, version,
                 DependencySection.TAG, DependencySection.record(path, declared, NOW));
+    }
+
+    /** A copy held for review as the proxy holds one at its fill: its subject recorded and its review pointer linked,
+     *  and no holding. */
+    private void hold(String group, String artifact, String version) throws IOException {
+        String path = "/maven/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-"
+                + version + ".pom";
+        HeldSubjects.hold(publication, store, path,
+                publication.storeBlob(new ByteArrayInputStream(pom(group, artifact, version, ""))), "Maven",
+                group + ":" + artifact, version);
     }
 
     private void cached(String group, String artifact, String version, byte[] pom) throws IOException {
