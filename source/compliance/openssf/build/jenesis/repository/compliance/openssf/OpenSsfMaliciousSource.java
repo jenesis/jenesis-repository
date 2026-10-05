@@ -14,7 +14,10 @@ import build.jenesis.repository.feed.FeedRequest;
 import build.jenesis.repository.feed.FeedResponse;
 import build.jenesis.repository.feed.FeedTransport;
 import build.jenesis.repository.feed.Osv;
+import build.jenesis.repository.compliance.osv.OsvAdvisorySource;
+import build.jenesis.repository.compliance.osv.OsvChanges;
 import build.jenesis.repository.compliance.osv.OsvQuery;
+import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * An {@link AdvisorySource} over the curated OpenSSF malicious-packages dataset (github.com/ossf/malicious-packages,
@@ -43,8 +46,13 @@ import build.jenesis.repository.compliance.osv.OsvQuery;
  * a request, and fetches in full only the {@code MAL-} records the answers name - each once per batch, keyed by its
  * modification instant - so a clean package costs a share of one request rather than a query of its own. A query OSV
  * answers only in part is asked on its own.
+ *
+ * <p>It publishes what it changed ({@link AdvisorySource.Changes}) from OSV's own change lists, since its records are
+ * OSV's: a draw reads each ecosystem's {@code modified_id.csv} at the OSV export and keeps the {@code MAL-} records,
+ * committing the packages they affect to the feed's own log, so a package flagged malicious after its copy was cached
+ * is asked again by the next scan without waiting for the full pass.
  */
-public final class OpenSsfMaliciousSource implements AdvisorySource.Batched {
+public final class OpenSsfMaliciousSource implements AdvisorySource.Batched, AdvisorySource.Changes {
 
     /** The single network operation, isolated so a test can answer with a fixed response. The argument is the
      *  request body the feed built (the JSON query, carrying {@code page_token} from the second page on). */
@@ -77,6 +85,7 @@ public final class OpenSsfMaliciousSource implements AdvisorySource.Batched {
     private final URI vulns;
     private final FreshnessTracker fetches;
     private final OsvQuery.Shared shared;
+    private final OsvChanges changes;
 
     public OpenSsfMaliciousSource() {
         this(FeedClient.of(FEED, FeedTransport.jdk(CONNECT_TIMEOUT), POLICY), DEFAULT_ENDPOINT, Clock.systemUTC(),
@@ -89,8 +98,15 @@ public final class OpenSsfMaliciousSource implements AdvisorySource.Batched {
     }
 
     private OpenSsfMaliciousSource(FeedClient client, URI base, Clock clock, OsvQuery.Shared shared) {
+        this(client, base, OsvAdvisorySource.DEFAULT_EXPORT, NO_SPACE, clock, shared);
+    }
+
+    private OpenSsfMaliciousSource(FeedClient client, URI base, URI export, Supplier<ArtifactStore> space, Clock clock,
+                                   OsvQuery.Shared shared) {
         this.client = client;
         this.shared = shared;
+        this.changes = OsvChanges.of(client, export, base.resolve("/v1/vulns/"), space, clock,
+                id -> id.startsWith("MAL-"));
         this.query = base.resolve("/v1/query");
         this.querybatch = base.resolve("/v1/querybatch");
         this.vulns = base.resolve("/v1/vulns/");
@@ -111,8 +127,40 @@ public final class OpenSsfMaliciousSource implements AdvisorySource.Batched {
 
     /** The production form, over the deployment clock the reading's retry window is measured on. */
     public static OpenSsfMaliciousSource over(URI base, Clock clock) {
-        return new OpenSsfMaliciousSource(FeedClient.of(FEED, FeedTransport.jdk(CONNECT_TIMEOUT), POLICY), base, clock,
-                OsvQuery.Shared.node());
+        return over(base, OsvAdvisorySource.DEFAULT_EXPORT, NO_SPACE, clock);
+    }
+
+    /** The production form, drawing OSV's change lists at {@code export} into the log kept in {@code space}. */
+    public static OpenSsfMaliciousSource over(URI base, URI export, Supplier<ArtifactStore> space, Clock clock) {
+        return new OpenSsfMaliciousSource(FeedClient.of(FEED, FeedTransport.jdk(CONNECT_TIMEOUT), POLICY), base, export,
+                space, clock, OsvQuery.Shared.node());
+    }
+
+    /** As {@link #exchanging(Exchange)}, keeping its change log in {@code space} on {@code clock}. */
+    public static OpenSsfMaliciousSource exchanging(Exchange exchange, Supplier<ArtifactStore> space, Clock clock) {
+        return new OpenSsfMaliciousSource(FeedClient.of(FEED, (request, timeout) -> FeedResponse.of(200,
+                exchange.answer(request)), POLICY), DEFAULT_ENDPOINT, OsvAdvisorySource.DEFAULT_EXPORT, space, clock,
+                OsvQuery.Shared.none());
+    }
+
+    /** No space to keep a change log in: a source built where no deployment bound one still screens. */
+    private static final Supplier<ArtifactStore> NO_SPACE = () -> {
+        throw new IllegalStateException("the malicious-package feed was built with no space for its change log");
+    };
+
+    @Override
+    public int drawChanges() throws IOException {
+        return changes.draw();
+    }
+
+    @Override
+    public AdvisorySource.ChangeLog changes(long after) throws IOException {
+        return changes.changes(after);
+    }
+
+    /** Nothing to drop: the source holds no answers of its own, and what it shares lasts seconds. */
+    @Override
+    public void forget(Set<AdvisorySource.Package> packages) {
     }
 
     @Override

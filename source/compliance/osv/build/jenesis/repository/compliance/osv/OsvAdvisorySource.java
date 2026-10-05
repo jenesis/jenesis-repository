@@ -65,7 +65,7 @@ public final class OsvAdvisorySource implements AdvisorySource.Batched, Advisory
     private static final URI DEFAULT_ENDPOINT = URI.create("https://api.osv.dev");
 
     /** Where OSV publishes its export, each ecosystem's change list among it. */
-    static final URI DEFAULT_EXPORT = URI.create("https://osv-vulnerabilities.storage.googleapis.com/");
+    public static final URI DEFAULT_EXPORT = URI.create("https://osv-vulnerabilities.storage.googleapis.com/");
 
     /** The space of a source built with none: a draw or a read of the log is a wiring error there. */
     private static final Supplier<ArtifactStore> NO_SPACE = () -> {
