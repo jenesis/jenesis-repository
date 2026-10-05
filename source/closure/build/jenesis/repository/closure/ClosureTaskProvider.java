@@ -1,7 +1,6 @@
 package build.jenesis.repository.closure;
 
 import module java.base;
-import build.jenesis.repository.compliance.QualityInspector;
 import build.jenesis.repository.maintenance.IntervalSetting;
 import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
@@ -20,6 +19,6 @@ public final class ClosureTaskProvider implements MaintenanceTaskProvider {
 
     @Override
     public Optional<MaintenanceTask> create(UnaryOperator<String> config) {
-        return Optional.of(new ClosureTask(INTERVAL.resolve(config), QualityInspector.all()));
+        return Optional.of(new ClosureTask(INTERVAL.resolve(config), ClosureSource.installed()));
     }
 }

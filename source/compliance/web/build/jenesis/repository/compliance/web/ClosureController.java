@@ -36,11 +36,12 @@ public class ClosureController {
         this.routing = routing;
     }
 
-    /** One version's closure: {@code resolved} is when the pass resolved it and {@code source} whether from what the
-     *  repositories hold ({@code RESOLVED}) or the bill the version carries ({@code BILL}), both {@code null} with no
-     *  closure; a component's {@code repository} is empty where the version's own repository holds it. */
+    /** One version's closure: {@code resolved} is when the pass resolved it, {@code kind} which kind of source
+     *  produced it - {@code BILL}, {@code RESOLVER}, {@code SCANNER} or {@code DECLARATIONS} - and {@code source} that
+     *  source's name, each {@code null} with no closure; a component's {@code repository} is empty where the version's
+     *  own repository holds it. */
     public record ClosureView(String repository, String ecosystem, String coordinate, String version, String state,
-                              String resolved, String source, boolean truncated,
+                              String resolved, String kind, String source, boolean truncated,
                               List<ClosureSection.Component> components, List<ClosureSection.Cut> cuts) {
     }
 
@@ -73,7 +74,8 @@ public class ClosureController {
         ClosureSection.Closure closure = answer.get().closure();
         return new ClosureView(repo, ecosystem, coordinate, version, answer.get().state().name(),
                 closure == null ? null : closure.resolved().toString(),
-                closure == null ? null : closure.source().name(), closure != null && closure.truncated(),
+                closure == null ? null : closure.kind().name(), closure == null ? null : closure.source(),
+                closure != null && closure.truncated(),
                 closure == null ? List.of() : closure.components(), closure == null ? List.of() : closure.cuts());
     }
 }

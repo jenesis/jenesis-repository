@@ -24,15 +24,33 @@ import build.jenesis.repository.store.ServableNames;
  * {@link ClosureResolver#MAX_COMPONENTS} components, a closure stopped there saying so; an archive is read only as far
  * as its bill, within the dependency module's own budget. Nothing is fetched.
  */
-public final class CarriedBill {
+public final class CarriedBill implements ClosureSource {
 
-    private CarriedBill() {
+    /** The source's name. */
+    public static final String NAME = "carried-bill";
+
+    @Override
+    public String name() {
+        return NAME;
+    }
+
+    /** Every ecosystem: a bill published as a file of a version is read whatever its format, and an archive's
+     *  embedded one wherever the version's files are archives. */
+    @Override
+    public Set<String> ecosystems() {
+        return Ecosystems.canonical();
+    }
+
+    @Override
+    public Kind kind() {
+        return Kind.BILL;
     }
 
     /** The closure the bill {@code coordinate} at {@code version} carries names, or empty where it carries none naming
      *  more than its direct dependencies. The release is the first repository of {@code walk}'s. */
-    public static Optional<ClosureSection.Closure> resolve(ClosureWalk walk, String ecosystem, String coordinate,
-                                                           String version, Instant now) throws IOException {
+    @Override
+    public Optional<ClosureSection.Closure> resolve(ClosureWalk walk, String ecosystem, String coordinate,
+                                                    String version, Instant now) throws IOException {
         ClosureWalk.Member own = walk.members().getFirst();
         Optional<DependencyGraph> bill = bill(own, ecosystem, coordinate, version);
         if (bill.isEmpty()) {
@@ -80,7 +98,7 @@ public final class CarriedBill {
             }
         }
         return Optional.of(new ClosureSection.Closure(cuts.isEmpty() && !truncated ? ClosureSection.Status.RESOLVED
-                : ClosureSection.Status.PARTIAL, components, cuts, truncated, now, ClosureSection.Source.BILL));
+                : ClosureSection.Status.PARTIAL, components, cuts, truncated, now, Kind.BILL, NAME));
     }
 
     /** The first bill among the version's files that names a closure: a published bill before an embedding archive. */

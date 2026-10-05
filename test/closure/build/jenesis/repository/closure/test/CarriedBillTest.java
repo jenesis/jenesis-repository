@@ -4,6 +4,7 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.closure.CarriedBill;
 import build.jenesis.repository.closure.ClosureSection;
+import build.jenesis.repository.closure.ClosureSource;
 import build.jenesis.repository.closure.ClosureWalk;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
@@ -55,10 +56,11 @@ class CarriedBillTest {
         inventory.cache("Maven", "org.dep:a", "1.1", "https://repo.example/maven2/", NOW);
         inventory.record("Maven", "org.dep:b", "2.0", NOW);
 
-        ClosureSection.Closure closure = CarriedBill.resolve(ClosureWalk.of(store), "Maven", "org.acme:app", "1.0",
+        ClosureSection.Closure closure = new CarriedBill().resolve(ClosureWalk.of(store), "Maven", "org.acme:app", "1.0",
                 NOW).orElseThrow();
 
-        assertThat(closure.source()).isEqualTo(ClosureSection.Source.BILL);
+        assertThat(closure.kind()).isEqualTo(ClosureSource.Kind.BILL);
+        assertThat(closure.source()).isEqualTo(CarriedBill.NAME);
         assertThat(closure.components()).as("each the holding kept of it, at its distance along the bill's edges")
                 .containsExactly(new ClosureSection.Component("org.dep:a", "1.1", true, 1, ""),
                         new ClosureSection.Component("org.dep:b", "2.0", false, 2, ""));
@@ -77,7 +79,7 @@ class CarriedBillTest {
                  "components":[{"bom-ref":"a","name":"a","version":"1.1","purl":"pkg:maven/org.dep/a@1.1"}],
                  "dependencies":[{"ref":"root","dependsOn":["a"]}]}"""));
 
-        assertThat(CarriedBill.resolve(ClosureWalk.of(store), "Maven", "org.acme:app", "1.0", NOW))
+        assertThat(new CarriedBill().resolve(ClosureWalk.of(store), "Maven", "org.acme:app", "1.0", NOW))
                 .as("the resolvers fill in what it does not name").isEmpty();
     }
 
@@ -85,7 +87,7 @@ class CarriedBillTest {
     void a_release_carrying_no_bill_has_none_to_take() throws IOException {
         release(JAR, jar(null));
 
-        assertThat(CarriedBill.resolve(ClosureWalk.of(store), "Maven", "org.acme:app", "1.0", NOW)).isEmpty();
+        assertThat(new CarriedBill().resolve(ClosureWalk.of(store), "Maven", "org.acme:app", "1.0", NOW)).isEmpty();
     }
 
     private void release(String path, byte[] body) throws IOException {

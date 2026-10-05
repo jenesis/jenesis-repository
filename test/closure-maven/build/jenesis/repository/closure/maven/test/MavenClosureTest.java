@@ -4,7 +4,7 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.closure.ClosureSection;
 import build.jenesis.repository.closure.ClosureWalk;
-import build.jenesis.repository.closure.EcosystemClosure;
+import build.jenesis.repository.closure.ClosureSource;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
@@ -41,7 +41,11 @@ class MavenClosureTest {
 
     @Test
     void the_maven_closure_is_the_installed_resolver_for_maven() {
-        assertThat(EcosystemClosure.of("Maven")).isPresent();
+        assertThat(ClosureSource.serving("Maven")).as("discovered, after the carried bill and before the walk")
+                .extracting(ClosureSource::name)
+                .containsSubsequence("carried-bill", "maven-resolver", "declarations");
+        assertThat(ClosureSource.serving("npm")).extracting(ClosureSource::name)
+                .as("and asked about Maven alone").doesNotContain("maven-resolver");
     }
 
     @Test
@@ -117,7 +121,7 @@ class MavenClosureTest {
     void a_release_without_a_pom_is_left_to_the_walk_by_declarations() throws IOException {
         publication.link("/maven/org/acme/jar/1.0/jar-1.0.jar",
                 publication.storeBlob(new ByteArrayInputStream(new byte[]{1})));
-        assertThat(EcosystemClosure.of("Maven").orElseThrow().resolve(ClosureWalk.of(store), "org.acme:jar", "1.0", NOW)).isEmpty();
+        assertThat(maven().resolve(ClosureWalk.of(store), "Maven", "org.acme:jar", "1.0", NOW)).isEmpty();
     }
 
     @Test
@@ -140,9 +144,9 @@ class MavenClosureTest {
                   <dependency><groupId>org.dep</groupId><artifactId>gone</artifactId><version>1.0</version></dependency>
                 </dependencies>"""), NOW);
 
-        ClosureSection.Closure closure = EcosystemClosure.of("Maven").orElseThrow().resolve(new ClosureWalk(List.of(
+        ClosureSection.Closure closure = maven().resolve(new ClosureWalk(List.of(
                 new ClosureWalk.Member("group", group), new ClosureWalk.Member("releases", store))),
-                "org.acme:app", "1.0", NOW).orElseThrow();
+                "Maven", "org.acme:app", "1.0", NOW).orElseThrow();
 
         assertThat(closure.components()).as("the newest in the range across the walk, named by the repository holding it")
                 .containsExactly(new ClosureSection.Component("org.dep:lib", "2.0", true, 1, "releases"));
@@ -152,15 +156,21 @@ class MavenClosureTest {
         });
 
         cached("org.dep", "gone", "1.0", "");
-        assertThat(EcosystemClosure.of("Maven").orElseThrow().resolve(new ClosureWalk(List.of(
+        assertThat(maven().resolve(new ClosureWalk(List.of(
                 new ClosureWalk.Member("group", group), new ClosureWalk.Member("releases", store))),
-                "org.acme:app", "1.0", NOW).orElseThrow().components())
+                "Maven", "org.acme:app", "1.0", NOW).orElseThrow().components())
                 .as("a component the fallback's repository holds is named by it")
                 .contains(new ClosureSection.Component("org.dep:gone", "1.0", true, 1, "releases"));
     }
 
+    /** The Maven Resolver as the closure pass finds it: the installed source of that name. */
+    private static ClosureSource maven() {
+        return ClosureSource.installed().stream().filter(source -> "maven-resolver".equals(source.name()))
+                .findFirst().orElseThrow();
+    }
+
     private ClosureSection.Closure resolve(String coordinate, String version) throws IOException {
-        return EcosystemClosure.of("Maven").orElseThrow().resolve(ClosureWalk.of(store), coordinate, version, NOW)
+        return maven().resolve(ClosureWalk.of(store), "Maven", coordinate, version, NOW)
                 .orElseThrow();
     }
 

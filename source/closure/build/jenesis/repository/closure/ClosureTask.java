@@ -2,7 +2,6 @@ package build.jenesis.repository.closure;
 
 import module java.base;
 import module org.slf4j;
-import build.jenesis.repository.compliance.QualityInspector;
 import build.jenesis.repository.inventory.IncrementalPasses;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.maintenance.MaintenanceTask;
@@ -15,7 +14,8 @@ import build.jenesis.repository.metadata.MetadataStore;
  * Resolves the closure of every release that has none, in a repository whose {@value #SETTING} is on: on the
  * {@link IncrementalPasses} cadence, the releases published since the last full pass, and on a full pass every
  * release - which is how a version published before the setting was on is resolved. A closure resolves through the
- * repository and the repositories its fallbacks name ({@link ClosureWalk}). A version is resolved once: its
+ * repository and the repositories its fallbacks name ({@link ClosureWalk}), by the first {@link ClosureSource} serving
+ * the release's ecosystem that answers. A version is resolved once: its
  * closure is a section of its document ({@link ClosureSection}), and a version that has one is passed by.
  *
  * <p>Lease-owned, since it writes the version documents; idempotent, since a crash leaves the versions it had not
@@ -36,17 +36,35 @@ public final class ClosureTask implements MaintenanceTask {
     public static final String DEFAULT = "true";
 
     private final Duration interval;
-    private final List<QualityInspector> inspectors;
+    private final List<ClosureSource> sources;
 
-    public ClosureTask(Duration interval, List<QualityInspector> inspectors) {
+    /** The pass over {@code sources}, asked in the order given - {@link ClosureSource#installed()} in production. */
+    public ClosureTask(Duration interval, List<ClosureSource> sources) {
         this.interval = Objects.requireNonNull(interval, "interval");
-        this.inspectors = List.copyOf(inspectors);
+        this.sources = List.copyOf(sources);
     }
 
     /** Whether {@code config} resolves closures: on unless it says {@code false}. */
     public static boolean enabled(UnaryOperator<String> config) {
         String value = config == null ? null : config.apply(SETTING);
         return !"false".equalsIgnoreCase((value == null || value.isBlank() ? DEFAULT : value).strip());
+    }
+
+    /** The first answer of the sources serving {@code release}'s ecosystem, in their order: a carried bill, then a
+     *  resolver, then a scanner, then the declaration walk. */
+    private Optional<ClosureSection.Closure> resolve(ClosureWalk through, StoreRepositoryInventory.Coordinate release,
+                                                     Instant now) throws IOException {
+        for (ClosureSource source : sources) {
+            if (!source.ecosystems().contains(release.ecosystem())) {
+                continue;
+            }
+            Optional<ClosureSection.Closure> closure = source.resolve(through, release.ecosystem(),
+                    release.coordinate(), release.version(), now);
+            if (closure.isPresent()) {
+                return closure;
+            }
+        }
+        return Optional.empty();
     }
 
     @Override
@@ -72,7 +90,6 @@ public final class ClosureTask implements MaintenanceTask {
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(context.store());
         MetadataStore metadata = MetadataProvider.installed().over(context.store());
         ClosureWalk through = ClosureWalk.of(context);
-        ClosureResolver resolver = new ClosureResolver(through, inspectors);
         UnitFailures failed = context.failures("The closure pass of " + context.tenant() + "/" + context.repository(),
                 "Those versions have no closure yet; the next pass resolves them.");
         IncrementalPasses cadence = IncrementalPasses.over(context.store(), NAME, "closure/resolve",
@@ -84,17 +101,11 @@ public final class ClosureTask implements MaintenanceTask {
                 return;
             }
             try {
-                // The bill the release carries is the closure as its build resolved it; without one naming more than
-                // its direct dependencies, an ecosystem with a walk of its own resolves the release, and the walk by
-                // declarations answers otherwise.
-                Optional<EcosystemClosure> walk = EcosystemClosure.of(release.ecosystem());
-                Optional<ClosureSection.Closure> own = CarriedBill.resolve(through, release.ecosystem(),
-                        release.coordinate(), release.version(), context.now());
-                if (own.isEmpty() && walk.isPresent()) {
-                    own = walk.get().resolve(through, release.coordinate(), release.version(), context.now());
+                Optional<ClosureSection.Closure> answered = resolve(through, release, context.now());
+                if (answered.isEmpty()) {
+                    return;     // nothing installed serves the ecosystem; a source installed later resolves it
                 }
-                ClosureSection.Closure closure = own.isPresent() ? own.get()
-                        : resolver.resolve(release.ecosystem(), release.coordinate(), release.version(), context.now());
+                ClosureSection.Closure closure = answered.get();
                 metadata.mutate(release.ecosystem(), release.coordinate(), release.version(), ClosureSection.TAG,
                         ClosureSection.record(closure));
                 resolved[0]++;
