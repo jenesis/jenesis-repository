@@ -4,7 +4,6 @@ import module java.base;
 import module org.slf4j;
 
 import build.jenesis.repository.store.Clocks;
-import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.ComplianceSettings;
 import build.jenesis.repository.compliance.HealthSource;
@@ -13,7 +12,6 @@ import build.jenesis.repository.compliance.Maintainers;
 import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.compliance.SignerTrust;
 import build.jenesis.repository.compliance.SignerTrustProvider;
-import build.jenesis.repository.findings.AdvisoryFindings;
 import build.jenesis.repository.findings.Finding;
 import build.jenesis.repository.findings.Findings;
 import build.jenesis.repository.findings.FindingsProvider;
@@ -39,9 +37,8 @@ import build.jenesis.repository.gate.QuarantineLog;
  * so a lost derived row is caught up by the next sweep or the next screen of the path, and never fails a publish.
  *
  * <p>The {@link ComplianceScreen} builds one per commit from what the deployment wired, and hands it everything
- * explicitly - the discovered findings and health-ledger modules it holds, and the advisory feeds, the feed-miss
- * sink and the live health source as they are wired at that moment - so the wiring keeps one owner and nothing here
- * reads a JVM-wide reference of its own.
+ * explicitly - the discovered findings and health-ledger modules it holds, and the live health source as it is wired
+ * at that moment - so the wiring keeps one owner and nothing here reads a JVM-wide reference of its own.
  */
 final class PublishRecorder {
 
@@ -54,29 +51,21 @@ final class PublishRecorder {
     /** The durable maintainer-health ledger, when a persistence module is installed; empty, no health is persisted. */
     private final Optional<HealthLedgerProvider> healthLedger;
 
-    /** The deployment's named advisory feeds, or {@code null} while none are wired. */
-    private final Supplier<SequencedMap<String, AdvisorySource>> advisoryFeeds;
-
-    /** Where a feed the warm cache could not answer is counted, or {@code null} while no sink is wired. */
-    private final ComplianceScreen.FeedMissListener misses;
-
     /** The deployment's live maintainer-health source, or {@code null} while none is wired. */
     private final Supplier<HealthSource> healthSource;
 
     PublishRecorder(Optional<FindingsProvider> findings, Optional<HealthLedgerProvider> healthLedger,
-                    Supplier<SequencedMap<String, AdvisorySource>> advisoryFeeds,
-                    ComplianceScreen.FeedMissListener misses, Supplier<HealthSource> healthSource) {
+                    Supplier<HealthSource> healthSource) {
         this.findings = findings;
         this.healthLedger = healthLedger;
-        this.advisoryFeeds = advisoryFeeds;
-        this.misses = misses;
         this.healthSource = healthSource;
     }
 
     /**
      * Record an accepted publish, in the order the facts depend on one another: the inventory recording first, then
-     * the advisory findings and the health it is re-queried for, then the maintainers before the signers, since
-     * whom the metadata names is what a key found through a maintainer is judged against.
+     * the health it is probed for, then the maintainers before the signers, since whom the metadata names is what a
+     * key found through a maintainer is judged against. No advisory feed is asked about a published version: no feed
+     * knows a coordinate published here, and the lookup would only disclose an internal name.
      */
     void accepted(ArtifactStore store, StoreRepositoryInventory inventory, ArtifactDescriptor artifact,
                   List<ComplianceGate.Subject> inspected) throws IOException {
@@ -87,10 +76,6 @@ final class PublishRecorder {
         // inspected subject's: npm, PyPI, NuGet and RubyGems publish to a versionless envelope endpoint whose
         // path carries no version, and the inspector parsed the real per-version coordinate.
         recordPublish(inventory, artifact, inspected);
-        // Persist the publish-time advisory answer for the just-accepted coordinate, keyed by the real
-        // (feed, advisory-id) the scheduled sweep also writes - so a coordinate published after the last
-        // sweep already carries its advisory findings instead of rendering clean until the next pass.
-        recordAdvisoryFindings(store, artifact, inspected);
         // Persist the publish-time maintainer-health for the just-accepted coordinate, the health sibling of
         // the advisory persistence above - so a coordinate published after the last health sweep already
         // carries its health in the durable ledger the gate reads, and admission of a later version of the
@@ -182,77 +167,6 @@ final class PublishRecorder {
         } catch (IOException | RuntimeException _) {
             // best-effort: the WARNING log and (when held) the quarantine log carry the failure; the ledger row is a
             // bonus that a later re-screen of the path refreshes
-        }
-    }
-
-    /**
-     * Persist the publish-time advisory answer for a just-accepted coordinate: re-query the deployment's named
-     * advisory feeds - the same instances the gate assessed through, so the gate's own lookup just warmed each feed's
-     * {@code FeedCache} and this is a cache read, not a fresh network pass - and record each hit as a structured
-     * finding keyed by the real {@code (feed, advisory-id)} pair, exactly as the scheduled
-     * {@code VulnerabilityScanTask} writes them ({@link AdvisoryFindings#of}). This closes the between-sweeps window: a
-     * coordinate published AFTER the last sweep already carries its advisory findings rather than rendering clean until
-     * the next pass, and because the rows key by {@code (source, id)} the later sweep converges on the identical rows
-     * instead of doubling them. Held to ACCEPT, where the coordinate is recorded as published and the sweep will
-     * revisit it - a quarantined or rejected upload has no such record, so persisting its advisory rows would strand
-     * them. Best-effort like every derived write here, and fail-soft <em>per feed</em>: a feed the warm cache cannot
-     * answer (a feed failing closed with nothing cached) is logged and metered, never a reason to fail an
-     * already-accepted publish. A no-op when no findings module is installed or no feeds are wired.
-     */
-    void recordAdvisoryFindings(ArtifactStore store, ArtifactDescriptor artifact,
-                                List<ComplianceGate.Subject> inspected) {
-        if (findings.isEmpty()) {
-            return;
-        }
-        Supplier<SequencedMap<String, AdvisorySource>> supplier = advisoryFeeds;
-        if (supplier == null) {
-            return;
-        }
-        SequencedMap<String, AdvisorySource> feeds = supplier.get();
-        if (feeds == null || feeds.isEmpty()) {
-            return;
-        }
-        Optional<StoreRepositoryInventory.Coordinate> published = publishedCoordinate(store, artifact, inspected);
-        if (published.isEmpty()) {
-            return;
-        }
-        StoreRepositoryInventory.Coordinate coordinate = published.get();
-        Findings ledger = findings.get().over(store);
-        Instant now = Clocks.now();
-        // Accumulate every feed's rows, then commit them in ONE section mutate; the per-feed query stays
-        // fail-soft (a warm-cache miss defers to the sweep) but the persist is a single batched write per coordinate.
-        List<Finding> rows = new ArrayList<>();
-        for (Map.Entry<String, AdvisorySource> feed : feeds.entrySet()) {
-            List<AdvisorySource.Advisory> found;
-            try {
-                found = feed.getValue().advisories(coordinate.ecosystem(), coordinate.coordinate(),
-                        coordinate.version());
-            } catch (RuntimeException failure) {
-                // Fail-soft: a warm-cache miss whose refresh failed with nothing cached rethrows here (the feed fails
-                // closed for the gate, but the publish is already accepted and stored). Log and meter the miss and move
-                // on; the scheduled sweep records this feed's rows on its next pass.
-                LOGGER.warn("Could not re-query advisory feed " + feed.getKey()
-                        + " for " + coordinate.coordinate() + ":" + coordinate.version()
-                        + " at publish; its rows wait for the next sweep", failure);
-                ComplianceScreen.FeedMissListener miss = misses;
-                if (miss != null) {
-                    miss.missed(feed.getKey());
-                }
-                continue;
-            }
-            for (AdvisorySource.Advisory advisory : found) {
-                rows.add(AdvisoryFindings.of(advisory, feed.getKey(), artifact.path(), now));
-            }
-        }
-        if (rows.isEmpty()) {
-            return;
-        }
-        try {
-            ledger.recordAll(coordinate.ecosystem(), coordinate.coordinate(), coordinate.version(), rows);
-        } catch (IOException | RuntimeException failure) {
-            // best-effort: the artifact is stored and the sweep converges on these rows; a lost write only defers
-            LOGGER.warn("Could not persist publish-time advisory findings for "
-                    + coordinate.coordinate() + ":" + coordinate.version(), failure);
         }
     }
 

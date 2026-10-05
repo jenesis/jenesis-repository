@@ -199,6 +199,12 @@ public final class IncrementalPasses {
         }
         recent(inventory, release -> visitor.accept(
                 new StoreRepositoryInventory.Coordinate(release.ecosystem(), release.coordinate(), release.version())));
+        recentlyCached(inventory, visitor);
+    }
+
+    /** The copies cached since the last full pass, less the lookback, out of their newest-first index. */
+    private void recentlyCached(StoreRepositoryInventory inventory, StoreRepositoryInventory.CoordinateVisitor visitor)
+            throws IOException {
         Instant floor = since.orElseThrow().minus(lookback);
         String after = null;
         do {
@@ -212,6 +218,21 @@ public final class IncrementalPasses {
             }
             after = page.next();
         } while (after != null);
+    }
+
+    /**
+     * Every copy cached from an upstream that is no release of the repository's own on a full pass; the copies cached
+     * since the last full pass otherwise, out of their newest-first index. The leg a pass about upstream artifacts
+     * rides - the advisory scan and the known-exploited enforcement - since a version published here is asked of no
+     * feed.
+     */
+    public void cached(StoreRepositoryInventory inventory, StoreRepositoryInventory.CoordinateVisitor visitor)
+            throws IOException {
+        if (full) {
+            inventory.cachedCopies(visitor);
+            return;
+        }
+        recentlyCached(inventory, visitor);
     }
 
     /** Every published release on a full pass; the releases published since the last full pass otherwise. */

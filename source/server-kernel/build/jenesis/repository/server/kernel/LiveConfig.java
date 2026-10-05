@@ -188,10 +188,13 @@ public final class LiveConfig implements SettingsEditor.Resolution {
         // a value that fails to parse throws here, so the writer's rollback and the scheduled re-read's
         // keep-last-good semantics cover plugin policies exactly like the core dials.
         UnaryOperator<String> config = key -> store.apply(key, fileDefaults.apply(key));
+        // A published version is asked of no advisory feed: no feed knows a coordinate published here, so the lookup
+        // could only disclose an internal name and hold a release while a feed is down. What it depends on is screened
+        // where a build fetches it, and a cached copy is asked by its own coordinate.
         ComplianceGate publishGate = gate(threshold, vulnerable, malware, denied, denyAction,
-                GatePolicyProvider.resolve(config, GatePolicyProvider.Path.PUBLISH));
+                GatePolicyProvider.resolve(config, GatePolicyProvider.Path.PUBLISH), AdvisorySource.none());
         ComplianceGate proxyGate = gate(threshold, vulnerable, malware, denied, denyAction,
-                GatePolicyProvider.resolve(config, GatePolicyProvider.Path.PROXY));
+                GatePolicyProvider.resolve(config, GatePolicyProvider.Path.PROXY), advisories.get());
         int holdDays = Integer.parseInt(
                 get.apply("immaturity-hold-days", Integer.toString(defaults.getImmaturityHoldDays())));
         boolean proxy = Boolean.parseBoolean(get.apply("proxy-enabled", Boolean.toString(defaults.isProxyEnabled())));
@@ -433,9 +436,9 @@ public final class LiveConfig implements SettingsEditor.Resolution {
         return settings.getOrDefault(tenant, repository, key, fallback);
     }
 
-    private ComplianceGate gate(Severity threshold, Verdict vulnerable, Verdict malware, List<String> denied,
-                                Verdict denyAction, List<GatePolicy> policies) {
-        return new ComplianceGate(new VulnerabilityPolicy(threshold, vulnerable), advisories.get())
+    private static ComplianceGate gate(Severity threshold, Verdict vulnerable, Verdict malware, List<String> denied,
+                                       Verdict denyAction, List<GatePolicy> policies, AdvisorySource advisories) {
+        return new ComplianceGate(new VulnerabilityPolicy(threshold, vulnerable), advisories)
                 .malicious(new MaliciousPackagePolicy().action(malware))
                 .denyList(new DenyListPolicy(denied).action(denyAction))
                 .policies(policies);

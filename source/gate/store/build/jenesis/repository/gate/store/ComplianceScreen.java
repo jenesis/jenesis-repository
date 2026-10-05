@@ -4,7 +4,6 @@ import module java.base;
 import module org.slf4j;
 
 import build.jenesis.repository.store.Clocks;
-import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.HealthSource;
 import build.jenesis.repository.compliance.MalformedArtifactException;
@@ -39,8 +38,8 @@ import build.jenesis.repository.gate.RetroactiveHolds;
  * artifact stays retracted until the hold is released or discarded - at the cost of one pointer read per serve.
  *
  * <p>The screen is discovered by {@code ServiceLoader} and held once per process, so it is constructed without a
- * deployment. A deployment hands it one {@link Binding} - its gate, its per-tenant gates, its advisory feeds and
- * health source, its meters and the hold-mapping dial - by {@linkplain Binding#bind binding its store}, and every
+ * deployment. A deployment hands it one {@link Binding} - its gate, its per-tenant gates, its health source, its
+ * meters and the hold-mapping dial - by {@linkplain Binding#bind binding its store}, and every
  * call the screen receives carries a store derived from that one: {@link #assess} through {@code content.store()},
  * {@link #committed} and {@link #onPublished} as their argument, and {@link #rescreen} as its first. So a publish is
  * judged by the deployment whose store it runs over, and two deployments in one process never judge each other's
@@ -161,8 +160,8 @@ public final class ComplianceScreen implements PublishInterceptor {
         this.explicit = null;
     }
 
-    /** An explicitly configured screen - one gate, whatever store it is handed, and no meters, feeds or health
-     *  source: the seam a test or an embedder uses instead of a deployment's binding. */
+    /** An explicitly configured screen - one gate, whatever store it is handed, and no meters or health source: the
+     *  seam a test or an embedder uses instead of a deployment's binding. */
     public ComplianceScreen(Supplier<ComplianceGate> gate) {
         this(binding().gate(gate).build());
     }
@@ -225,13 +224,6 @@ public final class ComplianceScreen implements PublishInterceptor {
         void recorded(String format, String verdict);
     }
 
-    /** A registry-free callback a deployment binds so a commit-time feed re-query that failed closed (the warm cache
-     *  had nothing and the refresh could not reach the feed) is counted: {@code (feed)} names the feed that missed. */
-    @FunctionalInterface
-    public interface FeedMissListener {
-        void missed(String feed);
-    }
-
     /** A registry-free callback a deployment binds so an artifact an inspector could not parse is counted:
      *  {@code (format)} names the ecosystem/format of the unparseable upload. */
     @FunctionalInterface
@@ -267,15 +259,6 @@ public final class ComplianceScreen implements PublishInterceptor {
         /** Counts every committed verdict, across every publish path (the deploy, staging, batch). */
         private final VerdictListener verdicts;
 
-        /** The named advisory feeds - the same instances the gate assesses through - re-queried per feed at commit,
-         *  so a just-accepted coordinate's advisory findings are persisted at once rather than rendering clean until
-         *  the next sweep. The gate's assess just warmed each feed's cache, so the re-query is a cache read. */
-        private final Supplier<SequencedMap<String, AdvisorySource>> feeds;
-
-        /** Counts a commit-time feed re-query the warm cache could not answer, rather than dropping it silently; the
-         *  publish is never failed for it. */
-        private final FeedMissListener feedMisses;
-
         /** Counts an artifact an inspector could not parse ({@code jenrepo.gate.unparseable}, by format). */
         private final UnparseableListener unparseable;
 
@@ -295,8 +278,6 @@ public final class ComplianceScreen implements PublishInterceptor {
             this.gate = builder.gate;
             this.tenantGates = builder.tenantGates;
             this.verdicts = builder.verdicts;
-            this.feeds = builder.feeds;
-            this.feedMisses = builder.feedMisses;
             this.unparseable = builder.unparseable;
             this.strictHoldMapping = builder.strictHoldMapping;
             this.holdMappingBroken = builder.holdMappingBroken;
@@ -313,10 +294,9 @@ public final class ComplianceScreen implements PublishInterceptor {
             return StoreBindings.of(Binding.class, this);
         }
 
-        /** What a commit records through: the discovered ledgers, and this binding's feeds, feed-miss sink and
-         *  live health source. */
+        /** What a commit records through: the discovered ledgers, and this binding's live health source. */
         private PublishRecorder recorder() {
-            return new PublishRecorder(FINDINGS, HEALTH, feeds, feedMisses, healthSource);
+            return new PublishRecorder(FINDINGS, HEALTH, healthSource);
         }
 
         /** Retire this binding: a call through a store carrying no binding is inert again once none is open. */
@@ -325,15 +305,13 @@ public final class ComplianceScreen implements PublishInterceptor {
             OPEN.remove(this);
         }
 
-        /** Assembles a {@link Binding}; everything unset is absent - no gate, no meters, no feeds, the lenient hold
-         *  mapping. */
+        /** Assembles a {@link Binding}; everything unset is absent - no gate, no meters, no health source, the lenient
+         *  hold mapping. */
         public static final class Builder {
 
             private Supplier<ComplianceGate> gate = () -> null;
             private Function<String, ComplianceGate> tenantGates = _ -> null;
             private VerdictListener verdicts;
-            private Supplier<SequencedMap<String, AdvisorySource>> feeds;
-            private FeedMissListener feedMisses;
             private UnparseableListener unparseable;
             private BooleanSupplier strictHoldMapping = () -> false;
             private HoldMappingBrokenListener holdMappingBroken;
@@ -358,18 +336,6 @@ public final class ComplianceScreen implements PublishInterceptor {
             /** The sink every committed verdict is counted through. */
             public Builder verdicts(VerdictListener verdicts) {
                 this.verdicts = verdicts;
-                return this;
-            }
-
-            /** The named advisory feeds a committed publish re-queries to persist its advisory findings at once. */
-            public Builder advisoryFeeds(Supplier<SequencedMap<String, AdvisorySource>> feeds) {
-                this.feeds = feeds;
-                return this;
-            }
-
-            /** The sink a commit-time feed re-query that failed closed is counted through. */
-            public Builder advisoryFeedMisses(FeedMissListener feedMisses) {
-                this.feedMisses = feedMisses;
                 return this;
             }
 
@@ -412,7 +378,7 @@ public final class ComplianceScreen implements PublishInterceptor {
         }
     }
 
-    /** What an unbound commit records through: the discovered ledgers alone, with no feeds, sink or health source. */
+    /** What an unbound commit records through: the discovered ledgers alone, with no health source. */
     private static final Binding NO_BINDING = binding().build();
 
     /**

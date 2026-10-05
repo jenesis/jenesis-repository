@@ -2,7 +2,6 @@ package build.jenesis.repository.compliance.scan;
 
 import module java.base;
 import module org.slf4j;
-import build.jenesis.repository.cleanup.Release;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.KnownExploitedSource;
@@ -18,8 +17,8 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
 
 /**
- * Retroactive known-exploited enforcement. A gate verdict is reached once, at publish or proxy time, so an artifact
- * admitted before its CVE landed on a known-exploited catalogue keeps serving; this pass holds such a release by
+ * Retroactive known-exploited enforcement. A gate verdict is reached once, at proxy time, so a copy cached from an
+ * upstream before its CVE landed on a known-exploited catalogue keeps serving; this pass holds such a copy by
  * writing what the gate writes: a {@code /quarantine} pointer per served path (serving retracts at once through the
  * gate screen's {@code withheld} read) and a {@link QuarantineLog} row, so it lands in the normal review queue. Only
  * the known-exploited set is enforced; everything below it stays report-only ({@link VulnerabilityScanTask}), since a
@@ -76,13 +75,14 @@ public final class KevEnforceTask implements MaintenanceTask {
         // withheld. It is counted and warned about rather than thrown: one broken format must not stop the whole sweep,
         // and an evicted but still enumerated version legitimately resolves to nothing.
         long[] unenforceable = {0};
-        // Every release every Nth pass, the releases published since between; a changed catalogue asks for a full pass
-        // by name, since a listing that names an old release is what the incremental leg cannot see.
+        // Every cached copy every Nth pass, the copies cached since between; a changed catalogue asks for a full pass
+        // by name, since a listing that names an old copy is what the incremental leg cannot see. A version published
+        // here is asked of no feed, so the copies an upstream served are what this pass holds.
         IncrementalPasses cadence = IncrementalPasses.over(store, name(), "findings/kev-enforce", context.config());
-        cadence.releases(inventory, release -> {
-            String eco = release.ecosystem();
-            String coordinate = release.coordinate();
-            String version = release.version();
+        cadence.cached(inventory, copy -> {
+            String eco = copy.ecosystem();
+            String coordinate = copy.coordinate();
+            String version = copy.version();
             List<String> kevCves = knownExploited.listed(advisories.advisories(eco, coordinate, version));
             if (kevCves.isEmpty()) {
                 return;   // report-only below KEV; a delisting leaves an existing hold in place (no auto-release)
@@ -114,7 +114,7 @@ public final class KevEnforceTask implements MaintenanceTask {
                 // path added later, is held on the next pass.
                 RetroactiveHolds.converge(store, publication, inventory, log, context.now(), eco, coordinate, version,
                         paths, new RetroactiveHolds.Grounds(ComplianceGate.KNOWN_EXPLOITED_RULE,
-                                release.coordinate() + ":" + version, List.of("KEV retroactive: " + String.join(", ",
+                                copy.coordinate() + ":" + version, List.of("KEV retroactive: " + String.join(", ",
                                         kevCves.stream().filter(cve -> !overridden.contains(cve)).toList()))));
                 held[0]++;
                 return;   // already held (idempotent)
@@ -125,7 +125,7 @@ public final class KevEnforceTask implements MaintenanceTask {
             List<String> enforcing = kevCves.stream().filter(cve -> !overridden.contains(cve)).toList();
             if (RetroactiveHolds.hold(store, publication, inventory, log, context.now(), eco, coordinate, version,
                     paths, new RetroactiveHolds.Grounds(ComplianceGate.KNOWN_EXPLOITED_RULE,
-                            release.coordinate() + ":" + version,
+                            copy.coordinate() + ":" + version,
                             List.of("KEV retroactive: " + String.join(", ", enforcing))),
                     () -> KevHold.hold(store, eco, coordinate, version, kevCves))) {
                 held[0]++;
@@ -141,16 +141,16 @@ public final class KevEnforceTask implements MaintenanceTask {
         });
         cadence.completed(context.now(), true);
         context.gauge("jenrepo.vulnerabilities.hold.unenforceable",
-                "Released coordinates a retroactive hold would cover but cannot enforce because the blobs-namespace "
+                "Cached copies a retroactive hold would cover but cannot enforce because the blobs-namespace "
                         + "format resolved no served path or content hash - a wiring-regression alarm",
                 Map.of("tenant", context.tenant(), "repository", context.repository(), "sweep", "kev"),
                 unenforceable[0]);
         if (held[0] > 0) {
-            LOGGER.warn("Repository {}/{} is retroactively holding {} known-exploited release(s)",
+            LOGGER.warn("Repository {}/{} is retroactively holding {} known-exploited cached cop(ies)",
                     context.tenant(), context.repository(), held[0]);
         }
         context.gauge("jenrepo.vulnerabilities.kev.held",
-                "Released coordinates a repository is retroactively holding because their CVE is on a "
+                "Cached copies a repository is retroactively holding because their CVE is on a "
                         + "known-exploited catalogue",
                 Map.of("tenant", context.tenant(), "repository", context.repository()), held[0]);
     }

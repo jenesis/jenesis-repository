@@ -213,6 +213,18 @@ final class InventoryReleases {
         });
     }
 
+    /** Stream every copy cached from an upstream that is no release of the repository's own to {@code visitor} - see
+     *  {@link StoreRepositoryInventory#cachedCopies(StoreRepositoryInventory.CoordinateVisitor)}. */
+    void cachedCopies(StoreRepositoryInventory.CoordinateVisitor visitor) throws IOException {
+        inventory.walk(MetadataKey.PREFIX, key -> {
+            StoreRepositoryInventory.Holding holding = holding(key);
+            if (holding != null && holding.cached()) {
+                visitor.accept(new StoreRepositoryInventory.Coordinate(
+                        holding.ecosystem(), holding.coordinate(), holding.version()));
+            }
+        });
+    }
+
     /** One version document as a holding - a release or a cached copy, with the download facts it carries - or
      *  {@code null} for a key that is no version document, or one that holds nothing. One read. */
     StoreRepositoryInventory.Holding holding(String key) throws IOException {
