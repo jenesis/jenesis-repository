@@ -6,7 +6,8 @@
  * {@link build.jenesis.repository.gate.QuarantineLog} row; {@code reanalyze} releases such a hold once its intel clears
  * ({@link build.jenesis.repository.gate.KevHold#cleared}); {@code vulnerability-rank-index} keeps the worst-first rank
  * index current; and {@code signal-refresh} draws a mirroring signal source's snapshot so its query path renders rather
- * than fetches. Without this module there are no scan gauges and no retroactive holds.
+ * than fetches. Beside them, the walk consumer {@code advised-name} records the name the advisory databases know a
+ * cached copy by where its screen did not. Without this module there are no scan gauges and no retroactive holds.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -25,6 +26,9 @@ module build.jenesis.repository.compliance.scan {
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.bounds;
     requires build.jenesis.repository.gate.spi;
+    // The walk the advisory-name back-fill rides, and the formats that name a pointer's version.
+    requires build.jenesis.repository.walk;
+    requires build.jenesis.repository.format;
     requires tools.jackson.databind;
     requires org.slf4j;
     // The console's template engine reads the report's records reflectively; only this package is opened.
@@ -43,4 +47,6 @@ module build.jenesis.repository.compliance.scan {
             with build.jenesis.repository.compliance.scan.ScanSettingsContributor;
     provides build.jenesis.repository.server.spi.CapabilityContributor
             with build.jenesis.repository.compliance.scan.ScanCapabilityContributor;
+    provides build.jenesis.repository.walk.WalkConsumer
+            with build.jenesis.repository.compliance.scan.AdvisedNameBackfill;
 }
