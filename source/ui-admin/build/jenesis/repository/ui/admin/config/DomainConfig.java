@@ -31,6 +31,9 @@ import build.jenesis.repository.ui.store.TenantService;
 import build.jenesis.repository.ui.store.VolumeReclaim;
 import org.slf4j.LoggerFactory;
 import io.micrometer.observation.ObservationRegistry;
+import build.jenesis.repository.compliance.ComplianceSources;
+import build.jenesis.repository.search.SearchQueryProvider;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -181,8 +184,12 @@ public class DomainConfig {
 
     @Bean
     public RepositoryBrowse repositoryBrowse(ArtifactStore repositoryStore, CurrentTenant currentTenant,
-                                             ObservationRegistry observations) {
-        return new RepositoryBrowse(repositoryStore, currentTenant, observations);
+                                             ObservationRegistry observations,
+                                             ObjectProvider<ComplianceSources> sources) {
+        // The feeds the repository screens with, where this node holds them, so a cached copy's page names what
+        // screened it; a console booted alone holds none and says nothing of it.
+        return new RepositoryBrowse(repositoryStore, currentTenant, observations, SearchQueryProvider.installed(),
+                () -> Optional.ofNullable(sources.getIfAvailable()).map(ComplianceSources::advisoryFeeds));
     }
 
 

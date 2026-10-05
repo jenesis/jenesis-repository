@@ -4,6 +4,8 @@ import module java.base;
 
 import build.jenesis.repository.closure.ClosureSection;
 import build.jenesis.repository.closure.ExposureSection;
+import build.jenesis.repository.compliance.AdvisorySource;
+import build.jenesis.repository.compliance.ScreenedThrough;
 import build.jenesis.repository.compliance.ScreeningMode;
 import build.jenesis.repository.settings.CoreDefaults;
 import build.jenesis.repository.ui.CurrentTenant;
@@ -72,9 +74,20 @@ public class RepositoryBrowse extends TenantScope implements AutoCloseable {
     /** With an explicit full-text index provider (empty for none) rather than {@link SearchQueryProvider#installed()}. */
     public RepositoryBrowse(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations,
                             Optional<SearchQueryProvider> index) {
+        this(repositoryStore, current, observations, index, Optional::empty);
+    }
+
+    /** With the advisory feeds switched on, asked at each page so a feed switched on is the one a page names; empty
+     *  where this node holds no feeds, and a page then says nothing of what a cached copy was screened through. */
+    public RepositoryBrowse(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations,
+                            Optional<SearchQueryProvider> index,
+                            Supplier<Optional<SequencedMap<String, AdvisorySource>>> feeds) {
         super(repositoryStore, current, observations);
         this.search = new RepositorySearch(index);
+        this.feeds = feeds;
     }
+
+    private final Supplier<Optional<SequencedMap<String, AdvisorySource>>> feeds;
 
     /** Close the search this browse holds, and the index readers it caches. */
     @Override
@@ -428,7 +441,10 @@ public class RepositoryBrowse extends TenantScope implements AutoCloseable {
                 FindingsState.of(FindingsProvider.installed().map(provider -> provider.over(store)),
                         riskThreshold(), ecosystem, coordinate, version), screenPending,
                 ClosureSection.answer(document).map(ClosureSection.Answer::closure).orElse(null),
-                ExposureSection.exposure(document.section(ExposureSection.TAG)).orElse(null)));
+                ExposureSection.exposure(document.section(ExposureSection.TAG)).orElse(null),
+                cached.isPresent()
+                        ? feeds.get().map(enabled -> ScreenedThrough.cached(ecosystem, enabled)).orElse(null)
+                        : ScreenedThrough.published(document.section(ClosureSection.TAG).isPresent())));
     }
 
     /** One version as its own page shows it - see {@link #version}. {@code about}, {@code signature} and
@@ -436,7 +452,9 @@ public class RepositoryBrowse extends TenantScope implements AutoCloseable {
      *  {@link #DEPENDENCIES_SHOWN} of the {@code dependencyCount} declared; {@code screenPending} says a file of a
      *  cached copy was served while an advisory feed could not answer, and no feed has answered for it since;
      *  {@code closure} is the transitive closure resolved for a release, {@code null} until it is; {@code exposure} is
-     *  what that closure reaches that is held for review or carries findings, {@code null} until the pass derived it. */
+     *  what that closure reaches that is held for review or carries findings, {@code null} until the pass derived it;
+     *  {@code screenedThrough} what the version was screened through, {@code null} for a cached copy on a node that
+     *  holds no feeds. */
     public record VersionDetail(String ecosystem, String coordinate, String version, String published, boolean cached,
                                 String upstream, boolean prerelease, boolean pinned, boolean served, long downloads,
                                 String lastDownloaded, AboutSection.About about,
@@ -444,7 +462,7 @@ public class RepositoryBrowse extends TenantScope implements AutoCloseable {
                                 ProvenanceSection.Summary provenance, List<DependencySection.Declared> dependencies,
                                 int dependencyCount, List<String> paths, boolean browsable,
                                 FindingsState findings, boolean screenPending, ClosureSection.Closure closure,
-                                ExposureSection.Exposure exposure) {
+                                ExposureSection.Exposure exposure, ScreenedThrough screenedThrough) {
 
         /** When the closure pass last derived {@link #exposure}, as the page dates it. */
         public String exposureAt() {

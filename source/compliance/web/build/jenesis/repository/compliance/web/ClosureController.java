@@ -3,6 +3,8 @@ package build.jenesis.repository.compliance.web;
 import module java.base;
 import build.jenesis.repository.closure.ClosureSection;
 import build.jenesis.repository.closure.ExposureSection;
+import build.jenesis.repository.compliance.AdvisorySource;
+import build.jenesis.repository.compliance.ScreenedThrough;
 import build.jenesis.repository.metadata.MetadataDocument;
 import build.jenesis.repository.metadata.MetadataProvider;
 import build.jenesis.repository.server.RepositoryRouting;
@@ -31,20 +33,27 @@ public class ClosureController {
 
     private final Repositories repositories;
     private final RepositoryRouting routing;
+    private final Supplier<SequencedMap<String, AdvisorySource>> feeds;
 
-    public ClosureController(Repositories repositories, RepositoryRouting routing) {
+    /** The endpoint over {@code feeds}, the advisory feeds switched on, asked at each answer so a feed switched on is
+     *  the one it names. */
+    public ClosureController(Repositories repositories, RepositoryRouting routing,
+                             Supplier<SequencedMap<String, AdvisorySource>> feeds) {
         this.repositories = repositories;
         this.routing = routing;
+        this.feeds = feeds;
     }
 
     /** One version's closure: {@code resolved} is when the pass resolved it, {@code kind} which kind of source
      *  produced it - {@code BILL}, {@code RESOLVER}, {@code SCANNER} or {@code DECLARATIONS} - and {@code source} that
      *  source's name, each {@code null} with no closure; a component's {@code repository} is empty where the version's
-     *  own repository holds it; {@code exposure} is what the closure reaches that is held or carries findings. */
+     *  own repository holds it; {@code exposure} is what the closure reaches that is held or carries findings; and
+     *  {@code screenedThrough} what the version was screened through - the enabled feeds covering a cached copy's
+     *  ecosystem, or none, and a published version's closure, or nothing while it has none. */
     public record ClosureView(String repository, String ecosystem, String coordinate, String version, String state,
                               String resolved, String kind, String source, boolean truncated,
                               List<ClosureSection.Component> components, List<ClosureSection.Cut> cuts,
-                              ExposureView exposure) {
+                              ExposureView exposure, ScreenedThrough screenedThrough) {
     }
 
     /** What the closure reaches that is held for review or carries findings, as the closure pass derived it at
@@ -89,6 +98,8 @@ public class ClosureController {
                 closure != null && closure.truncated(),
                 closure == null ? List.of() : closure.components(), closure == null ? List.of() : closure.cuts(),
                 exposure.map(found -> new ExposureView(found.derived().toString(), found.examined(), found.held(),
-                        found.vulnerable(), found.reached())).orElse(null));
+                        found.vulnerable(), found.reached())).orElse(null),
+                answer.get().state() == ClosureSection.State.CACHED ? ScreenedThrough.cached(ecosystem, feeds.get())
+                        : ScreenedThrough.published(closure != null));
     }
 }
