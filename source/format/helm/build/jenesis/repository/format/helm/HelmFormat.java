@@ -21,6 +21,7 @@ import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
+import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
 import build.jenesis.repository.store.ArtifactDescriptor;
@@ -317,7 +318,8 @@ public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobL
                         "the upstream answered an index.yaml that is not a chart repository index");
             }
             exchange.setResponseHeader("Content-Type", "application/x-yaml");
-            exchange.respond(200, rewritten(document, index).getBytes(StandardCharsets.UTF_8));
+            exchange.respond(200, rewritten(document, index, HeldVersions.all(store, ECOSYSTEM))
+                    .getBytes(StandardCharsets.UTF_8));
             return true;
         }
         if (!sub.startsWith(CHARTS) || !sub.endsWith(TGZ)) {
@@ -365,8 +367,10 @@ public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobL
         }
     }
 
-    /** The index as this repository serves it: every version's {@code urls} pointing at its own {@code charts/}. */
-    private static String rewritten(Map<?, ?> document, URI index) {
+    /** The index as this repository serves it: every version's {@code urls} pointing at its own {@code charts/}, and
+     *  every version in {@code held} - a chart this repository holds for review, by name - left out, so helm never
+     *  selects one answering {@code 404}. */
+    private static String rewritten(Map<?, ?> document, URI index, Map<String, Set<String>> held) {
         Map<Object, Object> rewritten = new LinkedHashMap<>(document);
         Map<Object, Object> entries = new LinkedHashMap<>();
         for (Map.Entry<?, ?> chart : ((Map<?, ?>) document.get("entries")).entrySet()) {
@@ -374,8 +378,9 @@ public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobL
                 continue;
             }
             List<Object> served = new ArrayList<>();
+            Set<String> withheld = held.getOrDefault(String.valueOf(chart.getKey()), Set.of());
             for (Object version : versions) {
-                if (!(version instanceof Map<?, ?> entry)) {
+                if (!(version instanceof Map<?, ?> entry) || withheld.contains(String.valueOf(entry.get("version")))) {
                     continue;
                 }
                 List<String> files = new ArrayList<>();

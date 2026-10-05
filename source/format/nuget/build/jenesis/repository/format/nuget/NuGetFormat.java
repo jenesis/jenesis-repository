@@ -26,6 +26,7 @@ import build.jenesis.repository.multipart.MultipartForm;
 import build.jenesis.repository.format.ExportTarget;
 import build.jenesis.repository.format.PublishedExport;
 import build.jenesis.repository.format.RepositoryExporter;
+import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
 import build.jenesis.repository.store.ArtifactDescriptor;
@@ -778,6 +779,25 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         blobs.answer(key, exchange, "application/octet-stream");
     }
 
+    /** An upstream version index with every version in {@code held} - a copy this repository holds for review - left
+     *  out, so restore never selects a version whose package answers {@code 404}; the upstream's own bytes where none
+     *  is held, or where the body is no version index. Versions are compared as the index spells them, lower-case. */
+    private static byte[] withoutHeld(byte[] index, Set<String> held) throws IOException {
+        if (held.isEmpty() || !(JSON.readTree(index) instanceof ObjectNode document)
+                || !(document.get("versions") instanceof ArrayNode versions)) {
+            return index;
+        }
+        Set<String> lower = new HashSet<>();
+        held.forEach(version -> lower.add(version.toLowerCase(Locale.ROOT)));
+        ArrayNode kept = document.putArray("versions");
+        for (JsonNode version : versions) {
+            if (!lower.contains(version.asString("").toLowerCase(Locale.ROOT))) {
+                kept.add(version);
+            }
+        }
+        return JSON.writeValueAsBytes(document);
+    }
+
     /** Proxy a NuGet flat-container miss to the upstream registry. The service index stays local, advertising this
      *  registry's flat container. A version index is a mutable list of version strings, streamed through; a
      *  {@code .nupkg} is immutable, so it is fetched, cached and served. */
@@ -805,7 +825,8 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
             }
             ProxyRelay.relayValidators(answer.document(), exchange);
             exchange.setResponseHeader("Content-Type", "application/json");
-            exchange.respond(200, answer.document().body());
+            String id = after.substring(0, after.length() - "/index.json".length()).toLowerCase(Locale.ROOT);
+            exchange.respond(200, withoutHeld(answer.document().body(), HeldVersions.of(store, "NuGet", id)));
             return true;
         }
         int slash = after.indexOf('/');

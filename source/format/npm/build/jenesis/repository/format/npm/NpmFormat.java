@@ -21,6 +21,7 @@ import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.store.Checksums;
+import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
@@ -1168,7 +1169,8 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         }
         ProxyRelay.relayValidators(answer.document(), exchange);
         exchange.setResponseHeader("Content-Type", "application/json");
-        exchange.respond(200, rewritePackument(answer.document().body(), exchange));
+        exchange.respond(200, rewritePackument(answer.document().body(), exchange,
+                HeldVersions.of(store, "npm", URLDecoder.decode(rest, StandardCharsets.UTF_8))));
         return true;
     }
 
@@ -1233,9 +1235,39 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         return slash < 0 ? url : url.substring(slash + 1);
     }
 
-    private byte[] rewritePackument(byte[] body, FormatExchange exchange) throws IOException {
+    /**
+     * The upstream packument as this registry serves it: each {@code dist.tarball} rewritten here, and every version in
+     * {@code held} - a copy this repository holds for review - left out of {@code versions} and {@code time}, so a
+     * client never selects a version whose tarball answers {@code 404}. A dist-tag naming a held version moves to the
+     * newest version left, a release before a prerelease, and goes where none is left.
+     */
+    private byte[] rewritePackument(byte[] body, FormatExchange exchange, Set<String> held) throws IOException {
         if (!(MAPPER.readTree(body) instanceof ObjectNode packument)) {
             return body;
+        }
+        if (!held.isEmpty() && packument.get("versions") instanceof ObjectNode listed) {
+            held.forEach(listed::remove);
+            if (packument.get("time") instanceof ObjectNode time) {
+                held.forEach(time::remove);
+            }
+            if (packument.get("dist-tags") instanceof ObjectNode tags) {
+                List<String> left = new ArrayList<>();
+                listed.propertyNames().forEach(left::add);
+                Optional<String> newest = left.stream()
+                        .max(Comparator.comparing((String version) -> !version.contains("-"))
+                                .thenComparing(Semver::compare));
+                List<String> named = new ArrayList<>();
+                tags.propertyNames().forEach(named::add);
+                for (String tag : named) {
+                    if (held.contains(tags.get(tag).asString(""))) {
+                        if (newest.isPresent()) {
+                            tags.put(tag, newest.get());
+                        } else {
+                            tags.remove(tag);
+                        }
+                    }
+                }
+            }
         }
         String tarballBase = RequestBase.of(exchange) + exchange.requestUri() + "/-/";
         if (packument.get("versions") instanceof ObjectNode versions) {

@@ -2,6 +2,7 @@ package build.jenesis.repository.format.swift;
 
 import module java.base;
 
+import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.format.Listings;
 import build.jenesis.repository.format.LifecycleMark;
@@ -280,6 +281,8 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Path
                     entry.remove("url");
                 }
             }
+            // A release this repository holds for review is left out, so a client never selects one answering 404.
+            HeldVersions.of(store, ECOSYSTEM, rest[0] + "." + strip(rest[1])).forEach(releases::remove);
             respondBytes(exchange, MAPPER.writeValueAsBytes(document), "application/json");
             return true;
         }

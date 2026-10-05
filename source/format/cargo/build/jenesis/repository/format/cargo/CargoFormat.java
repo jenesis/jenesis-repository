@@ -21,6 +21,7 @@ import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.format.LifecycleMark;
+import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
@@ -530,11 +531,40 @@ public final class CargoFormat implements RepositoryFormat, ArtifactLayout, Prox
      * <p>ENUMERATION: the index file is the crate's version list, which {@code cargo update} resolves against, so its
      * absence is an answer and a transport failure must not render as one. Only an upstream that answered
      * {@code 404}/{@code 410} reaches the client as one. The generated {@code config.json} is never proxied, and a
-     * {@code .crate} download is PINNED.
+     * {@code .crate} download is PINNED. A version this repository holds for review is left out of the file.
      */
     private boolean proxyIndex(String target, FormatExchange exchange, ArtifactStore store, ProxyFormat.Fetcher fetcher) throws IOException {
-        return ProxyRelay.streamRemembered(fetcher, URI.create(target), "text/plain; charset=utf-8", exchange,
-                ProxyRelay.Document.ENUMERATION, store);
+        String crate = target.substring(target.lastIndexOf('/') + 1);
+        Set<String> held = HeldVersions.of(store, ECOSYSTEM, crate);
+        if (held.isEmpty()) {
+            return ProxyRelay.streamRemembered(fetcher, URI.create(target), "text/plain; charset=utf-8", exchange,
+                    ProxyRelay.Document.ENUMERATION, store);
+        }
+        // A version this repository holds for review is left out, so cargo never selects a crate answering 404: the
+        // file is read whole for it, one line per version.
+        ProxyRelay.Answer answer = ProxyRelay.fetchRemembered(fetcher, URI.create(target),
+                ProxyRelay.conditionalHeaders(exchange), exchange, ProxyRelay.Document.ENUMERATION, store);
+        if (!answer.answered()) {
+            return answer.served();
+        }
+        StringBuilder kept = new StringBuilder();
+        for (String line : new String(answer.document().body(), StandardCharsets.UTF_8).split("\n")) {
+            if (line.isBlank()) {
+                continue;
+            }
+            JsonNode entry;
+            try {
+                entry = MAPPER.readTree(line);
+            } catch (RuntimeException unreadable) {
+                entry = null;
+            }
+            if (entry == null || !held.contains(entry.path("vers").asString(""))) {
+                kept.append(line).append('\n');
+            }
+        }
+        exchange.setResponseHeader("Content-Type", "text/plain; charset=utf-8");
+        exchange.respond(200, kept.toString().getBytes(StandardCharsets.UTF_8));
+        return true;
     }
 
     /** Resolve the upstream {@code .crate} URL from the upstream {@code config.json} {@code dl} template, substituting

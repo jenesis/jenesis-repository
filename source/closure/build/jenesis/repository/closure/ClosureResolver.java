@@ -4,9 +4,9 @@ import module java.base;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.QualityInspector;
 import build.jenesis.repository.inventory.DependencySection;
-import build.jenesis.repository.inventory.HeldSubjects;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ServableNames;
 
@@ -138,15 +138,9 @@ public final class ClosureResolver {
     private boolean heldForReview(String ecosystem, RequirementGrammar grammar, ComplianceGate.Dependency dependency)
             throws IOException {
         for (Reader reader : readers) {
-            for (String version : HeldSubjects.versions(reader.store(), ecosystem, dependency.coordinate(),
-                    MAX_VERSIONS)) {
-                if (grammar.admits(dependency.requirement(), version) != RequirementGrammar.Admission.ADMITS) {
-                    continue;
-                }
-                for (String path : HeldSubjects.paths(reader.store(), ecosystem, dependency.coordinate(), version)) {
-                    if (Publication.reviewPending(reader.store(), path)) {
-                        return true;
-                    }
+            for (String version : HeldVersions.of(reader.store(), ecosystem, dependency.coordinate())) {
+                if (grammar.admits(dependency.requirement(), version) == RequirementGrammar.Admission.ADMITS) {
+                    return true;
                 }
             }
         }

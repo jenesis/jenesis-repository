@@ -27,6 +27,7 @@ import build.jenesis.repository.multipart.MultipartForm;
 import build.jenesis.repository.format.ExportTarget;
 import build.jenesis.repository.format.PublishedExport;
 import build.jenesis.repository.format.RepositoryExporter;
+import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
@@ -210,11 +211,17 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         if (lifecycle.isEmpty()) {
             return null;
         }
+        String version = versionOf(project, file);
+        return version == null ? null : lifecycle.get(version);
+    }
+
+    /** The version a distribution file of {@code project} belongs to, parsed as {@link #describe} parses it, or null
+     *  for a filename that is no distribution. */
+    static String versionOf(String project, String file) {
         for (String extension : DIST_EXTENSIONS) {
             if (file.endsWith(extension)) {
-                String version = version(project, file.substring(0, file.length() - extension.length()),
+                return version(project, file.substring(0, file.length() - extension.length()),
                         extension.equals(".whl"));
-                return version == null ? null : lifecycle.get(version);
             }
         }
         return null;
@@ -390,8 +397,8 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
                 return answer.served();
             }
             exchange.setResponseHeader("Content-Type", "text/html");
-            exchange.respond(200, rewriteIndex(new String(answer.document().body(), StandardCharsets.UTF_8))
-                    .getBytes(StandardCharsets.UTF_8));
+            exchange.respond(200, rewriteIndex(new String(answer.document().body(), StandardCharsets.UTF_8),
+                    project, HeldVersions.of(store, "PyPI", project)).getBytes(StandardCharsets.UTF_8));
             return true;
         }
         String project = normalize(after.substring(0, slash));
@@ -451,8 +458,24 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         return true;
     }
 
-    private static String rewriteIndex(String html) {
-        return HREF.matcher(html).replaceAll(match -> {
+    /** One file's anchor on a Simple page, with the line break a page may put after it. */
+    private static final Pattern FILE_ANCHOR = Pattern.compile("<a\\b[^>]*href=\"([^\"]*)\"[^>]*>.*?</a>\\s*(?:<br\\s*/?>)?",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+
+    /**
+     * A project's upstream Simple page as this repository serves it: each file's link reduced to its bare filename,
+     * resolved here, and every file of a version in {@code held} - a copy this repository holds for review - left out,
+     * so pip never selects a distribution whose {@code GET} answers {@code 404}.
+     */
+    private static String rewriteIndex(String html, String project, Set<String> held) {
+        String listed = held.isEmpty() ? html : FILE_ANCHOR.matcher(html).replaceAll(match -> {
+            String url = match.group(1);
+            int hash = url.indexOf('#');
+            String location = hash < 0 ? url : url.substring(0, hash);
+            String version = versionOf(project, location.substring(location.lastIndexOf('/') + 1));
+            return version != null && held.contains(version) ? "" : Matcher.quoteReplacement(match.group());
+        });
+        return HREF.matcher(listed).replaceAll(match -> {
             String url = match.group(1);
             int hash = url.indexOf('#');
             String location = hash < 0 ? url : url.substring(0, hash);
