@@ -57,8 +57,12 @@ public final class ClosureResolver {
         seen.add(coordinate);
         record Pending(ComplianceGate.Dependency dependency, int depth) {
         }
+        Optional<List<ComplianceGate.Dependency>> roots = declarations(ecosystem, coordinate, version);
+        if (roots.isEmpty()) {
+            return new ClosureSection.Closure(ClosureSection.Status.UNDECLARED, List.of(), List.of(), false, now);
+        }
         Deque<Pending> queue = new ArrayDeque<>();
-        for (ComplianceGate.Dependency dependency : declared(ecosystem, coordinate, version)) {
+        for (ComplianceGate.Dependency dependency : roots.get()) {
             queue.add(new Pending(dependency, 1));
         }
         boolean truncated = false;
@@ -136,22 +140,29 @@ public final class ClosureResolver {
                 after != null);
     }
 
-    /** What a held version declares: its document's record where the publish made one, its manifest otherwise. */
+    /** What a held version declares, empty where it declares nothing readable - see {@link #declarations}. */
     private List<ComplianceGate.Dependency> declared(String ecosystem, String coordinate, String version)
             throws IOException {
+        return declarations(ecosystem, coordinate, version).orElse(List.of());
+    }
+
+    /** What a held version declares: its document's record where the publish made one, its manifest otherwise, and
+     *  empty where neither says anything - no record, and no file an inspector reads a dependency from. */
+    private Optional<List<ComplianceGate.Dependency>> declarations(String ecosystem, String coordinate,
+                                                                   String version) throws IOException {
         Optional<List<DependencySection.Declared>> recorded = inventory.dependencies(ecosystem, coordinate, version);
         if (recorded.isPresent()) {
-            return recorded.get().stream()
+            return Optional.of(recorded.get().stream()
                     .map(declared -> new ComplianceGate.Dependency(declared.coordinate(), declared.requirement()))
-                    .toList();
+                    .toList());
         }
         for (String path : bySize(inventory.paths(ecosystem, coordinate, version))) {
             List<ComplianceGate.Dependency> read = manifest(path);
             if (!read.isEmpty()) {
-                return read;
+                return Optional.of(read);
             }
         }
-        return List.of();
+        return Optional.empty();
     }
 
     /** The dependencies the inspectors claiming {@code path} read off its stored bytes, empty where none claims it or

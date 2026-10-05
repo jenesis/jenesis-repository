@@ -155,7 +155,11 @@
         <p th:if="${detail.closure == null}"><small>Resolving: the closure pass resolves a version published here from
             what the repository holds, shortly after its publish. Nothing is resolved while the repository's closure
             resolution is off.</small></p>
-        <th:block th:if="${detail.closure != null}">
+        <p th:if="${detail.closure != null and detail.closure.status().name() == 'UNDECLARED'}"><small>This version
+            declares no dependencies this repository can read - its format's artifacts declare none, or declare them
+            in a recipe that is a program - so it has no closure to resolve, which is not the same as an empty
+            one.</small></p>
+        <th:block th:if="${detail.closure != null and detail.closure.status().name() != 'UNDECLARED'}">
             <p><small th:text="|${detail.closure.components().size()} component(s) resolved from what this repository holds, ${detail.closure.cuts().size()} unresolved.|">12 components resolved, 1 unresolved.</small>
                 <span th:if="${detail.closure.status().name() == 'PARTIAL'}" class="app-badge app-badge--warn">partial</span></p>
             <table class="app-list" th:unless="${detail.closure.components().isEmpty()}">

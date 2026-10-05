@@ -113,6 +113,20 @@ class ClosureResolverTest {
                 .containsExactly(new ClosureSection.Component("org.dep:a", "1.10", false, 1));
     }
 
+    @Test
+    void a_version_declaring_nothing_readable_is_undeclared_rather_than_empty() throws IOException {
+        String path = "/maven/org/acme/blob/1.0/blob-1.0.bin";
+        publication.link(path, publication.storeBlob(new ByteArrayInputStream(new byte[]{1, 2, 3})));
+        inventory.record(path, NOW);
+        release("org.acme", "lean", "1.0", List.of());
+
+        assertThat(new ClosureResolver(store, QualityInspector.all()).resolve("Maven", "org.acme:blob", "1.0", NOW)
+                .status()).as("nothing recorded and nothing readable").isEqualTo(ClosureSection.Status.UNDECLARED);
+        assertThat(new ClosureResolver(store, QualityInspector.all()).resolve("Maven", "org.acme:lean", "1.0", NOW)
+                .status()).as("a manifest that declared none resolves to nothing")
+                .isEqualTo(ClosureSection.Status.RESOLVED);
+    }
+
     private void release(String group, String artifact, String version, List<DependencySection.Declared> declared)
             throws IOException {
         String path = "/maven/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-"
