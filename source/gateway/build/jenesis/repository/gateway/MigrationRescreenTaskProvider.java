@@ -23,7 +23,8 @@ import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
  * and a deployment with no {@code harden} repository simply back-fills nothing.
  *
  * <p>The pass re-screens with the same compliance gates the live legs use - the deployment's CVSS threshold, malware
- * action, deny list and every discovered {@link GatePolicy} dimension over the resolved advisory source - reconstructed
+ * action, deny list and every discovered {@link GatePolicy} dimension over the resolved advisory source for a copy
+ * fetched from an upstream (a version published here is asked of no feed) - reconstructed
  * here from the same effective config the live gates read, since a {@link MaintenanceTaskProvider} is handed only the
  * config lookup. The untrusted-upstream {@link HardenedScreen.Bounds} default the same way. Tenant-scoped gate
  * overrides are not layered here (the pass reads the deployment-wide config), which only ever screens with the
@@ -74,9 +75,10 @@ public final class MigrationRescreenTaskProvider implements MaintenanceTaskProvi
      *  the live legs - the CVSS threshold and its verdict, the malware action, the deny list and its verdict,
      *  plus every discovered
      *  {@link GatePolicyProvider} dimension that declares it carries {@code path}, over the resolved
-     *  {@link AdvisorySource}. Unset core dials fall back to the packaged secure defaults
+     *  {@link AdvisorySource} for the proxy flavour and none for the publish one, since a version published here is
+     *  asked of no feed. Unset core dials fall back to the packaged secure defaults
      *  ({@code CoreSettingsContributor}) so the migration gate is no laxer than a fresh deployment's. */
-    private static ComplianceGate gate(UnaryOperator<String> config, GatePolicyProvider.Path path) {
+    public static ComplianceGate gate(UnaryOperator<String> config, GatePolicyProvider.Path path) {
         Severity threshold = severity(config.apply("vulnerability-threshold"), Severity.CRITICAL);
         Verdict malware = verdict(config.apply("malware-action"), Verdict.REJECT);
         Verdict vulnerable = verdict(config.apply("vulnerability-action"), Verdict.REJECT);
@@ -84,7 +86,7 @@ public final class MigrationRescreenTaskProvider implements MaintenanceTaskProvi
         Verdict denyAction = verdict(config.apply("deny-list-action"), Verdict.REJECT);
         List<GatePolicy> policies = GatePolicyProvider.resolve(config, path);
         return new ComplianceGate(new VulnerabilityPolicy(threshold, vulnerable),
-                AdvisorySource.resolve(config))
+                path == GatePolicyProvider.Path.PUBLISH ? AdvisorySource.none() : AdvisorySource.resolve(config))
                 .malicious(new MaliciousPackagePolicy().action(malware))
                 .denyList(new DenyListPolicy(denied).action(denyAction))
                 .policies(policies);
