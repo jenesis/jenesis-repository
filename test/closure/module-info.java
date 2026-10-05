@@ -13,6 +13,7 @@ open module build.jenesis.repository.closure.test {
     requires build.jenesis.repository.closure;
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.compliance.maven;
+    requires build.jenesis.repository.dependents.requirements;
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.format.maven;
     requires build.jenesis.repository.inventory;
