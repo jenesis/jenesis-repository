@@ -190,7 +190,7 @@ class GateHostContractTest {
         assertThat(new Publication(store).located(path)).isEmpty();
         assertThat(new QuarantineLog(store).events().getFirst().reasons())
                 .as("and the hold names itself a screening outage rather than a verdict about the content")
-                .anySatisfy(reason -> assertThat(reason).contains(ComplianceScreen.FEED_FAILED_CLOSED));
+                .anySatisfy(reason -> assertThat(reason).contains(ComplianceGate.FEED_FAILED_CLOSED));
     }
 
     @Test

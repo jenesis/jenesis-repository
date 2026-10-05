@@ -318,7 +318,11 @@ public final class ProxyScreen {
             // HardenedScreen, which inspects the body itself and lets this exception surface.)
             LOGGER.warn("Could not parse proxied artifact " + path
                     + "; screening it from its path coordinate rather than serving it unscreened", malformed);
-            return assessUnclaimed(path, lastModified);
+            try {
+                return assessUnclaimed(path, lastModified);
+            } catch (RuntimeException failure) {
+                return feedFailed(path, List.of(), failure);
+            }
         }
         // On the byte[] tier every claiming inspector is handed the same bounded prefix and can read nothing else, so
         // the caller's one-byte lookahead past that prefix IS each inspector's own completeness - there is no report
@@ -343,6 +347,34 @@ public final class ProxyScreen {
      * inspector produced a subject.
      */
     Screening assessSubjects(String path, QualityInspector.Inspection inspection, Instant lastModified) {
+        try {
+            return decide(path, inspection, lastModified);
+        } catch (RuntimeException failure) {
+            return feedFailed(path, inspection.subjects(), failure);
+        }
+    }
+
+    /**
+     * Fail closed when an advisory feed threw mid-assessment - a rate limit, a mirror outage: a real feed raises on a
+     * failure rather than answering an empty, clean list, and the gate assesses through it. The copy is held for review
+     * with a reason that names the outage, as a publish whose screen could not complete is, rather than served
+     * unscreened or answered with an error that records nothing. The coordinate is the inspected one where the body
+     * parsed, the path's otherwise.
+     */
+    private Screening feedFailed(String path, List<ComplianceGate.Subject> subjects, RuntimeException failure) {
+        Throwable cause = failure.getCause() != null ? failure.getCause() : failure;
+        String message = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
+        LOGGER.warn("Could not fully screen the proxied " + path + "; an advisory feed failed closed - holding the copy "
+                + "in quarantine rather than serving unscreened bytes or answering an error", failure);
+        String coordinate = coordinate(subjects.isEmpty() ? List.of(pathDerivedSubject(path)) : subjects);
+        return new Screening(Verdict.QUARANTINE, coordinate,
+                List.of("Could not fully screen the artifact " + path + " - " + ComplianceGate.FEED_FAILED_CLOSED
+                        + ": " + message),
+                List.of(ComplianceGate.FEED_UNAVAILABLE_RULE), true);
+    }
+
+    /** {@link #assessSubjects}'s decision, which raises when an advisory feed does. */
+    private Screening decide(String path, QualityInspector.Inspection inspection, Instant lastModified) {
         List<ComplianceGate.Subject> subjects = inspection.subjects();
         if (InspectionMerge.noPackageSubject(subjects)) {
             // No package subject came back, so no parsed coordinate ever reached the gate, and the path's own
