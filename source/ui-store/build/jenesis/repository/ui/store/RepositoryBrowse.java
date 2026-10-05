@@ -2,6 +2,7 @@ package build.jenesis.repository.ui.store;
 
 import module java.base;
 
+import build.jenesis.repository.closure.ClosureSection;
 import build.jenesis.repository.compliance.ScreeningMode;
 import build.jenesis.repository.settings.CoreDefaults;
 import build.jenesis.repository.ui.CurrentTenant;
@@ -424,20 +425,34 @@ public class RepositoryBrowse extends TenantScope implements AutoCloseable {
                 dependencies.stream().limit(DEPENDENCIES_SHOWN).toList(), dependencies.size(),
                 paths, !inventory.locate(ecosystem, coordinate, version).isEmpty(),
                 FindingsState.of(FindingsProvider.installed().map(provider -> provider.over(store)),
-                        riskThreshold(), ecosystem, coordinate, version), screenPending));
+                        riskThreshold(), ecosystem, coordinate, version), screenPending,
+                ClosureSection.closure(document.section(ClosureSection.TAG)).orElse(null)));
     }
 
     /** One version as its own page shows it - see {@link #version}. {@code about}, {@code signature} and
      *  {@code provenance} are {@code null} where the document records none; {@code dependencies} holds at most
      *  {@link #DEPENDENCIES_SHOWN} of the {@code dependencyCount} declared; {@code screenPending} says a file of a
-     *  cached copy was served while an advisory feed could not answer, and no feed has answered for it since. */
+     *  cached copy was served while an advisory feed could not answer, and no feed has answered for it since;
+     *  {@code closure} is the transitive closure resolved for a release, {@code null} until it is. */
     public record VersionDetail(String ecosystem, String coordinate, String version, String published, boolean cached,
                                 String upstream, boolean prerelease, boolean pinned, boolean served, long downloads,
                                 String lastDownloaded, AboutSection.About about,
                                 List<LicenseInventory.Declared> licenses, SignatureSection.Summary signature,
                                 ProvenanceSection.Summary provenance, List<DependencySection.Declared> dependencies,
                                 int dependencyCount, List<String> paths, boolean browsable,
-                                FindingsState findings, boolean screenPending) {
+                                FindingsState findings, boolean screenPending, ClosureSection.Closure closure) {
+
+        /** Whether this is a release still waiting for its closure: a cached copy has none of its own. */
+        public boolean awaitsClosure() {
+            return closure == null && !cached;
+        }
+
+        /** The closure's components as the page lists them: at most {@link #DEPENDENCIES_SHOWN}. */
+        public List<ClosureSection.Component> closureShown() {
+            return closure == null ? List.of()
+                    : closure.components().subList(0, Math.min(DEPENDENCIES_SHOWN, closure.components().size()));
+        }
+
 
         /** The folder every file lies in - see {@link RepositoryBrowse#folder(List)}. */
         public String folder() {
