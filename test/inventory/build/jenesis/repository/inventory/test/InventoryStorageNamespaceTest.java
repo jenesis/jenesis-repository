@@ -18,7 +18,8 @@ class InventoryStorageNamespaceTest {
     void the_manifest_declares_the_derived_per_repository_key_spaces_and_nothing_the_documents_hold() {
         Set<String> prefixes = new InventoryStorageNamespace().repositoryPrefixes();
         assertThat(prefixes).as("the identity rollup, the sizes roll-ups, the retention policy, the pin index and "
-                        + "the newest-first indexes of releases and cached copies are purge-visible, not orphaned")
-                .containsExactlyInAnyOrder("identity", "sizes", "retention", "pinned", "recent", "cached");
+                        + "the newest-first indexes of releases and cached copies and the advisory-name index are "
+                        + "purge-visible, not orphaned")
+                .containsExactlyInAnyOrder("identity", "sizes", "retention", "pinned", "recent", "cached", "advised");
     }
 }
