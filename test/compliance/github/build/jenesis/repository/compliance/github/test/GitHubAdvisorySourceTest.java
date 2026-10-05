@@ -109,6 +109,18 @@ class GitHubAdvisorySourceTest {
     }
 
     @Test
+    void crates_and_packagist_are_asked_by_githubs_names_for_them() {
+        List<String> sent = new ArrayList<>();
+        GitHubAdvisorySource source = new GitHubAdvisorySource((ecosystem, affects, next) -> {
+            sent.add(ecosystem + " " + affects);
+            return new GitHubAdvisorySource.Endpoint.Page("[]", null);
+        });
+        source.advisories("crates.io", "time", "0.1.45");
+        source.advisories("Packagist", "monolog/monolog", "1.0.0");
+        assertThat(sent).containsExactly("rust time@0.1.45", "composer monolog/monolog@1.0.0");
+    }
+
+    @Test
     void a_malware_advisory_is_flagged() {
         GitHubAdvisorySource source = new GitHubAdvisorySource((ecosystem, affects, next) ->
                 new GitHubAdvisorySource.Endpoint.Page("""
