@@ -40,6 +40,7 @@ public final class FormatDispatcher {
     private final ProxyFormat.Fetcher fetcher;
     private final ObservationRegistry observations;
     private final PullThroughHooks hooks;
+    private final PullThroughCache.Withheld withheld;
     private final Map<String, FormatDispatcher> restricted = new ConcurrentHashMap<>();
 
     public FormatDispatcher(List<RepositoryFormat> formats, Map<String, URI> upstreams, ProxyFormat.Fetcher fetcher) {
@@ -63,11 +64,20 @@ public final class FormatDispatcher {
      */
     public FormatDispatcher(List<RepositoryFormat> formats, Upstreams upstreams, ProxyFormat.Fetcher fetcher,
                             ObservationRegistry observations, PullThroughHooks hooks) {
+        this(formats, upstreams, fetcher, observations, hooks, PullThroughCache.Withheld.NONE);
+    }
+
+    /** As {@link #FormatDispatcher(List, Upstreams, ProxyFormat.Fetcher, ObservationRegistry, PullThroughHooks)}, with
+     *  the guard a proxy leg asks before it fetches a local miss: a path held here is refused rather than fetched. */
+    public FormatDispatcher(List<RepositoryFormat> formats, Upstreams upstreams, ProxyFormat.Fetcher fetcher,
+                            ObservationRegistry observations, PullThroughHooks hooks,
+                            PullThroughCache.Withheld withheld) {
         this.formats = formats;
         this.upstreams = upstreams;
         this.fetcher = fetcher;
         this.observations = observations;
         this.hooks = hooks;
+        this.withheld = Objects.requireNonNull(withheld, "withheld");
     }
 
     /**
@@ -83,7 +93,7 @@ public final class FormatDispatcher {
             if (format.handles(path)) {
                 URI base = upstreams.upstream(tenant, format.name());
                 if (base != null && fetcher != ProxyFormat.Fetcher.NONE && format instanceof ProxyFormat proxy) {
-                    new PullThroughCache(fetcher, observations, hooks.forTenant(tenant))
+                    new PullThroughCache(fetcher, observations, hooks.forTenant(tenant), withheld)
                             .serve(format, proxy, base, exchange, store);
                 } else {
                     format.handle(exchange, store);
@@ -115,7 +125,7 @@ public final class FormatDispatcher {
     public FormatDispatcher only(List<RepositoryFormat> formats) {
         String key = String.join(",", formats.stream().map(RepositoryFormat::name).toList());
         return restricted.computeIfAbsent(key,
-                _ -> new FormatDispatcher(formats, upstreams, fetcher, observations, hooks));
+                _ -> new FormatDispatcher(formats, upstreams, fetcher, observations, hooks, withheld));
     }
 
     /**

@@ -71,6 +71,23 @@ public final class PullThroughCache {
 
     private final ObservationRegistry observations;
     private final PullThroughHooks hooks;
+    private final Withheld withheld;
+
+    /**
+     * Whether a path the local store does not serve is held there - pending review, or retracted by a screen - so that
+     * a local miss over it is a refusal to answer rather than a prompt to fetch. A fresh fetch of such a path would
+     * re-screen and re-record its hold on every request, and would serve what no reviewer released once the screen
+     * stops holding it - a hold window lapsing, a feed falling quiet. An undeterminable answer propagates, so a store
+     * outage fails the read rather than fetching.
+     */
+    @FunctionalInterface
+    public interface Withheld {
+
+        boolean withheld(String path, ArtifactStore store) throws IOException;
+
+        /** No path is held: every local miss is fetched. What a call site that wires no gate gets. */
+        Withheld NONE = (_, _) -> false;
+    }
 
     public PullThroughCache(ProxyFormat.Fetcher fetcher) {
         this(fetcher, ObservationRegistry.NOOP);
@@ -90,9 +107,17 @@ public final class PullThroughCache {
      * none serves with no edition's hooks.
      */
     public PullThroughCache(ProxyFormat.Fetcher fetcher, ObservationRegistry observations, PullThroughHooks hooks) {
+        this(fetcher, observations, hooks, Withheld.NONE);
+    }
+
+    /** As {@link #PullThroughCache(ProxyFormat.Fetcher, ObservationRegistry, PullThroughHooks)}, refusing rather than
+     *  fetching a local miss over a path {@code withheld} answers is held. */
+    public PullThroughCache(ProxyFormat.Fetcher fetcher, ObservationRegistry observations, PullThroughHooks hooks,
+                            Withheld withheld) {
         this.fetcher = fetcher;
         this.observations = observations;
         this.hooks = hooks;
+        this.withheld = Objects.requireNonNull(withheld, "withheld");
     }
 
     public void serve(RepositoryFormat format,
@@ -137,6 +162,11 @@ public final class PullThroughCache {
             format.handle(deferred, store);
             if (!deferred.missed()) {
                 observation.lowCardinalityKeyValue("outcome", "hit");
+                return null;
+            }
+            if (withheld.withheld(exchange.path(), store)) {
+                observation.lowCardinalityKeyValue("outcome", "withheld");
+                exchange.respond(404);
                 return null;
             }
             String filling = upstream + "\u0000" + exchange.path();
