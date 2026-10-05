@@ -42,4 +42,13 @@ public interface RepositoryContext {
      */
     default void counter(String name, String description, Map<String, String> tags, double amount) {
     }
+
+    /**
+     * Another repository of this tenant, as a pass that follows this repository's fallbacks reads it - its store and
+     * its own effective configuration - or empty where this context reaches no other repository. It is read-only by
+     * intent: a pass leases the repository it visits, not the ones it reads.
+     */
+    default Optional<RepositoryContext> repository(String name) {
+        return Optional.empty();
+    }
 }

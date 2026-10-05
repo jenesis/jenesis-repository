@@ -3,6 +3,7 @@ package build.jenesis.repository.closure.maven.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.closure.ClosureSection;
+import build.jenesis.repository.closure.ClosureWalk;
 import build.jenesis.repository.closure.EcosystemClosure;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
@@ -24,15 +25,16 @@ class MavenClosureTest {
     @TempDir
     Path root;
 
+    private ArtifactStore tenant;
     private ArtifactStore store;
     private StoreRepositoryInventory inventory;
     private Publication publication;
 
     @BeforeEach
     void setUp() {
-        store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null).scope("default")
-                .scope("releases");
+        tenant = ArtifactStoreProvider.resolve("filesystem",
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null).scope("default");
+        store = tenant.scope("releases");
         inventory = new StoreRepositoryInventory(store);
         publication = new Publication(store);
     }
@@ -115,11 +117,51 @@ class MavenClosureTest {
     void a_release_without_a_pom_is_left_to_the_walk_by_declarations() throws IOException {
         publication.link("/maven/org/acme/jar/1.0/jar-1.0.jar",
                 publication.storeBlob(new ByteArrayInputStream(new byte[]{1})));
-        assertThat(EcosystemClosure.of("Maven").orElseThrow().resolve(store, "org.acme:jar", "1.0", NOW)).isEmpty();
+        assertThat(EcosystemClosure.of("Maven").orElseThrow().resolve(ClosureWalk.of(store), "org.acme:jar", "1.0", NOW)).isEmpty();
+    }
+
+    @Test
+    void a_group_reads_poms_and_versions_through_the_repository_its_fallback_names() throws IOException {
+        // The group publishes the release and holds lib 1.0; its parent and lib's newer versions are held only by the
+        // repository its fallback names, so the parent's managed range sees the versions of both.
+        ArtifactStore group = tenant.scope("group");
+        cached("org.acme", "parent", "1", """
+                <packaging>pom</packaging>
+                <dependencyManagement><dependencies>
+                  <dependency><groupId>org.dep</groupId><artifactId>lib</artifactId><version>[1.0,3.0)</version></dependency>
+                </dependencies></dependencyManagement>""");
+        cached("org.dep", "lib", "2.0", "");
+        cached("org.dep", "lib", "3.0", "");
+        new StoreRepositoryInventory(group).record(link(group, "org.dep", "lib", "1.0", ""), NOW);
+        new StoreRepositoryInventory(group).record(link(group, "org.acme", "app", "1.0", """
+                <parent><groupId>org.acme</groupId><artifactId>parent</artifactId><version>1</version></parent>
+                <dependencies>
+                  <dependency><groupId>org.dep</groupId><artifactId>lib</artifactId></dependency>
+                  <dependency><groupId>org.dep</groupId><artifactId>gone</artifactId><version>1.0</version></dependency>
+                </dependencies>"""), NOW);
+
+        ClosureSection.Closure closure = EcosystemClosure.of("Maven").orElseThrow().resolve(new ClosureWalk(List.of(
+                new ClosureWalk.Member("group", group), new ClosureWalk.Member("releases", store))),
+                "org.acme:app", "1.0", NOW).orElseThrow();
+
+        assertThat(closure.components()).as("the newest in the range across the walk, named by the repository holding it")
+                .containsExactly(new ClosureSection.Component("org.dep:lib", "2.0", true, 1, "releases"));
+        assertThat(closure.cuts()).singleElement().satisfies(cut -> {
+            assertThat(cut.coordinate()).isEqualTo("org.dep:gone");
+            assertThat(cut.reason()).isEqualTo("not held by this repository or a repository its fallbacks name");
+        });
+
+        cached("org.dep", "gone", "1.0", "");
+        assertThat(EcosystemClosure.of("Maven").orElseThrow().resolve(new ClosureWalk(List.of(
+                new ClosureWalk.Member("group", group), new ClosureWalk.Member("releases", store))),
+                "org.acme:app", "1.0", NOW).orElseThrow().components())
+                .as("a component the fallback's repository holds is named by it")
+                .contains(new ClosureSection.Component("org.dep:gone", "1.0", true, 1, "releases"));
     }
 
     private ClosureSection.Closure resolve(String coordinate, String version) throws IOException {
-        return EcosystemClosure.of("Maven").orElseThrow().resolve(store, coordinate, version, NOW).orElseThrow();
+        return EcosystemClosure.of("Maven").orElseThrow().resolve(ClosureWalk.of(store), coordinate, version, NOW)
+                .orElseThrow();
     }
 
     private void release(String group, String artifact, String version, String body) throws IOException {
@@ -133,6 +175,12 @@ class MavenClosureTest {
     }
 
     private String link(String group, String artifact, String version, String body) throws IOException {
+        return link(store, group, artifact, version, body);
+    }
+
+    private static String link(ArtifactStore store, String group, String artifact, String version, String body)
+            throws IOException {
+        Publication publication = new Publication(store);
         String path = "/maven/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-"
                 + version + ".pom";
         String pom = "<project><modelVersion>4.0.0</modelVersion><groupId>" + group + "</groupId><artifactId>"

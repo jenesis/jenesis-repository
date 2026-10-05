@@ -903,6 +903,12 @@ public final class MaintenanceScheduler implements AutoCloseable {
         }
 
         @Override
+        public Optional<RepositoryContext> repository(String name) {
+            return Repositories.valid(name) ? Optional.of(new PassRepositoryContext(tenant, name, now, sink))
+                    : Optional.empty();
+        }
+
+        @Override
         public ArtifactStore store() {
             return repositories.store(tenant, repository);
         }

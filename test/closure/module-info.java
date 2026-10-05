@@ -1,6 +1,7 @@
 /**
  * The closure resolution in isolation over a real filesystem store with the Maven layout and its inspector installed:
- * a release's declared dependencies walked through the repository's releases and cached copies, a cached copy's own
+ * a release's declared dependencies walked through the repository's releases and cached copies and those of the
+ * repositories its fallbacks name, a cached copy's own
  * declarations read off its stored POM, a requirement taking the newest held version it admits, and every subtree
  * that cannot resolve recorded as a cut. The pass's setting and its default are asked of the catalogue.
  *
@@ -13,6 +14,7 @@ open module build.jenesis.repository.closure.test {
     requires build.jenesis.repository.closure;
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.compliance.maven;
+    requires build.jenesis.repository.definitions;
     requires build.jenesis.repository.dependents.requirements;
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.format.maven;

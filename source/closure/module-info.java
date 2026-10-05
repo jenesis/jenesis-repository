@@ -21,6 +21,7 @@
 module build.jenesis.repository.closure {
     requires transitive build.jenesis.repository.store;
     requires build.jenesis.repository.compliance;
+    requires build.jenesis.repository.definitions;
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.maintenance;
     requires build.jenesis.repository.metadata;

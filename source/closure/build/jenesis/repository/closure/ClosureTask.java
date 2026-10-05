@@ -14,7 +14,8 @@ import build.jenesis.repository.metadata.MetadataStore;
 /**
  * Resolves the closure of every release that has none, in a repository whose {@value #SETTING} is on: on the
  * {@link IncrementalPasses} cadence, the releases published since the last full pass, and on a full pass every
- * release - which is how a version published before the setting was on is resolved. A version is resolved once: its
+ * release - which is how a version published before the setting was on is resolved. A closure resolves through the
+ * repository and the repositories its fallbacks name ({@link ClosureWalk}). A version is resolved once: its
  * closure is a section of its document ({@link ClosureSection}), and a version that has one is passed by.
  *
  * <p>Lease-owned, since it writes the version documents; idempotent, since a crash leaves the versions it had not
@@ -70,7 +71,8 @@ public final class ClosureTask implements MaintenanceTask {
         }
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(context.store());
         MetadataStore metadata = MetadataProvider.installed().over(context.store());
-        ClosureResolver resolver = new ClosureResolver(context.store(), inspectors);
+        ClosureWalk through = ClosureWalk.of(context);
+        ClosureResolver resolver = new ClosureResolver(through, inspectors);
         UnitFailures failed = context.failures("The closure pass of " + context.tenant() + "/" + context.repository(),
                 "Those versions have no closure yet; the next pass resolves them.");
         IncrementalPasses cadence = IncrementalPasses.over(context.store(), NAME, "closure/resolve",
@@ -85,7 +87,7 @@ public final class ClosureTask implements MaintenanceTask {
                 // An ecosystem with a walk of its own resolves the release; the walk by declarations answers otherwise.
                 Optional<EcosystemClosure> walk = EcosystemClosure.of(release.ecosystem());
                 Optional<ClosureSection.Closure> own = walk.isEmpty() ? Optional.empty()
-                        : walk.get().resolve(context.store(), release.coordinate(), release.version(), context.now());
+                        : walk.get().resolve(through, release.coordinate(), release.version(), context.now());
                 ClosureSection.Closure closure = own.isPresent() ? own.get()
                         : resolver.resolve(release.ecosystem(), release.coordinate(), release.version(), context.now());
                 metadata.mutate(release.ecosystem(), release.coordinate(), release.version(), ClosureSection.TAG,

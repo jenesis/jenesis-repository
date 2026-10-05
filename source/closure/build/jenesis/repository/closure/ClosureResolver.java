@@ -10,9 +10,10 @@ import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ServableNames;
 
 /**
- * Resolves a version's transitive closure from what one repository holds: breadth-first from the version's declared
- * dependencies, each requirement taking the newest held version its ecosystem's {@link RequirementGrammar} admits and
- * the repository serves, and that version's own declarations read next. The nearest declaration of a coordinate wins,
+ * Resolves a version's transitive closure from what the repositories of a {@link ClosureWalk} hold: breadth-first from
+ * the version's declared dependencies, each requirement taking the newest held version its ecosystem's
+ * {@link RequirementGrammar} admits and the repository holding it serves - the earlier repository of the walk where
+ * two hold the same version, as a request walks them - and that version's own declarations read next. The nearest declaration of a coordinate wins,
  * as the build tools that mediate do, and a coordinate is visited once.
  *
  * <p>A held version's declarations are the ones its document records where its publish recorded them, and otherwise
@@ -35,15 +36,29 @@ public final class ClosureResolver {
 
     private static final int PAGE = 200;
 
-    private final ArtifactStore store;
-    private final StoreRepositoryInventory inventory;
-    private final Publication publication;
+    private final List<Reader> readers;
     private final List<QualityInspector> inspectors;
 
+    /** One repository of the walk, as the resolver reads it. */
+    private record Reader(String repository, ArtifactStore store, StoreRepositoryInventory inventory,
+                          Publication publication) {
+
+        Reader(ClosureWalk.Member member, boolean own) {
+            this(own ? "" : member.repository(), member.store(), new StoreRepositoryInventory(member.store()),
+                    new Publication(member.store()));
+        }
+    }
+
     public ClosureResolver(ArtifactStore store, List<QualityInspector> inspectors) {
-        this.store = Objects.requireNonNull(store, "store");
-        this.inventory = new StoreRepositoryInventory(store);
-        this.publication = new Publication(store);
+        this(ClosureWalk.of(store), inspectors);
+    }
+
+    public ClosureResolver(ClosureWalk walk, List<QualityInspector> inspectors) {
+        List<Reader> readers = new ArrayList<>();
+        for (ClosureWalk.Member member : walk.members()) {
+            readers.add(new Reader(member, readers.isEmpty()));
+        }
+        this.readers = List.copyOf(readers);
         this.inspectors = List.copyOf(inspectors);
     }
 
@@ -57,7 +72,8 @@ public final class ClosureResolver {
         seen.add(coordinate);
         record Pending(ComplianceGate.Dependency dependency, int depth) {
         }
-        Optional<List<ComplianceGate.Dependency>> roots = declarations(ecosystem, coordinate, version);
+        Optional<List<ComplianceGate.Dependency>> roots = declarations(readers.getFirst(), ecosystem, coordinate,
+                version);
         if (roots.isEmpty()) {
             return new ClosureSection.Closure(ClosureSection.Status.UNDECLARED, List.of(), List.of(), false, now);
         }
@@ -84,8 +100,9 @@ public final class ClosureResolver {
             }
             StoreRepositoryInventory.Holding held = choice.holding();
             components.add(new ClosureSection.Component(held.coordinate(), held.version(), held.cached(),
-                    next.depth()));
-            for (ComplianceGate.Dependency transitive : declared(ecosystem, held.coordinate(), held.version())) {
+                    next.depth(), choice.reader().repository()));
+            for (ComplianceGate.Dependency transitive : declared(choice.reader(), ecosystem, held.coordinate(),
+                    held.version())) {
                 queue.add(new Pending(transitive, next.depth() + 1));
             }
         }
@@ -93,71 +110,89 @@ public final class ClosureResolver {
                 : ClosureSection.Status.PARTIAL, components, cuts, truncated, now);
     }
 
-    /** The held version a dependency resolves to, or why none does. */
-    private record Choice(StoreRepositoryInventory.Holding holding, String reason, boolean truncated) {
+    /** The held version a dependency resolves to and the repository holding it, or why none does. */
+    private record Choice(StoreRepositoryInventory.Holding holding, Reader reader, String reason, boolean truncated) {
+
+        static Choice cut(String reason, boolean truncated) {
+            return new Choice(null, null, reason, truncated);
+        }
+    }
+
+    /** A held version a requirement admits, and the repository of the walk holding it. */
+    private record Candidate(StoreRepositoryInventory.Holding holding, Reader reader) {
     }
 
     private Choice choose(String ecosystem, RequirementGrammar grammar, ComplianceGate.Dependency dependency)
             throws IOException {
-        List<StoreRepositoryInventory.Holding> admitted = new ArrayList<>();
+        List<Candidate> admitted = new ArrayList<>();
         boolean anyHeld = false;
         boolean unknown = false;
+        boolean unexamined = false;
         int examined = 0;
-        String after = null;
-        do {
-            StoreRepositoryInventory.HoldingPage page = inventory.holdings(ecosystem, dependency.coordinate(), after,
-                    PAGE);
-            for (StoreRepositoryInventory.Holding holding : page.holdings()) {
-                anyHeld = true;
-                switch (grammar.admits(dependency.requirement(), holding.version())) {
-                    case ADMITS -> admitted.add(holding);
-                    case UNKNOWN -> unknown = true;
-                    case EXCLUDES -> {
+        for (Reader reader : readers) {
+            String after = null;
+            do {
+                StoreRepositoryInventory.HoldingPage page = reader.inventory().holdings(ecosystem,
+                        dependency.coordinate(), after, PAGE);
+                for (StoreRepositoryInventory.Holding holding : page.holdings()) {
+                    anyHeld = true;
+                    switch (grammar.admits(dependency.requirement(), holding.version())) {
+                        case ADMITS -> admitted.add(new Candidate(holding, reader));
+                        case UNKNOWN -> unknown = true;
+                        case EXCLUDES -> {
+                        }
                     }
                 }
+                examined += page.holdings().size();
+                after = page.next();
+            } while (after != null && examined < MAX_VERSIONS);
+            unexamined |= after != null;
+            if (examined >= MAX_VERSIONS) {
+                break;
             }
-            examined += page.holdings().size();
-            after = page.next();
-        } while (after != null && examined < MAX_VERSIONS);
-        if (!anyHeld) {
-            return new Choice(null, "not held by this repository", false);
         }
-        admitted.sort((left, right) -> grammar.compare(right.version(), left.version()));
-        for (StoreRepositoryInventory.Holding candidate : admitted) {
-            if (inventory.disclosable(ecosystem, candidate.coordinate(), candidate.version(),
-                    ServableNames.Policy.HIDE_WITHHELD)) {
-                return new Choice(candidate, null, false);
+        if (!anyHeld) {
+            return Choice.cut(readers.size() == 1 ? "not held by this repository"
+                    : "not held by this repository or a repository its fallbacks name", false);
+        }
+        // Newest first; a stable sort keeps the walk's order among repositories holding the same version.
+        admitted.sort((left, right) -> grammar.compare(right.holding().version(), left.holding().version()));
+        for (Candidate candidate : admitted) {
+            if (candidate.reader().inventory().disclosable(ecosystem, candidate.holding().coordinate(),
+                    candidate.holding().version(), ServableNames.Policy.HIDE_WITHHELD)) {
+                return new Choice(candidate.holding(), candidate.reader(), null, false);
             }
         }
         if (!admitted.isEmpty()) {
-            return new Choice(null, "every held version it admits is held for review", false);
+            return Choice.cut("every held version it admits is held for review", false);
         }
         if (unknown) {
-            return new Choice(null, "the requirement could not be evaluated", false);
+            return Choice.cut("the requirement could not be evaluated", false);
         }
-        return new Choice(null, after == null ? "no held version satisfies the requirement"
-                : "no examined version satisfies the requirement, and more are held than are examined",
-                after != null);
+        return Choice.cut(unexamined
+                ? "no examined version satisfies the requirement, and more are held than are examined"
+                : "no held version satisfies the requirement", unexamined);
     }
 
     /** What a held version declares, empty where it declares nothing readable - see {@link #declarations}. */
-    private List<ComplianceGate.Dependency> declared(String ecosystem, String coordinate, String version)
-            throws IOException {
-        return declarations(ecosystem, coordinate, version).orElse(List.of());
+    private List<ComplianceGate.Dependency> declared(Reader reader, String ecosystem, String coordinate,
+                                                     String version) throws IOException {
+        return declarations(reader, ecosystem, coordinate, version).orElse(List.of());
     }
 
     /** What a held version declares: its document's record where the publish made one, its manifest otherwise, and
      *  empty where neither says anything - no record, and no file an inspector reads a dependency from. */
-    private Optional<List<ComplianceGate.Dependency>> declarations(String ecosystem, String coordinate,
+    private Optional<List<ComplianceGate.Dependency>> declarations(Reader reader, String ecosystem, String coordinate,
                                                                    String version) throws IOException {
-        Optional<List<DependencySection.Declared>> recorded = inventory.dependencies(ecosystem, coordinate, version);
+        Optional<List<DependencySection.Declared>> recorded = reader.inventory().dependencies(ecosystem, coordinate,
+                version);
         if (recorded.isPresent()) {
             return Optional.of(recorded.get().stream()
                     .map(declared -> new ComplianceGate.Dependency(declared.coordinate(), declared.requirement()))
                     .toList());
         }
-        for (String path : bySize(inventory.paths(ecosystem, coordinate, version))) {
-            List<ComplianceGate.Dependency> read = manifest(path);
+        for (String path : bySize(reader.inventory().paths(ecosystem, coordinate, version))) {
+            List<ComplianceGate.Dependency> read = manifest(reader, path);
             if (!read.isEmpty()) {
                 return Optional.of(read);
             }
@@ -167,18 +202,18 @@ public final class ClosureResolver {
 
     /** The dependencies the inspectors claiming {@code path} read off its stored bytes, empty where none claims it or
      *  it is too large to be a manifest. */
-    private List<ComplianceGate.Dependency> manifest(String path) throws IOException {
+    private List<ComplianceGate.Dependency> manifest(Reader reader, String path) throws IOException {
         List<QualityInspector> claiming = inspectors.stream()
                 .filter(inspector -> inspector.claims(path, QualityInspector.Lookup.NONE)).toList();
         if (claiming.isEmpty()) {
             return List.of();
         }
-        Optional<Publication.Located> located = publication.locate(path);
+        Optional<Publication.Located> located = reader.publication().locate(path);
         if (located.isEmpty() || located.get().size() > MANIFEST_LIMIT) {
             return List.of();
         }
         byte[] body;
-        try (InputStream in = store.open(located.get().key())) {
+        try (InputStream in = reader.store().open(located.get().key())) {
             body = in.readNBytes(MANIFEST_LIMIT);
         }
         List<ComplianceGate.Dependency> dependencies = new ArrayList<>();
