@@ -430,7 +430,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
                 // their absence.
                 if (asked.endsWith(METADATA)) {
                     if (index.isEmpty()) {
-                        return unanswered(prefix + asked, exchange, "the upstream could not be reached");
+                        return unanswered(prefix + asked, exchange, ProxyFormat.Fetcher.NO_ANSWER);
                     }
                     if (index.get().status() != 200 && index.get().status() != 404 && index.get().status() != 410) {
                         return unanswered(prefix + asked, exchange, "the upstream answered " + index.get().status());
@@ -457,7 +457,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
         Optional<ProxyFormat.Download> fetched = fetcher.download(URI.create(prefix + rest), Map.of());
         if (fetched.isEmpty()) {
             return resolvedAgainstAbsence(rest)
-                    ? undecided(prefix + rest, exchange, "the upstream could not be reached")
+                    ? undecided(prefix + rest, exchange, ProxyFormat.Fetcher.NO_ANSWER)
                     : false;
         }
         try (ProxyFormat.Download download = fetched.get()) {

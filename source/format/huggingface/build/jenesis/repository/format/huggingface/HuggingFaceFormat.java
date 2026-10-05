@@ -801,7 +801,7 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         try (ProxyFormat.Download download = fetcher.download(target, ProxyRelay.conditionalHeaders(exchange)).orElse(null)) {
             if (download == null) {
                 return ProxyRelay.unanswered(target, exchange, ProxyRelay.Document.ENUMERATION,
-                        "the upstream could not be reached");
+                        ProxyFormat.Fetcher.NO_ANSWER);
             }
             if (download.status() == 304) {
                 // The client's validators still match: the 304 and validators are relayed.
