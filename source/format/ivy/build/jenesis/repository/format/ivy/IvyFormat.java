@@ -11,6 +11,7 @@ import build.jenesis.repository.format.ArtifactSignatures;
 import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
+import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
@@ -262,6 +263,23 @@ public final class IvyFormat implements RepositoryFormat, ArtifactLayout, Artifa
 
     // ---- proxy ----
 
+    /** A link in a directory listing, its target in the first group. */
+    private static final Pattern LINK = Pattern.compile("<a\\s[^>]*href=\"([^\"]*)\"[^>]*>.*?</a>",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+
+    /** A module directory's listing with the link to each revision {@code held} names left out. */
+    static String withoutHeld(String listing, Set<String> held) {
+        Matcher link = LINK.matcher(listing);
+        StringBuilder kept = new StringBuilder();
+        while (link.find()) {
+            String target = link.group(1);
+            String revision = target.endsWith("/") ? target.substring(0, target.length() - 1) : target;
+            link.appendReplacement(kept, held.contains(revision) ? "" : Matcher.quoteReplacement(link.group()));
+        }
+        link.appendTail(kept);
+        return kept.toString();
+    }
+
     /**
      * Proxy a miss to an upstream Ivy repository laid out as this one,
      * {@code <organisation>/<module>/<revision>/<file>} under the upstream's root; every target is composed from the
@@ -286,9 +304,24 @@ public final class IvyFormat implements RepositoryFormat, ArtifactLayout, Artifa
         String root = upstream.toString().endsWith("/") ? upstream.toString() : upstream + "/";
         Optional<Module> module = Module.of(path);
         if (module.isPresent()) {
-            return ProxyRelay.streamRemembered(fetcher,
-                    URI.create(root + module.get().organisation() + "/" + module.get().module() + "/"), "text/html",
-                    exchange, ProxyRelay.Document.ENUMERATION, store);
+            URI listing = URI.create(root + module.get().organisation() + "/" + module.get().module() + "/");
+            Set<String> held = HeldVersions.of(store, ECOSYSTEM,
+                    module.get().organisation() + ":" + module.get().module());
+            if (held.isEmpty()) {
+                return ProxyRelay.streamRemembered(fetcher, listing, "text/html", exchange,
+                        ProxyRelay.Document.ENUMERATION, store);
+            }
+            // A revision this repository holds for review is left out, so Ivy never resolves 1.+ to a revision
+            // answering 404: the listing is read whole for it.
+            ProxyRelay.Answer answer = ProxyRelay.fetchRemembered(fetcher, listing,
+                    ProxyRelay.conditionalHeaders(exchange), exchange, ProxyRelay.Document.ENUMERATION, store);
+            if (!answer.answered()) {
+                return answer.served();
+            }
+            exchange.setResponseHeader("Content-Type", "text/html");
+            exchange.respond(200, withoutHeld(new String(answer.document().body(), StandardCharsets.UTF_8), held)
+                    .getBytes(StandardCharsets.UTF_8));
+            return true;
         }
         Optional<Coordinate> coordinate = Coordinate.of(path);
         if (coordinate.isEmpty()) {

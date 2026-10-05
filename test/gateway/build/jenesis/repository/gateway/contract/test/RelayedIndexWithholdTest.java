@@ -205,6 +205,58 @@ class RelayedIndexWithholdTest {
     }
 
     @Test
+    void a_cocoapods_shard_listing_leaves_out_a_held_version() throws IOException {
+        byte[] shard = "AFNetworking/4.0.0/4.0.1\nAlamofire/5.8.0/5.9.0\nSolo/1.0.0\n"
+                .getBytes(StandardCharsets.UTF_8);
+        String path = "/cocoapods/main/all_pods_versions_0_a_1.txt";
+        assertThat(relay("cocoapods", path, shard).body()).as("nothing held: every version").contains("5.9.0");
+
+        UpstreamMemory.reset();
+        hold("/cocoapods/main/pods/Alamofire/5.9.0/Alamofire.zip", "CocoaPods", "Alamofire", "5.9.0");
+        hold("/cocoapods/main/pods/Solo/1.0.0/Solo.zip", "CocoaPods", "Solo", "1.0.0");
+
+        assertThat(relay("cocoapods", path, shard).body())
+                .as("a held version left out, and a pod whose only version is held left out with it")
+                .isEqualTo("AFNetworking/4.0.0/4.0.1\nAlamofire/5.8.0\n");
+    }
+
+    @Test
+    void an_ivy_module_listing_leaves_out_a_held_revision() throws IOException {
+        byte[] listing = """
+                <html><body><pre>
+                <a href="../">../</a>
+                <a href="1.0.0/">1.0.0/</a>
+                <a href="1.1.0/">1.1.0/</a>
+                </pre></body></html>""".getBytes(StandardCharsets.UTF_8);
+        String path = "/ivy/org.acme/widget/";
+        assertThat(relay("ivy", path, listing).body()).as("nothing held: every revision").contains("1.1.0/");
+
+        UpstreamMemory.reset();
+        hold("/ivy/org.acme/widget/1.1.0/widget-1.1.0.jar", "Maven", "org.acme:widget", "1.1.0");
+
+        assertThat(relay("ivy", path, listing).body()).doesNotContain("1.1.0").contains("href=\"1.0.0/\"")
+                .contains("href=\"../\"");
+    }
+
+    @Test
+    void a_conan_search_forwards_its_pattern_and_leaves_out_a_held_version() throws IOException {
+        // The pattern is the search: the upstream answers this one alone, so a relay that dropped it answers 404 here.
+        byte[] results = """
+                {"results":["zlib/1.2.13","zlib/1.3.1","zlib/1.3.1@acme/stable#0a1b","zlibng/1.3.1"]}"""
+                .getBytes(StandardCharsets.UTF_8);
+        String path = "/conan/main/v2/conans/search?q=zlib*";
+        Map<String, byte[]> answers = Map.of("/v2/conans/search?q=zlib*", results);
+        assertThat(JSON.readTree(relay("conan", path, answers).body()).path("results")).as("nothing held: every one")
+                .hasSize(4);
+
+        UpstreamMemory.reset();
+        hold("/conan/main/v2/conans/zlib/1.3.1/_/_/revisions/0a1b/files/conanfile.py", "Conan", "zlib", "1.3.1");
+
+        assertThat(JSON.readTree(relay("conan", path, answers).body()).path("results"))
+                .extracting(JsonNode::asString).containsExactly("zlib/1.2.13", "zlibng/1.3.1");
+    }
+
+    @Test
     void a_terraform_version_list_leaves_out_a_held_version() throws IOException {
         byte[] versions = ("{\"versions\":[{\"version\":\"1.0.0\",\"protocols\":[\"5.0\"]},"
                 + "{\"version\":\"1.1.0\",\"protocols\":[\"5.0\"]}]}").getBytes(StandardCharsets.UTF_8);
@@ -305,8 +357,19 @@ class RelayedIndexWithholdTest {
         private int status = -1;
         private final ByteArrayOutputStream captured = new ByteArrayOutputStream();
 
+        private final Map<String, String> query = new HashMap<>();
+
+        /** A {@code GET} of {@code path}, a query after its {@code ?} read as the request's parameters. */
         private Exchange(String path) {
-            this.path = path;
+            int mark = path.indexOf('?');
+            this.path = mark < 0 ? path : path.substring(0, mark);
+            if (mark >= 0) {
+                for (String pair : path.substring(mark + 1).split("&")) {
+                    int equals = pair.indexOf('=');
+                    query.put(equals < 0 ? pair : pair.substring(0, equals),
+                            equals < 0 ? "" : URLDecoder.decode(pair.substring(equals + 1), StandardCharsets.UTF_8));
+                }
+            }
         }
 
         byte[] bytes() {
@@ -329,7 +392,7 @@ class RelayedIndexWithholdTest {
 
         @Override
         public String queryParameter(String name) {
-            return null;
+            return query.get(name);
         }
 
         @Override

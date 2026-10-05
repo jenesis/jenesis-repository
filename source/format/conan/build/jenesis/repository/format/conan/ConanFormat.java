@@ -18,6 +18,7 @@ import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
+import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Retries;
@@ -522,6 +523,9 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
         if (root.endsWith("/")) {
             root = root.substring(0, root.length() - 1);
         }
+        if (sub.equals(CONANS + SEARCH)) {
+            return proxySearch(root, exchange, store, fetcher);
+        }
         URI target = URI.create(root + "/" + sub);
         FileRef file = fileRef(repo, sub.substring(CONANS.length()));
         if (file != null) {
@@ -574,6 +578,67 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
             }
         }
         return true;
+    }
+
+    /** The recipe search a version range resolves against: {@code v2/conans/search?q=<pattern>}. */
+    private static final String SEARCH = "search";
+
+    /**
+     * Relay a recipe search, its pattern forwarded, as the version list a range resolves against - an ENUMERATION.
+     * A version this repository holds for review is left out of the references it answers, so a range never resolves
+     * to a recipe answering 404; the answer is read whole for it, and streamed where nothing of the ecosystem is held.
+     */
+    private boolean proxySearch(String root, FormatExchange exchange, ArtifactStore store, ProxyFormat.Fetcher fetcher)
+            throws IOException {
+        String pattern = exchange.queryParameter("q");
+        URI target = URI.create(root + "/" + CONANS + SEARCH
+                + (pattern == null ? "" : "?q=" + URLEncoder.encode(pattern, StandardCharsets.UTF_8)));
+        Map<String, Set<String>> held = HeldVersions.all(store, ECOSYSTEM);
+        if (held.isEmpty()) {
+            return ProxyRelay.streamRemembered(fetcher, target, "application/json", exchange,
+                    ProxyRelay.Document.ENUMERATION, store);
+        }
+        ProxyRelay.Answer answer = ProxyRelay.fetchRemembered(fetcher, target, ProxyRelay.conditionalHeaders(exchange),
+                exchange, ProxyRelay.Document.ENUMERATION, store);
+        if (!answer.answered()) {
+            return answer.served();
+        }
+        JsonNode found;
+        try {
+            found = MAPPER.readTree(answer.document().body());
+        } catch (RuntimeException unreadable) {
+            exchange.respond(502);
+            return true;
+        }
+        if (found instanceof ObjectNode results && results.path("results") instanceof ArrayNode references) {
+            ArrayNode kept = MAPPER.createArrayNode();
+            for (JsonNode reference : references) {
+                if (!heldReference(reference.asString(""), held)) {
+                    kept.add(reference);
+                }
+            }
+            results.set("results", kept);
+        }
+        exchange.setResponseHeader("Content-Type", "application/json");
+        exchange.answer(MAPPER.writeValueAsBytes(found));
+        return true;
+    }
+
+    /** Whether the recipe reference {@code name/version[@user/channel][#revision]} names a version {@code held}. */
+    static boolean heldReference(String reference, Map<String, Set<String>> held) {
+        int slash = reference.indexOf('/');
+        if (slash <= 0) {
+            return false;
+        }
+        String rest = reference.substring(slash + 1);
+        int end = rest.length();
+        for (char stop : new char[]{'@', '#'}) {
+            int at = rest.indexOf(stop);
+            if (at >= 0 && at < end) {
+                end = at;
+            }
+        }
+        return held.getOrDefault(reference.substring(0, slash), Set.of()).contains(rest.substring(0, end));
     }
 
     /** The store and time-pointer keys of a proxied revision file, or {@code null} when {@code tail} is an index to

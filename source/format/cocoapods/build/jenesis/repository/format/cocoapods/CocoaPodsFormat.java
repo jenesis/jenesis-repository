@@ -21,6 +21,7 @@ import build.jenesis.repository.format.FormatExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
+import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
@@ -383,7 +384,48 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         URI target = URI.create(root + "/" + ALL_PODS + shard[0] + "_" + shard[1] + "_" + shard[2] + TXT);
         // The shard listing is the pod-version list a Podfile resolves against, an ENUMERATION: only an upstream that
         // answered 404/410 reaches the client as one. Served as text/plain by default, as the CDN serves it.
-        return ProxyRelay.streamRemembered(fetcher, target, "text/plain", exchange, ProxyRelay.Document.ENUMERATION, store);
+        Map<String, Set<String>> held = HeldVersions.all(store, ECOSYSTEM);
+        if (held.isEmpty()) {
+            return ProxyRelay.streamRemembered(fetcher, target, "text/plain", exchange,
+                    ProxyRelay.Document.ENUMERATION, store);
+        }
+        // A version this repository holds for review is left out, so a Podfile never resolves to a pod answering 404:
+        // the shard is read whole for it, one pod per line and its versions after it.
+        ProxyRelay.Answer answer = ProxyRelay.fetchRemembered(fetcher, target, ProxyRelay.conditionalHeaders(exchange),
+                exchange, ProxyRelay.Document.ENUMERATION, store);
+        if (!answer.answered()) {
+            return answer.served();
+        }
+        exchange.setResponseHeader("Content-Type", "text/plain");
+        exchange.respond(200, withoutHeld(new String(answer.document().body(), StandardCharsets.UTF_8), held)
+                .getBytes(StandardCharsets.UTF_8));
+        return true;
+    }
+
+    /** A shard listing - {@code <pod>/<version>/<version>...} a line - with the versions {@code held} names of each pod
+     *  left out, and a pod with none left out with them. */
+    static String withoutHeld(String listing, Map<String, Set<String>> held) {
+        StringBuilder kept = new StringBuilder();
+        for (String line : listing.split("\n")) {
+            String[] fields = line.split("/", -1);
+            Set<String> versions = held.get(fields[0]);
+            if (versions == null) {
+                kept.append(line).append('\n');
+                continue;
+            }
+            StringBuilder pod = new StringBuilder(fields[0]);
+            boolean any = false;
+            for (int at = 1; at < fields.length; at++) {
+                if (!versions.contains(fields[at])) {
+                    pod.append('/').append(fields[at]);
+                    any = true;
+                }
+            }
+            if (any) {
+                kept.append(pod).append('\n');
+            }
+        }
+        return kept.length() > 0 && !listing.endsWith("\n") ? kept.substring(0, kept.length() - 1) : kept.toString();
     }
 
     /** Fetch an upstream podspec, rewrite an http-zip {@code source} through this registry, and stream it fresh; a
