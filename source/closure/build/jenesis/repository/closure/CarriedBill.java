@@ -7,7 +7,9 @@ import build.jenesis.repository.dependency.ArtifactSbom;
 import build.jenesis.repository.dependency.DependencyComponent;
 import build.jenesis.repository.dependency.DependencyEdge;
 import build.jenesis.repository.dependency.DependencyGraph;
+import build.jenesis.repository.inventory.HeldSubjects;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
+import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.ServableNames;
 
@@ -189,10 +191,21 @@ public final class CarriedBill implements ClosureSource {
     }
 
     /** One repository of the walk, as a bill's components are looked up in it. */
-    private record Holder(String repository, StoreRepositoryInventory inventory) {
+    private record Holder(String repository, ArtifactStore store, StoreRepositoryInventory inventory) {
 
         Holder(ClosureWalk.Member member) {
-            this(member.repository(), new StoreRepositoryInventory(member.store()));
+            this(member.repository(), member.store(), new StoreRepositoryInventory(member.store()));
+        }
+
+        /** Whether this repository holds {@code version} of {@code coordinate} for review as no holding yet: a
+         *  proxied copy the screen held at its fill, found through its hold's subject and live review pointer. */
+        boolean heldAtFill(String ecosystem, String coordinate, String version) throws IOException {
+            for (String path : HeldSubjects.paths(store, ecosystem, coordinate, version)) {
+                if (Publication.reviewPending(store, path)) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 
@@ -212,6 +225,11 @@ public final class CarriedBill implements ClosureSource {
                 return Optional.of(new Held(i == 0 ? "" : holder.repository(), cached,
                         holder.inventory().disclosable(ecosystem, at.coordinate(), at.version(),
                                 ServableNames.Policy.HIDE_WITHHELD)));
+            }
+        }
+        for (int i = 0; i < holders.size(); i++) {
+            if (holders.get(i).heldAtFill(ecosystem, at.coordinate(), at.version())) {
+                return Optional.of(new Held(i == 0 ? "" : holders.get(i).repository(), true, false));
             }
         }
         return Optional.empty();
