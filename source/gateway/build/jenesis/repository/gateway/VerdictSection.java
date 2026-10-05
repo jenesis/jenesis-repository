@@ -21,7 +21,7 @@ import build.jenesis.repository.metadata.State;
  * <p>The {@code data} payload is
  * {@code {"digest":"sha256:<hex>", "verdict":"ALLOW|QUARANTINE|REJECT", "refusal":<name|null>,
  * "screenedAt":<instant>, "profile":<tier>, "source":<upstream|fallback>, "inspectionLimit":<bytes>,
- * "validators":[{"name":<inspector>, "version":<version|null>}, ...]}}. The verdict captures which typed disposition
+ * "policy":<the gate's policy digest>, "validators":[{"name":<inspector>, "version":<version|null>}, ...]}}. The verdict captures which typed disposition
  * the leg reached (an {@link Verdict#ALLOW} or a withholding), the optional named structural {@code refusal} when the
  * body could not be screened, when it was {@code screenedAt}, the screening {@code profile} (which tier/policy), the
  * {@code source} the bytes came from (which upstream or the local-store repair), and the {@code validators} that ran
@@ -56,6 +56,9 @@ public final class VerdictSection {
     private static final String SOURCE_FIELD = "source";
     private static final String VALIDATORS_FIELD = "validators";
     private static final String INSPECTION_LIMIT_FIELD = "inspectionLimit";
+
+    /** The digest of the gate's policy the verdict was reached under ({@code ComplianceGate.policy()}). */
+    private static final String POLICY_FIELD = "policy";
     private static final String NAME_FIELD = "name";
     private static final String VERSION_FIELD = "version";
 
@@ -83,7 +86,7 @@ public final class VerdictSection {
 
     /** The verdict a section carries, digest-pinned to the exact bytes it screened. */
     public record Recorded(String digest, Verdict verdict, String refusal, Instant screenedAt, String profile,
-                           String source, List<Validator> validators, long inspectionLimit) {
+                           String source, List<Validator> validators, long inspectionLimit, String policy) {
 
         public Recorded {
             validators = validators == null ? List.of() : List.copyOf(validators);
@@ -116,6 +119,26 @@ public final class VerdictSection {
             return allows(digest) && completeAt(currentLimit);
         }
 
+        /** Whether this verdict was reached under one of {@code policies} - the policy digests of the gates a re-screen
+         *  of these bytes could run through now. A record naming none was reached under a policy nobody can compare,
+         *  so it is never current. */
+        public boolean decidedUnder(Set<String> policies) {
+            return policy != null && policies.contains(policy);
+        }
+
+        /**
+         * The reuse test whole: an {@code ALLOW} over exactly these bytes, reached by a screen that looked at least as
+         * far as this deployment now looks, under a policy one of the gates now in force still has.
+         *
+         * <p>The policy is the third thing a reused verdict must still be true of. A deny-list entry, a tightened
+         * threshold or action, or a dimension's setting changed after the verdict was reached would otherwise never
+         * meet the cached bytes it was written for: the hit serves through on the old {@code ALLOW}, and the sweep
+         * skips it as current.
+         */
+        public boolean allows(String digest, long currentLimit, Set<String> policies) {
+            return allows(digest, currentLimit) && decidedUnder(policies);
+        }
+
         /** Whether this record pins exactly {@code digest}, regardless of verdict - the drift baseline: a
          *  re-fetch of an immutable coordinate whose bytes do NOT match the pinned digest is upstream drift/tampering.
          *  A record with no readable digest never pins, so a torn record is treated as no baseline (re-screen), not a
@@ -138,7 +161,8 @@ public final class VerdictSection {
                 Section.text(data.path(PROFILE_FIELD)),
                 Section.text(data.path(SOURCE_FIELD)),
                 validators(data.path(VALIDATORS_FIELD)),
-                data.path(INSPECTION_LIMIT_FIELD).asLong(0L)));
+                data.path(INSPECTION_LIMIT_FIELD).asLong(0L),
+                Section.text(data.path(POLICY_FIELD))));
     }
 
     /** Whether a section records an {@code ALLOW} verdict pinned to exactly {@code digest} - the digest-exact reuse
@@ -147,9 +171,10 @@ public final class VerdictSection {
         return recorded(section).map(recorded -> recorded.allows(digest)).orElse(false);
     }
 
-    /** {@link #allows(Optional, String)} with the completeness test - see {@link Recorded#allows(String, long)}. */
-    public static boolean allows(Optional<Section> section, String digest, long currentLimit) {
-        return recorded(section).map(recorded -> recorded.allows(digest, currentLimit)).orElse(false);
+    /** {@link #allows(Optional, String)} with the completeness and policy tests - see
+     *  {@link Recorded#allows(String, long, Set)}. */
+    public static boolean allows(Optional<Section> section, String digest, long currentLimit, Set<String> policies) {
+        return recorded(section).map(recorded -> recorded.allows(digest, currentLimit, policies)).orElse(false);
     }
 
     /**
@@ -158,13 +183,16 @@ public final class VerdictSection {
      * complete and a subsequent fetch of the same bytes re-screens fail-closed rather than reusing a non-{@code ALLOW}.
      */
     public static SectionMutation record(String digest, Verdict verdict, String refusal, String profile, String source,
-                                         List<Validator> validators, Instant screenedAt, long inspectionLimit) {
-        return current -> section(digest, verdict, refusal, profile, source, validators, screenedAt, inspectionLimit);
+                                         List<Validator> validators, Instant screenedAt, long inspectionLimit,
+                                         String policy) {
+        return current -> section(digest, verdict, refusal, profile, source, validators, screenedAt, inspectionLimit,
+                policy);
     }
 
     /** A verdict section for the given digest-pinned decision. */
     public static Section section(String digest, Verdict verdict, String refusal, String profile, String source,
-                                  List<Validator> validators, Instant screenedAt, long inspectionLimit) {
+                                  List<Validator> validators, Instant screenedAt, long inspectionLimit,
+                                  String policy) {
         ObjectNode data = JSON.createObjectNode();
         data.put(DIGEST_FIELD, pinned(digest));
         data.put(VERDICT_FIELD, verdict.name());
@@ -179,6 +207,12 @@ public final class VerdictSection {
         // How completely we looked, beside what we decided. Without it a raised ceiling cannot invalidate a
         // verdict a lower ceiling cut short.
         data.put(INSPECTION_LIMIT_FIELD, inspectionLimit);
+        // Under which policy, beside how completely: a policy changed since cannot otherwise reach a stored ALLOW.
+        if (policy == null) {
+            data.putNull(POLICY_FIELD);
+        } else {
+            data.put(POLICY_FIELD, policy);
+        }
         ArrayNode validatorsNode = data.putArray(VALIDATORS_FIELD);
         for (Validator validator : validators) {
             ObjectNode node = validatorsNode.addObject();

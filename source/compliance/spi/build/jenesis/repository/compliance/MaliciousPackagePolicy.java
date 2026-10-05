@@ -46,6 +46,11 @@ public final class MaliciousPackagePolicy {
         return new MaliciousPackagePolicy(action);
     }
 
+    /** The action, as {@link ComplianceGate#policy()} digests it. */
+    String describe() {
+        return String.valueOf(action);
+    }
+
     List<ComplianceGate.Finding> assess(List<AdvisorySource.Advisory> advisories) {
         // No early return on ALLOW: the verdict decides what this dimension REPORTS, never whether it looks.
         List<ComplianceGate.Finding> findings = new ArrayList<>();

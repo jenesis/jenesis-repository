@@ -84,7 +84,7 @@ public final class MigrationRescreenTaskProvider implements MaintenanceTaskProvi
         Verdict vulnerable = verdict(config.apply("vulnerability-action"), Verdict.REJECT);
         List<String> denied = tokens(config.apply("deny-list"));
         Verdict denyAction = verdict(config.apply("deny-list-action"), Verdict.REJECT);
-        List<GatePolicy> policies = GatePolicyProvider.resolve(config, path);
+        GatePolicyProvider.Resolution policies = GatePolicyProvider.resolution(config, path);
         return new ComplianceGate(new VulnerabilityPolicy(threshold, vulnerable),
                 path == GatePolicyProvider.Path.PUBLISH ? AdvisorySource.none() : AdvisorySource.resolve(config))
                 .malicious(new MaliciousPackagePolicy().action(malware))

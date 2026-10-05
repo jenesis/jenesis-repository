@@ -133,7 +133,8 @@ public final class HardenedHitVerify implements PullThroughHooks {
         // MigrationRescreenTask sweep pre-writes this verdict so a steady-state hit is this branch. Serve through so
         // the format's own handle streams the hit with its real headers. An ALLOW reached under a lower full-body
         // ceiling re-screens from the local bytes below, as the miss leg and the sweep treat it.
-        if (prior.isPresent() && prior.get().allows(digest, QualityInspector.fullBodyInspectionLimit())) {
+        if (prior.isPresent() && prior.get().allows(digest, QualityInspector.fullBodyInspectionLimit(),
+                policies(gates))) {
             return HitDecision.serveThrough();
         }
         // A recorded non-ALLOW verdict pinning these exact bytes (a retro re-verdict, or a policy flip already
@@ -148,6 +149,20 @@ public final class HardenedHitVerify implements PullThroughHooks {
         // 404+evict.
         String blobKey = key.get();
         return HitDecision.serveLocal((fmt, exchange, serveStore) -> serveLocalVerified(path, blobKey, serveStore, exchange));
+    }
+
+    /** The policy digests of the gates a re-screen of a stored artifact could run through now - one per flavour, since
+     *  {@link RescreenFlavor} picks the flavour per artifact and a verdict reached under either is current while that
+     *  flavour's gate is unchanged. The digest names its flavour, so one flavour's cannot stand for the other's. */
+    static Set<String> policies(Function<GatePolicyProvider.Path, ComplianceGate> gates) {
+        Set<String> policies = new HashSet<>();
+        for (GatePolicyProvider.Path path : GatePolicyProvider.Path.values()) {
+            ComplianceGate gate = gates.apply(path);
+            if (gate != null) {
+                policies.add(gate.policy());
+            }
+        }
+        return Set.copyOf(policies);
     }
 
     @Override

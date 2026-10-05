@@ -104,6 +104,6 @@ class HardeningVerdictsTest {
         HardenedScreen.Coordinate coordinate = HardenedScreen.coordinate(path);
         metadata.mutate(coordinate.ecosystem(), coordinate.coordinate(), coordinate.version(), VerdictSection.TAG,
                 VerdictSection.record(digest, verdict, null, "hardened/full-body", "http://upstream" + path,
-                        validators, screenedAt, QualityInspector.fullBodyInspectionLimit()));
+                        validators, screenedAt, QualityInspector.fullBodyInspectionLimit(), null));
     }
 }
