@@ -8,18 +8,14 @@ import build.jenesis.repository.dependency.DependencyComponent;
 import build.jenesis.repository.dependency.DependencyEdge;
 import build.jenesis.repository.dependency.DependencyGraph;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
-import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.store.Publication;
-import build.jenesis.repository.store.ServableNames;
 
 /**
  * A release's closure as the build that made it resolved it: the bill of materials the version carries - published as
  * a file of its own (a {@code -cyclonedx.json}, an {@code .spdx.json}) or embedded in its archive - taken as written,
- * where it names more than the version's direct dependencies. Each component is the holding the walk's repositories
- * keep of it, a release or a cached copy; one they do not hold, hold for review, or name in another ecosystem is a cut
- * saying so. A bill that names the direct dependencies alone - or none - is not a closure, and the resolvers answer
- * instead.
+ * where it names more than the version's direct dependencies, each component placed in the walk's repositories as
+ * {@link CarriedClosure} places what a release carries. A bill that names the direct dependencies alone - or none -
+ * is not a closure, and the resolvers answer instead.
  *
  * <p>A component's depth is its distance from the root along the bill's dependency edges, and {@code 1} where the bill
  * records none - a flat component list is the resolved closure CycloneDX records. Bounded at
@@ -60,47 +56,16 @@ public final class CarriedBill implements ClosureSource {
         }
         DependencyGraph graph = bill.get();
         Map<String, Integer> depths = depths(graph);
-        List<Holder> holders = walk.members().stream().map(Holder::new).toList();
-        List<ClosureSection.Component> components = new ArrayList<>();
-        List<ClosureSection.Cut> cuts = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        seen.add(coordinate);
-        boolean truncated = false;
+        List<CarriedClosure.Entry> entries = new ArrayList<>();
         for (DependencyComponent component : graph.dependencies()) {
-            Optional<PackageUrls.Named> named = named(component, ecosystem);
-            if (named.isEmpty()) {
-                cuts.add(new ClosureSection.Cut(component.coordinate(), versionOf(component),
-                        "named by the version's bill in a form this repository cannot place"));
-                continue;
-            }
-            PackageUrls.Named at = named.get();
-            if (!seen.add(at.coordinate())) {
-                continue;
-            }
-            if (!ecosystem.equals(at.ecosystem())) {
-                cuts.add(new ClosureSection.Cut(at.coordinate(), at.version(),
-                        "named by the version's bill in " + at.ecosystem() + ", another ecosystem"));
-                continue;
-            }
-            if (components.size() >= ClosureResolver.MAX_COMPONENTS) {
-                truncated = true;
-                break;
-            }
-            Optional<Held> held = held(holders, ecosystem, at);
-            if (held.isEmpty()) {
-                cuts.add(new ClosureSection.Cut(at.coordinate(), at.version(), holders.size() == 1
-                        ? "named by the version's bill, not held by this repository"
-                        : "named by the version's bill, not held by this repository or a repository its fallbacks "
-                                + "name"));
-            } else if (!held.get().served()) {
-                cuts.add(new ClosureSection.Cut(at.coordinate(), at.version(), "held for review"));
-            } else {
-                components.add(new ClosureSection.Component(at.coordinate(), at.version(), held.get().cached(),
-                        depths.getOrDefault(component.ref(), 1), held.get().repository()));
-            }
+            entries.add(named(component, ecosystem)
+                    .map(at -> CarriedClosure.Entry.placed(at.ecosystem(), at.coordinate(), at.version(),
+                            depths.getOrDefault(component.ref(), 1)))
+                    .orElseGet(() -> CarriedClosure.Entry.unplaced(component.coordinate(), versionOf(component),
+                            "named by the version's bill in a form this repository cannot place")));
         }
-        return Optional.of(new ClosureSection.Closure(cuts.isEmpty() && !truncated ? ClosureSection.Status.RESOLVED
-                : ClosureSection.Status.PARTIAL, components, cuts, truncated, now, Kind.BILL, NAME));
+        return Optional.of(CarriedClosure.place(walk, ecosystem, coordinate, version, entries, "the version's bill",
+                NAME, now));
     }
 
     /** The first bill among the version's files that names a closure: a published bill before an embedding archive. */
@@ -188,45 +153,5 @@ public final class CarriedBill implements ClosureSource {
 
     private static String versionOf(DependencyComponent component) {
         return component.version() == null ? "" : component.version();
-    }
-
-    /** One repository of the walk, as a bill's components are looked up in it. */
-    private record Holder(String repository, ArtifactStore store, StoreRepositoryInventory inventory) {
-
-        Holder(ClosureWalk.Member member) {
-            this(member.repository(), member.store(), new StoreRepositoryInventory(member.store()));
-        }
-
-        /** Whether this repository holds {@code version} of {@code coordinate} for review as no holding yet: a
-         *  proxied copy the screen held at its fill, found through its hold's subject and live review pointer. */
-        boolean heldAtFill(String ecosystem, String coordinate, String version) throws IOException {
-            return HeldVersions.held(store, ecosystem, coordinate, version);
-        }
-    }
-
-    /** Where a component is held: the repository, as a release or a cached copy, and whether it is served. */
-    private record Held(String repository, boolean cached, boolean served) {
-    }
-
-    /** The first repository of the walk holding {@code at}, as a release or a cached copy. */
-    private static Optional<Held> held(List<Holder> holders, String ecosystem, PackageUrls.Named at)
-            throws IOException {
-        for (int i = 0; i < holders.size(); i++) {
-            Holder holder = holders.get(i);
-            boolean released = holder.inventory().publishedAt(ecosystem, at.coordinate(), at.version()).isPresent();
-            boolean cached = !released
-                    && holder.inventory().cachedAt(ecosystem, at.coordinate(), at.version()).isPresent();
-            if (released || cached) {
-                return Optional.of(new Held(i == 0 ? "" : holder.repository(), cached,
-                        holder.inventory().disclosable(ecosystem, at.coordinate(), at.version(),
-                                ServableNames.Policy.HIDE_WITHHELD)));
-            }
-        }
-        for (int i = 0; i < holders.size(); i++) {
-            if (holders.get(i).heldAtFill(ecosystem, at.coordinate(), at.version())) {
-                return Optional.of(new Held(i == 0 ? "" : holders.get(i).repository(), true, false));
-            }
-        }
-        return Optional.empty();
     }
 }
