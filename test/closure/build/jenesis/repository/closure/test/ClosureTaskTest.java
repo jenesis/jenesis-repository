@@ -5,6 +5,7 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.closure.ClosureSection;
 import build.jenesis.repository.closure.ClosureTask;
 import build.jenesis.repository.compliance.QualityInspector;
+import build.jenesis.repository.definitions.RoutingSettingsContributor;
 import build.jenesis.repository.inventory.DependencySection;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.maintenance.RepositoryContext;
@@ -29,14 +30,15 @@ class ClosureTaskTest {
     @TempDir
     Path root;
 
+    private ArtifactStore tenant;
     private ArtifactStore store;
     private MetadataStore metadata;
 
     @BeforeEach
     void setUp() throws IOException {
-        store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null).scope("default")
-                .scope("releases");
+        tenant = ArtifactStoreProvider.resolve("filesystem",
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null).scope("default");
+        store = tenant.scope("releases");
         metadata = MetadataProvider.installed().over(store);
         Publication publication = new Publication(store);
         publication.link(APP, publication.storeBlob(new ByteArrayInputStream("<project/>".getBytes(StandardCharsets.UTF_8))));
@@ -63,13 +65,47 @@ class ClosureTaskTest {
         assertThat(closure()).isEmpty();
     }
 
+    @Test
+    void a_group_resolves_through_the_repository_its_fallback_names() throws IOException {
+        // The group publishes a release whose dependency only the repository its fallback names holds.
+        ArtifactStore group = tenant.scope("group");
+        String path = "/maven/org/acme/web/1.0/web-1.0.pom";
+        Publication publication = new Publication(group);
+        publication.link(path, publication.storeBlob(new ByteArrayInputStream(
+                "<project/>".getBytes(StandardCharsets.UTF_8))));
+        new StoreRepositoryInventory(group).record(path, NOW);
+        MetadataStore groupMetadata = MetadataProvider.installed().over(group);
+        groupMetadata.mutate("Maven", "org.acme:web", "1.0", DependencySection.TAG, DependencySection.record(path,
+                List.of(new DependencySection.Declared("org.acme:app", "1.0")), NOW));
+
+        pass("group", Map.of(RoutingSettingsContributor.KEY, "writable fallback releases"), null, NOW);
+
+        ClosureSection.Closure closure = ClosureSection.closure(groupMetadata.section("Maven", "org.acme:web", "1.0",
+                ClosureSection.TAG)).orElseThrow();
+        assertThat(closure.components()).as("held by the repository the fallback names, and named by it")
+                .containsExactly(new ClosureSection.Component("org.acme:app", "1.0", false, 1, "releases"));
+        assertThat(closure.cuts()).as("and walked past it, into what app declares")
+                .singleElement().satisfies(cut -> assertThat(cut.coordinate()).isEqualTo("org.dep:missing"));
+    }
+
     private Optional<ClosureSection.Closure> closure() throws IOException {
         return ClosureSection.closure(metadata.section("Maven", "org.acme:app", "1.0", ClosureSection.TAG));
     }
 
     private void pass(String setting, Instant now) throws IOException {
+        pass("releases", Map.of(), setting, now);
+    }
+
+    private void pass(String repository, Map<String, String> config, String setting, Instant now) throws IOException {
         UnitFailures failures = new UnitFailures("the closure pass", "nothing");
-        new ClosureTask(Duration.ofMinutes(5), QualityInspector.all()).repository(new RepositoryContext() {
+        new ClosureTask(Duration.ofMinutes(5), QualityInspector.all()).repository(context(repository, config, setting,
+                now, failures));
+        failures.rethrow();
+    }
+
+    private RepositoryContext context(String repository, Map<String, String> config, String setting, Instant now,
+                                      UnitFailures failures) {
+        return new RepositoryContext() {
             @Override
             public String tenant() {
                 return "default";
@@ -77,17 +113,22 @@ class ClosureTaskTest {
 
             @Override
             public String repository() {
-                return "releases";
+                return repository;
+            }
+
+            @Override
+            public Optional<RepositoryContext> repository(String name) {
+                return Optional.of(context(name, Map.of(), setting, now, failures));
             }
 
             @Override
             public ArtifactStore store() {
-                return store;
+                return tenant.scope(repository);
             }
 
             @Override
             public UnaryOperator<String> config() {
-                return key -> ClosureTask.SETTING.equals(key) ? setting : null;
+                return key -> ClosureTask.SETTING.equals(key) ? setting : config.get(key);
             }
 
             @Override
@@ -103,7 +144,6 @@ class ClosureTaskTest {
             @Override
             public void gauge(String name, String description, Map<String, String> tags, double value) {
             }
-        });
-        failures.rethrow();
+        };
     }
 }

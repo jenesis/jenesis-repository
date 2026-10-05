@@ -4,10 +4,12 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.closure.ClosureResolver;
 import build.jenesis.repository.closure.ClosureSection;
+import build.jenesis.repository.closure.ClosureWalk;
 import build.jenesis.repository.compliance.QualityInspector;
 import build.jenesis.repository.inventory.DependencySection;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.metadata.MetadataProvider;
+import build.jenesis.repository.metadata.Section;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
@@ -28,15 +30,16 @@ class ClosureResolverTest {
     @TempDir
     Path root;
 
+    private ArtifactStore tenant;
     private ArtifactStore store;
     private StoreRepositoryInventory inventory;
     private Publication publication;
 
     @BeforeEach
     void setUp() {
-        store = ArtifactStoreProvider.resolve("filesystem",
-                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null).scope("default")
-                .scope("releases");
+        tenant = ArtifactStoreProvider.resolve("filesystem",
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null).scope("default");
+        store = tenant.scope("releases");
         inventory = new StoreRepositoryInventory(store);
         publication = new Publication(store);
     }
@@ -63,8 +66,8 @@ class ClosureResolverTest {
                 .resolve("Maven", "org.acme:app", "1.0", NOW);
 
         assertThat(closure.components()).containsExactly(
-                new ClosureSection.Component("org.dep:a", "1.1", false, 1),
-                new ClosureSection.Component("org.dep:b", "2.0", true, 1));
+                new ClosureSection.Component("org.dep:a", "1.1", false, 1, ""),
+                new ClosureSection.Component("org.dep:b", "2.0", true, 1, ""));
         assertThat(closure.cuts()).extracting(ClosureSection.Cut::coordinate, ClosureSection.Cut::reason)
                 .containsExactlyInAnyOrder(
                         tuple("org.dep:missing", "not held by this repository"),
@@ -98,7 +101,7 @@ class ClosureResolverTest {
 
         assertThat(closure.status()).isEqualTo(ClosureSection.Status.RESOLVED);
         assertThat(closure.components()).as("the newest held version, ordered as versions are")
-                .containsExactly(new ClosureSection.Component("org.dep:a", "1.10", false, 1));
+                .containsExactly(new ClosureSection.Component("org.dep:a", "1.10", false, 1, ""));
     }
 
     @Test
@@ -110,7 +113,7 @@ class ClosureResolverTest {
 
         assertThat(new ClosureResolver(store, QualityInspector.all()).resolve("Maven", "org.acme:app", "1.0", NOW)
                 .components()).as("the newest held version in the range, not the newest held")
-                .containsExactly(new ClosureSection.Component("org.dep:a", "1.10", false, 1));
+                .containsExactly(new ClosureSection.Component("org.dep:a", "1.10", false, 1, ""));
     }
 
     @Test
@@ -127,8 +130,44 @@ class ClosureResolverTest {
                 .isEqualTo(ClosureSection.Status.RESOLVED);
     }
 
+    @Test
+    void a_dependency_a_fallback_holds_resolves_through_it_and_names_it() throws IOException {
+        // The group publishes the release; what it declares is held only by the repository its fallback names, which
+        // also holds an older version of a the group itself holds a newer one of.
+        ArtifactStore group = tenant.scope("group");
+        release(group, "org.acme", "app", "1.0", List.of(new DependencySection.Declared("org.dep:a", ""),
+                new DependencySection.Declared("org.dep:b", ""),
+                new DependencySection.Declared("org.dep:missing", "")));
+        release(group, "org.dep", "a", "2.0", List.of());
+        release("org.dep", "a", "1.0", List.of());
+        cached("org.dep", "b", "1.0", pom("org.dep", "b", "1.0", ""));
+
+        ClosureSection.Closure closure = new ClosureResolver(new ClosureWalk(List.of(
+                new ClosureWalk.Member("group", group), new ClosureWalk.Member("releases", store))),
+                QualityInspector.all()).resolve("Maven", "org.acme:app", "1.0", NOW);
+
+        assertThat(closure.components()).as("the newest across the walk, each named by the repository holding it")
+                .containsExactly(new ClosureSection.Component("org.dep:a", "2.0", false, 1, ""),
+                        new ClosureSection.Component("org.dep:b", "1.0", true, 1, "releases"));
+        assertThat(closure.cuts()).singleElement().satisfies(cut -> assertThat(cut.reason())
+                .isEqualTo("not held by this repository or a repository its fallbacks name"));
+        assertThat(ClosureSection.closure(Optional.of(roundTrip(closure))).orElseThrow().components())
+                .as("the holding repository survives the document").isEqualTo(closure.components());
+    }
+
+    private Section roundTrip(ClosureSection.Closure closure) {
+        return ClosureSection.record(closure).apply(Optional.empty());
+    }
+
     private void release(String group, String artifact, String version, List<DependencySection.Declared> declared)
             throws IOException {
+        release(store, group, artifact, version, declared);
+    }
+
+    private static void release(ArtifactStore store, String group, String artifact, String version,
+                                List<DependencySection.Declared> declared) throws IOException {
+        Publication publication = new Publication(store);
+        StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
         String path = "/maven/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-"
                 + version + ".pom";
         publication.link(path, publication.storeBlob(new ByteArrayInputStream(pom(group, artifact, version, ""))));

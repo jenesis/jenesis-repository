@@ -13,8 +13,9 @@ import tools.jackson.databind.node.ObjectNode;
  * The {@code closure} section codec of the consolidated metadata document: a published version's transitive closure as
  * the repository could resolve it from what it holds, when it was resolved, and every subtree that could not be.
  * Absent for a version not yet resolved. The {@code data} payload is {@code {"status":<RESOLVED|PARTIAL|UNDECLARED>,
- * "components":[{"coordinate","version","cached","depth"}], "cuts":[{"coordinate","requirement","reason"}],
- * "truncated":<bool>}}, every component in the version's own ecosystem.
+ * "components":[{"coordinate","version","cached","depth","repository"}], "cuts":[{"coordinate","requirement","reason"}],
+ * "truncated":<bool>}}, every component in the version's own ecosystem; a component's {@code repository} is present
+ * only where a fallback's repository holds it.
  */
 public final class ClosureSection {
 
@@ -35,9 +36,19 @@ public final class ClosureSection {
         RESOLVED, PARTIAL, UNDECLARED
     }
 
-    /** One held version the closure reaches: a cached copy where {@code cached}, a release of the repository otherwise,
-     *  {@code depth} edges from the version resolved. */
-    public record Component(String coordinate, String version, boolean cached, int depth) {
+    /** One held version the closure reaches: a cached copy where {@code cached}, a release otherwise, {@code depth}
+     *  edges from the version resolved, held by the repository the version was published to where {@code repository}
+     *  is empty and by the fallback's repository it names otherwise. */
+    public record Component(String coordinate, String version, boolean cached, int depth, String repository) {
+
+        public Component {
+            repository = repository == null ? "" : repository;
+        }
+
+        /** Whether a fallback's repository, not the version's own, holds this component. */
+        public boolean elsewhere() {
+            return !repository.isEmpty();
+        }
     }
 
     /** A dependency whose subtree did not resolve: what was asked for and why it ended there. */
@@ -67,7 +78,8 @@ public final class ClosureSection {
         List<Component> components = new ArrayList<>();
         for (JsonNode entry : data.path("components")) {
             components.add(new Component(entry.path("coordinate").asString(""), entry.path("version").asString(""),
-                    entry.path("cached").asBoolean(false), entry.path("depth").asInt(0)));
+                    entry.path("cached").asBoolean(false), entry.path("depth").asInt(0),
+                    entry.path("repository").asString("")));
         }
         List<Cut> cuts = new ArrayList<>();
         for (JsonNode entry : data.path("cuts")) {
@@ -89,8 +101,12 @@ public final class ClosureSection {
             data.put("status", closure.status().name());
             ArrayNode components = data.putArray("components");
             for (Component component : closure.components()) {
-                components.addObject().put("coordinate", component.coordinate()).put("version", component.version())
-                        .put("cached", component.cached()).put("depth", component.depth());
+                ObjectNode entry = components.addObject().put("coordinate", component.coordinate())
+                        .put("version", component.version()).put("cached", component.cached())
+                        .put("depth", component.depth());
+                if (component.elsewhere()) {
+                    entry.put("repository", component.repository());
+                }
             }
             ArrayNode cuts = data.putArray("cuts");
             for (Cut cut : closure.cuts()) {

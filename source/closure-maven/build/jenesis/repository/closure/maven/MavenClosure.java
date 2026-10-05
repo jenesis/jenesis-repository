@@ -3,6 +3,7 @@ package build.jenesis.repository.closure.maven;
 import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.closure.ClosureSection;
+import build.jenesis.repository.closure.ClosureWalk;
 import build.jenesis.repository.closure.EcosystemClosure;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
@@ -35,7 +36,9 @@ import org.eclipse.aether.transfer.NoTransporterException;
 import org.eclipse.aether.util.repository.SimpleArtifactDescriptorPolicy;
 
 /**
- * Resolves a Maven release's closure with Maven Resolver over the POMs one repository holds. The release's own POM is
+ * Resolves a Maven release's closure with Maven Resolver over the POMs the repositories of a {@link ClosureWalk} hold -
+ * the first of them holding a POM serving it, and a range resolved against the versions any of them serves, as a
+ * request through the repository walks them. The release's own POM is
  * read for its descriptor; the dependencies it ships - compile and runtime, not optional - are collected with its
  * managed dependencies, so a parent's or an imported BOM's versions and a property's value apply exactly as Maven
  * applies them, and the collected graph after version mediation is the closure.
@@ -66,25 +69,25 @@ public final class MavenClosure implements EcosystemClosure {
     }
 
     @Override
-    public Optional<ClosureSection.Closure> resolve(ArtifactStore store, String coordinate, String version,
+    public Optional<ClosureSection.Closure> resolve(ClosureWalk walk, String coordinate, String version,
                                                     Instant now) throws IOException {
         String[] ga = coordinate.split(":");
         if (ga.length != 2) {
             return Optional.empty();
         }
-        Held held = new Held(store);
-        if (!held.servesPom(ga[0], ga[1], version)) {
+        Held held = new Held(walk);
+        if (!held.servesOwnPom(ga[0], ga[1], version)) {
             return Optional.empty();
         }
         Path local = Files.createTempDirectory("jenesis-closure");
         try {
-            return Optional.of(collect(store, held, local, new DefaultArtifact(ga[0], ga[1], "pom", version), now));
+            return Optional.of(collect(held, local, new DefaultArtifact(ga[0], ga[1], "pom", version), now));
         } finally {
             delete(local);
         }
     }
 
-    private ClosureSection.Closure collect(ArtifactStore store, Held held, Path local, Artifact root, Instant now) {
+    private ClosureSection.Closure collect(Held held, Path local, Artifact root, Instant now) {
         Set<String> missing = ConcurrentHashMap.newKeySet();
         RepositorySystem system = new Offline().get();
         List<ClosureSection.Cut> cuts = new ArrayList<>();
@@ -130,7 +133,6 @@ public final class MavenClosure implements EcosystemClosure {
         } finally {
             system.shutdown();
         }
-        StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
         List<ClosureSection.Component> components = new ArrayList<>();
         boolean truncated = held.exhausted();
         Set<String> seen = new HashSet<>();
@@ -151,27 +153,22 @@ public final class MavenClosure implements EcosystemClosure {
             String gav = ga + ":" + artifact.getVersion();
             if (missing.contains(gav)) {
                 cuts.add(new ClosureSection.Cut(ga, artifact.getVersion(), held.heldForReview(artifact)
-                        ? "held for review" : "not held by this repository"));
+                        ? "held for review" : held.single() ? "not held by this repository"
+                        : "not held by this repository or a repository its fallbacks name"));
                 continue;
             }
             if (components.size() >= MAX_COMPONENTS) {
                 truncated = true;
                 break;
             }
-            components.add(new ClosureSection.Component(ga, artifact.getVersion(), cached(inventory, ga, artifact),
-                    visit.depth()));
+            Optional<Held.Member> holder = held.holder(artifact);
+            components.add(new ClosureSection.Component(ga, artifact.getVersion(),
+                    holder.map(member -> member.cached(ga, artifact.getVersion())).orElse(false), visit.depth(),
+                    holder.map(Held.Member::repository).orElse("")));
             visit.node().getChildren().forEach(child -> queue.add(new Visit(child, visit.depth() + 1)));
         }
         return new ClosureSection.Closure(cuts.isEmpty() && !truncated ? ClosureSection.Status.RESOLVED
                 : ClosureSection.Status.PARTIAL, components, cuts, truncated, now);
-    }
-
-    private static boolean cached(StoreRepositoryInventory inventory, String ga, Artifact artifact) {
-        try {
-            return inventory.publishedAt("Maven", ga, artifact.getVersion()).isEmpty();
-        } catch (IOException unreadable) {
-            return false;
-        }
     }
 
     /** A collection failure as the cut it is: an unsatisfied range names its dependency and its range. */
@@ -214,22 +211,60 @@ public final class MavenClosure implements EcosystemClosure {
         }
     }
 
-    /** What one repository holds, as the resolver reads it: its served POMs and the versions it serves. */
+    /** What the repositories of a walk hold, as the resolver reads them: their served POMs and the versions they
+     *  serve. */
     private static final class Held {
 
-        private final ArtifactStore store;
-        private final Publication publication;
-        private final StoreRepositoryInventory inventory;
-        private final AtomicInteger read = new AtomicInteger();
+        /** One repository of the walk; its name is empty for the repository the release was published to. */
+        record Member(String repository, ArtifactStore store, Publication publication,
+                      StoreRepositoryInventory inventory) {
 
-        Held(ArtifactStore store) {
-            this.store = store;
-            this.publication = new Publication(store);
-            this.inventory = new StoreRepositoryInventory(store);
+            boolean servesPom(String group, String artifact, String version) throws IOException {
+                return publication.located(path(group, artifact, version)).isPresent();
+            }
+
+            /** Whether this repository holds the version as a cached copy rather than a release. */
+            boolean cached(String ga, String version) {
+                try {
+                    return inventory.publishedAt("Maven", ga, version).isEmpty();
+                } catch (IOException unreadable) {
+                    return false;
+                }
+            }
         }
 
-        boolean servesPom(String group, String artifact, String version) throws IOException {
-            return publication.located(path(group, artifact, version)).isPresent();
+        private final List<Member> members;
+        private final AtomicInteger read = new AtomicInteger();
+
+        Held(ClosureWalk walk) {
+            List<Member> members = new ArrayList<>();
+            for (ClosureWalk.Member member : walk.members()) {
+                members.add(new Member(members.isEmpty() ? "" : member.repository(), member.store(),
+                        new Publication(member.store()), new StoreRepositoryInventory(member.store())));
+            }
+            this.members = List.copyOf(members);
+        }
+
+        boolean single() {
+            return members.size() == 1;
+        }
+
+        boolean servesOwnPom(String group, String artifact, String version) throws IOException {
+            return members.getFirst().servesPom(group, artifact, version);
+        }
+
+        /** The first repository of the walk serving {@code artifact}'s POM - the one the resolver read it from. */
+        Optional<Member> holder(Artifact artifact) {
+            for (Member member : members) {
+                try {
+                    if (member.servesPom(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion())) {
+                        return Optional.of(member);
+                    }
+                } catch (IOException unreadable) {
+                    // a repository that cannot be read holds nothing the closure can name
+                }
+            }
+            return Optional.empty();
         }
 
         boolean exhausted() {
@@ -237,12 +272,17 @@ public final class MavenClosure implements EcosystemClosure {
         }
 
         boolean heldForReview(Artifact artifact) {
-            try {
-                return Publication.reviewPending(store,
-                        path(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion()));
-            } catch (IOException unreadable) {
-                return false;
+            for (Member member : members) {
+                try {
+                    if (Publication.reviewPending(member.store(),
+                            path(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion()))) {
+                        return true;
+                    }
+                } catch (IOException unreadable) {
+                    // an unreadable marker reads as no hold; the cut then says the POM is not held
+                }
             }
+            return false;
         }
 
         WorkspaceReader reader(Path folder) {
@@ -259,47 +299,56 @@ public final class MavenClosure implements EcosystemClosure {
                             || read.incrementAndGet() > MAX_DOCUMENTS) {
                         return null;
                     }
-                    try {
-                        Optional<Publication.Located> located = publication.locate(
-                                path(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion()));
-                        if (located.isEmpty() || located.get().size() > LARGEST_POM) {
+                    String pom = path(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion());
+                    for (Member member : members) {
+                        try {
+                            Optional<Publication.Located> located = member.publication().locate(pom);
+                            if (located.isEmpty()) {
+                                continue;
+                            }
+                            if (located.get().size() > LARGEST_POM) {
+                                return null;
+                            }
+                            Path file = folder.resolve(artifact.getGroupId() + "/" + artifact.getArtifactId() + "/"
+                                    + artifact.getVersion() + ".pom");
+                            Files.createDirectories(file.getParent());
+                            try (InputStream in = member.store().open(located.get().key())) {
+                                Files.write(file, in.readNBytes(LARGEST_POM));
+                            }
+                            return file.toFile();
+                        } catch (IOException unreadable) {
                             return null;
                         }
-                        Path file = folder.resolve(artifact.getGroupId() + "/" + artifact.getArtifactId() + "/"
-                                + artifact.getVersion() + ".pom");
-                        Files.createDirectories(file.getParent());
-                        try (InputStream in = store.open(located.get().key())) {
-                            Files.write(file, in.readNBytes(LARGEST_POM));
-                        }
-                        return file.toFile();
-                    } catch (IOException unreadable) {
-                        return null;
                     }
+                    return null;
                 }
 
-                /** The versions the repository holds and serves: what a range is resolved against. */
+                /** The versions the repositories of the walk hold and serve: what a range is resolved against. */
                 @Override
                 public List<String> findVersions(Artifact artifact) {
                     String ga = artifact.getGroupId() + ":" + artifact.getArtifactId();
-                    List<String> versions = new ArrayList<>();
-                    try {
-                        String after = null;
-                        int examined = 0;
-                        do {
-                            StoreRepositoryInventory.HoldingPage page = inventory.holdings("Maven", ga, after, 200);
-                            for (StoreRepositoryInventory.Holding holding : page.holdings()) {
-                                if (inventory.disclosable("Maven", ga, holding.version(),
-                                        ServableNames.Policy.HIDE_WITHHELD)) {
-                                    versions.add(holding.version());
+                    Set<String> versions = new LinkedHashSet<>();
+                    int examined = 0;
+                    for (Member member : members) {
+                        try {
+                            String after = null;
+                            do {
+                                StoreRepositoryInventory.HoldingPage page = member.inventory().holdings("Maven", ga,
+                                        after, 200);
+                                for (StoreRepositoryInventory.Holding holding : page.holdings()) {
+                                    if (member.inventory().disclosable("Maven", ga, holding.version(),
+                                            ServableNames.Policy.HIDE_WITHHELD)) {
+                                        versions.add(holding.version());
+                                    }
                                 }
-                            }
-                            examined += page.holdings().size();
-                            after = page.next();
-                        } while (after != null && examined < MAX_COMPONENTS);
-                    } catch (IOException unreadable) {
-                        return List.of();
+                                examined += page.holdings().size();
+                                after = page.next();
+                            } while (after != null && examined < MAX_COMPONENTS);
+                        } catch (IOException unreadable) {
+                            // a repository that cannot be read offers no version
+                        }
                     }
-                    return versions;
+                    return List.copyOf(versions);
                 }
             };
         }

@@ -148,7 +148,8 @@
     </article>
 
     <!--/* What a build through this repository resolves for a release: every component its declared dependencies reach,
-         each the newest held version its requirement admits, and every dependency that did not resolve with why. A
+         each the newest held version its requirement admits - in this repository or one its fallbacks name, which
+         the component then links to - and every dependency that did not resolve with why. A
          cached copy has no closure of its own; it is screened by its own coordinate. */-->
     <article th:if="${detail.closure != null or detail.awaitsClosure()}">
         <h2>Resolved closure</h2>
@@ -160,7 +161,7 @@
             in a recipe that is a program - so it has no closure to resolve, which is not the same as an empty
             one.</small></p>
         <th:block th:if="${detail.closure != null and detail.closure.status().name() != 'UNDECLARED'}">
-            <p><small th:text="|${detail.closure.components().size()} component(s) resolved from what this repository holds, ${detail.closure.cuts().size()} unresolved.|">12 components resolved, 1 unresolved.</small>
+            <p><small th:text="|${detail.closure.components().size()} component(s) resolved from what this repository and the repositories its fallbacks name hold, ${detail.closure.cuts().size()} unresolved.|">12 components resolved, 1 unresolved.</small>
                 <span th:if="${detail.closure.status().name() == 'PARTIAL'}" class="app-badge app-badge--warn">partial</span></p>
             <table class="app-list" th:unless="${detail.closure.components().isEmpty()}">
                 <thead>
@@ -174,9 +175,10 @@
                 <tbody>
                 <tr th:each="component : ${detail.closureShown()}">
                     <td><th:block th:replace="~{base :: artifactLink(${component.coordinate()},
-                            @{/ui/repositories/{repo}/version(repo=${repo},ecosystem=${detail.ecosystem},coordinate=${component.coordinate()},version=${component.version()})})}"></th:block></td>
+                            @{/ui/repositories/{repo}/version(repo=${component.elsewhere() ? component.repository() : repo},ecosystem=${detail.ecosystem},coordinate=${component.coordinate()},version=${component.version()})})}"></th:block></td>
                     <td><code th:text="${component.version()}">1.0</code></td>
-                    <td th:text="${component.cached()} ? 'a cached copy' : 'a release'">a cached copy</td>
+                    <td><span th:text="${component.cached()} ? 'a cached copy' : 'a release'">a cached copy</span><th:block
+                            th:if="${component.elsewhere()}"> of <code th:text="${component.repository()}">releases</code></th:block></td>
                     <td th:text="${component.depth()}">1</td>
                 </tr>
                 </tbody>
