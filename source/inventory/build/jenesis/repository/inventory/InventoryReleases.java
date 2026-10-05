@@ -207,8 +207,7 @@ final class InventoryReleases {
         inventory.walk(MetadataKey.PREFIX, key -> {
             StoreRepositoryInventory.Holding holding = holding(key);
             if (holding != null) {
-                visitor.accept(new StoreRepositoryInventory.Coordinate(
-                        holding.ecosystem(), holding.coordinate(), holding.version()));
+                visitor.accept(holding.asCoordinate());
             }
         });
     }
@@ -230,8 +229,7 @@ final class InventoryReleases {
         inventory.walk(MetadataKey.PREFIX, key -> {
             StoreRepositoryInventory.Holding holding = holding(key);
             if (holding != null && holding.cached()) {
-                visitor.accept(new StoreRepositoryInventory.Coordinate(
-                        holding.ecosystem(), holding.coordinate(), holding.version()));
+                visitor.accept(holding.asCoordinate());
             }
         });
     }
@@ -267,7 +265,8 @@ final class InventoryReleases {
             case CACHED -> {
                 CachedSection.Facts facts = CachedSection.facts(document.section(CachedSection.TAG)).orElseThrow();
                 yield new StoreRepositoryInventory.Holding(ecosystem, coordinate, version, facts.at(), true,
-                        facts.upstream(), false, count, downloadedAt);
+                        facts.upstream(), false, count, downloadedAt,
+                        AdvisedSection.advised(document.section(AdvisedSection.TAG)).orElse(null));
             }
             case NONE -> null;
         };

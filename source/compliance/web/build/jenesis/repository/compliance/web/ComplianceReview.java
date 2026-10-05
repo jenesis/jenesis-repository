@@ -567,6 +567,7 @@ public class ComplianceReview extends TenantScope {
         inventory(repository).cachedCopies(held -> {
             scanned[0]++;
             if (AdvisoryFindings.record(ledger.get(), feeds, held.ecosystem(), held.coordinate(), held.version(),
+                    held.asked(),
                     "console-report", Instant.now())) {
                 flagged[0]++;
             }

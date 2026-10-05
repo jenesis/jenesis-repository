@@ -1,6 +1,7 @@
 package build.jenesis.repository.inventory;
 
 import module java.base;
+import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.store.Clocks;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.store.Retries;
@@ -328,6 +329,22 @@ final class InventoryRecording {
             NewestFirst.CACHED.record(store, ecosystem, coordinate, version, at);
         }
         return recorded;
+    }
+
+    /** Record the name an advisory database knows a version by - see {@link StoreRepositoryInventory#advised}. */
+    void advised(String ecosystem, String coordinate, String version, AdvisorySource.Query advised, Instant at)
+            throws IOException {
+        String key = MetadataKey.version(ecosystem, coordinate, version);
+        DocumentTurns.decide(store, key, current -> {
+            MetadataDocument document = current.map(versioned -> MetadataDocument.read(versioned.content()))
+                    .orElseGet(MetadataDocument::empty);
+            if (AdvisedSection.advised(document.section(AdvisedSection.TAG)).filter(advised::equals).isPresent()) {
+                return Retries.Verdict.keep(false);
+            }
+            SequencedMap<String, SectionMutation> mutations = new LinkedHashMap<>();
+            mutations.put(AdvisedSection.TAG, AdvisedSection.record(advised, at));
+            return Retries.Verdict.write(document.mutate(mutations).serialize(), true);
+        });
     }
 
     /** When a coordinate version was first cached from an upstream and where from, or empty when it is not held as a

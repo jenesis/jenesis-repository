@@ -484,18 +484,44 @@ public final class ComplianceGate {
      * {@code null} where the inspector reads no dependency list at all - two different facts, since only the first
      * lets a screen say the artifact depends on nothing. {@code about} is what the same document says the package is
      * for ({@link About}), recorded at publish so a full-text index finds it by what a person would type; {@code null}
-     * where the inspector reads no such document.
+     * where the inspector reads no such document. {@code advised} is the name an advisory database knows the version by
+     * where it differs from the coordinate, {@code null} otherwise: a Debian binary package is published in the
+     * vulnerability databases under its source package ({@code libssl3} under {@code openssl}), at the source's
+     * version. An inspector that reads it from the package's own manifest sets it; the gate asks the feeds under it,
+     * and the findings are recorded under the subject's own coordinate.
      */
     public record Subject(String ecosystem, String coordinate, String version, List<DeclaredLicense> licenses,
                           Reachability reachability, List<DetectedSecret> secrets, Attestation attestation,
                           List<Signature> signatures, List<Maintainer> maintainers, List<Dependency> dependencies,
-                          About about) {
+                          About about, AdvisorySource.Query advised) {
 
         public Subject {
             secrets = secrets == null ? List.of() : List.copyOf(secrets);
             signatures = signatures == null ? List.of() : List.copyOf(signatures);
             maintainers = maintainers == null ? List.of() : List.copyOf(maintainers);
             dependencies = dependencies == null ? null : List.copyOf(dependencies);
+        }
+
+        /** A subject known to the advisory databases by its own coordinate, so the callers that build one without an
+         *  advisory name need not restate a {@code null}. */
+        public Subject(String ecosystem, String coordinate, String version, List<DeclaredLicense> licenses,
+                       Reachability reachability, List<DetectedSecret> secrets, Attestation attestation,
+                       List<Signature> signatures, List<Maintainer> maintainers, List<Dependency> dependencies,
+                       About about) {
+            this(ecosystem, coordinate, version, licenses, reachability, secrets, attestation, signatures,
+                    maintainers, dependencies, about, null);
+        }
+
+        /** The question an advisory database answers about this subject: under {@link #advised} where its inspector
+         *  read one, its own coordinate otherwise. */
+        public AdvisorySource.Query asked() {
+            return advised != null ? advised : new AdvisorySource.Query(ecosystem, coordinate, version);
+        }
+
+        /** This subject re-stamped with the name an advisory database knows its version by. */
+        public Subject withAdvised(AdvisorySource.Query advised) {
+            return new Subject(ecosystem, coordinate, version, licenses, reachability, secrets, attestation,
+                    signatures, maintainers, dependencies, about, advised);
         }
 
         /** A subject that says nothing about what its package is for, so the callers that build one without it need
@@ -544,7 +570,7 @@ public final class ComplianceGate {
          *  inspector uses to hand its detections to the discovered secret-scan gate dimension. */
         public Subject withSecrets(List<DetectedSecret> secrets) {
             return new Subject(ecosystem, coordinate, version, licenses, reachability, secrets, attestation,
-                    signatures, maintainers, dependencies, about);
+                    signatures, maintainers, dependencies, about, advised);
         }
 
         /** This subject re-stamped with the inbound attestation an inspector read from the artifact's co-located
@@ -552,7 +578,7 @@ public final class ComplianceGate {
          *  verified attestation, exactly as {@link #withSecrets} hands the secret-scan dimension its detections. */
         public Subject withAttestation(Attestation attestation) {
             return new Subject(ecosystem, coordinate, version, licenses, reachability, secrets, attestation,
-                    signatures, maintainers, dependencies, about);
+                    signatures, maintainers, dependencies, about, advised);
         }
 
         /** This subject re-stamped with the inbound signatures the signature inspector verified for it - the seam that
@@ -560,28 +586,28 @@ public final class ComplianceGate {
          *  {@link #withAttestation} hand theirs to the secret-scan and admission dimensions. */
         public Subject withSignatures(List<Signature> signatures) {
             return new Subject(ecosystem, coordinate, version, licenses, reachability, secrets, attestation,
-                    signatures, maintainers, dependencies, about);
+                    signatures, maintainers, dependencies, about, advised);
         }
 
         /** This subject re-stamped with whom its metadata names as maintainers - the seam an ecosystem inspector
          *  uses to hand the trust what a key-discovery source that looks keys up by their owner needs. */
         public Subject withMaintainers(List<Maintainer> maintainers) {
             return new Subject(ecosystem, coordinate, version, licenses, reachability, secrets, attestation,
-                    signatures, maintainers, dependencies, about);
+                    signatures, maintainers, dependencies, about, advised);
         }
 
         /** This subject re-stamped with what its manifest declares it depends on - the seam an ecosystem inspector
          *  uses to hand the publish record what the SBOM and the dependents index are built from. */
         public Subject withDependencies(List<Dependency> dependencies) {
             return new Subject(ecosystem, coordinate, version, licenses, reachability, secrets, attestation,
-                    signatures, maintainers, dependencies, about);
+                    signatures, maintainers, dependencies, about, advised);
         }
 
         /** This subject re-stamped with what its manifest says the package is for - the seam an ecosystem inspector
          *  uses to hand the publish record what a full-text index finds the package by. */
         public Subject withAbout(About about) {
             return new Subject(ecosystem, coordinate, version, licenses, reachability, secrets, attestation,
-                    signatures, maintainers, dependencies, about);
+                    signatures, maintainers, dependencies, about, advised);
         }
 
         /** Whether this is a <em>content-scan</em> subject - one an inspector derived from an artifact's bytes (an
@@ -797,7 +823,8 @@ public final class ComplianceGate {
         boolean packaged = !subject.contentScan();
         List<AdvisorySource.Advisory> found = new ArrayList<>();
         if (packaged && subject.version() != null && !subject.version().isBlank()) {
-            found.addAll(advisories.advisories(subject.ecosystem(), subject.coordinate(), subject.version()));
+            AdvisorySource.Query asked = subject.asked();
+            found.addAll(advisories.advisories(asked.ecosystem(), asked.coordinate(), asked.version()));
             // What a discovered dimension holds about the subject beyond the feeds - a content scan's report on the
             // stored bytes - joins the feeds' answer here, before VEX and waivers, so it is decided by exactly the
             // threshold, action and statements a feed's advisory is. Only for a claimed subject: the unclaimed

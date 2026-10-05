@@ -205,8 +205,7 @@ public final class IncrementalPasses {
     /** The copies cached since the last full pass, less the lookback, out of their newest-first index. */
     private void recentlyCached(StoreRepositoryInventory inventory, StoreRepositoryInventory.CoordinateVisitor visitor)
             throws IOException {
-        recentlyCachedHoldings(inventory, holding -> visitor.accept(new StoreRepositoryInventory.Coordinate(
-                holding.ecosystem(), holding.coordinate(), holding.version())));
+        recentlyCachedHoldings(inventory, holding -> visitor.accept(holding.asCoordinate()));
     }
 
     private void recentlyCachedHoldings(StoreRepositoryInventory inventory,

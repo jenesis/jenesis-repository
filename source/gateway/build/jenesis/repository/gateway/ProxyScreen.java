@@ -397,7 +397,35 @@ public final class ProxyScreen {
             screening = outage(path, inspection.subjects(), failure,
                     () -> decide(gate.advisories(AdvisorySource.none()), path, inspection, lastModified));
         }
-        return governed(path, screening);
+        Screening decided = governed(path, screening);
+        if (decided.verdict() != Verdict.REJECT) {
+            recordAdvised(inspection.subjects());
+        }
+        return decided;
+    }
+
+    /**
+     * Record, for a copy the screen keeps, the name each subject's inspector read the advisory databases know it by
+     * ({@link ComplianceGate.Subject#advised}), so every later screen of the copy - the scan pass, a rescan - asks the
+     * feeds what this one asked. One compare-and-set of the version's document where it records another name or none,
+     * none where it records this one. A refused write fails the fill rather than leaving a copy every later screen
+     * would ask about under a name the databases do not publish, which reads clean.
+     */
+    private void recordAdvised(List<ComplianceGate.Subject> subjects) {
+        StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
+        for (ComplianceGate.Subject subject : subjects) {
+            if (subject.advised() == null || subject.contentScan() || subject.version() == null
+                    || subject.version().isBlank()) {
+                continue;
+            }
+            try {
+                inventory.advised(subject.ecosystem(), subject.coordinate(), subject.version(), subject.advised(),
+                        Instant.now());
+            } catch (IOException failure) {
+                throw new UncheckedIOException("Could not record the name the advisory databases know "
+                        + subject.coordinate() + " " + subject.version() + " by", failure);
+            }
+        }
     }
 
     /**
