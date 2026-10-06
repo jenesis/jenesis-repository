@@ -5,8 +5,8 @@ import module java.base;
 import build.jenesis.repository.maintenance.StorageNamespace;
 
 /**
- * The dependents module's storage manifest: it owns the per-repository {@code dependents} shards the
- * {@link DependentsIndex} maintains, so the orphan diagnostic and the operator purge know it.
+ * The dependents module's storage manifest: it owns the per-repository {@code dependents} space the
+ * {@link DeclaredDependents} pass maintains, so the orphan diagnostic and the operator purge know it.
  */
 public final class DependentsStorageNamespace implements StorageNamespace {
 

@@ -42,7 +42,6 @@ open module build.jenesis.repository.server.kernel.contract.test {
     requires build.jenesis.repository.audit;
     requires build.jenesis.repository.findings;
     requires build.jenesis.repository.health;
-    requires build.jenesis.repository.dependents.spi;
     requires build.jenesis.repository.upstream.store;
     requires build.jenesis.repository.gc;
     requires build.jenesis.repository.format;
