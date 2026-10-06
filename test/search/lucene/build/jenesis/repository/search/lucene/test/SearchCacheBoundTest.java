@@ -118,6 +118,11 @@ class SearchCacheBoundTest {
 
     private RepositoryContext context(ArtifactStore store) {
         return new RepositoryContext() {
+
+            @Override
+            public TenantView tenantView() {
+                return TenantView.NONE;
+            }
             @Override
             public UnitFailures failures(String work, String consequence) {
                 return new UnitFailures(work, consequence);

@@ -95,6 +95,11 @@ class QuarantineRetentionTaskTest {
     /** A minimal maintenance context over the test's own store at a fixed wall clock, mirroring {@code StagingReapTest}. */
     private RepositoryContext context(UnaryOperator<String> config) {
         return new RepositoryContext() {
+
+            @Override
+            public TenantView tenantView() {
+                return TenantView.NONE;
+            }
             @Override
             public UnitFailures failures(String work, String consequence) {
                 return new UnitFailures(work, consequence);

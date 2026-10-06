@@ -107,6 +107,11 @@ class SearchFieldsTest {
 
     private RepositoryContext context() {
         return new RepositoryContext() {
+
+            @Override
+            public TenantView tenantView() {
+                return TenantView.NONE;
+            }
             @Override
             public UnitFailures failures(String work, String consequence) {
                 return new UnitFailures(work, consequence);

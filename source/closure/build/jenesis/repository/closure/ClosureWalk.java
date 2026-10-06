@@ -50,7 +50,7 @@ public record ClosureWalk(List<Member> members) {
             }
             members.put(at.repository(), new Member(at.repository(), at.store()));
             for (String named : fallbacks(at)) {
-                context.repository(named).ifPresent(queue::add);
+                context.tenantView().repository(named).ifPresent(queue::add);
             }
         }
         return new ClosureWalk(List.copyOf(members.values()));
