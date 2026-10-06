@@ -38,6 +38,7 @@ module build.jenesis.repository.compliance {
     requires org.slf4j;
     requires tools.jackson.databind;
     exports build.jenesis.repository.compliance;
+    uses build.jenesis.repository.compliance.ContentScanner;
     uses build.jenesis.repository.compliance.GatePolicyProvider;
     uses build.jenesis.repository.compliance.ProvenanceSignerProvider;
     uses build.jenesis.repository.compliance.QualityInspector;
