@@ -26,7 +26,6 @@ open module build.jenesis.repository.compliance.web {
     requires build.jenesis.repository.gateway;
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.cleanup;
-    requires build.jenesis.repository.dependents.spi;
     requires build.jenesis.repository.audit;
     requires build.jenesis.repository.maintenance;
     requires build.jenesis.repository.metadata;

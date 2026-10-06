@@ -9,6 +9,8 @@ import build.jenesis.repository.closure.ClosureWalk;
 import build.jenesis.repository.closure.ExposureSection;
 import build.jenesis.repository.closure.ReliedOn;
 import build.jenesis.repository.compliance.Severity;
+import build.jenesis.repository.compliance.scan.Reached;
+import build.jenesis.repository.compliance.scan.VulnerabilityRanking;
 import build.jenesis.repository.findings.Finding;
 import build.jenesis.repository.findings.Findings;
 import build.jenesis.repository.findings.FindingsProvider;
@@ -286,6 +288,28 @@ class ClosureTaskTest {
                 .containsExactly(new ExposureSection.Reached("org.dep:lib", "1.0", "releases", false, 1, "HIGH",
                         List.of(new ClosureSection.Hop("org.acme:app", "1.0"),
                                 new ClosureSection.Hop("org.dep:lib", "1.0"))));
+    }
+
+    @Test
+    void the_vulnerability_ranking_puts_a_version_a_release_relies_on_first() throws IOException {
+        metadata.mutate("Maven", "org.acme:app", "1.0", DependencySection.TAG, DependencySection.record(APP,
+                List.of(new DependencySection.Declared("org.dep:lib", "1.0")), NOW));
+        cached("lib", "1.0");
+        cached("aaa", "1.0");                           // sorts first by coordinate, and nothing relies on it
+        Findings ledger = FindingsProvider.installed().orElseThrow().over(store);
+        for (String artifact : List.of("lib", "aaa")) {
+            ledger.record("Maven", "org.dep:" + artifact, "1.0", Finding.of("CVE-2026-00" + artifact.length(), "osv",
+                    Finding.Kind.VULNERABILITY, "advisory", Severity.HIGH, "recorded", NOW));
+        }
+
+        pass(null, NOW);
+
+        assertThat(VulnerabilityRanking.rank(ledger, List.of(), Reached.NONE))
+                .as("with nothing relied on, the ranking falls through to coordinate order")
+                .extracting(VulnerabilityRanking.RankedLine::coordinate).containsExactly("org.dep:aaa", "org.dep:lib");
+        assertThat(VulnerabilityRanking.rank(ledger, List.of(), Reached.over(store, Optional.of(tenant))))
+                .as("read through the relied-on index, the version the release's closure reaches comes first")
+                .extracting(VulnerabilityRanking.RankedLine::coordinate).containsExactly("org.dep:lib", "org.dep:aaa");
     }
 
     @Test

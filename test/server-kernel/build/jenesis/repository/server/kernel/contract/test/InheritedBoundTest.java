@@ -8,7 +8,6 @@ import build.jenesis.repository.cleanup.RepositoryInventory;
 import build.jenesis.repository.compliance.Freshness;
 import build.jenesis.repository.compliance.HealthSource;
 import build.jenesis.repository.compliance.Severity;
-import build.jenesis.repository.dependents.spi.DependentsQuery;
 import build.jenesis.repository.findings.Finding;
 import build.jenesis.repository.findings.Findings;
 import build.jenesis.repository.health.HealthLedger;
@@ -23,8 +22,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * whole-list abstract sibling <b>fails visibly</b> at a stated ceiling instead of degrading silently on a
  * deployment-sized ledger.
  *
- * <p>Five SPIs have that shape - {@code Findings} (paged and Visitor), {@code HealthLedger},
- * {@code RepositoryInventory}, {@code DependentsQuery} and {@code AuditTrail} (paged and streaming) - and "the default
+ * <p>Four SPIs have that shape - {@code Findings} (paged and Visitor), {@code HealthLedger},
+ * {@code RepositoryInventory} and {@code AuditTrail} (paged and streaming) - and "the default
  * is correct for a simple implementation; the store overrides it" describes an implementation nobody ships while the
  * shipped one overrides, so the default's cost is invisible until a plug-in author inherits it. A default that
  * silently buffers the whole ledger and answers fails every one of these assertions. Each leg refuses past
@@ -36,11 +35,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * implementation and the remedy rather than surfacing as an anonymous {@code OutOfMemoryError} three layers up. The
  * streaming legs additionally prove the refusal lands <em>before</em> the first row is emitted, so a consumer never
  * half-processes an export that is about to die.
- *
- * <p>The eighth site is not a bound but a probe: {@link DependentsQuery#built()} answers "has the index ever been
- * swept" as "a single small-object existence probe, never a scan", by reading the sweep's own completion stamp
- * ({@link DependentsQuery#builtAt()}) - the only evidence that can tell a swept-empty index from a never-built one,
- * where materialising the whole coordinate set and asking {@code isEmpty()} cannot.
  */
 class InheritedBoundTest {
 
@@ -117,22 +111,6 @@ class InheritedBoundTest {
                 .hasMessageContaining("releases()");
     }
 
-    // --- DependentsQuery: the cursor page over the whole reverse-dependency key set --------------------------------
-
-    @Test
-    void the_dependents_page_default_refuses_past_the_ceiling() throws IOException {
-        assertThat(indexOf(CEILING).coordinates(null, 5).coordinates())
-                .as("at the ceiling the inherited page still answers its slice").hasSize(5);
-
-        assertThatThrownBy(() -> indexOf(CEILING + 1).coordinates(null, 5))
-                .as("the default sorts and slices the entire graph's key set per page, so a caller paging N pages "
-                        + "materialises it N times - past the ceiling it refuses instead")
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("coordinates(String, int)")
-                .hasMessageContaining("coordinates()")
-                .hasMessageContaining(String.valueOf(CEILING + 1));
-    }
-
     // --- AuditTrail: the CSV export's row sink and the paged console read over the whole trail ---------------------
 
     @Test
@@ -174,54 +152,6 @@ class InheritedBoundTest {
                         + "anonymous heap exhaustion three frames up is precisely the silent degrade this replaces")
                 .hasMessageContaining(trailOf(0).getClass().getName())
                 .hasMessageContaining(CEILING + "-row bound");
-    }
-
-    // --- the eighth site: an existence probe that reads a marker, not the graph -------------------------------------
-
-    @Test
-    void the_built_probe_reads_the_sweep_marker_and_never_the_coordinate_set() throws IOException {
-        DependentsQuery swept = new DependentsQuery() {
-            @Override
-            public List<String> dependents(String coordinate) {
-                return List.of();
-            }
-
-            @Override
-            public List<String> coordinates() {
-                throw new AssertionError("built() must not read the coordinate set - its javadoc calls it 'a single "
-                        + "small-object existence probe, never a scan', and a scan cannot answer the question "
-                        + "anyway: a swept-empty index and a never-built one look identical from the data");
-            }
-
-            @Override
-            public Set<String> reachable(Collection<String> coordinates) {
-                return Set.of();                        // nothing recorded here; the probe under test is built()
-            }
-
-            @Override
-            public Optional<Instant> builtAt() {
-                return Optional.of(Instant.parse("2026-08-15T10:15:30Z"));
-            }
-        };
-
-        assertThat(swept.built())
-                .as("a committed sweep left a completion stamp, which is the whole answer")
-                .isTrue();
-
-        // The ambiguity a coordinate-set default cannot resolve: a sweep that committed an EMPTY index. Reading the
-        // coordinate set answers 'false' there - a never-derived view served as an authoritative empty one, the
-        // exact failure built() exists to prevent.
-        DependentsQuery sweptEmpty = query(List.of(), Optional.of(Instant.parse("2026-08-15T10:15:30Z")));
-        assertThat(sweptEmpty.built())
-                .as("a swept-empty index is authoritative-empty, not never-built")
-                .isTrue();
-
-        // And the converse: an implementation that keeps no completion marker reads as not-yet-built, whatever its
-        // data holds, so its surface says "not yet built" rather than presenting an underived view as whole.
-        DependentsQuery unmarked = query(List.of("pkg:maven/com.example/app@1.0.0"), Optional.empty());
-        assertThat(unmarked.built())
-                .as("no completion stamp, so nothing proves a sweep ran - the conservative half of the ambiguity")
-                .isFalse();
     }
 
     // --- the inheriting implementations: each answers ONLY the abstract legs, so it inherits every default ----------
@@ -316,50 +246,6 @@ class InheritedBoundTest {
             @Override
             public void evict(Release release) {
                 throw new UnsupportedOperationException("not exercised: this fixture is a read model");
-            }
-        };
-    }
-
-    /** A reverse-dependency index of {@code rows} coordinates that inherits the cursor page. */
-    private static DependentsQuery indexOf(int rows) {
-        List<String> coordinates = new ArrayList<>(rows);
-        for (int index = 0; index < rows; index++) {
-            coordinates.add("pkg:maven/com.example/app" + index + "@1.0.0");
-        }
-        return query(List.copyOf(coordinates), Optional.of(Instant.parse("2026-08-15T10:15:30Z")));
-    }
-
-    private static DependentsQuery query(List<String> coordinates, Optional<Instant> builtAt) {
-        return new DependentsQuery() {
-
-            @Override
-            public List<String> dependents(String coordinate) {
-                return List.of();
-            }
-
-            @Override
-            public List<String> coordinates() {
-                return coordinates;
-            }
-
-            /** An in-memory index answers the bounded probe from the set it already holds - the shape the SPI's
-             *  javadoc names now that there is no materialising {@code default} to inherit. */
-            @Override
-            public Set<String> reachable(Collection<String> queried) {
-                Set<String> want = new HashSet<>(queried);
-                Set<String> hit = new HashSet<>();
-                for (String coordinate : coordinates) {
-                    String neutral = DependentsQuery.neutralise(coordinate);
-                    if (want.contains(neutral)) {
-                        hit.add(neutral);
-                    }
-                }
-                return hit;
-            }
-
-            @Override
-            public Optional<Instant> builtAt() {
-                return builtAt;
             }
         };
     }

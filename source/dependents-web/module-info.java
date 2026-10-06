@@ -1,9 +1,9 @@
 /**
- * The reverse-dependency and CVE blast-radius query surface, contributed through
+ * The declared-dependencies query surface, contributed through
  * {@link build.jenesis.repository.server.kernel.ServerModuleProvider}: a thin adapter over the {@code Repositories}
  * resolver and the discovered
- * {@link build.jenesis.repository.dependents.spi.DependentsQueryProvider} (the sharded reverse-dependency index): a
- * client asks who depends on a coordinate and reads a single small-object shard, never a scan. With no index module
+ * {@link build.jenesis.repository.dependents.spi.DependentsQueryProvider} (the sharded declared-dependencies index): a
+ * client asks who declares a dependency on a package and reads a single small-object shard, never a scan. With no index module
  * installed the {@code /api/dependents} route answers {@code 501}, with the index not yet built it answers {@code 503},
  * and with this module absent the server carries no dependents route. Open so Spring can reflect over the controller
  * and its configuration.

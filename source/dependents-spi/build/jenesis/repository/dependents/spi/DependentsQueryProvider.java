@@ -5,8 +5,8 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Providers;
 
 /**
- * Discovers the reverse-dependency index and binds it to a repository's scoped store, so the query surface reaches the
- * read model without depending on the optional index module. Without one {@link #installed()} is empty:
+ * Discovers the declared-dependencies index and binds it to a repository's scoped store, so the query surface reaches
+ * the read model without depending on the optional index module. Without one {@link #installed()} is empty:
  * {@code /api/dependents} answers {@code 501} and the console hides the panel. Stateless; one instance serves every
  * tenant and repository.
  *
@@ -20,21 +20,20 @@ import build.jenesis.repository.store.Providers;
  *   <li><b>Selection failure.</b> No key names an index, so the one failure is ambiguity: two installed providers make
  *       {@link #installed()} throw naming both, through the shared {@link Providers#singleton}.</li>
  *   <li><b>Tenant scoping.</b> The caller hands in an already-scoped store; the query reads nothing outside it.</li>
- *   <li><b>Read purity.</b> Stored index state only - no fetch, no index build on the read path; a never-built index
- *       answers empty.</li>
+ *   <li><b>Read purity.</b> Stored index state only - no fetch, no index pass on the read path; a never-built index
+ *       answers empty, with no stamp.</li>
  *   <li><b>Lifecycle / ownership.</b> The caller resolves the provider once and calls {@link #over} per request. The
  *       provider may cache per-scope readers it owns and closes; {@link #installed()} caches and closes nothing.</li>
  *   <li><b>Ordering / determinism.</b> Which provider answers depends on what is installed, never on discovery
  *       order.</li>
- *   <li><b>Bounded work / cancellation.</b> A returned query answers {@link DependentsQuery#coordinates(String, int)}
- *       without materialising the key set and {@link DependentsQuery#built()} with one read of the sweep's marker. The
- *       inherited page default refuses past {@link ArtifactStore#MAX_INHERITED_CHILDREN} coordinates, naming the class
- *       and the override.</li>
+ *   <li><b>Bounded work / cancellation.</b> A returned query answers {@link DependentsQuery#declarations} a bounded
+ *       page at a time, its size capped by the caller's limit, and {@link DependentsQuery#declarationsBuiltAt} with
+ *       one read of the pass's stamp.</li>
  * </ol>
  */
 public interface DependentsQueryProvider {
 
-    /** Bind the reverse-dependency read model to one repository's scoped store. */
+    /** Bind the declared-dependencies read model to one repository's scoped store. */
     DependentsQuery over(ArtifactStore store);
 
     /** The installed provider, through the shared {@link Providers#singleton}: empty without the index module, and a

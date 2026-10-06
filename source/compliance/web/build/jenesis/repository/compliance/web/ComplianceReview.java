@@ -23,11 +23,10 @@ import build.jenesis.repository.compliance.RefreshableSource;
 import build.jenesis.repository.compliance.SignalSourceProvider;
 import build.jenesis.repository.compliance.SignerIdentity;
 import build.jenesis.repository.compliance.signatures.SignerIndex;
+import build.jenesis.repository.compliance.scan.Reached;
 import build.jenesis.repository.compliance.scan.VulnerabilityReports;
 import build.jenesis.repository.compliance.scan.VulnerabilityRankIndexTask;
 import build.jenesis.repository.compliance.scan.VulnerabilityRanking;
-import build.jenesis.repository.dependents.spi.DependentsQuery;
-import build.jenesis.repository.dependents.spi.DependentsQueryProvider;
 import build.jenesis.repository.findings.AdvisoryFindings;
 import build.jenesis.repository.findings.AiReachabilityLabels;
 import build.jenesis.repository.findings.ApplicabilityLabels;
@@ -506,7 +505,7 @@ public class ComplianceReview extends TenantScope {
         return VulnerabilityReports.read(store, new StoreRepositoryInventory(store),
                 AdvisorySource.resolve(effective(settings)), AdvisorySignal.resolve(effective(settings)),
                 findingsLedger.map(provider -> provider.over(store)),
-                DependentsQueryProvider.installed().map(provider -> provider.over(store)),
+                Reached.over(store, Optional.of(root.scope(tenant()))),
                 reachability, applicability, after, Math.max(1, Math.min(limit, VULNERABLE_PAGE)),
                 VULNERABILITY_SCAN, List.of());
     }
@@ -574,7 +573,7 @@ public class ComplianceReview extends TenantScope {
         });
         Findings.scanned(store).mark(Instant.now());
         VulnerabilityRankIndexTask.reindex(store, ledger.get(), signals,
-                DependentsQueryProvider.installed().map(provider -> provider.over(store)));
+                Reached.over(store, Optional.of(root.scope(tenant()))));
         // The feed warnings lead, since Rows.of keeps a bounded sample.
         List<String> rows = new ArrayList<>(unrefreshed);
         rows.add(scanned[0] + " versions scanned");

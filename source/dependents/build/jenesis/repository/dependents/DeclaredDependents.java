@@ -10,15 +10,11 @@ import build.jenesis.repository.store.Retries;
 import build.jenesis.repository.store.Stamp;
 
 /**
- * The declared tier of the reverse-dependency index: for each package name, the versions whose manifest declares a
- * dependency on it and the requirement each states, read from the dependencies the format's inspector recorded at
- * publish. It is what "who depends on X" can say for the great majority of artifacts, which embed no bill of
- * materials and so never reach the resolved tier {@link DependentsIndex} inverts.
- *
- * <p>Kept apart from the resolved tier: a declaration is a requirement, and which version satisfies it is a client's
- * decision. So it is keyed by package name, carries the requirement with every entry, and is read only through
- * {@link DependentsQueryReader#declarations} - never by {@code reachable}, which counts a vulnerability's affected
- * artifacts.
+ * The declared-dependencies index: for each package name, the versions whose manifest declares a dependency on it and
+ * the requirement each states, read from the dependencies the format's inspector recorded at publish - what "who
+ * declares a dependency on X" answers from. A declaration is a requirement, and which version satisfies it is a
+ * client's decision, so it is keyed by package name, carries the requirement with every entry, and never counts as
+ * reaching a version; the versions a published version relies on are its closure's, indexed by the closure.
  *
  * <p>Fed by the inventory on the cadence of {@link IncrementalPasses}: every Nth pass visits every published version,
  * the passes between the versions published since. A visit reads the version's dependencies section and its record -

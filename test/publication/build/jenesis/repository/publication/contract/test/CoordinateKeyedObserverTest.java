@@ -3,7 +3,6 @@ package build.jenesis.repository.publication.contract.test;
 import module org.junit.jupiter.api;
 import module java.base;
 
-import build.jenesis.repository.dependents.DependentsIndex;
 import build.jenesis.repository.hooks.testkit.Hooks;
 import build.jenesis.repository.index.PublishedIndex;
 import build.jenesis.repository.store.ArtifactDescriptor;
@@ -57,35 +56,6 @@ class CoordinateKeyedObserverTest {
     // --- the webhook: durable on return, and no route back --------------------------------------------------------
 
     // --- the search index's coordinate gate, and its rebuild ------------------------------------------------------
-
-    // --- the dependents feed keys on the blob, so two bodies are two markers --------------------------------------
-
-    @Test
-    void the_dependents_feed_keys_on_the_blob_and_a_dropped_call_leaves_one_marker_missing() throws IOException {
-        DependentsFixture fixture = new DependentsFixture();
-        fixture.deploy(store);
-        PublicationObserver observer = fixture.create();
-        ArtifactDescriptor first = publish("/kit/one.jar", "first body");
-        ArtifactDescriptor second = publish("/kit/two.jar", "second body");
-
-        observer.onPublished(first, store);
-        // The second call is LOST - the crash window Publication documents and does not close - so its blob is never
-        // marked even though its pointer is durable and the artifact serves.
-        Map<String, String> afterOne = fixture.projection(store);
-
-        assertThat(afterOne).as("one delivered call, one marker").containsOnlyKeys(first.path());
-        assertThat(fixture.projection(store))
-                .as("and the surface is demonstrably missing the dropped one, which is the trace a contained failure "
-                        + "must leave")
-                .doesNotContainKey(second.path());
-
-        fixture.repair(store);
-
-        assertThat(new DependentsIndex(store).built())
-                .as("the repair leg is the real full blobs/ walk-inversion, which reads durable truth and never the "
-                        + "feed - so it covers the blob the lost call never named")
-                .isTrue();
-    }
 
     @Test
     void the_search_feed_marks_a_coordinate_and_skips_a_publish_that_carries_none() throws IOException {

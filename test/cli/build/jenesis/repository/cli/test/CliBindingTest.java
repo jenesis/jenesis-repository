@@ -62,7 +62,7 @@ public class CliBindingTest {
             Map.entry("browse", Binding.of("/api/browse", "browse", "releases")),
             Map.entry("search", Binding.of("/api/search", "search", "releases", "acme")),
             Map.entry("assets", Binding.of("/api/assets", "assets", "releases")),
-            Map.entry("dependents", Binding.of("/api/dependents", "dependents", "releases")),
+            Map.entry("dependents", Binding.of("/api/dependents", "dependents", "releases", "lodash")),
             Map.entry("sbom", Binding.of("/api/sbom", "sbom", "releases")),
             Map.entry("origin", Binding.of("/api/origin", "origin", "releases")),
             Map.entry("attribution", Binding.of("/api/attribution", "attribution", "releases")),
