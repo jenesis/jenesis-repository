@@ -14,6 +14,8 @@ import build.jenesis.repository.settings.CoreDefaults;
 import build.jenesis.repository.metadata.MetadataDocument;
 import build.jenesis.repository.metadata.MetadataProvider;
 import build.jenesis.repository.metadata.MetadataStore;
+import build.jenesis.repository.metadata.SectionMutation;
+import build.jenesis.repository.findings.FindingsProvider;
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.ArtifactStore;
 
@@ -141,6 +143,9 @@ public final class ClosureTask implements MaintenanceTask {
         // nothing resolved: a release still waiting for its closure is the cadence's below.
         ReliedOn.drainStale(context.store(), DRAIN, release -> visit.release(release, false, false));
         cadence.coordinates(inventory, release -> visit.release(release, true, cadence.full()));
+        for (ArtifactStore holder : visit.touched.values()) {
+            ReliedOn.epoch(holder).bump();
+        }
         cadence.completed(context.now(), !failed.any());
         if (visit.resolved > 0 || visit.exposed > 0 || visit.indexed > 0) {
             LOGGER.info("Resolved {} closure(s), re-derived {} exposure(s) and indexed {} relied-on row(s) in {}/{}",
@@ -157,6 +162,10 @@ public final class ClosureTask implements MaintenanceTask {
         private final Severity risk;
         private final UnitFailures failed;
         private final Exposures.Tenant tenant;
+        /** Every store this visit wrote relied-on rows into, by identity, whose epoch it moves once at its end. */
+        private final Map<Object, ArtifactStore> touched = new LinkedHashMap<>();
+        /** The findings ledger's provider, resolved once for the visit rather than once per component. */
+        private final Optional<FindingsProvider> findings = FindingsProvider.installed();
         private long resolved;
         private long exposed;
         private long indexed;
@@ -206,7 +215,7 @@ public final class ClosureTask implements MaintenanceTask {
                     }
                 }
                 ExposureSection.Exposure derived = Exposures.derive(through, release.ecosystem(), closure.get(), risk,
-                        context.now(), context.repository(), tenant);
+                        context.now(), context.repository(), tenant, findings);
                 Optional<ExposureSection.Exposure> was = document.flatMap(read -> ExposureSection.exposure(
                         read.section(ExposureSection.TAG)));
                 boolean changed = was.isEmpty() || !was.get().sameAs(derived);
@@ -215,17 +224,20 @@ public final class ClosureTask implements MaintenanceTask {
                 if (fresh || changed || full) {
                     indexed += ReliedOn.index(through, release.ecosystem(), new ReliedOn.Row(context.repository(),
                             release.coordinate(), release.version()), closure.get(), derived, fresh,
-                            context.tenantStore());
+                            context.tenantStore(), touched);
                 }
+                // A fresh closure and its exposure are one compare-and-set, never two.
+                SequencedMap<String, SectionMutation> writes = new LinkedHashMap<>();
                 if (fresh) {
-                    metadata.mutate(release.ecosystem(), release.coordinate(), release.version(), ClosureSection.TAG,
-                            ClosureSection.record(closure.get()));
+                    writes.put(ClosureSection.TAG, ClosureSection.record(closure.get()));
                     resolved++;
                 }
                 if (changed) {
-                    metadata.mutate(release.ecosystem(), release.coordinate(), release.version(),
-                            ExposureSection.TAG, ExposureSection.record(derived));
+                    writes.put(ExposureSection.TAG, ExposureSection.record(derived));
                     exposed++;
+                }
+                if (!writes.isEmpty()) {
+                    metadata.mutate(release.ecosystem(), release.coordinate(), release.version(), writes);
                 }
             } catch (IOException | RuntimeException e) {
                 LOGGER.warn("Could not resolve the closure of {} {}:{} in {}/{}", release.ecosystem(),

@@ -47,12 +47,12 @@ final class Exposures {
         Optional<ArtifactStore> store(String repository);
     }
 
-    /** {@code closure}'s exposure over the repositories of {@code walk}, findings counted from {@code risk} up, and
-     *  its packages of other ecosystems over {@code tenant}'s, {@code own} being the name of the repository of the
-     *  version - the walk's first. */
+    /** {@code closure}'s exposure over the repositories of {@code walk}, findings counted from {@code risk} up through
+     *  {@code findings} - none where no ledger is installed - and its packages of other ecosystems over
+     *  {@code tenant}'s, {@code own} being the name of the repository of the version - the walk's first. */
     static ExposureSection.Exposure derive(ClosureWalk walk, String ecosystem, ClosureSection.Closure closure,
-                                           Severity risk, Instant now, String own, Tenant tenant)
-            throws IOException {
+                                           Severity risk, Instant now, String own, Tenant tenant,
+                                           Optional<FindingsProvider> findings) throws IOException {
         List<ClosureWalk.Member> members = walk.members();
         Map<String, ClosureWalk.Member> byRepository = new HashMap<>();
         for (int i = 1; i < members.size(); i++) {
@@ -69,7 +69,7 @@ final class Exposures {
             examined++;
             boolean held = !new StoreRepositoryInventory(holder.store()).disclosable(ecosystem,
                     component.coordinate(), component.version(), ServableNames.Policy.HIDE_WITHHELD);
-            add(reached, holder.store(), ecosystem, component.coordinate(), component.version(),
+            add(reached, findings, holder.store(), ecosystem, component.coordinate(), component.version(),
                     component.repository(), held, risk, ClosureSection.path(closure, component.coordinate(),
                             component.version()), "");
         }
@@ -78,7 +78,7 @@ final class Exposures {
                 ClosureWalk.Member member = members.get(i);
                 if (heldForReview(member, ecosystem, cut.coordinate(), cut.requirement())) {
                     examined++;
-                    add(reached, member.store(), ecosystem, cut.coordinate(), cut.requirement(),
+                    add(reached, findings, member.store(), ecosystem, cut.coordinate(), cut.requirement(),
                             i == 0 ? "" : member.repository(), true, risk, List.of(), "");
                     break;
                 }
@@ -100,7 +100,7 @@ final class Exposures {
                         foreign.version(), ServableNames.Policy.HIDE_WITHHELD)
                         : HeldVersions.held(store.get(), foreign.ecosystem(), foreign.coordinate(), foreign.version());
                 if (holds || held) {
-                    add(reached, store.get(), foreign.ecosystem(), foreign.coordinate(), foreign.version(),
+                    add(reached, findings, store.get(), foreign.ecosystem(), foreign.coordinate(), foreign.version(),
                             repository.equals(own) ? "" : repository, held, risk, ClosureSection.foreignPath(closure,
                                     foreign.ecosystem(), foreign.coordinate(), foreign.version()),
                             foreign.ecosystem());
@@ -127,12 +127,13 @@ final class Exposures {
 
     /** Add the version, reached along {@code path}, to {@code reached} where it is held or carries findings at or
      *  above {@code risk}, {@code foreign} naming its ecosystem where that is not the closure's own. */
-    private static void add(List<ExposureSection.Reached> reached, ArtifactStore holder, String ecosystem,
-                            String coordinate, String version, String repository, boolean held, Severity risk,
-                            List<ClosureSection.Hop> path, String foreign) throws IOException {
+    private static void add(List<ExposureSection.Reached> reached, Optional<FindingsProvider> findings,
+                            ArtifactStore holder, String ecosystem, String coordinate, String version,
+                            String repository, boolean held, Severity risk, List<ClosureSection.Hop> path,
+                            String foreign) throws IOException {
         int count = 0;
         Severity worst = null;
-        Optional<Findings> ledger = FindingsProvider.installed().map(provider -> provider.over(holder));
+        Optional<Findings> ledger = findings.map(provider -> provider.over(holder));
         if (ledger.isPresent()) {
             for (Finding finding : ledger.get().of(ecosystem, coordinate, version)) {
                 if (finding.active() && finding.severity().compareTo(risk) >= 0) {

@@ -28,6 +28,7 @@ open module build.jenesis.repository.closure.test {
     requires build.jenesis.repository.settings;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.store.filesystem;
+    requires build.jenesis.repository.store.testkit;
     requires org.junit.jupiter;
     requires org.assertj.core;
 }
