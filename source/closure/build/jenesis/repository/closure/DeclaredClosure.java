@@ -1,6 +1,9 @@
 package build.jenesis.repository.closure;
 
 import module java.base;
+import build.jenesis.repository.closure.spi.ClosureSection;
+import build.jenesis.repository.closure.spi.ClosureSource;
+import build.jenesis.repository.closure.spi.ClosureWalk;
 import build.jenesis.repository.compliance.Ecosystems;
 import build.jenesis.repository.compliance.QualityInspector;
 

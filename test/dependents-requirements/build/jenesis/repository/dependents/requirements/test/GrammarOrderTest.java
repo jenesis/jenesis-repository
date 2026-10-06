@@ -2,7 +2,7 @@ package build.jenesis.repository.dependents.requirements.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
-import build.jenesis.repository.closure.RequirementGrammar;
+import build.jenesis.repository.closure.spi.RequirementGrammar;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

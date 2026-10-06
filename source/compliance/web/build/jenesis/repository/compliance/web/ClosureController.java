@@ -1,8 +1,8 @@
 package build.jenesis.repository.compliance.web;
 
 import module java.base;
-import build.jenesis.repository.closure.ClosureSection;
-import build.jenesis.repository.closure.ExposureSection;
+import build.jenesis.repository.closure.spi.ClosureSection;
+import build.jenesis.repository.closure.spi.ExposureSection;
 import build.jenesis.repository.closure.ReliedOn;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ScreenedThrough;

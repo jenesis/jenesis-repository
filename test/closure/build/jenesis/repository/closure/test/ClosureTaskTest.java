@@ -2,11 +2,11 @@ package build.jenesis.repository.closure.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
-import build.jenesis.repository.closure.ClosureSection;
-import build.jenesis.repository.closure.ClosureSource;
+import build.jenesis.repository.closure.spi.ClosureSection;
+import build.jenesis.repository.closure.spi.ClosureSource;
 import build.jenesis.repository.closure.ClosureTask;
-import build.jenesis.repository.closure.ClosureWalk;
-import build.jenesis.repository.closure.ExposureSection;
+import build.jenesis.repository.closure.spi.ClosureWalk;
+import build.jenesis.repository.closure.spi.ExposureSection;
 import build.jenesis.repository.closure.ReliedOn;
 import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.compliance.scan.Reached;

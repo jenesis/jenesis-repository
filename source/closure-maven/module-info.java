@@ -12,7 +12,7 @@
  * @jenesis.signature signature-repository.properties
  */
 module build.jenesis.repository.closure.maven {
-    requires build.jenesis.repository.closure;
+    requires build.jenesis.repository.closure.spi;
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.store;
     requires org.apache.maven.resolver;
@@ -21,6 +21,6 @@ module build.jenesis.repository.closure.maven {
     requires org.apache.maven.resolver.util;
     requires org.apache.maven.resolver.supplier;
     requires org.slf4j;
-    provides build.jenesis.repository.closure.ClosureSource
+    provides build.jenesis.repository.closure.spi.ClosureSource
             with build.jenesis.repository.closure.maven.MavenClosure;
 }

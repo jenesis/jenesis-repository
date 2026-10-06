@@ -2,9 +2,9 @@ package build.jenesis.repository.closure.lock;
 
 import module java.base;
 import build.jenesis.repository.closure.CarriedClosure;
-import build.jenesis.repository.closure.ClosureSection;
-import build.jenesis.repository.closure.ClosureSource;
-import build.jenesis.repository.closure.ClosureWalk;
+import build.jenesis.repository.closure.spi.ClosureSection;
+import build.jenesis.repository.closure.spi.ClosureSource;
+import build.jenesis.repository.closure.spi.ClosureWalk;
 import build.jenesis.repository.compliance.Ecosystems;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;

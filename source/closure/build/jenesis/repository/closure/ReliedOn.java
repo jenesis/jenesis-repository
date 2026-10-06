@@ -1,6 +1,9 @@
 package build.jenesis.repository.closure;
 
 import module java.base;
+import build.jenesis.repository.closure.spi.ClosureSection;
+import build.jenesis.repository.closure.spi.ClosureWalk;
+import build.jenesis.repository.closure.spi.ExposureSection;
 import build.jenesis.repository.inventory.Mailbox;
 import build.jenesis.repository.inventory.PublishedSection;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;

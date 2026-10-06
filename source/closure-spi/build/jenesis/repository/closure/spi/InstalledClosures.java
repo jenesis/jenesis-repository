@@ -1,4 +1,4 @@
-package build.jenesis.repository.closure;
+package build.jenesis.repository.closure.spi;
 
 import module java.base;
 import build.jenesis.repository.store.Providers;

@@ -1,7 +1,7 @@
 package build.jenesis.repository.dependents.requirements;
 
 import module java.base;
-import build.jenesis.repository.closure.RequirementGrammar;
+import build.jenesis.repository.closure.spi.RequirementGrammar;
 import io.github.nscuro.versatile.VersException;
 import io.github.nscuro.versatile.VersionFactory;
 import io.github.nscuro.versatile.spi.Version;
