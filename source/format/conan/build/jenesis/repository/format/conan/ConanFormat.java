@@ -545,6 +545,11 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
             handle(exchange, store);
             return true;
         }
+        // A held version's revision and file listings are not relayed: they name what a held recipe is made of.
+        String[] named = sub.substring(CONANS.length()).split("/");
+        if (named.length >= 2 && HeldVersions.held(store, ECOSYSTEM, named[0], named[1])) {
+            return false;
+        }
         // The index is streamed fresh with validators forwarded both ways. Every shape answers what exists, an
         // ENUMERATION a conan install resolves against; the loop is this leg's own for the HEAD short-circuit and the
         // upstream Content-Type.

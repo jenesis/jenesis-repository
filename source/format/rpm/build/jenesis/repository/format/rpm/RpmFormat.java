@@ -690,6 +690,10 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
                 : BlobLayout.stored(requestPath.substring(1), store);
     }
 
+    /** The coordinate a package path carries: the repository-qualified name, and as version the build -
+     *  {@code <version>-<release>.<arch>} - so each arch's package is a version of its own, held and released as one.
+     *  A finding keyed by name and version reaches every arch, since the screen judges each package's fill by its own
+     *  coordinate. */
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith(PREFIX) || !path.endsWith(".rpm")) {

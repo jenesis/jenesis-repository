@@ -440,6 +440,9 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         }
         String name = parts[4];
         String version = parts[5];
+        if (HeldVersions.held(store, ECOSYSTEM, name, version)) {
+            return false;   // a held version's podspec - for a git-sourced pod its only file - is not relayed
+        }
         // PINNED: the request names the pod and version, so its absence decides nothing about what exists.
         ProxyRelay.Answer answer = ProxyRelay.fetchRemembered(fetcher, URI.create(root + "/" + sub), Map.of(), exchange,
                 ProxyRelay.Document.PINNED, store);
