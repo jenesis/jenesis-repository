@@ -3,7 +3,7 @@ package build.jenesis.repository.compliance.web;
 import module java.base;
 import build.jenesis.repository.closure.spi.ClosureSection;
 import build.jenesis.repository.closure.spi.ExposureSection;
-import build.jenesis.repository.closure.ReliedOn;
+import build.jenesis.repository.closure.spi.Reliance;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ScreenedThrough;
 import build.jenesis.repository.metadata.MetadataDocument;
@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>The other way round, {@code /api/repository/relied-on} answers which published versions rely on a version the
  * repository holds, a page at a time - those whose closures reach this copy, then those whose bills name the version
- * by coordinate in another ecosystem, and so rely on whichever copy of it the tenant holds ({@link ReliedOn#pageAcross}).
+ * by coordinate in another ecosystem, and so rely on whichever copy of it the tenant holds ({@link Reliance#dependents}).
  *
  * <p>Under {@code /api/repository/}, so it takes the repository's read right; an invalid name is a {@code 400} and a
  * version the repository does not hold a {@code 404}. The answer is bounded by what one document holds - the pass stops
@@ -86,11 +86,11 @@ public class ClosureController {
      *  there because the version is held for review; {@code examined} is how many index rows the page read, and
      *  {@code next} the cursor of the next page, {@code null} once there is none. */
     public record ReliedOnView(String repository, String ecosystem, String coordinate, String version,
-                               List<ReliedOn.Dependent> dependents, int examined, String next) {
+                               List<Reliance.Dependent> dependents, int examined, String next) {
     }
 
     /** Which published versions of the tenant rely on {@code version} of {@code coordinate} held by {@code repo}: up
-     *  to {@code limit} (at most {@value ReliedOn#MAX_PAGE}) after {@code after}, each confirmed by its own closure,
+     *  to {@code limit} (at most {@value Reliance#MAX_PAGE}) after {@code after}, each confirmed by its own closure,
      *  and only those in a repository the caller may read. A row and a document read per dependent, so a page costs the
      *  same however many rely on it; nothing is resolved on the request. */
     @SuppressWarnings("unchecked")
@@ -112,12 +112,11 @@ public class ClosureController {
         }
         Predicate<String> readable = request.getAttribute(RepositoryAuthorizationManager.READS_REPOSITORY)
                 instanceof Predicate<?> reads ? name -> ((Predicate<String>) reads).test(name) : repo::equals;
-        ReliedOn.Page page;
+        Reliance.Page page;
         try {
-            page = ReliedOn.pageAcross(repositories.store(tenant, repo), repo,
-                    Optional.of(repositories.root().scope(tenant)), name -> Repositories.valid(name)
-                            ? Optional.of(repositories.store(tenant, name)) : Optional.empty(), readable, ecosystem,
-                    coordinate, version, after, limit);
+            page = Reliance.over(repositories.store(tenant, repo), repo, Optional.of(repositories.root().scope(tenant)),
+                    name -> Repositories.valid(name) ? Optional.of(repositories.store(tenant, name))
+                            : Optional.empty()).dependents(ecosystem, coordinate, version, after, limit, readable);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

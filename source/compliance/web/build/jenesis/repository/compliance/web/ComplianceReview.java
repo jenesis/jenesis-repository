@@ -4,6 +4,7 @@ import build.jenesis.repository.ui.store.ConsoleActor;
 import build.jenesis.repository.ui.store.RepositoryBrowse;
 import build.jenesis.repository.ui.store.TenantScope;
 import module java.base;
+import build.jenesis.repository.closure.spi.Reliance;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.StoredSettings;
 import build.jenesis.repository.compliance.GatePolicyProvider;
@@ -23,7 +24,6 @@ import build.jenesis.repository.compliance.RefreshableSource;
 import build.jenesis.repository.compliance.SignalSourceProvider;
 import build.jenesis.repository.compliance.SignerIdentity;
 import build.jenesis.repository.compliance.signatures.SignerIndex;
-import build.jenesis.repository.compliance.scan.Reached;
 import build.jenesis.repository.compliance.scan.VulnerabilityReports;
 import build.jenesis.repository.compliance.scan.VulnerabilityRankIndexTask;
 import build.jenesis.repository.compliance.scan.VulnerabilityRanking;
@@ -505,7 +505,8 @@ public class ComplianceReview extends TenantScope {
         return VulnerabilityReports.read(store, new StoreRepositoryInventory(store),
                 AdvisorySource.resolve(effective(settings)), AdvisorySignal.resolve(effective(settings)),
                 findingsLedger.map(provider -> provider.over(store)),
-                Reached.over(store, Optional.of(root.scope(tenant()))),
+                Reliance.over(store, repository, Optional.of(root.scope(tenant())),
+                        name -> validRepository(name) ? Optional.of(scope(name)) : Optional.empty()),
                 reachability, applicability, after, Math.max(1, Math.min(limit, VULNERABLE_PAGE)),
                 VULNERABILITY_SCAN, List.of());
     }
@@ -573,7 +574,8 @@ public class ComplianceReview extends TenantScope {
         });
         Findings.scanned(store).mark(Instant.now());
         VulnerabilityRankIndexTask.reindex(store, ledger.get(), signals,
-                Reached.over(store, Optional.of(root.scope(tenant()))));
+                Reliance.over(store, repository, Optional.of(root.scope(tenant())),
+                        name -> validRepository(name) ? Optional.of(scope(name)) : Optional.empty()));
         // The feed warnings lead, since Rows.of keeps a bounded sample.
         List<String> rows = new ArrayList<>(unrefreshed);
         rows.add(scanned[0] + " versions scanned");
