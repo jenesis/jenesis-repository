@@ -2,6 +2,7 @@ package build.jenesis.repository.closure;
 
 import module java.base;
 import build.jenesis.repository.inventory.PublishedSection;
+import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.metadata.MetadataDocument;
 import build.jenesis.repository.metadata.MetadataProvider;
 import build.jenesis.repository.store.ArtifactStore;
@@ -28,6 +29,10 @@ import tools.jackson.databind.json.JsonMapper;
  * before the index is indexed. The pass writes into the repositories its walk reaches although it leases only its own:
  * nothing else writes a row of its dependent, and the reconcile in the holding repository deletes a row only once the
  * dependent's document says it is no longer relied on, never while the dependent waits for its closure.
+ *
+ * <p><b>Following a change.</b> Where what a row names changes - a finding, a hold - the closure pass of the holding
+ * repository marks the row's dependent {@linkplain #stale stale} in the dependent's own repository, under
+ * {@value #STALE}, and that repository's pass re-derives it. A marker is a request, removed before it is acted on.
  */
 public final class ReliedOn {
 
@@ -71,6 +76,81 @@ public final class ReliedOn {
 
         public Page {
             dependents = List.copyOf(dependents);
+        }
+    }
+
+    /** The root of the markers asking a repository's closure pass to re-derive a release: one per release at
+     *  {@code closure/stale/<sha-256 of the release>}, naming its ecosystem, coordinate and version as JSON. */
+    public static final String STALE = "closure/stale";
+
+    /** What a pass does with one row, or with one stale release. */
+    @FunctionalInterface
+    interface Visitor<T> {
+
+        void accept(T value) throws IOException;
+    }
+
+    /** Hand every row naming a dependent of {@code coordinate} at {@code version} of {@code ecosystem}, held by
+     *  {@code holder}, to {@code visitor}, a page at a time; a row that does not parse is passed over. Unconfirmed:
+     *  what the visitor does with a row it has to tolerate one whose dependent no longer relies on the version. */
+    static void dependents(ArtifactStore holder, String ecosystem, String coordinate, String version,
+                           Visitor<Row> visitor) throws IOException {
+        String level = level(ecosystem, coordinate, version);
+        String after = "";
+        while (after != null) {
+            List<String> names = new ArrayList<>();
+            holder.page(level, after, SWEEP_PAGE, names::add);
+            for (String name : names) {
+                Optional<Row> row = row(holder, level + "/" + name);
+                if (row.isPresent()) {
+                    visitor.accept(row.get());
+                }
+            }
+            after = names.size() < SWEEP_PAGE ? null : names.getLast();
+        }
+    }
+
+    /** Ask the closure pass of {@code store}, the repository of {@code dependent}, to re-derive it: what its closure
+     *  reaches changed. A release asked twice before the pass is one marker. */
+    static void stale(ArtifactStore store, String ecosystem, Row dependent) throws IOException {
+        store.write(STALE + "/" + HexFormat.of().formatHex(sha256((ecosystem + "\n" + dependent.coordinate() + "\n"
+                        + dependent.version()).getBytes(StandardCharsets.UTF_8))),
+                new ByteArrayInputStream(JSON.writeValueAsBytes(JSON.createObjectNode().put("ecosystem", ecosystem)
+                        .put("coordinate", dependent.coordinate()).put("version", dependent.version()))));
+    }
+
+    /** Remove up to {@code limit} of {@code store}'s stale markers, handing each release to {@code visitor} once its
+     *  marker is gone - so a change while it runs leaves a marker of its own for the next drain, and one lost to a
+     *  failure is the full pass's to re-derive. A marker that does not parse is removed and passed over. */
+    static void drainStale(ArtifactStore store, int limit,
+                           Visitor<StoreRepositoryInventory.Coordinate> visitor) throws IOException {
+        List<String> names = new ArrayList<>();
+        store.page(STALE, "", limit, names::add);
+        for (String name : names) {
+            String key = STALE + "/" + name;
+            Optional<ArtifactStore.Versioned> marker = store.readVersioned(key);
+            store.delete(key);
+            if (marker.isEmpty()) {
+                continue;
+            }
+            Optional<StoreRepositoryInventory.Coordinate> release = release(marker.get().content());
+            if (release.isPresent()) {
+                visitor.accept(release.get());
+            }
+        }
+    }
+
+    /** The release a stale marker names, or empty for one that does not parse. */
+    private static Optional<StoreRepositoryInventory.Coordinate> release(byte[] marker) {
+        try {
+            JsonNode node = JSON.readTree(marker);
+            String ecosystem = node.path("ecosystem").asString("");
+            String coordinate = node.path("coordinate").asString("");
+            String version = node.path("version").asString("");
+            return ecosystem.isEmpty() || coordinate.isEmpty() || version.isEmpty() ? Optional.empty()
+                    : Optional.of(new StoreRepositoryInventory.Coordinate(ecosystem, coordinate, version));
+        } catch (RuntimeException unreadable) {
+            return Optional.empty();
         }
     }
 

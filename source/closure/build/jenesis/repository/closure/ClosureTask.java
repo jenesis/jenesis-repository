@@ -3,6 +3,7 @@ package build.jenesis.repository.closure;
 import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.compliance.Severity;
+import build.jenesis.repository.inventory.ChangedVersions;
 import build.jenesis.repository.inventory.IncrementalPasses;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.maintenance.MaintenanceTask;
@@ -12,6 +13,7 @@ import build.jenesis.repository.settings.CoreDefaults;
 import build.jenesis.repository.metadata.MetadataDocument;
 import build.jenesis.repository.metadata.MetadataProvider;
 import build.jenesis.repository.metadata.MetadataStore;
+import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * Resolves the closure of every release that has none, in a repository whose {@value #SETTING} is on: on the
@@ -28,7 +30,10 @@ import build.jenesis.repository.metadata.MetadataStore;
  *
  * <p>Each closure is indexed the other way round too ({@link ReliedOn}): the pass writes a row, in the repository of
  * the walk holding it, for each version the closure reaches, and on a full pass of its own removes the rows of this
- * repository whose dependent no longer relies on what they name.
+ * repository whose dependent no longer relies on what they name. A version here whose findings or holds changed
+ * ({@link ChangedVersions}) marks the releases relying on it stale in their own repositories, whose next pass
+ * re-derives their exposure first - so a release follows a new finding or hold on a copy it relies on within a pass of
+ * each repository, with no feed asked and without waiting for its full pass.
  *
  * <p>Lease-owned, since it writes the version documents; idempotent, since a crash leaves the versions it had not
  * reached without a section, which the next pass reaches. A version whose resolution fails is contained, reported, and
@@ -49,6 +54,9 @@ public final class ClosureTask implements MaintenanceTask {
 
     /** The space of the relied-on reconcile's own cadence, beside the resolution's {@code closure/resolve}. */
     private static final String RECONCILE = "closure/reconcile";
+
+    /** How many changed versions, and how many stale releases, one pass takes up; the rest wait for the next. */
+    private static final int DRAIN = 1_000;
 
     private final Duration interval;
     private final List<ClosureSource> sources;
@@ -112,21 +120,55 @@ public final class ClosureTask implements MaintenanceTask {
     @Override
     public void repository(RepositoryContext context) throws IOException {
         reconcile(context);
+        propagate(context);
         if (!enabled(context.config())) {
+            ReliedOn.drainStale(context.store(), DRAIN, _ -> {
+            });   // nothing here re-derives, so what was asked of it is dropped rather than kept
             return;
         }
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(context.store());
-        MetadataStore metadata = MetadataProvider.installed().over(context.store());
-        ClosureWalk through = ClosureWalk.of(context);
-        Severity risk = riskBand(context.config());
         UnitFailures failed = context.failures("The closure pass of " + context.tenant() + "/" + context.repository(),
                 "Those versions have no closure or exposure yet; the next pass resolves them.");
         IncrementalPasses cadence = IncrementalPasses.over(context.store(), NAME, "closure/resolve",
                 context.config());
-        long[] resolved = {0};
-        long[] exposed = {0};
-        long[] indexed = {0};
-        cadence.coordinates(inventory, release -> {
+        Visit visit = new Visit(context, MetadataProvider.installed().over(context.store()), ClosureWalk.of(context),
+                riskBand(context.config()), failed);
+        // What another repository's pass found changed among what these releases reach, re-derived first and with
+        // nothing resolved: a release still waiting for its closure is the cadence's below.
+        ReliedOn.drainStale(context.store(), DRAIN, release -> visit.release(release, false, false));
+        cadence.coordinates(inventory, release -> visit.release(release, true, cadence.full()));
+        cadence.completed(context.now(), !failed.any());
+        if (visit.resolved > 0 || visit.exposed > 0 || visit.indexed > 0) {
+            LOGGER.info("Resolved {} closure(s), re-derived {} exposure(s) and indexed {} relied-on row(s) in {}/{}",
+                    visit.resolved, visit.exposed, visit.indexed, context.tenant(), context.repository());
+        }
+    }
+
+    /** One pass's visit of the releases of one repository, and what it did. */
+    private final class Visit {
+
+        private final RepositoryContext context;
+        private final MetadataStore metadata;
+        private final ClosureWalk through;
+        private final Severity risk;
+        private final UnitFailures failed;
+        private long resolved;
+        private long exposed;
+        private long indexed;
+
+        private Visit(RepositoryContext context, MetadataStore metadata, ClosureWalk through, Severity risk,
+                      UnitFailures failed) {
+            this.context = context;
+            this.metadata = metadata;
+            this.through = through;
+            this.risk = risk;
+            this.failed = failed;
+        }
+
+        /** Resolve {@code release}'s closure where it has none and {@code resolve} says so, re-derive its exposure,
+         *  and write its relied-on rows - blind for a closure resolved now, where missing on a {@code full} pass or
+         *  where the exposure changed. A failure is contained and reported. */
+        private void release(StoreRepositoryInventory.Coordinate release, boolean resolve, boolean full) {
             try {
                 Optional<MetadataDocument> document = metadata.read(release.ecosystem(), release.coordinate(),
                         release.version());
@@ -134,7 +176,7 @@ public final class ClosureTask implements MaintenanceTask {
                         read.section(ClosureSection.TAG)));
                 boolean fresh = closure.isEmpty();
                 if (fresh) {
-                    closure = resolve(through, release, context.now());
+                    closure = resolve ? ClosureTask.this.resolve(through, release, context.now()) : Optional.empty();
                     if (closure.isEmpty()) {
                         return;     // nothing installed serves the ecosystem; a source installed later resolves it
                     }
@@ -146,30 +188,49 @@ public final class ClosureTask implements MaintenanceTask {
                 boolean changed = was.isEmpty() || !was.get().sameAs(derived);
                 // The rows go before the closure they index, and a pass that finds the closure recorded makes sure of
                 // them where they could be missing: a full pass, or an exposure naming a held version anew.
-                if (fresh || changed || cadence.full()) {
-                    indexed[0] += ReliedOn.index(through, release.ecosystem(), new ReliedOn.Row(context.repository(),
+                if (fresh || changed || full) {
+                    indexed += ReliedOn.index(through, release.ecosystem(), new ReliedOn.Row(context.repository(),
                             release.coordinate(), release.version()), closure.get(), derived, fresh);
                 }
                 if (fresh) {
                     metadata.mutate(release.ecosystem(), release.coordinate(), release.version(), ClosureSection.TAG,
                             ClosureSection.record(closure.get()));
-                    resolved[0]++;
+                    resolved++;
                 }
                 if (changed) {
                     metadata.mutate(release.ecosystem(), release.coordinate(), release.version(),
                             ExposureSection.TAG, ExposureSection.record(derived));
-                    exposed[0]++;
+                    exposed++;
                 }
             } catch (IOException | RuntimeException e) {
                 LOGGER.warn("Could not resolve the closure of {} {}:{} in {}/{}", release.ecosystem(),
                         release.coordinate(), release.version(), context.tenant(), context.repository(), e);
                 failed.record(release.ecosystem() + ' ' + release.coordinate() + ':' + release.version(), e);
             }
-        });
-        cadence.completed(context.now(), !failed.any());
-        if (resolved[0] > 0 || exposed[0] > 0 || indexed[0] > 0) {
-            LOGGER.info("Resolved {} closure(s), re-derived {} exposure(s) and indexed {} relied-on row(s) in {}/{}",
-                    resolved[0], exposed[0], indexed[0], context.tenant(), context.repository());
+        }
+    }
+
+    /** Tell the repositories relying on what this one holds that it changed: each version whose findings or holds
+     *  moved since the last pass ({@link ChangedVersions}) marks every published version its {@link ReliedOn} rows
+     *  name as stale in that version's repository, whose own pass re-derives it. Runs whether or not this repository
+     *  resolves closures; a failure is contained and reported, and the full passes there re-derive what it missed. */
+    private static void propagate(RepositoryContext context) {
+        try {
+            ChangedVersions.drain(context.store(), DRAIN, changed -> ReliedOn.dependents(context.store(),
+                    changed.ecosystem(), changed.coordinate(), changed.version(), dependent -> {
+                        Optional<ArtifactStore> store = dependent.repository().equals(context.repository())
+                                ? Optional.of(context.store())
+                                : context.repository(dependent.repository()).map(RepositoryContext::store);
+                        if (store.isPresent()) {
+                            ReliedOn.stale(store.get(), changed.ecosystem(), dependent);
+                        }
+                    }));
+        } catch (IOException | RuntimeException e) {
+            LOGGER.warn("Could not tell what relies on the changed versions of {}/{}", context.tenant(),
+                    context.repository(), e);
+            context.failures("The relied-on propagation of " + context.tenant() + "/" + context.repository(),
+                    "What relies on those versions is re-derived on its repository's next full pass.")
+                    .record("changed", e);
         }
     }
 

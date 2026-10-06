@@ -404,6 +404,7 @@ final class InventoryReconciler {
                                 .orElse(null));
                 AdvisedSection.forget(store, AdvisedSection.advised(document.section(AdvisedSection.TAG)), ecosystem,
                         coordinate, version);
+                ChangedVersions.forget(store, ecosystem, coordinate, version);
                 return true;
             }
             if (live && facts.isPresent()) {

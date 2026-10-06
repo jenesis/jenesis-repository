@@ -5,6 +5,7 @@ import build.jenesis.repository.events.EventSink;
 import build.jenesis.repository.events.RepositoryEvent;
 import build.jenesis.repository.findings.Finding;
 import build.jenesis.repository.findings.Findings;
+import build.jenesis.repository.inventory.ChangedVersions;
 import build.jenesis.repository.metadata.MetadataDocument;
 import build.jenesis.repository.metadata.MetadataKey;
 import build.jenesis.repository.metadata.MetadataProvider;
@@ -171,8 +172,28 @@ public final class StoreFindings implements Findings {
     /** Apply a row transform through the {@code findings} section - one compare-and-set. */
     private void apply(String ecosystem, String coordinate, String version,
                        UnaryOperator<List<Finding>> rowTransform) throws IOException {
-        metadata.mutate(ecosystem, coordinate, version, FindingsSection.TAG,
-                FindingsSection.transform(rowTransform, Instant.now()));
+        boolean[] moved = {false};
+        metadata.mutate(ecosystem, coordinate, version, FindingsSection.TAG, FindingsSection.transform(rows -> {
+            Set<String> before = standing(rows);
+            List<Finding> after = rowTransform.apply(rows);
+            moved[0] = !before.equals(standing(after));        // the committed run's value is what stands
+            return after;
+        }, Instant.now()));
+        if (moved[0]) {
+            ChangedVersions.mark(store, ecosystem, coordinate, version);
+        }
+    }
+
+    /** What a version's findings say of it to what relies on it: each active finding with its severity. A re-scan
+     *  refreshing a finding's last sighting, or a label, leaves it as it was. */
+    private static Set<String> standing(List<Finding> rows) {
+        Set<String> standing = new HashSet<>();
+        for (Finding finding : rows) {
+            if (finding.active()) {
+                standing.add(finding.source() + "\n" + finding.id() + "\n" + finding.severity());
+            }
+        }
+        return standing;
     }
 
     /** Label-or-throw against a mutable row list, matching {@link #label}'s contract inside a batch: a classifier's
