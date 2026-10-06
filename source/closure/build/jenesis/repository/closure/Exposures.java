@@ -8,10 +8,7 @@ import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.findings.Finding;
 import build.jenesis.repository.findings.Findings;
 import build.jenesis.repository.findings.FindingsProvider;
-import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.HeldVersions;
-import build.jenesis.repository.store.ServableNames;
 
 /**
  * What a published version inherits from its closure: each version it reaches as it stands in the repository of the
@@ -70,8 +67,8 @@ final class Exposures {
                 continue;
             }
             examined++;
-            boolean held = !new StoreRepositoryInventory(holder.store()).disclosable(ecosystem,
-                    component.coordinate(), component.version(), ServableNames.Policy.HIDE_WITHHELD);
+            boolean held = Holdings.of(holder.store()).withheld(ecosystem, component.coordinate(),
+                    component.version());
             add(reached, findings, holder.store(), ecosystem, component.coordinate(), component.version(),
                     component.repository(), held, risk, ClosureSection.path(closure, component.coordinate(),
                             component.version()), "");
@@ -79,7 +76,8 @@ final class Exposures {
         for (ClosureSection.Cut cut : closure.cuts()) {
             for (int i = 0; i < members.size(); i++) {
                 ClosureWalk.Member member = members.get(i);
-                if (heldForReview(member, ecosystem, cut.coordinate(), cut.requirement())) {
+                if (!cut.requirement().isBlank() && Holdings.of(member.store()).standing(ecosystem,
+                        cut.coordinate(), cut.requirement()).filter(standing -> !standing.served()).isPresent()) {
                     examined++;
                     add(reached, findings, member.store(), ecosystem, cut.coordinate(), cut.requirement(),
                             i == 0 ? "" : member.repository(), true, risk, List.of(), "");
@@ -95,37 +93,17 @@ final class Exposures {
                 if (store.isEmpty()) {
                     continue;
                 }
-                StoreRepositoryInventory inventory = new StoreRepositoryInventory(store.get());
-                boolean holds = inventory.publishedAt(foreign.ecosystem(), foreign.coordinate(), foreign.version())
-                        .isPresent() || inventory.cachedAt(foreign.ecosystem(), foreign.coordinate(),
-                        foreign.version()).isPresent();
-                boolean held = holds ? !inventory.disclosable(foreign.ecosystem(), foreign.coordinate(),
-                        foreign.version(), ServableNames.Policy.HIDE_WITHHELD)
-                        : HeldVersions.held(store.get(), foreign.ecosystem(), foreign.coordinate(), foreign.version());
-                if (holds || held) {
+                Optional<Holdings.Standing> standing = Holdings.of(store.get()).standing(foreign.ecosystem(),
+                        foreign.coordinate(), foreign.version());
+                if (standing.isPresent()) {
                     add(reached, findings, store.get(), foreign.ecosystem(), foreign.coordinate(), foreign.version(),
-                            repository.equals(own) ? "" : repository, held, risk, ClosureSection.foreignPath(closure,
-                                    foreign.ecosystem(), foreign.coordinate(), foreign.version()),
-                            foreign.ecosystem());
+                            repository.equals(own) ? "" : repository, !standing.get().served(), risk,
+                            ClosureSection.foreignPath(closure, foreign.ecosystem(), foreign.coordinate(),
+                                    foreign.version()), foreign.ecosystem());
                 }
             }
         }
         return new ExposureSection.Exposure(reached, examined, now);
-    }
-
-    /** Whether {@code member} holds {@code version} of {@code coordinate} for review: a holding it withholds, or a
-     *  proxied copy the screen held at its fill, whose review pointer is still in place. */
-    private static boolean heldForReview(ClosureWalk.Member member, String ecosystem, String coordinate,
-                                         String version) throws IOException {
-        if (version.isBlank()) {
-            return false;
-        }
-        StoreRepositoryInventory inventory = new StoreRepositoryInventory(member.store());
-        if (inventory.publishedAt(ecosystem, coordinate, version).isPresent()
-                || inventory.cachedAt(ecosystem, coordinate, version).isPresent()) {
-            return !inventory.disclosable(ecosystem, coordinate, version, ServableNames.Policy.HIDE_WITHHELD);
-        }
-        return HeldVersions.held(member.store(), ecosystem, coordinate, version);
     }
 
     /** Add the version, reached along {@code path}, to {@code reached} where it is held or carries findings at or
