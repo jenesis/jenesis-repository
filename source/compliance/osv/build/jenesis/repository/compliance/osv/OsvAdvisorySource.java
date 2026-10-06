@@ -125,9 +125,20 @@ public final class OsvAdvisorySource implements AdvisorySource.Batched, Advisory
 
     /** As {@link #exchanging(Exchange)}, keeping its change log in {@code space} on {@code clock}. */
     public static OsvAdvisorySource exchanging(Exchange exchange, Supplier<ArtifactStore> space, Clock clock) {
-        return new OsvAdvisorySource(FeedClient.of(FEED, (request, timeout) -> FeedResponse.of(200,
-                exchange.answer(request)), POLICY), DEFAULT_ENDPOINT, DEFAULT_EXPORT, space, clock,
-                OsvQuery.Shared.none());
+        return responding(request -> FeedResponse.of(200, exchange.answer(request)), space, clock);
+    }
+
+    /** A test's stand-in for OSV's endpoints that answers a whole response, its status among it. */
+    @FunctionalInterface
+    public interface Responder {
+        FeedResponse answer(FeedRequest request) throws IOException;
+    }
+
+    /** A source answering every request through {@code responder}, keeping its change log in {@code space} on
+     *  {@code clock}. */
+    public static OsvAdvisorySource responding(Responder responder, Supplier<ArtifactStore> space, Clock clock) {
+        return new OsvAdvisorySource(FeedClient.of(FEED, (request, timeout) -> responder.answer(request), POLICY),
+                DEFAULT_ENDPOINT, DEFAULT_EXPORT, space, clock, OsvQuery.Shared.none());
     }
 
     /** As {@link #exchanging(Exchange)}, sharing its answers through {@code shared}. */

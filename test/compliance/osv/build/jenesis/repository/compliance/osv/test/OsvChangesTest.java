@@ -4,6 +4,7 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.osv.OsvAdvisorySource;
+import build.jenesis.repository.feed.FeedResponse;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 
@@ -13,7 +14,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * What OSV changed, drawn from its export's per-ecosystem change lists into the feed's log: a first draw only records
  * where each list stands, a later one names the packages the records changed since affect - in the product's
  * ecosystem names, a release-qualified ecosystem by its base - and a list whose position lies past the window a draw
- * reads is a gap rather than a shorter list.
+ * reads is a gap rather than a shorter list. An ecosystem the export holds no list for fails nothing, and every record
+ * of the list it gains later is drawn as a change.
  */
 class OsvChangesTest {
 
@@ -25,6 +27,8 @@ class OsvChangesTest {
     private ArtifactStore space;
     private final Map<String, String> lists = new HashMap<>();
     private final List<String> fetched = new ArrayList<>();
+    /** The ecosystems the export holds no list for, which it answers 404. */
+    private final Set<String> absent = new HashSet<>();
 
     @BeforeEach
     void setUp() {
@@ -33,19 +37,20 @@ class OsvChangesTest {
     }
 
     private OsvAdvisorySource source() {
-        return OsvAdvisorySource.exchanging(request -> {
+        return OsvAdvisorySource.responding(request -> {
             String path = request.uri().getPath();
             if (path.endsWith("/modified_id.csv")) {
                 String ecosystem = URLDecoder.decode(path.substring(1, path.indexOf('/', 1)), StandardCharsets.UTF_8);
-                return lists.getOrDefault(ecosystem, "");
+                return absent.contains(ecosystem) ? FeedResponse.of(404, "")
+                        : FeedResponse.of(200, lists.getOrDefault(ecosystem, ""));
             }
             fetched.add(path);
-            return switch (path) {
+            return FeedResponse.of(200, switch (path) {
                 case "/v1/vulns/GHSA-aaaa" -> record("GHSA-aaaa", "[\"Maven\",\"org.acme:a\"]");
                 case "/v1/vulns/GHSA-bbbb" -> record("GHSA-bbbb",
                         "[\"Maven\",\"org.acme:b\"],[\"Debian:12\",\"openssl\"],[\"NotOurs\",\"thing\"]");
                 default -> throw new AssertionError("asked " + request.uri());
-            };
+            });
         }, () -> space, CLOCK);
     }
 
@@ -96,6 +101,19 @@ class OsvChangesTest {
         fetched.clear();
         assertThat(source().drawChanges()).as("a draw with nothing new since names nothing").isZero();
         assertThat(fetched).isEmpty();
+    }
+
+    @Test
+    void an_ecosystem_the_export_lists_nothing_for_yet_has_every_record_it_gains_drawn() throws IOException {
+        absent.add("ConanCenter");
+
+        assertThat(source().drawChanges()).as("no list is not a failure").isZero();
+
+        absent.clear();
+        lists.put("ConanCenter", "2026-10-03T00:00:00Z,GHSA-aaaa\n");
+        assertThat(source().drawChanges()).as("the first record of a new list is a change, not where it stands")
+                .isEqualTo(1);
+        assertThat(source().changes(0).packages()).containsExactly(new AdvisorySource.Package("Maven", "org.acme:a"));
     }
 
     @Test
