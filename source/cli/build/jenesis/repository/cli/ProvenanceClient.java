@@ -152,7 +152,36 @@ public final class ProvenanceClient extends ClientCalls {
     /** One version a closure reaches that is held for review or carries findings: {@code repository} is empty where
      *  the version's own repository holds it, and {@code worst} the worst severity among {@code findings}. */
     public record ClosureReached(String coordinate, String version, String repository, boolean held, int findings,
-                                 String worst) {
+                                 String worst, List<ClosureHop> path) {
+    }
+
+    /** One step of a path through a closure: a dependency at the version the closure holds. */
+    public record ClosureHop(String coordinate, String version) {
+    }
+
+    /** A published version relying on the version asked about, in {@code repository}: the path its closure reaches
+     *  that version along, from the dependency it names itself down to it, and whether its closure stopped there
+     *  because the version is held for review. */
+    public record Dependent(String repository, String coordinate, String version, List<ClosureHop> path,
+                            boolean cut) {
+    }
+
+    /** One page of the published versions relying on a version; {@code next} is the cursor of the next page,
+     *  {@code null} once there is none. */
+    public record ReliedOn(String repository, String ecosystem, String coordinate, String version,
+                           List<Dependent> dependents, int examined, String next) {
+    }
+
+    /** One page of the published versions of the tenant relying on a version {@code repo} holds, after
+     *  {@code cursor} where one is given. */
+    public ReliedOn reliedOn(String repo, String ecosystem, String coordinate, String version, String cursor)
+            throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/repository/relied-on?repo=" + enc(repo) + "&ecosystem="
+                + enc(ecosystem) + "&coordinate=" + enc(coordinate) + "&version=" + enc(version)
+                + (cursor == null || cursor.isBlank() ? "" : "&after=" + enc(cursor)), null, null);
+        require(response, 200, "read what relies on " + ecosystem + " " + coordinate + " " + version + " in "
+                + repo);
+        return JSON.readValue(response.body(), ReliedOn.class);
     }
 
     /** What a closure reaches that is held or carries findings, as the closure pass derived it at {@code derived};

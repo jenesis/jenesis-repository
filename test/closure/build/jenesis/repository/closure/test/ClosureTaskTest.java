@@ -7,6 +7,7 @@ import build.jenesis.repository.closure.ClosureSource;
 import build.jenesis.repository.closure.ClosureTask;
 import build.jenesis.repository.closure.ClosureWalk;
 import build.jenesis.repository.closure.ExposureSection;
+import build.jenesis.repository.closure.ReliedOn;
 import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.findings.Finding;
 import build.jenesis.repository.findings.Findings;
@@ -15,6 +16,7 @@ import build.jenesis.repository.definitions.RoutingSettingsContributor;
 import build.jenesis.repository.inventory.DependencySection;
 import build.jenesis.repository.inventory.HeldSubjects;
 import build.jenesis.repository.inventory.IncrementalPasses;
+import build.jenesis.repository.inventory.PublishedSection;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.maintenance.RepositoryContext;
 import build.jenesis.repository.maintenance.UnitFailures;
@@ -220,6 +222,135 @@ class ClosureTaskTest {
                 .containsExactly(new ExposureSection.Reached("org.dep:held", "1.0", "", true, 0, ""));
         assertThat(ClosureSection.closure(metadata.section("Maven", "org.acme:app", "2.0", ClosureSection.TAG))
                 .orElseThrow().resolved()).as("the closure itself is resolved once").isEqualTo(NOW);
+    }
+
+    @Test
+    void a_cached_copy_names_every_release_relying_on_it_with_the_path_it_is_reached_along() throws IOException {
+        // app 1.0, released here, relies on a cached lib; web 1.0, published to a group whose fallback is this
+        // repository, relies on app and so on lib through it.
+        metadata.mutate("Maven", "org.acme:app", "1.0", DependencySection.TAG, DependencySection.record(APP,
+                List.of(new DependencySection.Declared("org.dep:lib", "1.0")), NOW));
+        cached("lib", "1.0");
+        web("org.acme:app");
+
+        pass(null, NOW);
+        pass("group", Map.of(RoutingSettingsContributor.KEY, "writable fallback releases"), null, NOW);
+
+        assertThat(reliedOn("org.dep:lib", "1.0", _ -> true).dependents()).as("both, each with its path")
+                .containsExactlyInAnyOrder(
+                        new ReliedOn.Dependent("releases", "org.acme:app", "1.0",
+                                List.of(new ClosureSection.Hop("org.dep:lib", "1.0")), false),
+                        new ReliedOn.Dependent("group", "org.acme:web", "1.0",
+                                List.of(new ClosureSection.Hop("org.acme:app", "1.0"),
+                                        new ClosureSection.Hop("org.dep:lib", "1.0")), false));
+        assertThat(reliedOn("org.dep:lib", "1.0", "releases"::equals).dependents())
+                .as("a repository the caller may not read is left out")
+                .extracting(ReliedOn.Dependent::repository).containsExactly("releases");
+        assertThat(ExposureSection.exposure(MetadataProvider.installed().over(tenant.scope("group"))
+                .section("Maven", "org.acme:web", "1.0", ExposureSection.TAG)).orElseThrow().reached())
+                .as("nothing it reaches is held or vulnerable").isEmpty();
+    }
+
+    @Test
+    void a_held_copy_names_the_release_whose_closure_stopped_at_it() throws IOException {
+        String held = "/maven/org/dep/held/1.0/held-1.0.pom";
+        Publication publication = new Publication(store);
+        HeldSubjects.hold(publication, store, held, publication.storeBlob(new ByteArrayInputStream(
+                "<project/>".getBytes(StandardCharsets.UTF_8))), "Maven", "org.dep:held", "1.0");
+        metadata.mutate("Maven", "org.acme:app", "1.0", DependencySection.TAG, DependencySection.record(APP,
+                List.of(new DependencySection.Declared("org.dep:held", "1.0")), NOW));
+
+        pass(null, NOW);
+
+        assertThat(reliedOn("org.dep:held", "1.0", _ -> true).dependents()).singleElement()
+                .isEqualTo(new ReliedOn.Dependent("releases", "org.acme:app", "1.0",
+                        List.of(new ClosureSection.Hop("org.dep:held", "1.0")), true));
+    }
+
+    @Test
+    void a_vulnerable_copy_reached_through_a_dependency_is_inherited_with_its_path() throws IOException {
+        metadata.mutate("Maven", "org.acme:app", "1.0", DependencySection.TAG, DependencySection.record(APP,
+                List.of(new DependencySection.Declared("org.dep:lib", "1.0")), NOW));
+        cached("lib", "1.0");
+        FindingsProvider.installed().orElseThrow().over(store).record("Maven", "org.dep:lib", "1.0", Finding.of(
+                "CVE-2026-0003", "osv", Finding.Kind.VULNERABILITY, "advisory", Severity.HIGH, "recorded", NOW));
+        web("org.acme:app");
+
+        pass("group", Map.of(RoutingSettingsContributor.KEY, "writable fallback releases"), null, NOW);
+
+        assertThat(ExposureSection.exposure(MetadataProvider.installed().over(tenant.scope("group"))
+                .section("Maven", "org.acme:web", "1.0", ExposureSection.TAG)).orElseThrow().reached())
+                .containsExactly(new ExposureSection.Reached("org.dep:lib", "1.0", "releases", false, 1, "HIGH",
+                        List.of(new ClosureSection.Hop("org.acme:app", "1.0"),
+                                new ClosureSection.Hop("org.dep:lib", "1.0"))));
+    }
+
+    @Test
+    void a_row_goes_once_its_dependent_no_longer_relies_on_what_it_names() throws IOException {
+        metadata.mutate("Maven", "org.acme:app", "1.0", DependencySection.TAG, DependencySection.record(APP,
+                List.of(new DependencySection.Declared("org.dep:lib", "1.0")), NOW));
+        cached("lib", "1.0");
+        web("org.acme:app");
+        pass(null, NOW);
+        pass("group", Map.of(RoutingSettingsContributor.KEY, "writable fallback releases"), null, NOW);
+        assertThat(rows()).as("a row per release relying on lib, and web's on app").hasSize(3);
+
+        // web waits for a closure again: its rows stay, since its pass writes them before it records one.
+        MetadataStore group = MetadataProvider.installed().over(tenant.scope("group"));
+        group.mutate("Maven", "org.acme:web", "1.0", ClosureSection.TAG, _ -> null);
+        Map<String, String> full = Map.of(IncrementalPasses.FULL_EVERY, "1");
+        pass("releases", full, "false", NOW.plus(Duration.ofHours(1)));
+        assertThat(rows()).as("a dependent waiting for its closure keeps its rows").hasSize(3);
+
+        // app's closure no longer reaches lib, and web is no longer published.
+        metadata.mutate("Maven", "org.acme:app", "1.0", ClosureSection.TAG, ClosureSection.record(
+                new ClosureSection.Closure(ClosureSection.Status.RESOLVED, List.of(), List.of(), false, NOW,
+                        ClosureSource.Kind.DECLARATIONS, "test")));
+        group.mutate("Maven", "org.acme:web", "1.0", PublishedSection.TAG, _ -> null);
+        pass("releases", full, "false", NOW.plus(Duration.ofHours(2)));
+        assertThat(rows()).as("rows no closure names go, even where the repository resolves none itself").isEmpty();
+    }
+
+    @Test
+    void a_closure_without_its_rows_is_indexed_on_the_next_full_pass() throws IOException {
+        metadata.mutate("Maven", "org.acme:app", "1.0", DependencySection.TAG, DependencySection.record(APP,
+                List.of(new DependencySection.Declared("org.dep:lib", "1.0")), NOW));
+        cached("lib", "1.0");
+        pass(null, NOW);
+        for (String row : rows()) {
+            store.delete(row);   // a closure resolved before the index, or whose rows a crash lost
+        }
+
+        pass("releases", Map.of(), null, NOW.plus(Duration.ofMinutes(10)));
+        assertThat(rows()).as("an incremental pass that finds the closure recorded writes nothing").isEmpty();
+
+        pass("releases", Map.of(IncrementalPasses.FULL_EVERY, "1"), null, NOW.plus(Duration.ofHours(1)));
+        assertThat(reliedOn("org.dep:lib", "1.0", _ -> true).dependents())
+                .extracting(ReliedOn.Dependent::coordinate).containsExactly("org.acme:app");
+    }
+
+    /** web 1.0, published to the group, declaring {@code dependency} at 1.0. */
+    private void web(String dependency) throws IOException {
+        ArtifactStore group = tenant.scope("group");
+        String path = "/maven/org/acme/web/1.0/web-1.0.pom";
+        Publication publication = new Publication(group);
+        publication.link(path, publication.storeBlob(new ByteArrayInputStream(
+                "<project/>".getBytes(StandardCharsets.UTF_8))));
+        new StoreRepositoryInventory(group).record(path, NOW);
+        MetadataProvider.installed().over(group).mutate("Maven", "org.acme:web", "1.0", DependencySection.TAG,
+                DependencySection.record(path, List.of(new DependencySection.Declared(dependency, "1.0")), NOW));
+    }
+
+    private ReliedOn.Page reliedOn(String coordinate, String version, Predicate<String> readable)
+            throws IOException {
+        return ReliedOn.page(store, "releases", name -> Optional.of(tenant.scope(name)), readable, "Maven",
+                coordinate, version, "", 50);
+    }
+
+    private List<String> rows() throws IOException {
+        List<String> keys = new ArrayList<>();
+        store.scan(ReliedOn.ROOT, "", 100, listed -> keys.add(listed.key()));
+        return keys;
     }
 
     private Optional<ExposureSection.Exposure> exposure(String version) throws IOException {

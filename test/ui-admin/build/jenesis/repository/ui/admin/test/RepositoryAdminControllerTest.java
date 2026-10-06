@@ -380,7 +380,7 @@ class RepositoryAdminControllerTest {
                 .commit();
         ExtendedModelMap model = new ExtendedModelMap();
 
-        assertThat(controller.version("libs", "Maven", "org.acme:lib", "1.0", model)).isEqualTo("version");
+        assertThat(controller.version("libs", "Maven", "org.acme:lib", "1.0", "", model)).isEqualTo("version");
 
         RepositoryBrowse.VersionDetail detail = (RepositoryBrowse.VersionDetail) model.get("detail");
         assertThat(detail.published()).isEqualTo("2026-01-01T00:00:00Z");
@@ -393,7 +393,7 @@ class RepositoryAdminControllerTest {
         assertThat(detail.folder()).isEqualTo("/maven/org/acme/lib/1.0/");
         assertThat(detail.files()).extracting(RepositoryBrowse.ServedFile::name)
                 .containsExactlyInAnyOrder("lib-1.0.jar", "lib-1.0.pom");
-        assertThatThrownBy(() -> controller.version("libs", "Maven", "org.acme:lib", "9.9", new ExtendedModelMap()))
+        assertThatThrownBy(() -> controller.version("libs", "Maven", "org.acme:lib", "9.9", "", new ExtendedModelMap()))
                 .as("a version the repository holds no document for")
                 .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
     }

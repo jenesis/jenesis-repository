@@ -617,9 +617,10 @@ class PublicationHookCensusTest {
                         + "measured mechanism in HookStores.injectable - the gate is not a place to put a red. If one "
                         + "SHRANK, the seam it waited on has landed and the gate should lose that clause")
                 .isEqualTo(Map.of(
-                        // The fixtures whose probes see only served subjects: two screens and the subtree sizes.
-                        Mutant.A_ROW_PER_DELIVERY, 5,
-                        Mutant.A_PUBLISH_ROW_FROM_THE_WITHHOLD_LEG, 1));
+                        // The fixtures whose probes see only served subjects: two screens, the subtree sizes and
+                        // the dependents feed, which also cannot show a row of a subject that does not serve.
+                        Mutant.A_ROW_PER_DELIVERY, 6,
+                        Mutant.A_PUBLISH_ROW_FROM_THE_WITHHOLD_LEG, 2));
     }
 
     @Test

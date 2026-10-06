@@ -78,6 +78,8 @@ public class CliBindingTest {
             Map.entry("signers", Binding.of("/api/signers", "signers", "releases")),
             Map.entry("closure", Binding.of("/api/repository/closure", "closure", "releases", "Maven",
                     "org.acme:app", "1.0")),
+            Map.entry("relied-on", Binding.of("/api/repository/relied-on", "relied-on", "releases", "Maven",
+                    "org.dep:lib", "1.0")),
             Map.entry("signature", Binding.of("/api/signature", "signature", "releases", "/a/b.jar")),
             Map.entry("policy", Binding.of("/api/policy", "policy")),
             Map.entry("provenance", Binding.of("/api/provenance", "provenance", "releases", "/a/b.jar")),
