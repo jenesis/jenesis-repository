@@ -1,9 +1,7 @@
 package build.jenesis.repository.closure;
 
 import module java.base;
-import build.jenesis.repository.closure.spi.ClosureSection;
 import build.jenesis.repository.closure.spi.ClosureSource;
-import build.jenesis.repository.closure.spi.ClosureWalk;
 import build.jenesis.repository.compliance.Ecosystems;
 import build.jenesis.repository.compliance.PackageUrls;
 import build.jenesis.repository.dependency.ArtifactSbom;
@@ -11,13 +9,14 @@ import build.jenesis.repository.dependency.DependencyComponent;
 import build.jenesis.repository.dependency.DependencyEdge;
 import build.jenesis.repository.dependency.DependencyGraph;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
+import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
 
 /**
  * A release's closure as the build that made it resolved it: the bill of materials the version carries - published as
  * a file of its own (a {@code -cyclonedx.json}, an {@code .spdx.json}) or embedded in its archive - taken as written,
  * where it names more than the version's direct dependencies, each component placed in the walk's repositories as
- * {@link CarriedClosure} places what a release carries. A bill that names the direct dependencies alone - or none -
+ * the pass places what a release carries. A bill that names the direct dependencies alone - or none -
  * is not a closure, and the resolvers answer instead.
  *
  * <p>A component's depth is its distance from the root along the bill's dependency edges, and {@code 1} where the bill
@@ -25,7 +24,7 @@ import build.jenesis.repository.store.Publication;
  * {@link ClosureSource#MAX_COMPONENTS} components, a closure stopped there saying so; an archive is read only as far
  * as its bill, within the dependency module's own budget. Nothing is fetched.
  */
-public final class CarriedBill implements ClosureSource {
+public final class CarriedBill implements ClosureSource.Carried {
 
     /** The source's name. */
     public static final String NAME = "carried-bill";
@@ -47,13 +46,12 @@ public final class CarriedBill implements ClosureSource {
         return Kind.BILL;
     }
 
-    /** The closure the bill {@code coordinate} at {@code version} carries names, or empty where it carries none naming
-     *  more than its direct dependencies. The release is the first repository of {@code walk}'s. */
+    /** The packages the bill {@code coordinate} at {@code version} carries names, or empty where it carries none
+     *  naming more than its direct dependencies. */
     @Override
-    public Optional<ClosureSection.Closure> resolve(ClosureWalk walk, String ecosystem, String coordinate,
-                                                    String version, Instant now) throws IOException {
-        ClosureWalk.Member own = walk.members().getFirst();
-        Optional<DependencyGraph> bill = bill(own, ecosystem, coordinate, version);
+    public Optional<ClosureSource.Carriage> read(ArtifactStore release, String ecosystem, String coordinate,
+                                                 String version) throws IOException {
+        Optional<DependencyGraph> bill = bill(release, ecosystem, coordinate, version);
         if (bill.isEmpty()) {
             return Optional.empty();
         }
@@ -65,28 +63,27 @@ public final class CarriedBill implements ClosureSource {
         for (DependencyComponent component : graph.dependencies()) {
             named(component, ecosystem).ifPresent(at -> names.put(component.ref(), at));
         }
-        List<CarriedClosure.Entry> entries = new ArrayList<>();
+        List<ClosureSource.Entry> entries = new ArrayList<>();
         for (DependencyComponent component : graph.dependencies()) {
             // The component whose dependencies name this one, where the bill's graph says so and it is not the root.
             PackageUrls.Named via = names.get(parents.get(component.ref()));
             entries.add(named(component, ecosystem)
                     .map(at -> via == null
-                            ? CarriedClosure.Entry.placed(at.ecosystem(), at.coordinate(), at.version(),
+                            ? ClosureSource.Entry.placed(at.ecosystem(), at.coordinate(), at.version(),
                                     depths.getOrDefault(component.ref(), 1))
-                            : CarriedClosure.Entry.placed(at.ecosystem(), at.coordinate(), at.version(),
+                            : ClosureSource.Entry.placed(at.ecosystem(), at.coordinate(), at.version(),
                                     depths.getOrDefault(component.ref(), 1), via.coordinate(), via.version()))
-                    .orElseGet(() -> CarriedClosure.Entry.unplaced(component.coordinate(), versionOf(component),
+                    .orElseGet(() -> ClosureSource.Entry.unplaced(component.coordinate(), versionOf(component),
                             "named by the version's bill in a form this repository cannot place")));
         }
-        return Optional.of(CarriedClosure.place(walk, ecosystem, coordinate, version, entries, "the version's bill",
-                this, now));
+        return Optional.of(new ClosureSource.Carriage("the version's bill", entries));
     }
 
     /** The first bill among the version's files that names a closure: a published bill before an embedding archive. */
-    private static Optional<DependencyGraph> bill(ClosureWalk.Member own, String ecosystem, String coordinate,
+    private static Optional<DependencyGraph> bill(ArtifactStore release, String ecosystem, String coordinate,
                                                   String version) throws IOException {
-        StoreRepositoryInventory inventory = new StoreRepositoryInventory(own.store());
-        Publication publication = new Publication(own.store());
+        StoreRepositoryInventory inventory = new StoreRepositoryInventory(release);
+        Publication publication = new Publication(release);
         List<String> candidates = billOrder(inventory.paths(ecosystem, coordinate, version)).stream()
                 .filter(path -> ArtifactSbom.isDocument(path) || archive(path))
                 .toList();
@@ -96,7 +93,7 @@ public final class CarriedBill implements ClosureSource {
                 continue;
             }
             Optional<DependencyGraph> read;
-            try (InputStream in = own.store().open(key.get())) {
+            try (InputStream in = release.open(key.get())) {
                 read = read(path, in);
             }
             if (read.isPresent() && namesClosure(read.get())) {

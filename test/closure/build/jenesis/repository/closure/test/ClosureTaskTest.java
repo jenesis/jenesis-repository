@@ -162,10 +162,11 @@ class ClosureTaskTest {
         });
     }
 
-    /** A source of {@code kind} serving {@code ecosystems} that records being asked and answers {@code answer}. */
+    /** A source of {@code kind} serving {@code ecosystems} that records being asked and answers {@code answer} - a
+     *  resolving source whatever its kind, since the pass orders by kind and asks by role. */
     private static ClosureSource source(String name, ClosureSource.Kind kind, Set<String> ecosystems,
                                         Optional<ClosureSection.Closure> answer, List<String> asked) {
-        return new ClosureSource() {
+        return new ClosureSource.Resolving() {
             @Override
             public String name() {
                 return name;
