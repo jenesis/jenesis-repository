@@ -5,6 +5,7 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.DocumentMemory;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.MissMemory;
 import build.jenesis.repository.store.NodeMemoStore;
 import build.jenesis.repository.store.StoreCache;
@@ -18,8 +19,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * The node's memory of listings, driven through the store faces a listing read takes: a document opened twice is
  * read from the store once within the ttl, its existence and size answer from memory, a write of the key on this
- * node forgets it, a document past the cap streams uncached, a key outside the listing family is untouched, the
- * memory is bounded by bytes, and a raw store reads as before.
+ * node forgets it - and a read that a write overtook does not remember what it read - a document past the cap streams
+ * uncached, a key outside the listing family is untouched, the memory is bounded by bytes, and a raw store reads as
+ * before.
  */
 class DocumentMemoryTest {
 
@@ -110,6 +112,48 @@ class DocumentMemoryTest {
     }
 
     @Test
+    void a_listing_read_before_a_write_is_not_remembered_after_it() {
+        // A client reads the listing; a publish rewrites it and forgets the key; only then does the read get to
+        // remember what it read. Remembered, the listing would answer without the publish for the whole ttl.
+        long mark = memory.mark();
+        memory.forget(store, KEY);
+        memory.put(store, KEY, document("1.0.0"), mark);
+        assertThat(memory.get(store, KEY)).as("the write since the read wins").isEmpty();
+
+        memory.put(store, KEY, document("1.1.0"), memory.mark());
+        assertThat(memory.get(store, KEY)).as("a read no write followed is remembered").contains(document("1.1.0"));
+    }
+
+    @Test
+    void a_write_landing_while_a_listing_is_read_is_served_at_once() throws IOException {
+        AtomicReference<ArtifactStore> over = new AtomicReference<>();
+        AtomicBoolean raced = new AtomicBoolean();
+        // The store answers the read with the document as it stood, and the publish lands before the read is done.
+        ArtifactStore racing = new ForwardingArtifactStore(counting) {
+            @Override
+            public InputStream open(String key) throws IOException {
+                byte[] read;
+                try (InputStream in = super.open(key)) {
+                    read = in.readAllBytes();
+                }
+                if (raced.compareAndSet(false, true)) {
+                    over.get().write(KEY, new ByteArrayInputStream(document("1.1.0")));
+                }
+                return new ByteArrayInputStream(read);
+            }
+
+            @Override
+            public ArtifactStore scope(String tenant) {
+                return counting.scope(tenant);
+            }
+        };
+        over.set(NodeMemoStore.over(racing, new MissMemory(Duration.ZERO, clock), memory));
+
+        assertThat(open(over.get(), KEY)).as("the read answers what it read").isEqualTo(document("1.0.0"));
+        assertThat(open(over.get(), KEY)).as("and the next one what was written").isEqualTo(document("1.1.0"));
+    }
+
+    @Test
     void an_entry_expires_with_the_clock() throws IOException {
         open(store, KEY);
         clock.advance(Duration.ofSeconds(29));
@@ -164,7 +208,7 @@ class DocumentMemoryTest {
         DocumentMemory bounded = new DocumentMemory(Duration.ofHours(1), clock);
         byte[] half = new byte[1 << 19];
         for (int i = 0; i < 200; i++) {
-            bounded.put(store, StoredListing.key("bulk/" + i), half);
+            bounded.put(store, StoredListing.key("bulk/" + i), half, bounded.mark());
         }
         assertThat(bounded.bytes())
                 .as("two hundred half-megabyte listings are a hundred megabytes; the memory holds sixty-four")
@@ -177,7 +221,7 @@ class DocumentMemoryTest {
         MissMemory.reset();
         try {
             DocumentMemory node = DocumentMemory.node();
-            node.put(store, KEY, document("1.0.0"));
+            node.put(store, KEY, document("1.0.0"), node.mark());
             assertThat(node.size()).isEqualTo(1);
             assertThat(StoreCache.clearAll()).isGreaterThanOrEqualTo(1);
             assertThat(node.size()).isZero();
