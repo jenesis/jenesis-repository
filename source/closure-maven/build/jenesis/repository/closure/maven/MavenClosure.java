@@ -20,6 +20,7 @@ import org.eclipse.aether.collection.CollectResult;
 import org.eclipse.aether.collection.DependencyCollectionException;
 import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.impl.VersionRangeResolver;
+import org.eclipse.aether.impl.MetadataGeneratorFactory;
 import org.eclipse.aether.impl.VersionResolver;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.repository.RepositoryPolicy;
@@ -225,10 +226,10 @@ public final class MavenClosure implements ClosureSource {
     /**
      * The resolver with no transporter, so a repository any POM declares is never reached, and with a version and a
      * range resolved from the versions the walk holds, through the session's workspace reader - what Maven's own
-     * resolvers answer offline, without reading a {@code maven-metadata.xml}. Those resolvers read one through classes
-     * whose package {@code maven-artifact} also declares, so in a composition naming {@code maven-artifact} as a module
-     * - versatile requires it by name - they cannot be loaded, and a resolver thread dying on that leaves the
-     * collection waiting forever.
+     * resolvers answer offline, without reading a {@code maven-metadata.xml}. It generates no metadata either, since it
+     * never installs or deploys. Maven's resolvers and generators are the only classes reading or writing a
+     * {@code maven-metadata.xml}, and the library holding its model, {@code maven-repository-metadata}, splits a package
+     * with {@code maven-artifact}; with neither left to load, the module requires none of it.
      */
     private static final class Offline extends RepositorySystemSupplier {
 
@@ -240,6 +241,11 @@ public final class MavenClosure implements ClosureSource {
         @Override
         protected VersionRangeResolver createVersionRangeResolver() {
             return new HeldVersions(getVersionScheme());
+        }
+
+        @Override
+        protected Map<String, MetadataGeneratorFactory> createMetadataGeneratorFactories() {
+            return Map.of();
         }
 
         @Override

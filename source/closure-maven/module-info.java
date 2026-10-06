@@ -7,6 +7,7 @@
  * @jenesis.release 25
  * @jenesis.alias org.apache.maven.resolver.supplier org.apache.maven.resolver/maven-resolver-supplier-mvn3
  * @jenesis.exclude org.apache.maven.resolver.supplier org.apache.maven.resolver/maven-resolver-transport-apache
+ * @jenesis.exclude org.apache.maven.resolver.supplier org.apache.maven/maven-repository-metadata
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
  */
