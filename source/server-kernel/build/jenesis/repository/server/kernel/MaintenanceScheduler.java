@@ -907,25 +907,30 @@ public final class MaintenanceScheduler implements AutoCloseable {
         }
 
         @Override
-        public Optional<RepositoryContext> repository(String name) {
-            return Repositories.valid(name) ? Optional.of(new PassRepositoryContext(tenant, name, now, sink))
-                    : Optional.empty();
-        }
-
-        @Override
-        public Optional<ArtifactStore> tenantStore() {
-            return Optional.of(root.scope(tenant));
-        }
-
-        @Override
-        public List<String> repositories() throws IOException {
-            List<String> names = new ArrayList<>();
-            REPOSITORIES.scan(root.scope(tenant), "", name -> {
-                if (Repositories.valid(name)) {
-                    names.add(name);
+        public TenantView tenantView() {
+            return new TenantView() {
+                @Override
+                public Optional<RepositoryContext> repository(String name) {
+                    return Repositories.valid(name) ? Optional.of(new PassRepositoryContext(tenant, name, now, sink))
+                            : Optional.empty();
                 }
-            });
-            return List.copyOf(names);
+
+                @Override
+                public Optional<ArtifactStore> store() {
+                    return Optional.of(root.scope(tenant));
+                }
+
+                @Override
+                public List<String> repositories() throws IOException {
+                    List<String> names = new ArrayList<>();
+                    REPOSITORIES.scan(root.scope(tenant), "", name -> {
+                        if (Repositories.valid(name)) {
+                            names.add(name);
+                        }
+                    });
+                    return List.copyOf(names);
+                }
+            };
         }
 
         @Override

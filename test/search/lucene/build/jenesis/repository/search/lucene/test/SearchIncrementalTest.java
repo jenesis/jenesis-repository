@@ -360,6 +360,11 @@ class SearchIncrementalTest {
 
     private RepositoryContext context(ArtifactStore store, Map<String, String> config) {
         return new RepositoryContext() {
+
+            @Override
+            public TenantView tenantView() {
+                return TenantView.NONE;
+            }
             @Override
             public UnitFailures failures(String work, String consequence) {
                 return new UnitFailures(work, consequence);

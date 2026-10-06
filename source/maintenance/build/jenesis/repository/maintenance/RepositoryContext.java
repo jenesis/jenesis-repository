@@ -44,29 +44,49 @@ public interface RepositoryContext {
     }
 
     /**
-     * Another repository of this tenant, as a pass that follows this repository's fallbacks reads it - its store and
-     * its own effective configuration - or empty where this context reaches no other repository. It is read-only by
-     * intent: a pass leases the repository it visits, not the ones it reads.
+     * This tenant beyond the repository the pass visits - its other repositories and its store - or {@link
+     * TenantView#NONE} where the context reaches nothing past its own repository. Abstract, so every context says
+     * which of the two it is: a context that inherited "nothing" would quietly write no tenant-wide row and find no
+     * copy in a sibling repository.
      */
-    default Optional<RepositoryContext> repository(String name) {
-        return Optional.empty();
-    }
+    TenantView tenantView();
 
     /**
-     * The store scoped to this tenant's whole subspace, as {@link TenantContext#store} answers it - the dot-spaces a
-     * module keeps per tenant ({@code .vex}, {@code .closure}) beside the repositories - for what a pass keeps across
-     * the tenant's repositories rather than in one of them. Empty where this context reaches no store but its
-     * repository's.
+     * The tenant of a {@link RepositoryContext}, as a pass that looks past the repository it visits sees it. A pass
+     * leases the repository it visits and no other: what it writes into a sibling repository, or into the tenant's
+     * store, is a row or a request one writer owns - an index row naming this repository's release, a mailbox post
+     * asking the sibling's own pass to look again - never a change to what the sibling holds.
      */
-    default Optional<ArtifactStore> tenantStore() {
-        return Optional.empty();
-    }
+    interface TenantView {
 
-    /**
-     * The names of this tenant's repositories, each readable through {@link #repository}, as many as the scheduler's
-     * fan-out over the tenant visits; empty where this context reaches no other repository.
-     */
-    default List<String> repositories() throws IOException {
-        return List.of();
+        /** A context reaching no repository but its own. */
+        TenantView NONE = new TenantView() {
+            @Override
+            public Optional<RepositoryContext> repository(String name) {
+                return Optional.empty();
+            }
+
+            @Override
+            public Optional<ArtifactStore> store() {
+                return Optional.empty();
+            }
+
+            @Override
+            public List<String> repositories() {
+                return List.of();
+            }
+        };
+
+        /** Another repository of this tenant - its store and its own effective configuration - or empty where there is
+         *  none by that name. */
+        Optional<RepositoryContext> repository(String name);
+
+        /** The store scoped to this tenant's whole subspace, as {@link TenantContext#store} answers it - the dot-spaces
+         *  a module keeps per tenant ({@code .vex}, {@code .closure}) beside the repositories. */
+        Optional<ArtifactStore> store();
+
+        /** The names of this tenant's repositories, each readable through {@link #repository}, as many as the
+         *  scheduler's fan-out over the tenant visits. */
+        List<String> repositories() throws IOException;
     }
 }

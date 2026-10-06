@@ -136,6 +136,11 @@ class PendingScreenTaskTest {
 
     private RepositoryContext context() {
         return new RepositoryContext() {
+
+            @Override
+            public TenantView tenantView() {
+                return TenantView.NONE;
+            }
             @Override
             public String tenant() {
                 return "default";

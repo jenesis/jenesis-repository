@@ -326,6 +326,11 @@ class StagingReapTest {
      *  chosen wall clock and configuration. */
     private RepositoryContext context(Instant now, UnaryOperator<String> config) {
         return new RepositoryContext() {
+
+            @Override
+            public TenantView tenantView() {
+                return TenantView.NONE;
+            }
             @Override
             public UnitFailures failures(String work, String consequence) {
                 return new UnitFailures(work, consequence);

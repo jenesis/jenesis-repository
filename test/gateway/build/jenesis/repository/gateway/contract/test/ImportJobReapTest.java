@@ -176,6 +176,11 @@ class ImportJobReapTest {
 
     private RepositoryContext context(ArtifactStore over, Instant now, String ttl, String exportTtl) {
         return new RepositoryContext() {
+
+            @Override
+            public TenantView tenantView() {
+                return TenantView.NONE;
+            }
             @Override
             public UnitFailures failures(String work, String consequence) {
                 return new UnitFailures(work, consequence);
