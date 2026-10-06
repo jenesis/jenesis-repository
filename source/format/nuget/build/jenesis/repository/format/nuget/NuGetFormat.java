@@ -773,10 +773,24 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         return Map.of("id", element.getAttribute("id"), "range", element.getAttribute("version"));
     }
 
+    /** One file of a package version's folder. A file beside the {@code .nupkg} - its {@code .nuspec} - is answered
+     *  only while the version is not held, so a manifest a fill kept beside a package held for review, or of a
+     *  package since withheld, is not served about a package a client cannot fetch. */
     private void serve(String id, String version, String file, Blobs blobs, FormatExchange exchange)
             throws IOException {
-        String key = "nuget/" + id.toLowerCase(Locale.ROOT) + "/" + version + "/" + file;
+        String lower = id.toLowerCase(Locale.ROOT);
+        String key = "nuget/" + lower + "/" + version + "/" + file;
+        if (!file.endsWith(".nupkg") && held(blobs, lower, version)) {
+            exchange.respond(404);
+            return;
+        }
         blobs.answer(key, exchange, "application/octet-stream");
+    }
+
+    /** Whether the version is held: a copy held for review at its fill, or a package since withheld. */
+    private static boolean held(Blobs blobs, String id, String version) throws IOException {
+        return HeldVersions.held(blobs.store(), "NuGet", id, version)
+                || blobs.withheld("nuget/" + id + "/" + version + "/" + id + "." + version + ".nupkg");
     }
 
     /** An upstream version index with every version in {@code held} - a copy this repository holds for review - left
@@ -837,6 +851,9 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         String id = after.substring(0, slash);
         String version = after.substring(slash + 1, next);
         String key = "nuget/" + id.toLowerCase(Locale.ROOT) + "/" + version + "/" + after.substring(next + 1);
+        if (!key.endsWith(".nupkg") && held(new Blobs(store), id.toLowerCase(Locale.ROOT), version)) {
+            return false;   // the version's other files are not fetched while it is held
+        }
         // NuGet publishes the .nupkg's SHA-512 through its registration and catalog, so the streamed package is
         // verified against it. A hop that could not be read, or that the outbound screen refuses, must not downgrade
         // the fill.

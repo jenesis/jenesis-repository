@@ -212,6 +212,13 @@ public final class PullThroughCache {
                 .<FormatExchange>map(kept -> new Kept(requested, kept))
                 .orElse(requested);
         String path = exchange.path();
+        if (!path.equals(asked) && withheld.withheld(path, store)) {
+            // The name the upstream resolved the request to - a branch's commit - is held, which the guard over the
+            // name asked for could not see.
+            observation.lowCardinalityKeyValue("outcome", "withheld");
+            requested.respond(404);
+            return;
+        }
         // The documents the upstream publishes beside the artifact are fetched first, so the screen inside the fill
         // decides over the signature the upstream publishes rather than over what an earlier request left here; they
         // are kept only once the fill has an artifact for them to be a sidecar of - served, or held for review.

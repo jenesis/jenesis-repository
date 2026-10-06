@@ -440,16 +440,30 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
                     HeldVersions.of(store, ECOSYSTEM,
                             TerraformCoordinates.moduleCoordinate(path[2], path[3], path[4])));
         }
+        // A held version's own documents - its package document, its checksums and their signature, a module's download
+        // answer - are not relayed: each names the held archive's digest and where to fetch it.
         if (path.length == 8 && path[0].equals("v1") && path[1].equals("providers") && path[5].equals("download")) {
+            if (HeldVersions.held(store, ECOSYSTEM, TerraformCoordinates.providerCoordinate(path[2], path[3]),
+                    path[4])) {
+                return false;
+            }
             return proxiedPackage(exchange, store, fetcher, services, repo, path[2], path[3], path[4], path[6], path[7]);
         }
         if (path.length == 7 && path[0].equals("v1") && path[1].equals("modules") && path[6].equals("download")) {
+            if (HeldVersions.held(store, ECOSYSTEM, TerraformCoordinates.moduleCoordinate(path[2], path[3], path[4]),
+                    path[5])) {
+                return false;
+            }
             return proxiedModuleDownload(exchange, store, fetcher, services, repo, path[2], path[3], path[4], path[5],
                     allowInternal, upstream);
         }
         if (path.length == 5 && path[0].equals("providers")) {
             String namespace = path[1], type = path[2], version = path[3], file = path[4];
             if (file.equals("SHA256SUMS") || file.equals("SHA256SUMS.sig")) {
+                if (HeldVersions.held(store, ECOSYSTEM, TerraformCoordinates.providerCoordinate(namespace, type),
+                        version)) {
+                    return false;
+                }
                 String os = exchange.queryParameter("os"), arch = exchange.queryParameter("arch");
                 if (os == null || arch == null || Keys.unsafe(os) || Keys.unsafe(arch)) {
                     return false;

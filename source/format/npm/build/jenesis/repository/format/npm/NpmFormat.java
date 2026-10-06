@@ -1167,6 +1167,9 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
         if (!answer.answered()) {
             return answer.served();
         }
+        if (heldVersionDocument(answer.document().body(), store)) {
+            return false;
+        }
         ProxyRelay.relayValidators(answer.document(), exchange);
         exchange.setResponseHeader("Content-Type", "application/json");
         exchange.respond(200, rewritePackument(answer.document().body(), exchange,
@@ -1233,6 +1236,20 @@ public final class NpmFormat implements RepositoryFormat, ProxyLeg, BlobLayout, 
     private static String basename(String url) {
         int slash = url.lastIndexOf('/');
         return slash < 0 ? url : url.substring(slash + 1);
+    }
+
+    /** Whether {@code body} is one version's document - {@code /<name>/<version>}, or a dist-tag naming one - of a
+     *  version held here: it names the held tarball and its digest, so it is not relayed. */
+    private static boolean heldVersionDocument(byte[] body, ArtifactStore store) throws IOException {
+        JsonNode document;
+        try {
+            document = MAPPER.readTree(body);
+        } catch (RuntimeException notJson) {
+            return false;
+        }
+        return document instanceof ObjectNode && !document.has("versions") && document.path("name").isString()
+                && document.path("version").isString() && HeldVersions.held(store, "npm",
+                document.path("name").asString(), document.path("version").asString());
     }
 
     /**

@@ -50,6 +50,9 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
 
     private static final String QUICK = "quick/Marshal.4.8/";
 
+    /** The suffix of a quick spec under {@link #QUICK}. */
+    private static final String QUICK_SUFFIX = ".gemspec.rz";
+
 
 
 
@@ -148,14 +151,19 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
 
     /** The coordinate a gem path carries ({@code /rubygems/gems/<name>-<version>.gem}), split at the rightmost
      *  {@code -} followed by a digit, since a gem version starts with one and a name's segments conventionally do not.
-     *  The compact index, the quick spec, the push endpoint and a filename with no version-looking suffix describe
-     *  nothing, rather than a wrong coordinate. */
+     *  A quick spec ({@code /rubygems/quick/Marshal.4.8/<name>-<version>.gemspec.rz}) is a file of the same version, so
+     *  a hold on the version covers it. The compact index, the push endpoint and a filename with no version-looking
+     *  suffix describe nothing, rather than a wrong coordinate. */
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
-        if (!path.startsWith("/rubygems/gems/") || !path.endsWith(".gem")) {
+        String stem;
+        if (path.startsWith("/rubygems/gems/") && path.endsWith(".gem")) {
+            stem = path.substring("/rubygems/gems/".length(), path.length() - ".gem".length());
+        } else if (path.startsWith("/rubygems/" + QUICK) && path.endsWith(QUICK_SUFFIX)) {
+            stem = path.substring(("/rubygems/" + QUICK).length(), path.length() - QUICK_SUFFIX.length());
+        } else {
             return Optional.empty();
         }
-        String stem = path.substring("/rubygems/gems/".length(), path.length() - ".gem".length());
         int split = -1;
         for (int dash = stem.lastIndexOf('-'); dash > 0; dash = stem.lastIndexOf('-', dash - 1)) {
             if (dash + 1 < stem.length() && Character.isDigit(stem.charAt(dash + 1))) {
@@ -280,9 +288,10 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
             serveFile("rubygemfiles/" + rest.substring("gems/".length()), blobs, exchange);
         } else if (rest.startsWith("api/v1/attestations/") && rest.endsWith(".json")) {
             // The version's attestations as rubygems.org serves them, or a 404 where none were kept - never an empty
-            // array, which would claim the upstream was asked.
+            // array, which would claim the upstream was asked - and only while the gem itself is served: what a fill
+            // kept beside a gem held for review, or of a gem since withheld, is the reviewer's evidence.
             String stem = rest.substring("api/v1/attestations/".length(), rest.length() - ".json".length());
-            if (stem.isEmpty() || Keys.unsafe(stem)) {
+            if (stem.isEmpty() || Keys.unsafe(stem) || blobs.locate("rubygemfiles/" + stem + ".gem").isEmpty()) {
                 exchange.respond(404);
                 return;
             }
