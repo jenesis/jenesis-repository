@@ -10,6 +10,8 @@ import build.jenesis.repository.closure.ExposureSection;
 import build.jenesis.repository.closure.ReliedOn;
 import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.compliance.scan.Reached;
+import build.jenesis.repository.compliance.scan.VulnerabilityRankIndex;
+import build.jenesis.repository.compliance.scan.VulnerabilityRankIndexTask;
 import build.jenesis.repository.compliance.scan.VulnerabilityRanking;
 import build.jenesis.repository.findings.Finding;
 import build.jenesis.repository.findings.Findings;
@@ -29,6 +31,7 @@ import build.jenesis.repository.metadata.MetadataStore;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
+import build.jenesis.repository.store.testkit.FaultInjectingStore;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
@@ -72,6 +75,26 @@ class ClosureTaskTest {
 
         pass(null, NOW.plus(Duration.ofHours(1)));
         assertThat(closure().orElseThrow().resolved()).as("a version is resolved once").isEqualTo(NOW);
+    }
+
+    @Test
+    void a_fresh_closure_and_its_exposure_are_written_in_one_compare_and_set() throws IOException {
+        List<String> written = new ArrayList<>();
+        FaultInjectingStore traced = FaultInjectingStore.wrap(ArtifactStoreProvider.resolve("filesystem",
+                key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null)).tracing((op, key) -> {
+            if (op == FaultInjectingStore.Op.WRITE_VERSIONED && key != null && key.contains("meta/")
+                    && key.contains("app")) {
+                written.add(key);
+            }
+        });
+        tenant = traced.scope("default");
+        store = tenant.scope("releases");
+
+        pass(null, NOW);
+
+        assertThat(closure()).isPresent();
+        assertThat(exposure("1.0")).isPresent();
+        assertThat(written).as("one write of app's version document for both sections").hasSize(1);
     }
 
     @Test
@@ -309,6 +332,36 @@ class ClosureTaskTest {
                 .extracting(VulnerabilityRanking.RankedLine::coordinate).containsExactly("org.dep:aaa", "org.dep:lib");
         assertThat(VulnerabilityRanking.rank(ledger, List.of(), Reached.over(store, Optional.of(tenant))))
                 .as("read through the relied-on index, the version the release's closure reaches comes first")
+                .extracting(VulnerabilityRanking.RankedLine::coordinate).containsExactly("org.dep:lib", "org.dep:aaa");
+    }
+
+    @Test
+    void a_new_dependent_reorders_the_stored_ranking_on_its_next_rebuild_though_no_finding_moved() throws IOException {
+        cached("lib", "1.0");
+        cached("aaa", "1.0");                           // sorts first by coordinate
+        Findings ledger = FindingsProvider.installed().orElseThrow().over(store);
+        for (String artifact : List.of("lib", "aaa")) {
+            ledger.record("Maven", "org.dep:" + artifact, "1.0", Finding.of("CVE-2026-00" + artifact.length(), "osv",
+                    Finding.Kind.VULNERABILITY, "advisory", Severity.HIGH, "recorded", NOW));
+        }
+        pass(null, NOW);
+        Reached reached = Reached.over(store, Optional.of(tenant));
+        VulnerabilityRankIndexTask.reindex(store, ledger, List.of(), reached);
+        assertThat(new VulnerabilityRankIndex(store).read(null, 10).lines())
+                .extracting(VulnerabilityRanking.RankedLine::coordinate).containsExactly("org.dep:aaa", "org.dep:lib");
+
+        // A release published since relies on lib; no finding anywhere changes.
+        String tool = "/maven/org/acme/tool/1.0/tool-1.0.pom";
+        Publication publication = new Publication(store);
+        publication.link(tool, publication.storeBlob(new ByteArrayInputStream("<project/>".getBytes(StandardCharsets.UTF_8))));
+        new StoreRepositoryInventory(store).record(tool, NOW.plusSeconds(60));
+        metadata.mutate("Maven", "org.acme:tool", "1.0", DependencySection.TAG, DependencySection.record(tool,
+                List.of(new DependencySection.Declared("org.dep:lib", "1.0")), NOW));
+        pass(null, NOW.plusSeconds(120));
+        VulnerabilityRankIndexTask.reindex(store, ledger, List.of(), reached);
+
+        assertThat(new VulnerabilityRankIndex(store).read(null, 10).lines())
+                .as("the pass that wrote tool's rows moved the reliance epoch the stamp folds, so the index rebuilt")
                 .extracting(VulnerabilityRanking.RankedLine::coordinate).containsExactly("org.dep:lib", "org.dep:aaa");
     }
 
