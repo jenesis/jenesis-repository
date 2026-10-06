@@ -27,7 +27,8 @@ import org.springframework.web.bind.annotation.RestController;
  * coordinate - and a release the pass has not reached {@code PENDING}, never an empty closure.
  *
  * <p>The other way round, {@code /api/repository/relied-on} answers which published versions rely on a version the
- * repository holds, a page at a time ({@link ReliedOn#page}).
+ * repository holds, a page at a time - those whose closures reach this copy, then those whose bills name the version
+ * by coordinate in another ecosystem, and so rely on whichever copy of it the tenant holds ({@link ReliedOn#pageAcross}).
  *
  * <p>Under {@code /api/repository/}, so it takes the repository's read right; an invalid name is a {@code 400} and a
  * version the repository does not hold a {@code 404}. The answer is bounded by what one document holds - the pass stops
@@ -62,13 +63,15 @@ public class ClosureController {
     /** One version's closure: {@code resolved} is when the pass resolved it, {@code kind} which kind of source
      *  produced it - {@code BILL}, {@code RESOLVER}, {@code SCANNER} or {@code DECLARATIONS} - and {@code source} that
      *  source's name, each {@code null} with no closure; a component's {@code repository} is empty where the version's
-     *  own repository holds it; {@code exposure} is what the closure reaches that is held or carries findings; and
+     *  own repository holds it; {@code foreign} the packages its bill names in other ecosystems, indexed by coordinate
+     *  across the tenant; {@code exposure} is what the closure reaches that is held or carries findings; and
      *  {@code screenedThrough} what the version was screened through - the enabled feeds covering a cached copy's
      *  ecosystem, or none, and a published version's closure, or nothing while it has none. */
     public record ClosureView(String repository, String ecosystem, String coordinate, String version, String state,
                               String resolved, String kind, String source, boolean truncated,
                               List<ClosureSection.Component> components, List<ClosureSection.Cut> cuts,
-                              ExposureView exposure, ScreenedThrough screenedThrough) {
+                              List<ClosureSection.Foreign> foreign, ExposureView exposure,
+                              ScreenedThrough screenedThrough) {
     }
 
     /** What the closure reaches that is held for review or carries findings, as the closure pass derived it at
@@ -111,8 +114,9 @@ public class ClosureController {
                 instanceof Predicate<?> reads ? name -> ((Predicate<String>) reads).test(name) : repo::equals;
         ReliedOn.Page page;
         try {
-            page = ReliedOn.page(repositories.store(tenant, repo), repo, name -> Repositories.valid(name)
-                    ? Optional.of(repositories.store(tenant, name)) : Optional.empty(), readable, ecosystem,
+            page = ReliedOn.pageAcross(repositories.store(tenant, repo), repo,
+                    Optional.of(repositories.root().scope(tenant)), name -> Repositories.valid(name)
+                            ? Optional.of(repositories.store(tenant, name)) : Optional.empty(), readable, ecosystem,
                     coordinate, version, after, limit);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -155,6 +159,7 @@ public class ClosureController {
                 closure == null ? null : closure.kind().name(), closure == null ? null : closure.source(),
                 closure != null && closure.truncated(),
                 closure == null ? List.of() : closure.components(), closure == null ? List.of() : closure.cuts(),
+                closure == null ? List.of() : closure.foreign(),
                 exposure.map(found -> new ExposureView(found.derived().toString(), found.examined(), found.held(),
                         found.vulnerable(), found.reached())).orElse(null),
                 answer.get().state() == ClosureSection.State.CACHED ? ScreenedThrough.cached(ecosystem, feeds.get(),

@@ -19,9 +19,10 @@ import tools.jackson.databind.node.ObjectNode;
  * {@code {"status":<RESOLVED|PARTIAL|UNDECLARED>,
  * "components":[{"coordinate","version","cached","depth","repository","via":{"coordinate","version"}}],
  * "cuts":[{"coordinate","requirement","reason"}], "truncated":<bool>, "kind":<a {@link ClosureSource.Kind}>,
- * "source":<the producing source's name>}}, every component
- * in the version's own ecosystem; a component's {@code repository} is present only where a fallback's repository holds
- * it, and its {@code via} only where it was reached through another dependency rather than named by the version.
+ * "source":<the producing source's name>, "foreign":[{"ecosystem","coordinate","version","depth","via"}]}}, every
+ * component in the version's own ecosystem; a component's {@code repository} is present only where a fallback's
+ * repository holds it, and its {@code via} only where it was reached through another dependency rather than named by
+ * the version. {@code foreign} is present only where a carried bill names packages of other ecosystems.
  */
 public final class ClosureSection {
 
@@ -111,14 +112,77 @@ public final class ClosureSection {
     public record Cut(String coordinate, String requirement, String reason) {
     }
 
-    /** A version's closure: the components it reaches, the cuts, whether a bound stopped it, when it was read, and
-     *  the {@link ClosureSource} that produced it - its kind and its name. */
+    /**
+     * A package the version's carried bill names in another ecosystem than the version's own - a jar or a distribution
+     * package inside an image - at {@code depth}, reached through {@code viaCoordinate} at {@code viaVersion} as a
+     * {@link Component} is. No repository of the walk is asked to hold it, since the build that installed it resolved
+     * it elsewhere: it is indexed by its coordinate across the tenant ({@link ReliedOn}), so a finding or a hold on any
+     * copy of it the tenant holds reaches the version.
+     */
+    public record Foreign(String ecosystem, String coordinate, String version, int depth, String viaCoordinate,
+                          String viaVersion) {
+
+        public Foreign {
+            viaCoordinate = viaCoordinate == null ? "" : viaCoordinate;
+            viaVersion = viaVersion == null ? "" : viaVersion;
+        }
+
+        /** Whether the version resolved names this package itself. */
+        public boolean direct() {
+            return viaCoordinate.isEmpty();
+        }
+    }
+
+    /**
+     * How {@code closure} reaches the package {@code coordinate} at {@code version} of {@code ecosystem}, another
+     * ecosystem than its own: from the package the version names itself down to it, as {@link #path} answers a
+     * component. Empty where the closure does not name it.
+     */
+    public static List<Hop> foreignPath(Closure closure, String ecosystem, String coordinate, String version) {
+        Map<String, Foreign> byName = new HashMap<>();
+        for (Foreign foreign : closure.foreign()) {
+            byName.putIfAbsent(foreign.coordinate() + "@" + foreign.version(), foreign);
+        }
+        Foreign at = null;
+        for (Foreign foreign : closure.foreign()) {
+            if (foreign.ecosystem().equals(ecosystem) && foreign.coordinate().equals(coordinate)
+                    && foreign.version().equals(version)) {
+                at = foreign;
+                break;
+            }
+        }
+        Deque<Hop> hops = new ArrayDeque<>();
+        Set<String> visited = new HashSet<>();
+        while (at != null && visited.add(at.coordinate() + "@" + at.version())) {
+            hops.addFirst(new Hop(at.coordinate(), at.version()));
+            if (at.direct()) {
+                break;
+            }
+            Foreign parent = byName.get(at.viaCoordinate() + "@" + at.viaVersion());
+            if (parent == null) {
+                hops.addFirst(new Hop(at.viaCoordinate(), at.viaVersion()));
+            }
+            at = parent;
+        }
+        return List.copyOf(hops);
+    }
+
+    /** A version's closure: the components it reaches, the cuts, whether a bound stopped it, when it was read, the
+     *  {@link ClosureSource} that produced it - its kind and its name - and the packages of other ecosystems its
+     *  carried bill names. */
     public record Closure(Status status, List<Component> components, List<Cut> cuts, boolean truncated,
-                          Instant resolved, ClosureSource.Kind kind, String source) {
+                          Instant resolved, ClosureSource.Kind kind, String source, List<Foreign> foreign) {
 
         public Closure {
             components = List.copyOf(components);
             cuts = List.copyOf(cuts);
+            foreign = List.copyOf(foreign);
+        }
+
+        /** A closure naming nothing in another ecosystem. */
+        public Closure(Status status, List<Component> components, List<Cut> cuts, boolean truncated,
+                       Instant resolved, ClosureSource.Kind kind, String source) {
+            this(status, components, cuts, truncated, resolved, kind, source, List.of());
         }
     }
 
@@ -184,6 +248,12 @@ public final class ClosureSection {
             case "UNDECLARED" -> Status.UNDECLARED;
             default -> Status.RESOLVED;
         };
+        List<Foreign> foreign = new ArrayList<>();
+        for (JsonNode entry : data.path("foreign")) {
+            foreign.add(new Foreign(entry.path("ecosystem").asString(""), entry.path("coordinate").asString(""),
+                    entry.path("version").asString(""), entry.path("depth").asInt(0),
+                    entry.path("via").path("coordinate").asString(""), entry.path("via").path("version").asString("")));
+        }
         ClosureSource.Kind kind;
         try {
             kind = ClosureSource.Kind.valueOf(data.path("kind").asString(""));
@@ -191,7 +261,7 @@ public final class ClosureSection {
             kind = ClosureSource.Kind.DECLARATIONS;
         }
         return new Closure(status, components, cuts, data.path("truncated").asBoolean(false), updated, kind,
-                data.path("source").asString(""));
+                data.path("source").asString(""), foreign);
     }
 
     /** Record {@code closure} as the version's, replacing what it had; re-derivable each compare-and-set attempt. */
@@ -220,6 +290,18 @@ public final class ClosureSection {
             data.put("truncated", closure.truncated());
             data.put("kind", closure.kind().name());
             data.put("source", closure.source());
+            if (!closure.foreign().isEmpty()) {
+                ArrayNode foreign = data.putArray("foreign");
+                for (Foreign entry : closure.foreign()) {
+                    ObjectNode written = foreign.addObject().put("ecosystem", entry.ecosystem())
+                            .put("coordinate", entry.coordinate()).put("version", entry.version())
+                            .put("depth", entry.depth());
+                    if (!entry.direct()) {
+                        written.putObject("via").put("coordinate", entry.viaCoordinate())
+                                .put("version", entry.viaVersion());
+                    }
+                }
+            }
             return Section.derived(TAG, SCHEMA, closure.resolved(), Signal.NEUTRAL, data);
         };
     }

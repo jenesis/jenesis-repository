@@ -66,7 +66,8 @@ import build.jenesis.repository.walk.TraversalException;
  * {@code jenrepo.cache.upstream-ttl}, and cached under that commit, so a moved branch re-resolves once the memory
  * forgets it instead of serving a stale weight for good; a {@code GET} streams into the store and serves through the hosted read path, and a {@code HEAD} on an
  * uncached file answers from the upstream's headers without pulling the body. The {@code /api/...} index is streamed
- * fresh and needs no rewrite.
+ * fresh and needs no rewrite: a held revision stays named in it, because a client pins a revision or follows a branch
+ * rather than choosing among those the index lists, and a held file is refused when it is fetched.
  */
 public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout,
         RepositoryImporter.Delegating, RepositoryExporter {

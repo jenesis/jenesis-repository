@@ -913,6 +913,22 @@ public final class MaintenanceScheduler implements AutoCloseable {
         }
 
         @Override
+        public Optional<ArtifactStore> tenantStore() {
+            return Optional.of(root.scope(tenant));
+        }
+
+        @Override
+        public List<String> repositories() throws IOException {
+            List<String> names = new ArrayList<>();
+            REPOSITORIES.scan(root.scope(tenant), "", name -> {
+                if (Repositories.valid(name)) {
+                    names.add(name);
+                }
+            });
+            return List.copyOf(names);
+        }
+
+        @Override
         public ArtifactStore store() {
             return repositories.store(tenant, repository);
         }

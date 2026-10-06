@@ -51,4 +51,22 @@ public interface RepositoryContext {
     default Optional<RepositoryContext> repository(String name) {
         return Optional.empty();
     }
+
+    /**
+     * The store scoped to this tenant's whole subspace, as {@link TenantContext#store} answers it - the dot-spaces a
+     * module keeps per tenant ({@code .vex}, {@code .closure}) beside the repositories - for what a pass keeps across
+     * the tenant's repositories rather than in one of them. Empty where this context reaches no store but its
+     * repository's.
+     */
+    default Optional<ArtifactStore> tenantStore() {
+        return Optional.empty();
+    }
+
+    /**
+     * The names of this tenant's repositories, each readable through {@link #repository}, as many as the scheduler's
+     * fan-out over the tenant visits; empty where this context reaches no other repository.
+     */
+    default List<String> repositories() throws IOException {
+        return List.of();
+    }
 }
