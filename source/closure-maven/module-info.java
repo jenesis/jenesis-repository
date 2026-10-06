@@ -15,6 +15,7 @@ module build.jenesis.repository.closure.maven {
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.store;
     requires org.apache.maven.resolver;
+    requires org.apache.maven.resolver.impl;
     requires org.apache.maven.resolver.spi;
     requires org.apache.maven.resolver.util;
     requires org.apache.maven.resolver.supplier;

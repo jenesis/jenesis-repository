@@ -19,6 +19,8 @@ import org.eclipse.aether.collection.CollectRequest;
 import org.eclipse.aether.collection.CollectResult;
 import org.eclipse.aether.collection.DependencyCollectionException;
 import org.eclipse.aether.graph.DependencyNode;
+import org.eclipse.aether.impl.VersionRangeResolver;
+import org.eclipse.aether.impl.VersionResolver;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.repository.RepositoryPolicy;
 import org.eclipse.aether.repository.WorkspaceReader;
@@ -27,13 +29,21 @@ import org.eclipse.aether.resolution.ArtifactDescriptorException;
 import org.eclipse.aether.resolution.ArtifactDescriptorPolicy;
 import org.eclipse.aether.resolution.ArtifactDescriptorRequest;
 import org.eclipse.aether.resolution.ArtifactDescriptorResult;
+import org.eclipse.aether.resolution.VersionRangeRequest;
 import org.eclipse.aether.resolution.VersionRangeResolutionException;
+import org.eclipse.aether.resolution.VersionRangeResult;
+import org.eclipse.aether.resolution.VersionRequest;
+import org.eclipse.aether.resolution.VersionResult;
 import org.eclipse.aether.spi.connector.transport.Transporter;
 import org.eclipse.aether.spi.connector.transport.TransporterFactory;
 import org.eclipse.aether.supplier.RepositorySystemSupplier;
 import org.eclipse.aether.supplier.SessionBuilderSupplier;
 import org.eclipse.aether.transfer.NoTransporterException;
 import org.eclipse.aether.util.repository.SimpleArtifactDescriptorPolicy;
+import org.eclipse.aether.version.InvalidVersionSpecificationException;
+import org.eclipse.aether.version.Version;
+import org.eclipse.aether.version.VersionConstraint;
+import org.eclipse.aether.version.VersionScheme;
 
 /**
  * Resolves a Maven release's closure with Maven Resolver over the POMs the repositories of a {@link ClosureWalk} hold -
@@ -189,13 +199,16 @@ public final class MavenClosure implements ClosureSource {
                 Kind.RESOLVER, NAME);
     }
 
-    /** A collection failure as the cut it is: an unsatisfied range names its dependency and its range. */
+    /** A collection failure as the cut it is: an unsatisfied range, which the collector reports wrapped, names its
+     *  dependency and its range. */
     private static ClosureSection.Cut cut(Exception failure) {
-        if (failure instanceof VersionRangeResolutionException range && range.getResult() != null
-                && range.getResult().getRequest() != null) {
-            Artifact artifact = range.getResult().getRequest().getArtifact();
-            return new ClosureSection.Cut(artifact.getGroupId() + ":" + artifact.getArtifactId(),
-                    artifact.getVersion(), "no held version satisfies the range");
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof VersionRangeResolutionException range && range.getResult() != null
+                    && range.getResult().getRequest() != null) {
+                Artifact artifact = range.getResult().getRequest().getArtifact();
+                return new ClosureSection.Cut(artifact.getGroupId() + ":" + artifact.getArtifactId(),
+                        artifact.getVersion(), "no held version satisfies the range");
+            }
         }
         LOGGER.debug("A closure subtree did not resolve", failure);
         return new ClosureSection.Cut("", "", String.valueOf(failure.getMessage()));
@@ -209,8 +222,25 @@ public final class MavenClosure implements ClosureSource {
         }
     }
 
-    /** The resolver with no transporter: a repository any POM declares is never reached. */
+    /**
+     * The resolver with no transporter, so a repository any POM declares is never reached, and with a version and a
+     * range resolved from the versions the walk holds, through the session's workspace reader - what Maven's own
+     * resolvers answer offline, without reading a {@code maven-metadata.xml}. Those resolvers read one through classes
+     * whose package {@code maven-artifact} also declares, so in a composition naming {@code maven-artifact} as a module
+     * - versatile requires it by name - they cannot be loaded, and a resolver thread dying on that leaves the
+     * collection waiting forever.
+     */
     private static final class Offline extends RepositorySystemSupplier {
+
+        @Override
+        protected VersionResolver createVersionResolver() {
+            return new HeldVersions(getVersionScheme());
+        }
+
+        @Override
+        protected VersionRangeResolver createVersionRangeResolver() {
+            return new HeldVersions(getVersionScheme());
+        }
 
         @Override
         protected Map<String, TransporterFactory> createTransporterFactories() {
@@ -226,6 +256,57 @@ public final class MavenClosure implements ClosureSource {
                     return 0;
                 }
             });
+        }
+    }
+
+    /**
+     * A version as it is written and a range as the versions the workspace holds within it, the newest last; a
+     * keyword ({@code RELEASE}, {@code LATEST}) or a snapshot is taken as written, and is a cut where no POM is held
+     * at it.
+     */
+    private static final class HeldVersions implements VersionResolver, VersionRangeResolver {
+
+        private final VersionScheme scheme;
+
+        private HeldVersions(VersionScheme scheme) {
+            this.scheme = scheme;
+        }
+
+        @Override
+        public VersionResult resolveVersion(RepositorySystemSession session, VersionRequest request) {
+            return new VersionResult(request).setVersion(request.getArtifact().getVersion());
+        }
+
+        @Override
+        public VersionRangeResult resolveVersionRange(RepositorySystemSession session, VersionRangeRequest request)
+                throws VersionRangeResolutionException {
+            VersionRangeResult result = new VersionRangeResult(request);
+            VersionConstraint constraint;
+            try {
+                constraint = scheme.parseVersionConstraint(request.getArtifact().getVersion());
+            } catch (InvalidVersionSpecificationException invalid) {
+                result.addException(invalid);
+                throw new VersionRangeResolutionException(result);
+            }
+            result.setVersionConstraint(constraint);
+            if (constraint.getRange() == null) {
+                return result.addVersion(constraint.getVersion());
+            }
+            WorkspaceReader workspace = session.getWorkspaceReader();
+            List<Version> versions = new ArrayList<>();
+            for (String held : workspace == null ? List.<String>of() : workspace.findVersions(request.getArtifact())) {
+                try {
+                    Version version = scheme.parseVersion(held);
+                    if (constraint.containsVersion(version)) {
+                        versions.add(version);
+                        result.setRepository(version, workspace.getRepository());
+                    }
+                } catch (InvalidVersionSpecificationException unparsable) {
+                    // a held version the scheme cannot read satisfies no range
+                }
+            }
+            Collections.sort(versions);
+            return result.setVersions(versions);
         }
     }
 
