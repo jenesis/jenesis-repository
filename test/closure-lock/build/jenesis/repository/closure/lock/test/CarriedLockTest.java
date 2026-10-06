@@ -42,6 +42,16 @@ class CarriedLockTest {
     }
 
     @Test
+    void a_carried_lock_file_is_asked_before_a_carried_bill_of_the_same_ecosystem() {
+        List<String> npm = ClosureSource.serving("npm").stream().map(ClosureSource::name).toList();
+
+        assertThat(npm).as("a lock file is exact and the package manager's own, so it answers first")
+                .containsSubsequence("carried-lock-npm", "carried-bill");
+        assertThat(ClosureSource.serving("crates.io").stream().map(ClosureSource::name).toList())
+                .containsSubsequence("carried-lock-cargo", "carried-bill");
+    }
+
+    @Test
     void an_npm_release_is_what_its_shrinkwrap_installs_for_a_consumer() throws IOException {
         // b needs a@2 where the root needs a@1, so npm installs a@2 under b's own node_modules; dev-only and bundled
         // packages are not installed from the repository for a consumer, and a link names nothing it holds.
@@ -64,7 +74,7 @@ class CarriedLockTest {
         ClosureSection.Closure closure = new NpmShrinkwrap().resolve(ClosureWalk.of(store), "npm", "acme-app",
                 "1.0.0", NOW).orElseThrow();
 
-        assertThat(closure.kind()).isEqualTo(ClosureSource.Kind.BILL);
+        assertThat(closure.kind()).isEqualTo(ClosureSource.Kind.LOCK);
         assertThat(closure.source()).isEqualTo(NpmShrinkwrap.NAME);
         assertThat(closure.components()).containsExactly(
                 new ClosureSection.Component("a", "1.0.0", true, 1, ""),

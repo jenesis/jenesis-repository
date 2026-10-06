@@ -179,6 +179,12 @@ public final class ClosureSection {
             foreign = List.copyOf(foreign);
         }
 
+        /** This closure as {@code source} answered it: under that source's own kind and name, whatever the answer
+         *  carried - attribution is the pass's, so no source can record another's. */
+        public Closure attributed(ClosureSource source) {
+            return new Closure(status, components, cuts, truncated, resolved, source.kind(), source.name(), foreign);
+        }
+
         /** A closure naming nothing in another ecosystem. */
         public Closure(Status status, List<Component> components, List<Cut> cuts, boolean truncated,
                        Instant resolved, ClosureSource.Kind kind, String source) {
