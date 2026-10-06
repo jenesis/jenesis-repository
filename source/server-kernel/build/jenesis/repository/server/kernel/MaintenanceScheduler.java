@@ -794,7 +794,11 @@ public final class MaintenanceScheduler implements AutoCloseable {
                             () -> {
                                 PassRepositoryContext context =
                                         new PassRepositoryContext(tenant, repository, now, sink);
-                                task.task().repository(context);
+                                // The repository is bound to the unit's thread as a request binds it, so what the
+                                // pass screens again reads the repository's own dials and its tenant's gate.
+                                try (PublishTenant.Scope _ = PublishTenant.open(tenant, repository)) {
+                                    task.task().repository(context);
+                                }
                                 // Whatever the unit contained is raised here rather than by the unit, so a pass
                                 // that recorded its failures cannot lose them by forgetting to re-raise.
                                 context.raiseContained();

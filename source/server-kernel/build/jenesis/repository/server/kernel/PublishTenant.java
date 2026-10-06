@@ -10,8 +10,9 @@ package build.jenesis.repository.server.kernel;
  * {@link LiveConfig#publishGate(String)} from {@link #current()}; the screening and the publish run on the one thread
  * within that request.
  *
- * <p>Unset (an off-request publish - staging or batch - the filter never wraps) {@link #current()} is
- * {@code null}, and the gate falls back to the deployment-wide policy. Under fixed tenancy the filter binds the one
+ * <p>A maintenance pass over one repository binds it the same way around the pass, so a re-assessment it makes
+ * reads that repository's dials. Unset (an off-request publish - staging or batch - the filter never wraps)
+ * {@link #current()} is {@code null}, and the gate falls back to the deployment-wide policy. Under fixed tenancy the filter binds the one
  * default tenant, whose policy is the deployment-wide one anyway. The scope restores the previous value on close, so a
  * reused request thread never leaks a tenant into the next publish.
  */

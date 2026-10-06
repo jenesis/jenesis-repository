@@ -185,11 +185,19 @@ public class DomainConfig {
     @Bean
     public RepositoryBrowse repositoryBrowse(ArtifactStore repositoryStore, CurrentTenant currentTenant,
                                              ObservationRegistry observations,
-                                             ObjectProvider<ComplianceSources> sources) {
+                                             ObjectProvider<ComplianceSources> sources,
+                                             SettingsAdmin settingsAdmin) {
         // The feeds the repository screens with, where this node holds them, so a cached copy's page names what
-        // screened it; a console booted alone holds none and says nothing of it.
+        // screened it - those its repository selects; a console booted alone holds none and says nothing of it.
         return new RepositoryBrowse(repositoryStore, currentTenant, observations, SearchQueryProvider.installed(),
-                () -> Optional.ofNullable(sources.getIfAvailable()).map(ComplianceSources::advisoryFeeds));
+                () -> Optional.ofNullable(sources.getIfAvailable()).map(ComplianceSources::advisoryFeeds),
+                (tenant, repository) -> {
+                    try {
+                        return settingsAdmin.repositoryConfig(tenant, repository);
+                    } catch (IOException unreadable) {
+                        throw new UncheckedIOException(unreadable);
+                    }
+                });
     }
 
 

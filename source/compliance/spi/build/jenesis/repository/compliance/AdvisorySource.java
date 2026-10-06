@@ -307,10 +307,101 @@ public interface AdvisorySource extends SignalSource {
         return SignalSourceProvider.named(AdvisorySource.class, config);
     }
 
-    /** Every enabled feed discovered via {@link ServiceLoader}, merged (de-duplicated) into one source; the
-     *  {@link AdvisorySource#none() none} source when none is enabled. */
+    /** Every enabled feed discovered via {@link ServiceLoader}, merged (de-duplicated) into one source that a
+     *  repository's {@value #SELECTION} narrows ({@link #forRepository}); the {@link AdvisorySource#none() none} source
+     *  when none is enabled. */
     static AdvisorySource resolve(UnaryOperator<String> config) {
-        return resolve(named(config).values());
+        return resolve(named(config));
+    }
+
+    /** The merge of {@code named} feeds as {@link #resolve(Collection)} merges them, keeping their names so a
+     *  repository's {@value #SELECTION} can narrow it ({@link #forRepository}); the {@link AdvisorySource#none() none}
+     *  source when there are none. */
+    static AdvisorySource resolve(SequencedMap<String, AdvisorySource> named) {
+        return named.isEmpty() ? AdvisorySource.none() : new NamedFeeds(named, resolve(named.values()));
+    }
+
+    /** The repository setting naming the advisory feeds that screen it, comma-separated: empty for every feed the
+     *  deployment enables, {@value #NONE_SELECTED} for none. */
+    String SELECTION = "advisory-feeds";
+
+    /** The {@value #SELECTION} value of a repository screened by no feed. */
+    String NONE_SELECTED = "none";
+
+    /**
+     * The feeds of {@code enabled} - the deployment's, by name - that screen a repository whose effective lookup is
+     * {@code repository}: those its {@value #SELECTION} names, in {@code enabled}'s order, every one where it names
+     * none, none for {@value #NONE_SELECTED}. A feed's credential and its switch stay the deployment's; a repository
+     * selects among what is on.
+     *
+     * @throws IllegalStateException for a name no installed feed answers to, or one the deployment has switched off
+     *                               or not configured, naming it - a repository is never screened by fewer feeds than
+     *                               it names without saying so
+     */
+    static SequencedMap<String, AdvisorySource> selected(SequencedMap<String, AdvisorySource> enabled,
+                                                         UnaryOperator<String> repository) {
+        String value = repository == null ? null : repository.apply(SELECTION);
+        if (value == null || value.isBlank()) {
+            return enabled;
+        }
+        if (value.strip().equalsIgnoreCase(NONE_SELECTED)) {
+            return new LinkedHashMap<>();
+        }
+        Set<String> named = new LinkedHashSet<>();
+        for (String name : value.split(",")) {
+            if (!name.isBlank()) {
+                named.add(name.strip());
+            }
+        }
+        for (String name : named) {
+            if (!enabled.containsKey(name)) {
+                throw new IllegalStateException(SELECTION + " names the advisory feed '" + name + "', which is "
+                        + (installed().contains(name) ? "switched off, or missing the configuration it needs, on this "
+                        + "deployment" : "not installed; installed: " + installed()));
+            }
+        }
+        SequencedMap<String, AdvisorySource> chosen = new LinkedHashMap<>();
+        enabled.forEach((name, feed) -> {
+            if (named.contains(name)) {
+                chosen.put(name, feed);
+            }
+        });
+        return chosen;
+    }
+
+    /**
+     * {@code source} narrowed to the feeds a repository whose effective lookup is {@code repository} selects, where it
+     * is a merge {@link #resolve(SequencedMap)} made; unchanged where the repository selects nothing, or where it is a
+     * source a caller built of its own - {@link #none()} among them, which a gate screening what is published here
+     * holds on purpose. A selection {@link #selected} refuses answers a source whose every query raises, saying why,
+     * so the screen decides it as the outage of a feed that cannot answer.
+     */
+    static AdvisorySource forRepository(AdvisorySource source, UnaryOperator<String> repository) {
+        String value = repository == null ? null : repository.apply(SELECTION);
+        if (value == null || value.isBlank() || !(source instanceof NamedFeeds feeds)) {
+            return source;
+        }
+        try {
+            return resolve(selected(feeds.feeds(), repository));
+        } catch (IllegalStateException misnamed) {
+            return new AdvisorySource() {
+
+                @Override
+                public List<Advisory> advisories(String ecosystem, String coordinate, String version) {
+                    throw misnamed;
+                }
+
+                @Override
+                public Set<String> ecosystems() {
+                    return feeds.ecosystems();
+                }
+
+                @Override
+                public Freshness freshness() {
+                    return feeds.freshness();
+                }
+            };
+        }
     }
 
     /** The de-duplicated union of an already-resolved set of feeds - the {@link #resolve(UnaryOperator)} merge over a

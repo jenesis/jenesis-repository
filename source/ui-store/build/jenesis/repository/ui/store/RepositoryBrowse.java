@@ -83,12 +83,24 @@ public class RepositoryBrowse extends TenantScope implements AutoCloseable {
     public RepositoryBrowse(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations,
                             Optional<SearchQueryProvider> index,
                             Supplier<Optional<SequencedMap<String, AdvisorySource>>> feeds) {
+        this(repositoryStore, current, observations, index, feeds, (_, _) -> null);
+    }
+
+    /** As above, with {@code settings} answering a repository's effective settings by tenant and repository, so a
+     *  cached copy's page names the feeds its repository selects ({@value AdvisorySource#SELECTION}). */
+    public RepositoryBrowse(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations,
+                            Optional<SearchQueryProvider> index,
+                            Supplier<Optional<SequencedMap<String, AdvisorySource>>> feeds,
+                            BiFunction<String, String, UnaryOperator<String>> settings) {
         super(repositoryStore, current, observations);
         this.search = new RepositorySearch(index);
         this.feeds = feeds;
+        this.settings = settings;
     }
 
     private final Supplier<Optional<SequencedMap<String, AdvisorySource>>> feeds;
+
+    private final BiFunction<String, String, UnaryOperator<String>> settings;
 
     /** Close the search this browse holds, and the index readers it caches. */
     @Override
@@ -459,7 +471,8 @@ public class RepositoryBrowse extends TenantScope implements AutoCloseable {
                 ClosureSection.answer(document).map(ClosureSection.Answer::closure).orElse(null),
                 ExposureSection.exposure(document.section(ExposureSection.TAG)).orElse(null),
                 cached.isPresent()
-                        ? feeds.get().map(enabled -> ScreenedThrough.cached(ecosystem, enabled)).orElse(null)
+                        ? feeds.get().map(enabled -> ScreenedThrough.cached(ecosystem, enabled,
+                                settings.apply(tenant(), repository))).orElse(null)
                         : ScreenedThrough.published(document.section(ClosureSection.TAG).isPresent())));
     }
 
