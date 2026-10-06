@@ -88,13 +88,14 @@ public final class KevEnforceTask implements MaintenanceTask {
         // by name, since a listing that names an old copy is what the incremental leg cannot see. A version published
         // here is asked of no feed, so the copies an upstream served are what this pass holds.
         IncrementalPasses cadence = IncrementalPasses.over(store, name(), "findings/kev-enforce", context.config());
+        AdvisorySource asking = AdvisorySource.forRepository(advisories, context.config());
         cadence.cached(inventory, copy -> {
             String eco = copy.ecosystem();
             String coordinate = copy.coordinate();
             String version = copy.version();
             AdvisorySource.Query asked = copy.asked();
             List<String> kevCves = knownExploited.listed(
-                    advisories.advisories(asked.ecosystem(), asked.coordinate(), asked.version()));
+                    asking.advisories(asked.ecosystem(), asked.coordinate(), asked.version()));
             if (kevCves.isEmpty()) {
                 return;   // report-only below KEV; a delisting leaves an existing hold in place (no auto-release)
             }

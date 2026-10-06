@@ -40,6 +40,18 @@ public record ScreenedThrough(Basis basis, List<String> feeds) {
                 : new ScreenedThrough(Basis.FEEDS, covering);
     }
 
+    /** A cached copy of {@code ecosystem} held by a repository whose effective lookup is {@code repository}, under the
+     *  feeds of {@code enabled} it selects ({@link AdvisorySource#selected}): unscreened where its selection names a
+     *  feed that is not on, since its screens then fail. */
+    public static ScreenedThrough cached(String ecosystem, SequencedMap<String, AdvisorySource> enabled,
+                                         UnaryOperator<String> repository) {
+        try {
+            return cached(ecosystem, AdvisorySource.selected(enabled, repository));
+        } catch (IllegalStateException misnamed) {
+            return new ScreenedThrough(Basis.UNCOVERED, List.of());
+        }
+    }
+
     /** A published version, with a closure or without one. */
     public static ScreenedThrough published(boolean closure) {
         return new ScreenedThrough(closure ? Basis.CLOSURE : Basis.NOTHING, List.of());

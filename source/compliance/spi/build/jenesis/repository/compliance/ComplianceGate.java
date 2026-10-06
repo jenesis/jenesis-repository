@@ -147,7 +147,8 @@ public final class ComplianceGate {
                 advisories, vex, waivers, dimensions);
     }
 
-    /** This gate bound to one stored artifact: every discovered dimension is rebound through
+    /** This gate bound to one stored artifact: its advisory feeds narrowed to those the repository selects
+     *  ({@link #screening}), and every discovered dimension rebound through
      *  {@link GatePolicy#bound} to the repository's scoped store and the artifact as it was stored there, so a
      *  dimension that answers from what the repository recorded about these bytes reads it for this assessment. The
      *  screen binds before it assesses a publish and before it re-assesses a held artifact; a dimension that reads only
@@ -158,7 +159,16 @@ public final class ComplianceGate {
             rebound.add(policy.bound(repository, artifact));
         }
         return new ComplianceGate(vulnerabilityPolicy, maliciousPolicy, denyListPolicy, List.copyOf(rebound),
-                advisories, vex, waivers, dimensions);
+                advisories, vex, waivers, dimensions).screening(repository);
+    }
+
+    /** This gate asking the advisory feeds {@code repository} selects ({@value AdvisorySource#SELECTION}) among those
+     *  it asks: the narrowing {@link AdvisorySource#forRepository} makes, read through the repository's effective
+     *  settings. */
+    public ComplianceGate screening(ArtifactStore repository) {
+        AdvisorySource narrowed = AdvisorySource.forRepository(advisories, ComplianceSettings.lookup(repository));
+        return narrowed == advisories ? this : new ComplianceGate(vulnerabilityPolicy, maliciousPolicy,
+                denyListPolicy, policies, narrowed, vex, waivers, dimensions);
     }
 
     /** This gate reading the tenant's ingested VEX statements: an advisory a statement marks non-applicable to the

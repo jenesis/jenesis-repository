@@ -38,8 +38,8 @@ public class ComplianceWebConfig {
 
     @Bean
     public ClosureController closureController(Repositories repositories, RepositoryRouting routing,
-                                               ComplianceSources sources) {
-        return new ClosureController(repositories, routing, sources::advisoryFeeds);
+                                               ComplianceSources sources, LiveConfig liveConfig) {
+        return new ClosureController(repositories, routing, sources::advisoryFeeds, liveConfig::settings);
     }
 
     @Bean
