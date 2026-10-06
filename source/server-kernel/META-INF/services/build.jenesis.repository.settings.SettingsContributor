@@ -1,5 +1,0 @@
-build.jenesis.repository.server.kernel.BatchUploadSettingsContributor
-build.jenesis.repository.server.kernel.ImmutabilitySettingsContributor
-build.jenesis.repository.server.kernel.CachingSettingsContributor
-build.jenesis.repository.server.kernel.ModuleTogglesSettingsContributor
-build.jenesis.repository.server.kernel.QuotaSettingsContributor
