@@ -83,6 +83,9 @@ open module build.jenesis.repository.bundle {
     requires build.jenesis.repository.closure.lock;
     // How a requirement in a Maven, npm, Cargo or Composer manifest is read, for the closure and the dependents index.
     requires build.jenesis.repository.dependents.requirements;
+    // The reverse-dependency index, and its API and console screen.
+    requires build.jenesis.repository.dependents;
+    requires build.jenesis.repository.dependents.web;
     // Every hold, refusal and release as a signed, retried webhook, sent once an operator names an endpoint.
     requires build.jenesis.repository.webhook;
     requires build.jenesis.repository.webhook.web;
