@@ -7,6 +7,7 @@ import build.jenesis.repository.findings.Finding;
 import build.jenesis.repository.findings.Findings;
 import build.jenesis.repository.findings.FindingsProvider;
 import build.jenesis.repository.findings.store.StoreFindings;
+import build.jenesis.repository.inventory.ChangedVersions;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 
@@ -47,6 +48,29 @@ class StoreFindingsTest {
 
         assertThat(findings.of("Maven", "org.apache.logging.log4j:log4j-core", "2.14.1"))
                 .singleElement().isEqualTo(recorded);
+    }
+
+    @Test
+    void a_version_is_marked_changed_only_where_what_its_findings_say_of_it_moves() throws IOException {
+        Finding advisory = Finding.of("CVE-2026-9", "osv", Finding.Kind.VULNERABILITY, "advisory", Severity.HIGH,
+                "recorded", FIRST);
+        findings.record("Maven", "org.acme:lib", "1.0", advisory);
+        assertThat(drain()).as("a new finding").containsExactly("org.acme:lib 1.0");
+
+        findings.record("Maven", "org.acme:lib", "1.0", Finding.of("CVE-2026-9", "osv", Finding.Kind.VULNERABILITY,
+                "advisory", Severity.HIGH, "seen again", LATER));
+        findings.label("Maven", "org.acme:lib", "1.0", "osv", "CVE-2026-9",
+                new Finding.Label("ai", "applicability", "applies", 0.7, LATER));
+        assertThat(drain()).as("a re-sighting and a label leave it as it stood").isEmpty();
+
+        findings.supersede("Maven", "org.acme:lib", "1.0", "osv", "CVE-2026-9", "withdrawn");
+        assertThat(drain()).as("a withdrawn finding").containsExactly("org.acme:lib 1.0");
+    }
+
+    private List<String> drain() throws IOException {
+        List<String> drained = new ArrayList<>();
+        ChangedVersions.drain(store, 100, version -> drained.add(version.coordinate() + " " + version.version()));
+        return drained;
     }
 
     @Test

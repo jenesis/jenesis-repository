@@ -179,8 +179,14 @@ public final class HeldSubjects {
         }
         writeVersioned(store, pathKey(path), body.toString().getBytes(StandardCharsets.UTF_8));
         if (ecosystem != null && coordinate != null && version != null) {
-            writeVersioned(store, versionKey(ecosystem, coordinate, version, path),
-                    path.getBytes(StandardCharsets.UTF_8));
+            String key = versionKey(ecosystem, coordinate, version, path);
+            boolean placed = !store.exists(key);
+            writeVersioned(store, key, path.getBytes(StandardCharsets.UTF_8));
+            if (placed) {
+                // A hold newly placed changes what every version relying on this one inherits; a re-screen or a
+                // converging sweep recording it again changes nothing.
+                ChangedVersions.mark(store, ecosystem, coordinate, version);
+            }
         }
     }
 
@@ -269,12 +275,15 @@ public final class HeldSubjects {
     /** Drop the record for one held path - called beside the {@code /quarantine} pointer clear that ends the hold,
      *  never on a schedule and never because a module is absent. Delete-if-present on both faces, so a retry after a
      *  crash converges; the version face is reached through the row's own recorded coordinate, so a format that has
-     *  since been uninstalled cannot strand it. */
+     *  since been uninstalled cannot strand it. The version's standing changed, which is recorded
+     *  ({@link ChangedVersions}). */
     public static void forget(ArtifactStore store, String path) throws IOException {
         Optional<Subject> subject = read(store, path);
         if (subject.isPresent() && subject.get().versioned()) {
             deleteIfPresent(store, versionKey(subject.get().ecosystem(), subject.get().coordinate(),
                     subject.get().version(), path));
+            ChangedVersions.mark(store, subject.get().ecosystem(), subject.get().coordinate(),
+                    subject.get().version());
         }
         deleteIfPresent(store, pathKey(path));
     }
