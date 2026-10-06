@@ -14,15 +14,15 @@
  *
  * <p>semver4j declares its module name in its manifest only and the hosted module index does not carry it, so the
  * alias names the artifact and the pin file's coordinate entry carries its version; versatile is aliased the same way,
- * and so is the descriptor-less {@code maven-artifact} its descriptor requires, which reaches the module path only
- * through an alias naming it.
+ * and so is the descriptor-less {@code maven-artifact}, which reaches the module path only through the alias giving it
+ * the name versatile's descriptor requires.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
  * @jenesis.alias org.semver4j org.semver4j/semver4j
  * @jenesis.alias io.github.nscuro.versatile.core io.github.nscuro/versatile-core
- * @jenesis.alias maven.artifact org.apache.maven/maven-artifact
+ * @jenesis.alias org.apache.maven.v3.artifact org.apache.maven/maven-artifact
  */
 module build.jenesis.repository.dependents.requirements {
     requires build.jenesis.repository.closure;
