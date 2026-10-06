@@ -11,7 +11,7 @@ import build.jenesis.repository.maintenance.StorageNamespace;
  * browse folder), the repository's {@code retention} policy ({@link InventoryRetention#KEY}), the {@code pinned}
  * index and the two newest-first indexes, {@code recent} releases and {@code cached} copies, and the {@code advised}
  * reverse index from a name the advisory databases use to the copies asked under it, and the {@code changed} rows of
- * the versions whose findings or holds changed ({@link ChangedVersions}) - so the orphan diagnostic and the explicit
+ * the versions whose findings or holds changed ({@link Mailbox#CHANGED}) - so the orphan diagnostic and the explicit
  * operator purge know the
  * key-spaces without a hardcoded table. The publish facts, the downloads and the declared licences are sections of the
  * version documents under {@code meta}, which the metadata store's own manifest declares.
@@ -33,6 +33,6 @@ public final class InventoryStorageNamespace implements StorageNamespace {
     public Set<String> repositoryPrefixes() {
         return Set.of(InventoryIdentity.ROOT, InventoryRetention.KEY, SubtreeSizeRollUp.ROOT,
                 StoreRepositoryInventory.PINNED, NewestFirst.RELEASES.root,
-                NewestFirst.CACHED.root, AdvisedSection.INDEX, ChangedVersions.ROOT);
+                NewestFirst.CACHED.root, AdvisedSection.INDEX, Mailbox.CHANGED.root());
     }
 }

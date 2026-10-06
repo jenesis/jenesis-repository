@@ -17,7 +17,7 @@ import build.jenesis.repository.findings.Finding;
 import build.jenesis.repository.findings.Findings;
 import build.jenesis.repository.findings.FindingsProvider;
 import build.jenesis.repository.definitions.RoutingSettingsContributor;
-import build.jenesis.repository.inventory.ChangedVersions;
+import build.jenesis.repository.inventory.Mailbox;
 import build.jenesis.repository.inventory.DependencySection;
 import build.jenesis.repository.inventory.HeldSubjects;
 import build.jenesis.repository.inventory.IncrementalPasses;
@@ -430,8 +430,8 @@ class ClosureTaskTest {
                 .containsExactly(new ExposureSection.Reached("org.dep:lib", "1.0", "releases", false, 1, "HIGH",
                         List.of(new ClosureSection.Hop("org.acme:app", "1.0"),
                                 new ClosureSection.Hop("org.dep:lib", "1.0"))));
-        assertThat(store.isEmpty(ChangedVersions.ROOT)).as("the change was taken up").isTrue();
-        assertThat(tenant.scope("group").isEmpty(ReliedOn.STALE)).as("and the request it made").isTrue();
+        assertThat(store.isEmpty(Mailbox.CHANGED.root())).as("the change was taken up").isTrue();
+        assertThat(tenant.scope("group").isEmpty(ReliedOn.STALE.root())).as("and the request it made").isTrue();
     }
 
     @Test
@@ -580,7 +580,7 @@ class ClosureTaskTest {
 
     private List<String> changed() throws IOException {
         List<String> drained = new ArrayList<>();
-        ChangedVersions.drain(store, 100, version -> drained.add(version.coordinate() + " " + version.version()));
+        Mailbox.CHANGED.drain(store, 100, version -> drained.add(version.coordinate() + " " + version.version()));
         return drained;
     }
 
