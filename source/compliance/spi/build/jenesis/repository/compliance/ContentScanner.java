@@ -1,6 +1,7 @@
 package build.jenesis.repository.compliance;
 
 import module java.base;
+import build.jenesis.repository.store.Providers;
 
 /**
  * A scanner of what an artifact contains: a service an operator runs or a tool beside the deployment - an adapter
@@ -34,6 +35,8 @@ import module java.base;
  *       vulnerabilities is what a clean artifact looks like.</li>
  *   <li><b>Read purity.</b> Every call of a {@link Session} may reach the scanner; none is made on a request path - the
  *       host submits and collects off it, in a pass.</li>
+ *   <li><b>Selection.</b> {@code ALL}: every installed scanner the deployment configured screens a repository that
+ *       names none; two answering to one name fail {@link #installed}.</li>
  *   <li><b>Lifecycle / ownership.</b> {@link #installed} instantiates afresh per call, so a caller on a repeated path
  *       holds the list. A provider owns no thread; a session owns its client for the pass and nothing past it.</li>
  *   <li><b>Bounded work / cancellation.</b> Every call is bounded in time by the scanner, and every body it reads in
@@ -50,12 +53,14 @@ public interface ContentScanner {
     /** The {@value #SETTING} value a repository scanned by no scanner names. */
     String NONE = "none";
 
+    /** The image manifest types a scanner of {@link Input#IMAGE_MANIFEST} is handed. */
+    Set<String> IMAGE_MANIFESTS = Set.of("application/vnd.oci.image.manifest.v1+json",
+            "application/vnd.docker.distribution.manifest.v2+json");
+
     /** What a scanner can be handed. */
     enum Input {
         /** A container image, by its manifest, pulled from the registry the request names. */
-        IMAGE_MANIFEST,
-        /** A bill of materials, handed as the document. */
-        BILL_OF_MATERIALS
+        IMAGE_MANIFEST
     }
 
     /** What a scanner can make of what it is handed. */
@@ -165,9 +170,11 @@ public interface ContentScanner {
         }
     }
 
-    /** Every installed scanner, in discovery order. */
+    /** Every installed scanner, ordered by name; two answering to one name fail here, naming both, since which one a
+     *  repository's {@value #SETTING} selected would otherwise be an accident of the module path. */
     static List<ContentScanner> installed() {
-        return ServiceLoader.load(ContentScanner.class).stream().map(ServiceLoader.Provider::get).toList();
+        return Providers.all("content-scanner", ServiceLoader.load(ContentScanner.class), ContentScanner::name,
+                _ -> true, Optional::of);
     }
 
     /**
