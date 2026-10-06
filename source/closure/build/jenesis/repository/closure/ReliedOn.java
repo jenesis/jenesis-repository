@@ -248,15 +248,21 @@ public final class ReliedOn {
     }
 
     /**
-     * Whether a published version relies on {@code version} of {@code coordinate} of {@code ecosystem} held by
-     * {@code holder}: a row of its own index, or one of the tenant's naming it by coordinate. At most two listings, and
-     * unconfirmed - a row whose dependent no longer relies on it counts until the reconcile removes it - which is what a
-     * ranking ordering vulnerable versions by their reach wants, never what a page listing dependents may show.
+     * How many published versions are built against {@code version} of {@code coordinate} of {@code ecosystem} held by
+     * {@code holder}, up to {@code cap}: the rows of its own index, then the tenant's naming it by coordinate, listed
+     * no further than the cap. Unconfirmed - a row whose dependent no longer relies on it counts until the reconcile
+     * removes it - which is what a ranking ordering vulnerable versions by their dependents wants, never what a page
+     * listing them may show.
      */
-    public static boolean relied(ArtifactStore holder, Optional<ArtifactStore> tenant, String ecosystem,
-                                 String coordinate, String version) throws IOException {
+    public static int usedBy(ArtifactStore holder, Optional<ArtifactStore> tenant, String ecosystem,
+                             String coordinate, String version, int cap) throws IOException {
         String level = level(ecosystem, coordinate, version);
-        return !holder.isEmpty(level) || tenant.isPresent() && !tenant.get().scope(SPACE).isEmpty(level);
+        int[] counted = {0};
+        holder.page(level, "", cap, _ -> counted[0]++);
+        if (counted[0] < cap && tenant.isPresent()) {
+            tenant.get().scope(SPACE).page(level, "", cap - counted[0], _ -> counted[0]++);
+        }
+        return Math.min(counted[0], cap);
     }
 
     /**

@@ -11,55 +11,56 @@ import build.jenesis.repository.compliance.Severity;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The vulnerability report's ordering, pinned with no network and no framework: reachability is the primary key
- * (a coordinate confirmed to sit on a build graph sorts above one only scored in the abstract, even when the
- * merely-scored one carries the more urgent signal), the installed signal ranks break a reachability tie, and the
- * no-reachability overload keeps the prior signal-then-coordinate ordering so a deployment without a
- * reverse-dependency index is unchanged.
+ * The vulnerability report's ordering, pinned with no network and no framework: having dependents is the primary key
+ * (a coordinate published versions are built against sorts above one only scored in the abstract, even when the
+ * merely-scored one carries the more urgent signal), the installed signal ranks break a tie between lines with
+ * dependents, and the overload knowing no dependents orders by signal then coordinate.
  */
 class AdvisoryReportTest {
 
-    private static final String REACHABLE = "org.example:reachable:1.0";
+    private static final String DEPENDED = "org.example:depended:1.0";
     private static final String SCORED = "org.example:scored:1.0";
 
     @Test
-    void ranks_a_reachable_coordinate_above_a_merely_scored_one_even_at_a_lower_signal_rank() {
+    void ranks_a_coordinate_with_dependents_above_a_merely_scored_one_even_at_a_lower_signal_rank() {
         SequencedMap<String, List<AdvisorySource.Advisory>> findings = new LinkedHashMap<>();
         findings.put(SCORED, List.of(new AdvisorySource.Advisory("CVE-SCORED", Severity.CRITICAL)));
-        findings.put(REACHABLE, List.of(new AdvisorySource.Advisory("CVE-REACH", Severity.LOW)));
+        findings.put(DEPENDED, List.of(new AdvisorySource.Advisory("CVE-USED", Severity.LOW)));
 
         List<AdvisoryReport.Line> lines =
-                AdvisoryReport.assemble(List.of(severitySignal()), findings, Set.of(REACHABLE));
+                AdvisoryReport.assemble(List.of(severitySignal()), findings, Map.of(DEPENDED, 2));
 
         assertThat(lines).extracting(AdvisoryReport.Line::coordinate).as(
-                        "the reachable LOW sorts above the merely-scored CRITICAL - reachability is the primary key")
-                .containsExactly(REACHABLE, SCORED);
+                        "the LOW with dependents sorts above the merely-scored CRITICAL - having dependents is the primary key")
+                .containsExactly(DEPENDED, SCORED);
+        assertThat(lines).extracting(AdvisoryReport.Line::usedBy).as("each line carries how many it is used by")
+                .containsExactly(2, 0);
     }
 
     @Test
-    void breaks_a_reachability_tie_by_the_installed_signal_rank() {
+    void breaks_a_tie_between_lines_with_dependents_by_the_installed_signal_rank_not_by_their_count() {
         SequencedMap<String, List<AdvisorySource.Advisory>> findings = new LinkedHashMap<>();
-        findings.put(REACHABLE, List.of(new AdvisorySource.Advisory("CVE-REACH", Severity.LOW)));
+        findings.put(DEPENDED, List.of(new AdvisorySource.Advisory("CVE-USED", Severity.LOW)));
         findings.put(SCORED, List.of(new AdvisorySource.Advisory("CVE-SCORED", Severity.CRITICAL)));
 
-        // both reachable, so the signal rank (CRITICAL over LOW) decides
+        // both have dependents, so the signal rank (CRITICAL over LOW) decides, not which has more
         List<AdvisoryReport.Line> lines =
-                AdvisoryReport.assemble(List.of(severitySignal()), findings, Set.of(REACHABLE, SCORED));
+                AdvisoryReport.assemble(List.of(severitySignal()), findings, Map.of(DEPENDED, 3, SCORED, 1));
 
-        assertThat(lines).extracting(AdvisoryReport.Line::coordinate).containsExactly(SCORED, REACHABLE);
+        assertThat(lines).extracting(AdvisoryReport.Line::coordinate).containsExactly(SCORED, DEPENDED);
     }
 
     @Test
-    void with_no_reachability_falls_back_to_the_signal_rank_then_coordinate() {
+    void with_no_dependents_known_falls_back_to_the_signal_rank_then_coordinate() {
         SequencedMap<String, List<AdvisorySource.Advisory>> findings = new LinkedHashMap<>();
-        findings.put(REACHABLE, List.of(new AdvisorySource.Advisory("CVE-REACH", Severity.LOW)));
+        findings.put(DEPENDED, List.of(new AdvisorySource.Advisory("CVE-USED", Severity.LOW)));
         findings.put(SCORED, List.of(new AdvisorySource.Advisory("CVE-SCORED", Severity.CRITICAL)));
 
         List<AdvisoryReport.Line> lines = AdvisoryReport.assemble(List.of(severitySignal()), findings);
 
         assertThat(lines).extracting(AdvisoryReport.Line::coordinate).as(
-                        "the empty-reachability overload keeps the pre-signal-then-coordinate ordering")
-                .containsExactly(SCORED, REACHABLE);
+                        "the overload knowing no dependents orders by signal, then coordinate")
+                .containsExactly(SCORED, DEPENDED);
     }
 
     /** A trivial signal that ranks each advisory by its CVSS band, so a test can pin the ordering without a feed. */

@@ -14,8 +14,8 @@ public final class ReliedOnReliance implements RelianceProvider {
                          Function<String, Optional<ArtifactStore>> repositories) {
         return new Reliance() {
             @Override
-            public boolean relied(String ecosystem, String coordinate, String version) throws IOException {
-                return ReliedOn.relied(holder, tenant, ecosystem, coordinate, version);
+            public int usedBy(String ecosystem, String coordinate, String version) throws IOException {
+                return ReliedOn.usedBy(holder, tenant, ecosystem, coordinate, version, USED_BY_CAP);
             }
 
             @Override
