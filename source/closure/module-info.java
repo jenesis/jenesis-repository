@@ -34,6 +34,7 @@ module build.jenesis.repository.closure {
     requires build.jenesis.repository.definitions;
     requires build.jenesis.repository.dependency;
     requires build.jenesis.repository.findings;
+    requires build.jenesis.repository.format;
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.maintenance;
     requires build.jenesis.repository.metadata;
