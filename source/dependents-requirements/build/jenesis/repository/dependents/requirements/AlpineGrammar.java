@@ -4,6 +4,6 @@ package build.jenesis.repository.dependents.requirements;
 public final class AlpineGrammar extends SchemeGrammar {
 
     public AlpineGrammar() {
-        super("Alpine", "alpine");
+        super("Alpine", "alpine", new AlpineRequirement());
     }
 }

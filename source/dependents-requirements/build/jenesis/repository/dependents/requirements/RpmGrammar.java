@@ -4,6 +4,6 @@ package build.jenesis.repository.dependents.requirements;
 public final class RpmGrammar extends SchemeGrammar {
 
     public RpmGrammar() {
-        super("RPM", "rpm");
+        super("RPM", "rpm", new RpmRequirement());
     }
 }

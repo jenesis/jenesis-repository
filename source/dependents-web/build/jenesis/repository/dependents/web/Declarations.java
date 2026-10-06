@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import build.jenesis.repository.dependents.requirements.Requirements;
+import build.jenesis.repository.closure.RequirementGrammar;
 import build.jenesis.repository.dependents.spi.DependentsQuery;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ServableNames;
@@ -17,8 +17,9 @@ import build.jenesis.repository.store.ServableNames;
  * full pass; until then this is what keeps a deleted or held version's name off both surfaces.
  *
  * <p>Asked about a version of the package, each row also says whether its requirement admits that version -
- * {@code admits}, {@code excludes} or {@code unknown} - as the declaring ecosystem's own grammar reads it. It is a
- * marker on a declaration, never a resolved dependency, and nothing counts it.
+ * {@code admits}, {@code excludes} or {@code unknown} - as the declaring ecosystem's {@link RequirementGrammar} reads
+ * it, the one a closure takes its versions by. It is a marker on a declaration, never a resolved dependency, and
+ * nothing counts it.
  */
 public final class Declarations {
 
@@ -42,7 +43,7 @@ public final class Declarations {
                     ServableNames.Policy.HIDE_WITHHELD)) {
                 shown.add(new Row(row.ecosystem(), row.coordinate(), row.version(), row.requirement(),
                         asked == null || asked.isBlank() ? null
-                                : Requirements.admits(row.ecosystem(), row.requirement(), asked).name()
+                                : RequirementGrammar.of(row.ecosystem()).admits(row.requirement(), asked).name()
                                 .toLowerCase(Locale.ROOT)));
             }
         }

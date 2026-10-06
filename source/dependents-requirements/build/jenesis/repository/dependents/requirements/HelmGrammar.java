@@ -7,7 +7,7 @@ import org.semver4j.Semver;
 public final class HelmGrammar extends ClosureGrammar {
 
     public HelmGrammar() {
-        super("Helm");
+        super("Helm", new HelmRequirement());
     }
 
     @Override

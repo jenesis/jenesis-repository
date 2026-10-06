@@ -1,6 +1,7 @@
 package build.jenesis.repository.dependents.requirements;
 
 import module java.base;
+import build.jenesis.repository.closure.RequirementGrammar;
 
 /**
  * Helm's dependency constraint, as a {@code Chart.yaml} writes it: the Masterminds semantic-version constraints, which
@@ -8,13 +9,14 @@ import module java.base;
  * "and", {@code ||} "or", and a space may sit between an operator and its version - so the constraint is translated
  * into the node-semver range it means and evaluated as npm's is.
  */
-final class HelmRequirement implements Requirements.Grammar {
+final class HelmRequirement implements ClosureGrammar.Reader {
 
     private static final Pattern SPACED_OPERATOR = Pattern.compile("(>=|<=|!=|=|>|<|~|\\^)\\s+");
 
     @Override
-    public Requirements.Verdict admits(String requirement, String version) {
+    public RequirementGrammar.Admission admits(String requirement, String version) {
         String range = SPACED_OPERATOR.matcher(requirement.replace(",", " ")).replaceAll("$1").strip();
-        return range.contains("!=") ? Requirements.Verdict.UNKNOWN : NpmRequirement.evaluate(range, version);
+        return range.contains("!=") || !NpmRequirement.range(range) ? RequirementGrammar.Admission.UNKNOWN
+                : NpmRequirement.evaluate(range, version);
     }
 }
