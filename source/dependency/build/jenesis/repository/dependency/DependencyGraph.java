@@ -5,7 +5,7 @@ import module java.base;
 /**
  * The dependency graph parsed from one artifact's SBOM: the {@code rootRef} it is about (its
  * {@code metadata.component}), every {@link DependencyComponent} it names and the {@link DependencyEdge}s between them
- * - a plain value, holding no store handle, that a sweep folds into the reverse-dependency index.
+ * - a plain value, holding no store handle, that a carried bill places as a version's closure.
  *
  * <p>{@link #dependencies()} is the resolved transitive set (every node but the root), the "is X anywhere in this tree"
  * a blast-radius query needs; {@link #directDependencies()} is the root's immediate edges.

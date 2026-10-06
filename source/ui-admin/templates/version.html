@@ -240,10 +240,10 @@
             <p th:if="${detail.closure.components().size() > detail.closureShown().size()}"><small
                     th:text="|Showing the first ${detail.closureShown().size()} of ${detail.closure.components().size()}.|">Showing the first 200 of 250.</small></p>
             <!--/* What the bill names in other ecosystems - the jars or distribution packages inside an image - which no
-                 repository of the walk is asked to hold: each is relied on by coordinate, so a finding or a hold on any
+                 repository of the walk is asked to hold: each is followed by coordinate, so a finding or a hold on any
                  copy of it in the tenant reaches this version. */-->
             <th:block th:unless="${detail.closure.foreign().isEmpty()}">
-                <p><small th:text="|${detail.closure.foreign().size()} package(s) its bill names in other ecosystems, relied on by coordinate: a copy of one in any repository of the tenant counts.|">40
+                <p><small th:text="|${detail.closure.foreign().size()} package(s) its bill names in other ecosystems, followed by coordinate: a copy of one in any repository of the tenant counts.|">40
                     packages its bill names in other ecosystems.</small></p>
                 <table class="app-list" aria-label="Packages of other ecosystems">
                     <thead>
@@ -275,48 +275,10 @@
         </th:block>
     </article>
 
-    <!--/* The other way round: which published versions of the tenant rely on this one, as the closures resolved so far
-         reach it - each confirmed by its own closure, with the dependencies it is reached through - a page at a
-         time. A version whose closure stopped here because this one is held for review is marked so, and one whose
-         bill names this version by coordinate in another ecosystem - relying on whichever copy its build installed -
-         is marked with that ecosystem. */-->
-    <article>
-        <h2>Relied on by</h2>
-        <th:block th:if="${reliedOn.dependents().isEmpty() and reliedAfter.isEmpty()}">
-            <div th:replace="~{base :: empty('No resolved closure of a published version reaches this one.')}"></div>
-        </th:block>
-        <table class="app-list" th:unless="${reliedOn.dependents().isEmpty()}"
-               aria-label="Published versions relying on this one">
-            <thead>
-            <tr>
-                <th scope="col">Coordinate</th>
-                <th scope="col">Version</th>
-                <th scope="col">Repository</th>
-            </tr>
-            </thead>
-            <tbody>
-            <th:block th:each="dependent : ${reliedOn.dependents()}">
-            <tr class="app-list__lead">
-                <td><th:block th:replace="~{base :: artifactLink(${dependent.coordinate()},
-                        @{/ui/repositories/{repo}/version(repo=${dependent.repository()},ecosystem=${dependent.ecosystem()},coordinate=${dependent.coordinate()},version=${dependent.version()})})}"></th:block></td>
-                <td><code th:text="${dependent.version()}">1.0</code>
-                    <span th:if="${dependent.cut()}" class="app-badge app-badge--warn">its closure stops here</span>
-                    <span th:if="${dependent.byCoordinate()}" class="app-badge"
-                          th:text="|names it in ${dependent.ecosystem()}|">names it in OCI</span></td>
-                <td><code th:text="${dependent.repository()}">releases</code></td>
-            </tr>
-            <tr class="app-list__detail" th:if="${dependent.path().size() > 1}">
-                <td colspan="3"><small>Through <th:block th:each="hop, step : ${dependent.path()}"
-                        th:unless="${step.last}"><code th:text="|${hop.coordinate()} ${hop.version()}|">org.acme:app 1.0</code><th:block
-                        th:unless="${step.index == dependent.path().size() - 2}"> &rarr; </th:block></th:block></small></td>
-            </tr>
-            </th:block>
-            </tbody>
-        </table>
-        <p th:if="${reliedOn.next().isPresent()}"><small>Showing <th:block
-                th:text="${reliedOn.dependents().size()}">50</th:block> here; <a th:href="@{/ui/repositories/{repo}/version(repo=${repo},ecosystem=${detail.ecosystem},coordinate=${detail.coordinate},version=${detail.version},reliedAfter=${reliedOn.next().get()})}">more rely on it</a>.</small></p>
-        <p th:if="${!reliedAfter.isEmpty()}"><small><a th:href="@{/ui/repositories/{repo}/version(repo=${repo},ecosystem=${detail.ecosystem},coordinate=${detail.coordinate},version=${detail.version})}">Back to the first page</a>.</small></p>
-    </article>
+    <!--/* What depends on this version - the published versions built against it and those whose manifest names its
+         package - is its own screen, which pages through each. */-->
+    <p th:if="${capabilities.dependents()}"><a th:href="@{/ui/repositories/{repo}/dependents(repo=${repo},ecosystem=${detail.ecosystem},coordinate=${detail.coordinate},version=${detail.version})}">Dependents</a>
+        of this version: the published versions built against it, and those whose manifest declares its package.</p>
 
     <article th:unless="${detail.dependencies.isEmpty()}">
         <h2>Dependencies</h2>

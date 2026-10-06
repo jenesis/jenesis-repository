@@ -14,7 +14,6 @@ module build.jenesis.repository.dependents {
     requires build.jenesis.repository.maintenance;
     requires build.jenesis.repository.dependents.spi;
     requires build.jenesis.repository.inventory;
-    requires build.jenesis.repository.server.spi;
     requires build.jenesis.repository.settings;
     requires build.jenesis.repository.store;
     requires org.slf4j;
@@ -27,6 +26,4 @@ module build.jenesis.repository.dependents {
             with build.jenesis.repository.dependents.DependentsSettingsContributor;
     provides build.jenesis.repository.dependents.spi.DependentsQueryProvider
             with build.jenesis.repository.dependents.DependentsIndexProvider;
-    provides build.jenesis.repository.server.spi.CapabilityContributor
-            with build.jenesis.repository.dependents.DependentsCapabilityContributor;
 }

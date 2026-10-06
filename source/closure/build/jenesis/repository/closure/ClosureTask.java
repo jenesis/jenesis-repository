@@ -190,7 +190,7 @@ public final class ClosureTask implements MaintenanceTask {
         }
         cadence.completed(context.now(), !failed.any());
         if (visit.resolved > 0 || visit.exposed > 0 || visit.indexed > 0) {
-            LOGGER.info("Resolved {} closure(s), re-derived {} exposure(s) and indexed {} relied-on row(s) in {}/{}",
+            LOGGER.info("Resolved {} closure(s), re-derived {} exposure(s) and indexed {} dependent row(s) in {}/{}",
                     visit.resolved, visit.exposed, visit.indexed, context.tenant(), context.repository());
         }
     }
@@ -333,7 +333,7 @@ public final class ClosureTask implements MaintenanceTask {
         } catch (IOException | RuntimeException e) {
             LOGGER.warn("Could not tell what relies on the changed versions of {}/{}", context.tenant(),
                     context.repository(), e);
-            context.failures("The relied-on propagation of " + context.tenant() + "/" + context.repository(),
+            context.failures("The dependents propagation of " + context.tenant() + "/" + context.repository(),
                     "What relies on those versions is re-derived on its repository's next full pass.")
                     .record("changed", e);
         }
@@ -354,12 +354,12 @@ public final class ClosureTask implements MaintenanceTask {
             long removed = ReliedOn.reconcile(space, ReliedOn.SPACE, named -> Scopes.valid(named)
                     ? Optional.of(context.store().scope(named)) : Optional.empty());
             if (removed > 0) {
-                LOGGER.info("Removed {} relied-on row(s) no closure names any more across {}", removed,
+                LOGGER.info("Removed {} dependent row(s) no closure names any more across {}", removed,
                         context.tenant());
             }
         } catch (IOException | RuntimeException e) {
             clean = false;
-            LOGGER.warn("Could not reconcile the relied-on rows across {}", context.tenant(), e);
+            LOGGER.warn("Could not reconcile the dependent rows across {}", context.tenant(), e);
         }
         cadence.completed(context.now(), clean);
     }
@@ -379,15 +379,15 @@ public final class ClosureTask implements MaintenanceTask {
                     context.repository()) ? Optional.of(context.store())
                     : context.tenantView().repository(named).map(RepositoryContext::store));
             if (removed > 0) {
-                LOGGER.info("Removed {} relied-on row(s) no closure names any more in {}/{}", removed,
+                LOGGER.info("Removed {} dependent row(s) no closure names any more in {}/{}", removed,
                         context.tenant(), context.repository());
             }
         } catch (IOException | RuntimeException e) {
             clean = false;
-            LOGGER.warn("Could not reconcile the relied-on rows of {}/{}", context.tenant(), context.repository(), e);
-            context.failures("The relied-on reconcile of " + context.tenant() + "/" + context.repository(),
+            LOGGER.warn("Could not reconcile the dependent rows of {}/{}", context.tenant(), context.repository(), e);
+            context.failures("The dependents reconcile of " + context.tenant() + "/" + context.repository(),
                     "Rows no closure names stay until the next full pass; the reader passes over them.")
-                    .record("relied-on", e);
+                    .record("dependents", e);
         }
         cadence.completed(context.now(), clean);
     }

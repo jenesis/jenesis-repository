@@ -7,64 +7,112 @@
     <div th:replace="~{fragments :: messages}"></div>
     <th:block th:replace="~{base :: repositoryHeader('Dependents', 'of', null, null)}"></th:block>
 
-    <p th:unless="${available}">
-        No declared-dependencies index module is installed on this deployment, so "who declares a dependency on X"
-        queries are unavailable.
+    <p>
+        What depends on a package this repository holds. Its <strong>resolved dependents</strong> are the published
+        versions of the tenant whose closure reaches a version of it - built against that version - each with the
+        dependencies it is reached through. Its <strong>declared dependents</strong> are the versions here whose
+        manifest names the package, with the requirement each states: a requirement is not a version anything was
+        built against, and which version a client installs for it is decided when the client runs.
     </p>
+    <form method="get" th:action="@{/ui/repositories/{repo}/dependents(repo=${repo})}">
+        <input type="text" name="ecosystem" th:value="${ecosystem}" placeholder="ecosystem" aria-label="Ecosystem"/>
+        <input type="text" name="coordinate" th:value="${coordinate}"
+               placeholder="package, as its ecosystem spells it" aria-label="Package"/>
+        <input type="text" name="version" th:value="${version}"
+               placeholder="version (optional)" aria-label="Version"/>
+        <button th:replace="~{base :: primaryButton('Show dependents')}">Show dependents</button>
+    </form>
 
-    <div th:if="${available}">
-        <!--/* What manifests declare. Which published versions rely on a version, as their resolved closures reach it,
-             is the "Relied on by" list on that version's own page. */-->
-        <section aria-labelledby="declared-by">
-            <h2 id="declared-by">Declared by</h2>
-            <p>
-                Enter a package name as its ecosystem spells it, without a version - <code>lodash</code>,
-                <code>org.apache.logging.log4j:log4j-core</code> - to see every version here whose manifest declares a
-                dependency on it, with the requirement it states. Add a version of that package to see whether each
-                requirement admits it, as the declaring ecosystem's own grammar reads it. A requirement is not a
-                resolved version: which version a client installs for it is decided when the client runs. The
-                published versions that do rely on a given version, as their resolved closures reach it, are listed on
-                that version's page.
-            </p>
-            <!--/* The panel renders the durable index only - the pass is the background task's job, never done on
-                 this read - so it shows how fresh that index is, and a never-indexed one reads as exactly that. */-->
-            <p><small th:if="${declaredBuilt != null}">Declared dependencies last indexed in full:
-                <span th:text="${declaredBuilt}">-</span></small>
-                <small th:if="${declaredBuilt == null}">The declared dependencies have not been indexed in full yet -
-                the background pass does it; until then the list below may be incomplete.</small></p>
-            <form method="get" th:action="@{/ui/repositories/{repo}/dependents(repo=${repo})}">
-                <input type="text" name="package" th:value="${dependency}"
-                       placeholder="package name" aria-label="Package"/>
-                <input type="text" name="version" th:value="${version}"
-                       placeholder="version (optional)" aria-label="Version"/>
-                <button th:replace="~{base :: primaryButton('Show declarations')}">Show declarations</button>
-            </form>
-            <th:block th:if="${declared != null}">
-                <th:block th:if="${declared.declarations().isEmpty()}">
-                    <div th:replace="~{base :: empty('No version here declares a dependency on this package.')}"></div>
+    <th:block th:if="${view != null}">
+        <!--/* The published versions whose closure reaches the version, each confirmed by its own closure, a page at a
+             time. One whose closure stopped here because the version is held for review is marked so, and one whose
+             bill names it by coordinate in another ecosystem - relying on whichever copy its build installed - is
+             marked with that ecosystem. */-->
+        <section aria-labelledby="resolved">
+            <h2 id="resolved">Resolved dependents</h2>
+            <p th:if="${view.resolved() == null}"><small>Name a version to see the published versions built against
+                it.</small></p>
+            <th:block th:if="${view.resolved() != null}">
+                <th:block th:if="${view.resolved().dependents().isEmpty() and after.isEmpty()}">
+                    <div th:replace="~{base :: empty('No resolved closure of a published version reaches this one.')}"></div>
                 </th:block>
-                <table th:unless="${declared.declarations().isEmpty()}">
-                    <caption>Versions declaring a dependency on <code th:text="${dependency}">package</code></caption>
+                <table class="app-list" th:unless="${view.resolved().dependents().isEmpty()}"
+                       aria-label="Published versions built against this one">
                     <thead>
-                    <tr><th scope="col">Ecosystem</th><th scope="col">Package</th><th scope="col">Version</th>
-                        <th scope="col">Requirement</th>
-                        <th scope="col" th:if="${!version.isBlank()}" th:text="'Admits ' + ${version}">Admits</th></tr>
+                    <tr>
+                        <th scope="col">Coordinate</th>
+                        <th scope="col">Version</th>
+                        <th scope="col">Repository</th>
+                    </tr>
                     </thead>
                     <tbody>
-                    <tr th:each="row : ${declared.declarations()}">
-                        <td th:text="${row.ecosystem()}">npm</td>
-                        <td><code th:text="${row.coordinate()}">app</code></td>
-                        <td th:text="${row.version()}">1.0.0</td>
+                    <th:block th:each="dependent : ${view.resolved().dependents()}">
+                    <tr class="app-list__lead">
+                        <td><th:block th:replace="~{base :: artifactLink(${dependent.coordinate()},
+                                @{/ui/repositories/{repo}/version(repo=${dependent.repository()},ecosystem=${dependent.ecosystem()},coordinate=${dependent.coordinate()},version=${dependent.version()})})}"></th:block></td>
+                        <td><code th:text="${dependent.version()}">1.0</code>
+                            <span th:if="${dependent.cut()}" class="app-badge app-badge--warn">its closure stops here</span>
+                            <span th:if="${dependent.byCoordinate()}" class="app-badge"
+                                  th:text="|names it in ${dependent.ecosystem()}|">names it in OCI</span></td>
+                        <td><code th:text="${dependent.repository()}">releases</code></td>
+                    </tr>
+                    <tr class="app-list__detail" th:if="${dependent.path().size() > 1}">
+                        <td colspan="3"><small>Through <th:block th:each="hop, step : ${dependent.path()}"
+                                th:unless="${step.last}"><code th:text="|${hop.coordinate()} ${hop.version()}|">org.acme:app 1.0</code><th:block
+                                th:unless="${step.index == dependent.path().size() - 2}"> &rarr; </th:block></th:block></small></td>
+                    </tr>
+                    </th:block>
+                    </tbody>
+                </table>
+                <p th:if="${view.resolved().next() != null}"><small>Showing <th:block
+                        th:text="${view.resolved().dependents().size()}">50</th:block> here; <a th:href="@{/ui/repositories/{repo}/dependents(repo=${repo},ecosystem=${ecosystem},coordinate=${coordinate},version=${version},after=${view.resolved().next()})}">more depend on it</a>.</small></p>
+                <p th:if="${!after.isEmpty()}"><small><a th:href="@{/ui/repositories/{repo}/dependents(repo=${repo},ecosystem=${ecosystem},coordinate=${coordinate},version=${version})}">Back to the first page</a>.</small></p>
+            </th:block>
+        </section>
+
+        <!--/* What manifests declare, read from the declared index only - its pass is the background task's job,
+             never done on this read - so the section says how fresh that index is, and a never-built one reads as
+             exactly that. */-->
+        <section aria-labelledby="declared">
+            <h2 id="declared">Declared dependents</h2>
+            <p th:unless="${view.declared().installed()}">
+                No declared-dependencies index is installed on this deployment, so the versions declaring a dependency
+                cannot be listed.
+            </p>
+            <th:block th:if="${view.declared().installed()}">
+                <p><small th:if="${view.declared().built() != null}">Declared dependencies last indexed in full:
+                    <span th:text="${view.declared().built()}">-</span></small>
+                    <small th:if="${view.declared().built() == null}">The declared dependencies have not been indexed in
+                    full yet - the background pass does it; until then none are listed.</small></p>
+                <th:block th:if="${view.declared().built() != null and view.declared().declarations().isEmpty()}">
+                    <div th:replace="~{base :: empty('No version here declares a dependency on this package.')}"></div>
+                </th:block>
+                <table class="app-list" th:unless="${view.declared().declarations().isEmpty()}"
+                       aria-label="Versions declaring a dependency on this package">
+                    <thead>
+                    <tr>
+                        <th scope="col">Coordinate</th>
+                        <th scope="col">Version</th>
+                        <th scope="col">Requirement</th>
+                        <th scope="col" th:if="${!version.isBlank()}" th:text="'Admits ' + ${version}">Admits</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr class="app-list__lead" th:each="row : ${view.declared().declarations()}">
+                        <td><th:block th:replace="~{base :: artifactLink(${row.coordinate()},
+                                @{/ui/repositories/{repo}/version(repo=${repo},ecosystem=${row.ecosystem()},coordinate=${row.coordinate()},version=${row.version()})})}"></th:block></td>
+                        <td><code th:text="${row.version()}">1.0.0</code></td>
                         <td><code th:text="${row.requirement().isEmpty() ? 'none stated' : row.requirement()}">^1</code></td>
                         <td th:if="${!version.isBlank()}" th:text="${row.admits()}">admits</td>
                     </tr>
                     </tbody>
                 </table>
-                <p th:if="${declared.more()}"><small>Showing the first page; more versions declare it - the
-                    <code>/api/dependents</code> answer pages through the rest.</small></p>
+                <p th:if="${view.declared().next() != null}"><small>Showing <th:block
+                        th:text="${view.declared().declarations().size()}">50</th:block> here; <a th:href="@{/ui/repositories/{repo}/dependents(repo=${repo},ecosystem=${ecosystem},coordinate=${coordinate},version=${version},declaredAfter=${view.declared().next()})}">more declare it</a>.</small></p>
+                <p th:if="${!declaredAfter.isEmpty()}"><small><a th:href="@{/ui/repositories/{repo}/dependents(repo=${repo},ecosystem=${ecosystem},coordinate=${coordinate},version=${version})}">Back to the first page</a>.</small></p>
             </th:block>
         </section>
-    </div>
+    </th:block>
 </main>
 </body>
 </html>

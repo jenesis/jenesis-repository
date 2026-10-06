@@ -401,7 +401,7 @@ final class ComplianceCommands {
         }
         List<ProvenanceClient.ClosureForeign> foreign = closure.foreign() == null ? List.of() : closure.foreign();
         if (!foreign.isEmpty()) {
-            System.out.println("  its bill names " + foreign.size() + " package(s) of other ecosystems, relied on by "
+            System.out.println("  its bill names " + foreign.size() + " package(s) of other ecosystems, followed by "
                     + "coordinate across the tenant:");
             for (ProvenanceClient.ClosureForeign entry : foreign) {
                 System.out.printf(Locale.ROOT, "    %s %s  %s, depth %d%n", entry.coordinate(), entry.version(),
@@ -436,47 +436,12 @@ final class ComplianceCommands {
 
     /** The dependencies a path goes through before the version it ends at, on a line of its own, where there are
      *  any. */
-    private static void through(List<ProvenanceClient.ClosureHop> path) {
+    static void through(List<ProvenanceClient.ClosureHop> path) {
         if (path == null || path.size() < 2) {
             return;
         }
         System.out.println("      through " + String.join(" -> ", path.subList(0, path.size() - 1).stream()
                 .map(hop -> hop.coordinate() + " " + hop.version()).toList()));
-    }
-
-    static int reliedOn(String[] args, Path home) throws Exception {
-        String usage = "Usage: relied-on <repo> <ecosystem> <coordinate> <version> [--cursor T]";
-        if (args.length < 5) {
-            throw new IllegalArgumentException(usage);
-        }
-        String cursor = null;
-        for (int i = 5; i < args.length; i++) {
-            switch (args[i]) {
-                case "--cursor" -> cursor = CliSupport.flag(args, ++i);
-                default -> throw new IllegalArgumentException(usage);
-            }
-        }
-        ProvenanceClient.ReliedOn page = CliSupport.client(home).provenance().reliedOn(args[1], args[2], args[3],
-                args[4], cursor);
-        List<ProvenanceClient.Dependent> dependents = page.dependents() == null ? List.of() : page.dependents();
-        String subject = page.coordinate() + " " + page.version();
-        if (dependents.isEmpty() && page.next() == null) {
-            System.out.println("No resolved closure of a published version reaches " + subject
-                    + (cursor == null ? "." : " past that cursor."));
-            return 0;
-        }
-        System.out.println(subject + " is relied on by:");
-        for (ProvenanceClient.Dependent dependent : dependents) {
-            System.out.println("    " + dependent.coordinate() + " " + dependent.version() + " of "
-                    + dependent.repository() + (dependent.cut() ? "  its closure stops here, held for review" : "")
-                    + (dependent.byCoordinate() ? "  its " + dependent.ecosystem() + " bill names it by coordinate"
-                    : ""));
-            through(dependent.path());
-        }
-        if (page.next() != null) {
-            System.out.println("  more rely on it: --cursor " + page.next());
-        }
-        return 0;
     }
 
     private static void line(String label, String value) {
