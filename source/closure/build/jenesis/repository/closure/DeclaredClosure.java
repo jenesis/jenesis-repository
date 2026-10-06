@@ -13,7 +13,7 @@ import build.jenesis.repository.compliance.QualityInspector;
  * repository can read - so a release no earlier source resolves still has one. Its declarations are read with every
  * installed inspector.
  */
-public final class DeclaredClosure implements ClosureSource {
+public final class DeclaredClosure implements ClosureSource.Resolving {
 
     /** The source's name. */
     public static final String NAME = "declarations";

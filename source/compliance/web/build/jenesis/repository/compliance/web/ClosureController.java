@@ -61,7 +61,7 @@ public class ClosureController {
     }
 
     /** One version's closure: {@code resolved} is when the pass resolved it, {@code kind} which kind of source
-     *  produced it - {@code BILL}, {@code RESOLVER}, {@code SCANNER} or {@code DECLARATIONS} - and {@code source} that
+     *  produced it - {@code LOCK}, {@code BILL}, {@code RESOLVER} or {@code DECLARATIONS} - and {@code source} that
      *  source's name, each {@code null} with no closure; a component's {@code repository} is empty where the version's
      *  own repository holds it; {@code foreign} the packages its bill names in other ecosystems, indexed by coordinate
      *  across the tenant; {@code exposure} is what the closure reaches that is held or carries findings; and

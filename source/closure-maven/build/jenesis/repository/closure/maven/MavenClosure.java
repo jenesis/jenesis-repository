@@ -58,7 +58,7 @@ import org.eclipse.aether.version.VersionScheme;
  * never asked. A POM the repository does not hold, or holds only for review, is a cut, and so is a range no held
  * version satisfies; what was collected besides is kept. A release with no POM is not this resolver's to answer.
  */
-public final class MavenClosure implements ClosureSource {
+public final class MavenClosure implements ClosureSource.Resolving {
 
     /** The source's name. */
     public static final String NAME = "maven-resolver";

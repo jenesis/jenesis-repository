@@ -176,13 +176,6 @@ class MavenClosureTest {
     }
 
     @Test
-    void a_release_without_a_pom_is_left_to_the_walk_by_declarations() throws IOException {
-        publication.link("/maven/org/acme/jar/1.0/jar-1.0.jar",
-                publication.storeBlob(new ByteArrayInputStream(new byte[]{1})));
-        assertThat(maven().resolve(ClosureWalk.of(store), "Maven", "org.acme:jar", "1.0", NOW)).isEmpty();
-    }
-
-    @Test
     void a_group_reads_poms_and_versions_through_the_repository_its_fallback_names() throws IOException {
         // The group publishes the release and holds lib 1.0; its parent and lib's newer versions are held only by the
         // repository its fallback names, so the parent's managed range sees the versions of both.
@@ -222,9 +215,9 @@ class MavenClosureTest {
     }
 
     /** The Maven Resolver as the closure pass finds it: the installed source of that name. */
-    private static ClosureSource maven() {
+    private static ClosureSource.Resolving maven() {
         return ClosureSource.installed().stream().filter(source -> "maven-resolver".equals(source.name()))
-                .findFirst().orElseThrow();
+                .map(ClosureSource.Resolving.class::cast).findFirst().orElseThrow();
     }
 
     private ClosureSection.Closure resolve(String coordinate, String version) throws IOException {

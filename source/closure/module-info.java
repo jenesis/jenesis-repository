@@ -11,9 +11,12 @@
  * release without one, a release published late and one published before the setting was on alike, and asked for
  * per repository by {@code closure-resolution}. How a closure is produced is a discovered
  * {@link build.jenesis.repository.closure.spi.ClosureSource}, each serving the ecosystems it declares and asked in order -
- * the bill a release carries ({@link build.jenesis.repository.closure.CarriedBill}), an ecosystem's own resolver, a
- * scanner, and last the walk over declarations ({@link build.jenesis.repository.closure.DeclaredClosure}), the first
- * answer winning; this module provides the first and the last. Evaluating a requirement in the walk is a discovered
+ * the lock file a release carries, the bill it carries ({@link build.jenesis.repository.closure.CarriedBill}), an
+ * ecosystem's own resolver, and last the walk over declarations
+ * ({@link build.jenesis.repository.closure.DeclaredClosure}), the first answer winning; this module provides the bill
+ * and the walk, and places every carried document's packages itself
+ * ({@link build.jenesis.repository.closure.CarriedClosure}), through the one answer to how a repository holds a
+ * version. Evaluating a requirement in the walk is a discovered
  * {@link build.jenesis.repository.closure.spi.RequirementGrammar}. Beside the closure the pass keeps what it reaches that
  * is held for review or carries findings ({@link build.jenesis.repository.closure.spi.ExposureSection}), re-derived on each
  * full pass, which is the state a published version inherits from the copies it relies on. The other way round, the

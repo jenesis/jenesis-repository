@@ -1,11 +1,9 @@
 package build.jenesis.repository.closure.lock;
 
 import module java.base;
-import build.jenesis.repository.closure.CarriedClosure;
-import build.jenesis.repository.closure.spi.ClosureSection;
 import build.jenesis.repository.closure.spi.ClosureSource;
-import build.jenesis.repository.closure.spi.ClosureWalk;
 import build.jenesis.repository.compliance.Ecosystems;
+import build.jenesis.repository.store.ArtifactStore;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.dataformat.toml.TomlMapper;
@@ -18,7 +16,7 @@ import tools.jackson.dataformat.toml.TomlMapper;
  * workspace member or a path dependency - and names nothing a repository holds, so it is a cut. A lock that does not
  * parse, or has no entry for the crate itself, is no closure, and the resolvers answer instead.
  */
-public final class CargoLock implements ClosureSource {
+public final class CargoLock implements ClosureSource.Carried {
 
     /** The source's name. */
     public static final String NAME = "carried-lock-cargo";
@@ -41,18 +39,17 @@ public final class CargoLock implements ClosureSource {
     }
 
     @Override
-    public Optional<ClosureSection.Closure> resolve(ClosureWalk walk, String ecosystem, String coordinate,
-                                                    String version, Instant now) throws IOException {
-        Optional<byte[]> lock = CarriedLock.read(walk, ecosystem, coordinate, version, "Cargo.lock");
+    public Optional<ClosureSource.Carriage> read(ArtifactStore release, String ecosystem, String coordinate,
+                                                 String version) throws IOException {
+        Optional<byte[]> lock = CarriedLock.read(release, ecosystem, coordinate, version, "Cargo.lock");
         if (lock.isEmpty()) {
             return Optional.empty();
         }
-        Optional<List<CarriedClosure.Entry>> entries = entries(lock.get(), coordinate, version);
+        Optional<List<ClosureSource.Entry>> entries = entries(lock.get(), coordinate, version);
         if (entries.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(CarriedClosure.place(walk, ecosystem, coordinate, version, entries.get(),
-                "the version's Cargo.lock", this, now));
+        return Optional.of(new ClosureSource.Carriage("the version's Cargo.lock", entries.get()));
     }
 
     /** One pinned package: its name, version, where it comes from, and the packages it lists. */
@@ -61,7 +58,7 @@ public final class CargoLock implements ClosureSource {
 
     /** The packages {@code lock} pins below {@code name} at {@code version}, each at its distance from it, or empty
      *  where the lock does not parse or has no entry for it. */
-    static Optional<List<CarriedClosure.Entry>> entries(byte[] lock, String name, String version) {
+    static Optional<List<ClosureSource.Entry>> entries(byte[] lock, String name, String version) {
         JsonNode root;
         try {
             root = TOML.readTree(lock);
@@ -83,7 +80,7 @@ public final class CargoLock implements ClosureSource {
         if (crate.isEmpty()) {
             return Optional.empty();
         }
-        List<CarriedClosure.Entry> entries = new ArrayList<>();
+        List<ClosureSource.Entry> entries = new ArrayList<>();
         Map<Pinned, Integer> depths = new HashMap<>();
         // The crate whose dependencies first named each one reached; the crate itself names its direct ones.
         Map<Pinned, Pinned> parents = new HashMap<>();
@@ -94,11 +91,11 @@ public final class CargoLock implements ClosureSource {
             int depth = depths.get(at);
             if (depth > 0) {
                 entries.add(at.source() == null
-                        ? CarriedClosure.Entry.unplaced(at.name(), at.version(), "built from the crate's own sources, "
+                        ? ClosureSource.Entry.unplaced(at.name(), at.version(), "built from the crate's own sources, "
                                 + "as the version's Cargo.lock records it, which names nothing a repository holds")
                         : depth == 1
-                                ? CarriedClosure.Entry.placed(Ecosystems.CRATES_IO, at.name(), at.version(), depth)
-                                : CarriedClosure.Entry.placed(Ecosystems.CRATES_IO, at.name(), at.version(), depth,
+                                ? ClosureSource.Entry.placed(Ecosystems.CRATES_IO, at.name(), at.version(), depth)
+                                : ClosureSource.Entry.placed(Ecosystems.CRATES_IO, at.name(), at.version(), depth,
                                         parents.get(at).name(), parents.get(at).version()));
             }
             for (String dependency : at.dependencies()) {
