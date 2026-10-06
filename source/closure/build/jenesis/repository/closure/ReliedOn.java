@@ -6,6 +6,7 @@ import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.metadata.MetadataDocument;
 import build.jenesis.repository.metadata.MetadataProvider;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Epoch;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -50,6 +51,11 @@ public final class ReliedOn {
      *  {@code <tenant>/.closure/}, beside the repositories. Also the name such a row's holder goes by, which no
      *  repository can take. */
     public static final String SPACE = ".closure";
+
+    /** The {@link Epoch} a holder's rows move: bumped once by every pass that wrote or removed rows the holder keeps -
+     *  a repository, or the tenant's {@value #SPACE} space - so a view ordering versions by what relies on them, which
+     *  folds it into its stamp, rebuilds on its next pass. */
+    public static final String EPOCH = "closure/reliance";
 
     /** The cursor prefix of a page continuing from a repository's own rows into the tenant's. */
     private static final String ACROSS = "tenant-";
@@ -204,11 +210,12 @@ public final class ReliedOn {
      * as held where the closure stopped - and the rows of its {@linkplain ClosureSection.Foreign packages of other
      * ecosystems} into {@code tenant}'s {@value #SPACE} space, none where there is no tenant store. With {@code blind}
      * every row is written; otherwise only a row not yet present, which is what a pass making sure of an indexed
-     * closure pays: one probe per row. Answers how many were written.
+     * closure pays: one probe per row. Answers how many were written, and adds every store a row was written into to
+     * {@code touched}, by its identity, for the pass to move its {@link #epoch} once.
      */
     public static int index(ClosureWalk walk, String ecosystem, Row dependent, ClosureSection.Closure closure,
-                            ExposureSection.Exposure exposure, boolean blind, Optional<ArtifactStore> tenant)
-            throws IOException {
+                            ExposureSection.Exposure exposure, boolean blind, Optional<ArtifactStore> tenant,
+                            Map<Object, ArtifactStore> touched) throws IOException {
         Map<String, ArtifactStore> holders = new HashMap<>();
         List<ClosureWalk.Member> members = walk.members();
         for (int i = 1; i < members.size(); i++) {
@@ -222,7 +229,8 @@ public final class ReliedOn {
             components.add(component.coordinate() + "@" + component.version() + "@" + component.repository());
             ArtifactStore holder = component.elsewhere() ? holders.get(component.repository())
                     : members.getFirst().store();
-            written += put(holder, key(ecosystem, component.coordinate(), component.version(), dependent), row, blind);
+            written += put(holder, key(ecosystem, component.coordinate(), component.version(), dependent), row, blind,
+                    touched);
         }
         for (ExposureSection.Reached reached : exposure.reached()) {
             if (!reached.held() || reached.version().isBlank() || !reached.ecosystem().isEmpty() || components.contains(
@@ -231,7 +239,8 @@ public final class ReliedOn {
             }
             ArtifactStore holder = reached.repository().isEmpty() ? members.getFirst().store()
                     : holders.get(reached.repository());
-            written += put(holder, key(ecosystem, reached.coordinate(), reached.version(), dependent), row, blind);
+            written += put(holder, key(ecosystem, reached.coordinate(), reached.version(), dependent), row, blind,
+                    touched);
         }
         if (!closure.foreign().isEmpty() && tenant.isPresent()) {
             ArtifactStore space = tenant.get().scope(SPACE);
@@ -240,18 +249,25 @@ public final class ReliedOn {
                     .put("ecosystem", ecosystem));
             for (ClosureSection.Foreign foreign : closure.foreign()) {
                 written += put(space, key(foreign.ecosystem(), foreign.coordinate(), foreign.version(), dependent),
-                        across, blind);
+                        across, blind, touched);
             }
         }
         return written;
     }
 
-    private static int put(ArtifactStore holder, String key, byte[] row, boolean blind) throws IOException {
+    private static int put(ArtifactStore holder, String key, byte[] row, boolean blind,
+                           Map<Object, ArtifactStore> touched) throws IOException {
         if (holder == null || !blind && holder.exists(key)) {
             return 0;
         }
         holder.write(key, new ByteArrayInputStream(row));
+        touched.putIfAbsent(holder.identity(), holder);
         return 1;
+    }
+
+    /** The epoch {@code holder}'s rows move - a repository's, or the tenant's {@value #SPACE} space's. */
+    public static Epoch epoch(ArtifactStore holder) {
+        return new Epoch(holder, EPOCH);
     }
 
     /**
@@ -271,6 +287,7 @@ public final class ReliedOn {
         String level = level(ecosystem, coordinate, version);
         holder.page(level, after == null ? "" : after, bound, names::add);
         List<Dependent> dependents = new ArrayList<>();
+        MetadataProvider metadata = MetadataProvider.installed();      // once per page, never per row
         for (String name : names) {
             Optional<Row> row = row(holder, level + "/" + name);
             if (row.isEmpty() || !readable.test(row.get().repository())) {
@@ -280,7 +297,7 @@ public final class ReliedOn {
             if (store.isEmpty()) {
                 continue;
             }
-            Optional<MetadataDocument> document = MetadataProvider.installed().over(store.get())
+            Optional<MetadataDocument> document = metadata.over(store.get())
                     .read(row.get().ecosystemOr(ecosystem), row.get().coordinate(), row.get().version());
             document.flatMap(read -> ClosureSection.closure(read.section(ClosureSection.TAG)))
                     .flatMap(closure -> reached(closure, document.get(), row.get(), holderName, ecosystem, coordinate,
@@ -387,6 +404,7 @@ public final class ReliedOn {
             }
         };
         long removed = 0;
+        MetadataProvider metadata = MetadataProvider.installed();      // once per sweep, never per row
         String resume = "";
         while (resume != null) {
             List<ArtifactStore.Listed> rows = new ArrayList<>();
@@ -404,7 +422,7 @@ public final class ReliedOn {
                 }
                 Optional<MetadataDocument> document = documents.get(row.get());
                 if (document == null) {
-                    document = MetadataProvider.installed().over(store.get()).read(
+                    document = metadata.over(store.get()).read(
                             row.get().ecosystemOr(subject.get().ecosystem()), row.get().coordinate(),
                             row.get().version());
                     documents.put(row.get(), document);
@@ -415,6 +433,9 @@ public final class ReliedOn {
                 holder.delete(listed.key());
                 removed++;
             }
+        }
+        if (removed > 0) {
+            epoch(holder).bump();
         }
         return removed;
     }
