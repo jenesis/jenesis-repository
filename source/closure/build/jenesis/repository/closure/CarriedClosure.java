@@ -9,11 +9,14 @@ import build.jenesis.repository.store.ServableNames;
 /**
  * A closure a release carries written out - a bill of materials, a lock file - placed in the repositories of a walk:
  * each package it names the holding the walk keeps of it, a release or a cached copy, at the distance the document
- * records; one the walk does not hold, holds for review, or that is named in another ecosystem, a cut saying so. What
- * the sources that read such a document share, so a bill and a lock file read the same.
+ * records; one the walk does not hold, or holds for review, a cut saying so. A package named in another ecosystem - a
+ * jar or a distribution package inside an image - is no repository of the walk's to hold, and is recorded as a
+ * {@link ClosureSection.Foreign} entry, indexed by its coordinate across the tenant. What the sources that read such a
+ * document share, so a bill and a lock file read the same.
  *
- * <p>Bounded at {@link ClosureResolver#MAX_COMPONENTS} components, a closure stopped there saying so. Nothing is
- * fetched: a lookup is a point read of each repository's inventory, in the walk's order.
+ * <p>Bounded at {@link ClosureResolver#MAX_COMPONENTS} entries, components and foreign entries together, a closure
+ * stopped there saying so. Nothing is fetched: a lookup is a point read of each repository's inventory, in the walk's
+ * order.
  */
 public final class CarriedClosure {
 
@@ -60,25 +63,26 @@ public final class CarriedClosure {
         List<Holder> holders = walk.members().stream().map(Holder::new).toList();
         List<ClosureSection.Component> components = new ArrayList<>();
         List<ClosureSection.Cut> cuts = new ArrayList<>();
+        List<ClosureSection.Foreign> foreign = new ArrayList<>();
         Set<String> seen = new HashSet<>();
-        seen.add(coordinate + "@" + version);
+        seen.add(ecosystem + "@" + coordinate + "@" + version);
         boolean truncated = false;
         for (Entry entry : entries) {
             if (entry.unplaced() != null) {
                 cuts.add(new ClosureSection.Cut(entry.coordinate(), entry.version(), entry.unplaced()));
                 continue;
             }
-            if (!seen.add(entry.coordinate() + "@" + entry.version())) {
+            if (!seen.add(entry.ecosystem() + "@" + entry.coordinate() + "@" + entry.version())) {
                 continue;
             }
-            if (!ecosystem.equals(entry.ecosystem())) {
-                cuts.add(new ClosureSection.Cut(entry.coordinate(), entry.version(),
-                        "named by " + document + " in " + entry.ecosystem() + ", another ecosystem"));
-                continue;
-            }
-            if (components.size() >= ClosureResolver.MAX_COMPONENTS) {
+            if (components.size() + foreign.size() >= ClosureResolver.MAX_COMPONENTS) {
                 truncated = true;
                 break;
+            }
+            if (!ecosystem.equals(entry.ecosystem())) {
+                foreign.add(new ClosureSection.Foreign(entry.ecosystem(), entry.coordinate(), entry.version(),
+                        entry.depth(), entry.viaCoordinate(), entry.viaVersion()));
+                continue;
             }
             Optional<Held> held = held(holders, ecosystem, entry.coordinate(), entry.version());
             if (held.isEmpty()) {
@@ -94,7 +98,8 @@ public final class CarriedClosure {
             }
         }
         return new ClosureSection.Closure(cuts.isEmpty() && !truncated ? ClosureSection.Status.RESOLVED
-                : ClosureSection.Status.PARTIAL, components, cuts, truncated, now, ClosureSource.Kind.BILL, source);
+                : ClosureSection.Status.PARTIAL, components, cuts, truncated, now, ClosureSource.Kind.BILL, source,
+                foreign);
     }
 
     /** One repository of the walk, as a carried document's packages are looked up in it. */

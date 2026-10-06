@@ -8,11 +8,13 @@ import build.jenesis.repository.inventory.IncrementalPasses;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.RepositoryContext;
+import build.jenesis.repository.maintenance.TenantContext;
 import build.jenesis.repository.maintenance.UnitFailures;
 import build.jenesis.repository.settings.CoreDefaults;
 import build.jenesis.repository.metadata.MetadataDocument;
 import build.jenesis.repository.metadata.MetadataProvider;
 import build.jenesis.repository.metadata.MetadataStore;
+import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
@@ -33,7 +35,9 @@ import build.jenesis.repository.store.ArtifactStore;
  * repository whose dependent no longer relies on what they name. A version here whose findings or holds changed
  * ({@link ChangedVersions}) marks the releases relying on it stale in their own repositories, whose next pass
  * re-derives their exposure first - so a release follows a new finding or hold on a copy it relies on within a pass of
- * each repository, with no feed asked and without waiting for its full pass.
+ * each repository, with no feed asked and without waiting for its full pass. A package a carried bill names in another
+ * ecosystem is indexed by coordinate for the whole tenant, its copies looked up in every repository of the tenant and
+ * a change to any of them followed the same way; the tenant hook reconciles those rows.
  *
  * <p>Lease-owned, since it writes the version documents; idempotent, since a crash leaves the versions it had not
  * reached without a section, which the next pass reaches. A version whose resolution fails is contained, reported, and
@@ -152,6 +156,7 @@ public final class ClosureTask implements MaintenanceTask {
         private final ClosureWalk through;
         private final Severity risk;
         private final UnitFailures failed;
+        private final Exposures.Tenant tenant;
         private long resolved;
         private long exposed;
         private long indexed;
@@ -163,6 +168,25 @@ public final class ClosureTask implements MaintenanceTask {
             this.through = through;
             this.risk = risk;
             this.failed = failed;
+            this.tenant = new Exposures.Tenant() {
+
+                /** The tenant's repositories, listed once for the visit and only where a closure asks. */
+                private List<String> repositories;
+
+                @Override
+                public List<String> repositories() throws IOException {
+                    if (repositories == null) {
+                        repositories = context.repositories();
+                    }
+                    return repositories;
+                }
+
+                @Override
+                public Optional<ArtifactStore> store(String repository) {
+                    return repository.equals(context.repository()) ? Optional.of(context.store())
+                            : context.repository(repository).map(RepositoryContext::store);
+                }
+            };
         }
 
         /** Resolve {@code release}'s closure where it has none and {@code resolve} says so, re-derive its exposure,
@@ -182,7 +206,7 @@ public final class ClosureTask implements MaintenanceTask {
                     }
                 }
                 ExposureSection.Exposure derived = Exposures.derive(through, release.ecosystem(), closure.get(), risk,
-                        context.now());
+                        context.now(), context.repository(), tenant);
                 Optional<ExposureSection.Exposure> was = document.flatMap(read -> ExposureSection.exposure(
                         read.section(ExposureSection.TAG)));
                 boolean changed = was.isEmpty() || !was.get().sameAs(derived);
@@ -190,7 +214,8 @@ public final class ClosureTask implements MaintenanceTask {
                 // them where they could be missing: a full pass, or an exposure naming a held version anew.
                 if (fresh || changed || full) {
                     indexed += ReliedOn.index(through, release.ecosystem(), new ReliedOn.Row(context.repository(),
-                            release.coordinate(), release.version()), closure.get(), derived, fresh);
+                            release.coordinate(), release.version()), closure.get(), derived, fresh,
+                            context.tenantStore());
                 }
                 if (fresh) {
                     metadata.mutate(release.ecosystem(), release.coordinate(), release.version(), ClosureSection.TAG,
@@ -216,15 +241,24 @@ public final class ClosureTask implements MaintenanceTask {
      *  resolves closures; a failure is contained and reported, and the full passes there re-derive what it missed. */
     private static void propagate(RepositoryContext context) {
         try {
-            ChangedVersions.drain(context.store(), DRAIN, changed -> ReliedOn.dependents(context.store(),
-                    changed.ecosystem(), changed.coordinate(), changed.version(), dependent -> {
-                        Optional<ArtifactStore> store = dependent.repository().equals(context.repository())
-                                ? Optional.of(context.store())
-                                : context.repository(dependent.repository()).map(RepositoryContext::store);
-                        if (store.isPresent()) {
-                            ReliedOn.stale(store.get(), changed.ecosystem(), dependent);
-                        }
-                    }));
+            Optional<ArtifactStore> space = context.tenantStore().map(tenant -> tenant.scope(ReliedOn.SPACE));
+            ChangedVersions.drain(context.store(), DRAIN, changed -> {
+                ReliedOn.Visitor<ReliedOn.Row> mark = dependent -> {
+                    Optional<ArtifactStore> store = dependent.repository().equals(context.repository())
+                            ? Optional.of(context.store())
+                            : context.repository(dependent.repository()).map(RepositoryContext::store);
+                    if (store.isPresent()) {
+                        ReliedOn.stale(store.get(), changed.ecosystem(), dependent);
+                    }
+                };
+                ReliedOn.dependents(context.store(), changed.ecosystem(), changed.coordinate(), changed.version(),
+                        mark);
+                // A copy here of a package some bill names by coordinate is one its build may have installed.
+                if (space.isPresent()) {
+                    ReliedOn.dependents(space.get(), changed.ecosystem(), changed.coordinate(), changed.version(),
+                            mark);
+                }
+            });
         } catch (IOException | RuntimeException e) {
             LOGGER.warn("Could not tell what relies on the changed versions of {}/{}", context.tenant(),
                     context.repository(), e);
@@ -232,6 +266,31 @@ public final class ClosureTask implements MaintenanceTask {
                     "What relies on those versions is re-derived on its repository's next full pass.")
                     .record("changed", e);
         }
+    }
+
+    /** On the reconcile's own full pass over the tenant, remove the rows of its {@value ReliedOn#SPACE} space - the
+     *  packages closures name by coordinate - whose dependent no longer relies on what they name. */
+    @Override
+    public void tenant(TenantContext context) throws IOException {
+        ArtifactStore space = context.store().scope(ReliedOn.SPACE);
+        IncrementalPasses cadence = IncrementalPasses.over(space, NAME, RECONCILE, context.config());
+        if (!cadence.full()) {
+            cadence.completed(context.now(), true);
+            return;
+        }
+        boolean clean = true;
+        try {
+            long removed = ReliedOn.reconcile(space, ReliedOn.SPACE, named -> Scopes.valid(named)
+                    ? Optional.of(context.store().scope(named)) : Optional.empty());
+            if (removed > 0) {
+                LOGGER.info("Removed {} relied-on row(s) no closure names any more across {}", removed,
+                        context.tenant());
+            }
+        } catch (IOException | RuntimeException e) {
+            clean = false;
+            LOGGER.warn("Could not reconcile the relied-on rows across {}", context.tenant(), e);
+        }
+        cadence.completed(context.now(), clean);
     }
 
     /** On the reconcile's own full pass, which runs whether or not this repository resolves closures - what it holds

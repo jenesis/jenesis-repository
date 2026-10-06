@@ -74,8 +74,10 @@ class CarriedBillTest {
         assertThat(closure.cuts()).extracting(ClosureSection.Cut::coordinate, ClosureSection.Cut::reason)
                 .containsExactlyInAnyOrder(
                         tuple("org.dep:c", "held for review"),
-                        tuple("org.dep:d", "named by the version's bill, not held by this repository"),
-                        tuple("left-pad", "named by the version's bill in npm, another ecosystem"));
+                        tuple("org.dep:d", "named by the version's bill, not held by this repository"));
+        assertThat(closure.foreign()).as("what it names in another ecosystem, relied on by coordinate rather than cut")
+                .extracting(ClosureSection.Foreign::ecosystem, ClosureSection.Foreign::coordinate)
+                .containsExactly(tuple("npm", "left-pad"));
         assertThat(closure.status()).isEqualTo(ClosureSection.Status.PARTIAL);
     }
 

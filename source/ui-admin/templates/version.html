@@ -199,7 +199,8 @@
                         <th:block th:each="reached : ${detail.exposure.reached()}">
                         <tr class="app-list__lead">
                             <td><th:block th:replace="~{base :: artifactLink(${reached.coordinate()},
-                                    @{/ui/repositories/{repo}/version(repo=${reached.repository().isEmpty() ? repo : reached.repository()},ecosystem=${detail.ecosystem},coordinate=${reached.coordinate()},version=${reached.version()})})}"></th:block></td>
+                                    @{/ui/repositories/{repo}/version(repo=${reached.repository().isEmpty() ? repo : reached.repository()},ecosystem=${reached.ecosystem().isEmpty() ? detail.ecosystem : reached.ecosystem()},coordinate=${reached.coordinate()},version=${reached.version()})})}"></th:block>
+                                <small th:unless="${reached.ecosystem().isEmpty()}" th:text="|${reached.ecosystem()}, the copy ${reached.repository().isEmpty() ? repo : reached.repository()} holds|">npm, the copy npm-proxy holds</small></td>
                             <td><code th:text="${reached.version()}">2.14.1</code></td>
                             <td><span th:if="${reached.held()}" class="app-badge app-badge--warn">held for review</span>
                                 <th:block th:if="${reached.findings() > 0}"><span
@@ -238,6 +239,33 @@
             </table>
             <p th:if="${detail.closure.components().size() > detail.closureShown().size()}"><small
                     th:text="|Showing the first ${detail.closureShown().size()} of ${detail.closure.components().size()}.|">Showing the first 200 of 250.</small></p>
+            <!--/* What the bill names in other ecosystems - the jars or distribution packages inside an image - which no
+                 repository of the walk is asked to hold: each is relied on by coordinate, so a finding or a hold on any
+                 copy of it in the tenant reaches this version. */-->
+            <th:block th:unless="${detail.closure.foreign().isEmpty()}">
+                <p><small th:text="|${detail.closure.foreign().size()} package(s) its bill names in other ecosystems, relied on by coordinate: a copy of one in any repository of the tenant counts.|">40
+                    packages its bill names in other ecosystems.</small></p>
+                <table class="app-list" aria-label="Packages of other ecosystems">
+                    <thead>
+                    <tr>
+                        <th scope="col">Coordinate</th>
+                        <th scope="col">Version</th>
+                        <th scope="col">Ecosystem</th>
+                        <th scope="col">Depth</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="entry : ${detail.foreignShown()}">
+                        <td><code th:text="${entry.coordinate()}">org.apache.logging.log4j:log4j-core</code></td>
+                        <td><code th:text="${entry.version()}">2.14.1</code></td>
+                        <td th:text="${entry.ecosystem()}">Maven</td>
+                        <td th:text="${entry.depth()}">1</td>
+                    </tr>
+                    </tbody>
+                </table>
+                <p th:if="${detail.closure.foreign().size() > detail.foreignShown().size()}"><small
+                        th:text="|Showing the first ${detail.foreignShown().size()} of ${detail.closure.foreign().size()}.|">Showing the first 200 of 250.</small></p>
+            </th:block>
             <p th:if="${detail.closure.truncated()}"><small>The closure stopped at its bound; what lies past it is not
                 listed.</small></p>
             <ul th:unless="${detail.closure.cuts().isEmpty()}" class="app-reasons" aria-label="Unresolved">
@@ -249,7 +277,9 @@
 
     <!--/* The other way round: which published versions of the tenant rely on this one, as the closures resolved so far
          reach it - each confirmed by its own closure, with the dependencies it is reached through - a page at a
-         time. A version whose closure stopped here because this one is held for review is marked so. */-->
+         time. A version whose closure stopped here because this one is held for review is marked so, and one whose
+         bill names this version by coordinate in another ecosystem - relying on whichever copy its build installed -
+         is marked with that ecosystem. */-->
     <article>
         <h2>Relied on by</h2>
         <th:block th:if="${reliedOn.dependents().isEmpty() and reliedAfter.isEmpty()}">
@@ -268,9 +298,11 @@
             <th:block th:each="dependent : ${reliedOn.dependents()}">
             <tr class="app-list__lead">
                 <td><th:block th:replace="~{base :: artifactLink(${dependent.coordinate()},
-                        @{/ui/repositories/{repo}/version(repo=${dependent.repository()},ecosystem=${detail.ecosystem},coordinate=${dependent.coordinate()},version=${dependent.version()})})}"></th:block></td>
+                        @{/ui/repositories/{repo}/version(repo=${dependent.repository()},ecosystem=${dependent.ecosystem()},coordinate=${dependent.coordinate()},version=${dependent.version()})})}"></th:block></td>
                 <td><code th:text="${dependent.version()}">1.0</code>
-                    <span th:if="${dependent.cut()}" class="app-badge app-badge--warn">its closure stops here</span></td>
+                    <span th:if="${dependent.cut()}" class="app-badge app-badge--warn">its closure stops here</span>
+                    <span th:if="${dependent.byCoordinate()}" class="app-badge"
+                          th:text="|names it in ${dependent.ecosystem()}|">names it in OCI</span></td>
                 <td><code th:text="${dependent.repository()}">releases</code></td>
             </tr>
             <tr class="app-list__detail" th:if="${dependent.path().size() > 1}">

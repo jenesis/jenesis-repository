@@ -33,11 +33,26 @@ import tools.jackson.databind.json.JsonMapper;
  * <p><b>Following a change.</b> Where what a row names changes - a finding, a hold - the closure pass of the holding
  * repository marks the row's dependent {@linkplain #stale stale} in the dependent's own repository, under
  * {@value #STALE}, and that repository's pass re-derives it. A marker is a request, removed before it is acted on.
+ *
+ * <p><b>By coordinate, across the tenant.</b> A package a carried bill names in another ecosystem than its version's
+ * ({@link ClosureSection.Foreign}) is held by no repository of the walk, so its rows are kept once for the tenant, in
+ * the same layout under the tenant's {@value #SPACE} space, each naming its dependent's ecosystem. A copy of it in any
+ * repository of the tenant is then relied on by those dependents: every repository's pass follows a change to one of
+ * its versions through them as through its own rows, and a copy's page lists them after its own. The tenant's
+ * {@linkplain #reconcile reconcile} runs in the pass's tenant hook.
  */
 public final class ReliedOn {
 
     /** The root of the rows. */
     public static final String ROOT = "closure/relied-on";
+
+    /** The tenant's space holding the rows of the packages closures name by coordinate, in another ecosystem: under
+     *  {@code <tenant>/.closure/}, beside the repositories. Also the name such a row's holder goes by, which no
+     *  repository can take. */
+    public static final String SPACE = ".closure";
+
+    /** The cursor prefix of a page continuing from a repository's own rows into the tenant's. */
+    private static final String ACROSS = "tenant-";
 
     /** The most rows one page answers. */
     public static final int MAX_PAGE = 200;
@@ -53,17 +68,34 @@ public final class ReliedOn {
     private ReliedOn() {
     }
 
-    /** A published version relying on what a repository holds, as a row names it. */
-    public record Row(String repository, String coordinate, String version) {
+    /** A published version relying on what a repository holds, as a row names it: its repository, coordinate and
+     *  version, and its ecosystem where that is not the one the row is kept under - empty otherwise. */
+    public record Row(String repository, String coordinate, String version, String ecosystem) {
+
+        public Row {
+            ecosystem = ecosystem == null ? "" : ecosystem;
+        }
+
+        /** A dependent in the ecosystem of what it relies on. */
+        public Row(String repository, String coordinate, String version) {
+            this(repository, coordinate, version, "");
+        }
+
+        /** The dependent's ecosystem, {@code subject} being that of what the row says it relies on. */
+        public String ecosystemOr(String subject) {
+            return ecosystem.isEmpty() ? subject : ecosystem;
+        }
     }
 
     /**
-     * A published version relying on the version asked about: its repository, coordinate and version, how its closure
-     * reaches it - from the dependency it names itself down to the version, both included - and whether the closure
-     * stopped there, a version held for review being a cut rather than a component.
+     * A published version relying on the version asked about: its repository, ecosystem, coordinate and version, how
+     * its closure reaches it - from the dependency it names itself down to the version, both included - whether the
+     * closure stopped there, a version held for review being a cut rather than a component, and whether it names the
+     * version by coordinate alone, in another ecosystem than its own, and so relies on whichever copy its build
+     * installed.
      */
-    public record Dependent(String repository, String coordinate, String version, List<ClosureSection.Hop> path,
-                            boolean cut) {
+    public record Dependent(String repository, String ecosystem, String coordinate, String version,
+                            List<ClosureSection.Hop> path, boolean cut, boolean byCoordinate) {
 
         public Dependent {
             path = List.copyOf(path);
@@ -113,6 +145,7 @@ public final class ReliedOn {
     /** Ask the closure pass of {@code store}, the repository of {@code dependent}, to re-derive it: what its closure
      *  reaches changed. A release asked twice before the pass is one marker. */
     static void stale(ArtifactStore store, String ecosystem, Row dependent) throws IOException {
+        ecosystem = dependent.ecosystemOr(ecosystem);
         store.write(STALE + "/" + HexFormat.of().formatHex(sha256((ecosystem + "\n" + dependent.coordinate() + "\n"
                         + dependent.version()).getBytes(StandardCharsets.UTF_8))),
                 new ByteArrayInputStream(JSON.writeValueAsBytes(JSON.createObjectNode().put("ecosystem", ecosystem)
@@ -168,11 +201,14 @@ public final class ReliedOn {
     /**
      * Write the rows of {@code closure}, the closure of {@code dependent} in the walk's first repository, into the
      * repositories of {@code walk} holding what it reaches - every component, and every version {@code exposure} names
-     * as held where the closure stopped. With {@code blind} every row is written; otherwise only a row not yet present,
-     * which is what a pass making sure of an indexed closure pays: one probe per row. Answers how many were written.
+     * as held where the closure stopped - and the rows of its {@linkplain ClosureSection.Foreign packages of other
+     * ecosystems} into {@code tenant}'s {@value #SPACE} space, none where there is no tenant store. With {@code blind}
+     * every row is written; otherwise only a row not yet present, which is what a pass making sure of an indexed
+     * closure pays: one probe per row. Answers how many were written.
      */
     public static int index(ClosureWalk walk, String ecosystem, Row dependent, ClosureSection.Closure closure,
-                     ExposureSection.Exposure exposure, boolean blind) throws IOException {
+                            ExposureSection.Exposure exposure, boolean blind, Optional<ArtifactStore> tenant)
+            throws IOException {
         Map<String, ArtifactStore> holders = new HashMap<>();
         List<ClosureWalk.Member> members = walk.members();
         for (int i = 1; i < members.size(); i++) {
@@ -189,13 +225,23 @@ public final class ReliedOn {
             written += put(holder, key(ecosystem, component.coordinate(), component.version(), dependent), row, blind);
         }
         for (ExposureSection.Reached reached : exposure.reached()) {
-            if (!reached.held() || reached.version().isBlank() || components.contains(
+            if (!reached.held() || reached.version().isBlank() || !reached.ecosystem().isEmpty() || components.contains(
                     reached.coordinate() + "@" + reached.version() + "@" + reached.repository())) {
                 continue;
             }
             ArtifactStore holder = reached.repository().isEmpty() ? members.getFirst().store()
                     : holders.get(reached.repository());
             written += put(holder, key(ecosystem, reached.coordinate(), reached.version(), dependent), row, blind);
+        }
+        if (!closure.foreign().isEmpty() && tenant.isPresent()) {
+            ArtifactStore space = tenant.get().scope(SPACE);
+            byte[] across = JSON.writeValueAsBytes(JSON.createObjectNode().put("repository", dependent.repository())
+                    .put("coordinate", dependent.coordinate()).put("version", dependent.version())
+                    .put("ecosystem", ecosystem));
+            for (ClosureSection.Foreign foreign : closure.foreign()) {
+                written += put(space, key(foreign.ecosystem(), foreign.coordinate(), foreign.version(), dependent),
+                        across, blind);
+            }
         }
         return written;
     }
@@ -235,34 +281,78 @@ public final class ReliedOn {
                 continue;
             }
             Optional<MetadataDocument> document = MetadataProvider.installed().over(store.get())
-                    .read(ecosystem, row.get().coordinate(), row.get().version());
+                    .read(row.get().ecosystemOr(ecosystem), row.get().coordinate(), row.get().version());
             document.flatMap(read -> ClosureSection.closure(read.section(ClosureSection.TAG)))
-                    .flatMap(closure -> reached(closure, document.get(), row.get(), holderName, coordinate, version))
+                    .flatMap(closure -> reached(closure, document.get(), row.get(), holderName, ecosystem, coordinate,
+                            version))
                     .ifPresent(dependents::add);
         }
         return new Page(dependents, names.size(),
                 names.size() < bound ? Optional.empty() : Optional.of(names.getLast()));
     }
 
-    /** How {@code closure}, of the dependent {@code row} names, reaches {@code coordinate} at {@code version} held by
-     *  {@code holderName}: as a component held there, or as a cut its exposure names as held there. */
+    /**
+     * One page of the published versions relying on a version {@code holder} holds, its own rows first and then the
+     * tenant's - the versions naming it by coordinate in another ecosystem - as {@link #page} answers each. A page
+     * ending the repository's own rows fills the rest of its bound from the tenant's, so the two together read no more
+     * rows than one page does; the cursor of a page within the tenant's rows is marked so.
+     */
+    public static Page pageAcross(ArtifactStore holder, String holderName, Optional<ArtifactStore> tenant,
+                                  Function<String, Optional<ArtifactStore>> repositories, Predicate<String> readable,
+                                  String ecosystem, String coordinate, String version, String after, int limit)
+            throws IOException {
+        Optional<ArtifactStore> space = tenant.map(store -> store.scope(SPACE));
+        String resume = after == null ? "" : after;
+        int bound = Math.max(1, Math.min(limit, MAX_PAGE));
+        if (space.isEmpty()) {
+            return page(holder, holderName, repositories, readable, ecosystem, coordinate, version,
+                    resume.startsWith(ACROSS) ? "" : resume, bound);
+        }
+        List<Dependent> dependents = new ArrayList<>();
+        int examined = 0;
+        if (!resume.startsWith(ACROSS)) {
+            Page own = page(holder, holderName, repositories, readable, ecosystem, coordinate, version, resume,
+                    bound);
+            if (own.next().isPresent()) {
+                return own;
+            }
+            dependents.addAll(own.dependents());
+            examined = own.examined();
+            resume = ACROSS;
+        }
+        Page across = page(space.get(), SPACE, repositories, readable, ecosystem, coordinate, version,
+                resume.substring(ACROSS.length()), Math.max(1, bound - examined));
+        dependents.addAll(across.dependents());
+        return new Page(dependents, examined + across.examined(), across.next().map(next -> ACROSS + next));
+    }
+
+    /** How {@code closure}, of the dependent {@code row} names, reaches {@code coordinate} at {@code version} of
+     *  {@code ecosystem} held by {@code holderName}: as a component held there, or as a cut its exposure names as held
+     *  there - or, held by the tenant's {@value #SPACE} space, as a package its bill names in that ecosystem. */
     private static Optional<Dependent> reached(ClosureSection.Closure closure, MetadataDocument document, Row row,
-                                               String holderName, String coordinate, String version) {
+                                               String holderName, String ecosystem, String coordinate,
+                                               String version) {
+        String own = row.ecosystemOr(ecosystem);
+        if (SPACE.equals(holderName)) {
+            List<ClosureSection.Hop> path = ClosureSection.foreignPath(closure, ecosystem, coordinate, version);
+            return path.isEmpty() ? Optional.empty() : Optional.of(new Dependent(row.repository(), own,
+                    row.coordinate(), row.version(), path, false, true));
+        }
         String through = holderName.equals(row.repository()) ? "" : holderName;
         for (ClosureSection.Component component : closure.components()) {
             if (component.coordinate().equals(coordinate) && component.version().equals(version)
                     && component.repository().equals(through)) {
-                return Optional.of(new Dependent(row.repository(), row.coordinate(), row.version(),
-                        ClosureSection.path(closure, coordinate, version), false));
+                return Optional.of(new Dependent(row.repository(), own, row.coordinate(), row.version(),
+                        ClosureSection.path(closure, coordinate, version), false, false));
             }
         }
         Optional<ExposureSection.Exposure> exposure = ExposureSection.exposure(document.section(ExposureSection.TAG));
         if (exposure.isPresent()) {
             for (ExposureSection.Reached reached : exposure.get().reached()) {
-                if (reached.held() && reached.coordinate().equals(coordinate) && reached.version().equals(version)
-                        && reached.repository().equals(through)) {
-                    return Optional.of(new Dependent(row.repository(), row.coordinate(), row.version(),
-                            List.of(new ClosureSection.Hop(coordinate, version)), true));
+                if (reached.held() && reached.ecosystem().isEmpty() && reached.coordinate().equals(coordinate)
+                        && reached.version().equals(version) && reached.repository().equals(through)) {
+                    return Optional.of(new Dependent(row.repository(), own, row.coordinate(), row.version(),
+                            List.of(new ClosureSection.Hop(coordinate, version)), true, false));
                 }
             }
         }
@@ -302,8 +392,9 @@ public final class ReliedOn {
                 }
                 Optional<MetadataDocument> document = documents.get(row.get());
                 if (document == null) {
-                    document = MetadataProvider.installed().over(store.get()).read(subject.get().ecosystem(),
-                            row.get().coordinate(), row.get().version());
+                    document = MetadataProvider.installed().over(store.get()).read(
+                            row.get().ecosystemOr(subject.get().ecosystem()), row.get().coordinate(),
+                            row.get().version());
                     documents.put(row.get(), document);
                 }
                 if (relied(document, row.get(), holderName, subject.get())) {
@@ -323,8 +414,8 @@ public final class ReliedOn {
             return false;
         }
         Optional<ClosureSection.Closure> closure = ClosureSection.closure(document.get().section(ClosureSection.TAG));
-        return closure.isEmpty() || reached(closure.get(), document.get(), row, holderName, subject.coordinate(),
-                subject.version()).isPresent();
+        return closure.isEmpty() || reached(closure.get(), document.get(), row, holderName, subject.ecosystem(),
+                subject.coordinate(), subject.version()).isPresent();
     }
 
     /** The version a row's key is a row of. */
@@ -351,7 +442,7 @@ public final class ReliedOn {
             String coordinate = node.path("coordinate").asString("");
             String version = node.path("version").asString("");
             return repository.isEmpty() || coordinate.isEmpty() || version.isEmpty() ? Optional.empty()
-                    : Optional.of(new Row(repository, coordinate, version));
+                    : Optional.of(new Row(repository, coordinate, version, node.path("ecosystem").asString("")));
         } catch (RuntimeException unreadable) {
             return Optional.empty();
         }

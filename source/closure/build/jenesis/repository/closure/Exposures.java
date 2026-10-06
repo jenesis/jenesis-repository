@@ -6,6 +6,7 @@ import build.jenesis.repository.findings.Finding;
 import build.jenesis.repository.findings.Findings;
 import build.jenesis.repository.findings.FindingsProvider;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
+import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.store.ServableNames;
 
@@ -13,17 +14,45 @@ import build.jenesis.repository.store.ServableNames;
  * What a published version inherits from its closure: each version it reaches as it stands in the repository of the
  * walk holding it - held for review, and its findings at or above the risk band. A component is looked up where the
  * closure says it is held; a cut naming a version some repository of the walk holds for review is the held copy the
- * closure stopped at, and is looked up there. Point reads only, a few per version reached, so the work is bounded by
- * the closure's own bound; nothing is asked of a feed.
+ * closure stopped at, and is looked up there. A package the version's bill names in another ecosystem is looked up in
+ * every repository of the tenant, since any copy of it may be the one the build installed: each copy held or carrying
+ * findings is reached, named by the repository holding it. Point reads only, a few per version reached - and per
+ * repository of the tenant for such a package - so the work is bounded by the closure's own bound; nothing is asked of
+ * a feed.
  */
 final class Exposures {
 
     private Exposures() {
     }
 
-    /** {@code closure}'s exposure over the repositories of {@code walk}, findings counted from {@code risk} up. */
+    /** The tenant's repositories a closure's packages of other ecosystems are looked up in: their names, asked only
+     *  of a closure naming such a package, and each one's store. */
+    interface Tenant {
+
+        /** No repository beyond the walk's: a closure's packages of other ecosystems are found nowhere. */
+        Tenant NONE = new Tenant() {
+            @Override
+            public List<String> repositories() {
+                return List.of();
+            }
+
+            @Override
+            public Optional<ArtifactStore> store(String repository) {
+                return Optional.empty();
+            }
+        };
+
+        List<String> repositories() throws IOException;
+
+        Optional<ArtifactStore> store(String repository);
+    }
+
+    /** {@code closure}'s exposure over the repositories of {@code walk}, findings counted from {@code risk} up, and
+     *  its packages of other ecosystems over {@code tenant}'s, {@code own} being the name of the repository of the
+     *  version - the walk's first. */
     static ExposureSection.Exposure derive(ClosureWalk walk, String ecosystem, ClosureSection.Closure closure,
-                                           Severity risk, Instant now) throws IOException {
+                                           Severity risk, Instant now, String own, Tenant tenant)
+            throws IOException {
         List<ClosureWalk.Member> members = walk.members();
         Map<String, ClosureWalk.Member> byRepository = new HashMap<>();
         for (int i = 1; i < members.size(); i++) {
@@ -40,17 +69,41 @@ final class Exposures {
             examined++;
             boolean held = !new StoreRepositoryInventory(holder.store()).disclosable(ecosystem,
                     component.coordinate(), component.version(), ServableNames.Policy.HIDE_WITHHELD);
-            add(reached, holder, ecosystem, component.coordinate(), component.version(), component.repository(), held,
-                    risk, ClosureSection.path(closure, component.coordinate(), component.version()));
+            add(reached, holder.store(), ecosystem, component.coordinate(), component.version(),
+                    component.repository(), held, risk, ClosureSection.path(closure, component.coordinate(),
+                            component.version()), "");
         }
         for (ClosureSection.Cut cut : closure.cuts()) {
             for (int i = 0; i < members.size(); i++) {
                 ClosureWalk.Member member = members.get(i);
                 if (heldForReview(member, ecosystem, cut.coordinate(), cut.requirement())) {
                     examined++;
-                    add(reached, member, ecosystem, cut.coordinate(), cut.requirement(),
-                            i == 0 ? "" : member.repository(), true, risk, List.of());
+                    add(reached, member.store(), ecosystem, cut.coordinate(), cut.requirement(),
+                            i == 0 ? "" : member.repository(), true, risk, List.of(), "");
                     break;
+                }
+            }
+        }
+        List<String> repositories = closure.foreign().isEmpty() ? List.of() : tenant.repositories();
+        for (ClosureSection.Foreign foreign : closure.foreign()) {
+            examined++;
+            for (String repository : repositories) {
+                Optional<ArtifactStore> store = tenant.store(repository);
+                if (store.isEmpty()) {
+                    continue;
+                }
+                StoreRepositoryInventory inventory = new StoreRepositoryInventory(store.get());
+                boolean holds = inventory.publishedAt(foreign.ecosystem(), foreign.coordinate(), foreign.version())
+                        .isPresent() || inventory.cachedAt(foreign.ecosystem(), foreign.coordinate(),
+                        foreign.version()).isPresent();
+                boolean held = holds ? !inventory.disclosable(foreign.ecosystem(), foreign.coordinate(),
+                        foreign.version(), ServableNames.Policy.HIDE_WITHHELD)
+                        : HeldVersions.held(store.get(), foreign.ecosystem(), foreign.coordinate(), foreign.version());
+                if (holds || held) {
+                    add(reached, store.get(), foreign.ecosystem(), foreign.coordinate(), foreign.version(),
+                            repository.equals(own) ? "" : repository, held, risk, ClosureSection.foreignPath(closure,
+                                    foreign.ecosystem(), foreign.coordinate(), foreign.version()),
+                            foreign.ecosystem());
                 }
             }
         }
@@ -73,13 +126,13 @@ final class Exposures {
     }
 
     /** Add the version, reached along {@code path}, to {@code reached} where it is held or carries findings at or
-     *  above {@code risk}. */
-    private static void add(List<ExposureSection.Reached> reached, ClosureWalk.Member holder, String ecosystem,
+     *  above {@code risk}, {@code foreign} naming its ecosystem where that is not the closure's own. */
+    private static void add(List<ExposureSection.Reached> reached, ArtifactStore holder, String ecosystem,
                             String coordinate, String version, String repository, boolean held, Severity risk,
-                            List<ClosureSection.Hop> path) throws IOException {
+                            List<ClosureSection.Hop> path, String foreign) throws IOException {
         int count = 0;
         Severity worst = null;
-        Optional<Findings> ledger = FindingsProvider.installed().map(provider -> provider.over(holder.store()));
+        Optional<Findings> ledger = FindingsProvider.installed().map(provider -> provider.over(holder));
         if (ledger.isPresent()) {
             for (Finding finding : ledger.get().of(ecosystem, coordinate, version)) {
                 if (finding.active() && finding.severity().compareTo(risk) >= 0) {
@@ -92,7 +145,7 @@ final class Exposures {
         }
         if (held || count > 0) {
             reached.add(new ExposureSection.Reached(coordinate, version, repository, held, count,
-                    worst == null ? "" : worst.name(), path));
+                    worst == null ? "" : worst.name(), path, foreign));
         }
     }
 }

@@ -411,13 +411,14 @@ public class RepositoryBrowse extends TenantScope implements AutoCloseable {
     /**
      * One page of the published versions of the signed-in tenant relying on {@code version} of {@code coordinate}
      * held by {@code repository}, after {@code after}: each confirmed by its own closure, with the path it is reached
-     * along ({@link ReliedOn#page}). The console is the tenant's, so it names a dependent in any of its repositories.
+     * along - those reaching this copy, then those whose bills name the version by coordinate in another ecosystem
+     * ({@link ReliedOn#pageAcross}). The console is the tenant's, so it names a dependent in any of its repositories.
      */
     public ReliedOn.Page reliedOn(String repository, String ecosystem, String coordinate, String version, String after)
             throws IOException {
-        return ReliedOn.page(scope(repository), repository, name -> validRepository(name)
-                ? Optional.of(scope(name)) : Optional.empty(), _ -> true, ecosystem, coordinate, version, after,
-                RELIED_ON_SHOWN);
+        return ReliedOn.pageAcross(scope(repository), repository, Optional.of(root.scope(tenant())),
+                name -> validRepository(name) ? Optional.of(scope(name)) : Optional.empty(), _ -> true, ecosystem,
+                coordinate, version, after, RELIED_ON_SHOWN);
     }
 
     /**
@@ -507,6 +508,13 @@ public class RepositoryBrowse extends TenantScope implements AutoCloseable {
         public List<ClosureSection.Component> closureShown() {
             return closure == null ? List.of()
                     : closure.components().subList(0, Math.min(DEPENDENCIES_SHOWN, closure.components().size()));
+        }
+
+        /** The packages the closure's bill names in other ecosystems, as the page lists them: at most
+         *  {@link #DEPENDENCIES_SHOWN}. */
+        public List<ClosureSection.Foreign> foreignShown() {
+            return closure == null ? List.of()
+                    : closure.foreign().subList(0, Math.min(DEPENDENCIES_SHOWN, closure.foreign().size()));
         }
 
 
