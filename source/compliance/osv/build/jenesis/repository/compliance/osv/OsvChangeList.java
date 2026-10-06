@@ -79,7 +79,9 @@ final class OsvChangeList {
         return URLEncoder.encode(ecosystem, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
-    /** At most {@code limit} bytes of {@code in}, remembering whether the limit, not the stream, ended the read. */
+    /** At most {@code limit} bytes of {@code in}, remembering whether the limit, not the stream, ended the read: at
+     *  the limit it looks one byte past it, so a list exactly {@code limit} bytes long ends as a whole list rather
+     *  than as one cut short. */
     private static final class BoundedInput extends FilterInputStream {
 
         private long remaining;
@@ -94,11 +96,16 @@ final class OsvChangeList {
             return exhausted;
         }
 
+        /** At the limit, whether the stream goes on past it: the byte looked at is never handed out. */
+        private int atLimit() throws IOException {
+            exhausted |= super.read() >= 0;
+            return -1;
+        }
+
         @Override
         public int read() throws IOException {
             if (remaining <= 0) {
-                exhausted = true;
-                return -1;
+                return atLimit();
             }
             int read = super.read();
             if (read >= 0) {
@@ -110,8 +117,7 @@ final class OsvChangeList {
         @Override
         public int read(byte[] buffer, int offset, int length) throws IOException {
             if (remaining <= 0) {
-                exhausted = true;
-                return -1;
+                return atLimit();
             }
             int read = super.read(buffer, offset, (int) Math.min(length, remaining));
             if (read > 0) {

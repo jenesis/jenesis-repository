@@ -186,21 +186,23 @@ final class OsvMirror {
     /** File every record of the archive {@code body} into {@code generation}, a batch at a time. */
     private void file(String osvName, String product, String generation, InputStream body) throws IOException {
         List<JsonNode> batch = new ArrayList<>(BATCH);
-        ZipInputStream zip = new ZipInputStream(body);
-        ZipEntry entry;
-        while ((entry = zip.getNextEntry()) != null) {
-            if (entry.isDirectory() || !entry.getName().endsWith(".json")) {
-                continue;
-            }
-            byte[] content = zip.readNBytes(RECORD_BYTES + 1);
-            if (content.length > RECORD_BYTES) {
-                throw new IOException("The OSV " + osvName + " export holds a record, " + entry.getName()
-                        + ", larger than " + RECORD_BYTES + " bytes");
-            }
-            batch.add(JSON.readTree(content));
-            if (batch.size() >= BATCH) {
-                flush(osvName, product, generation, batch);
-                batch.clear();
+        // Closed here, so the inflater's native memory goes with the read rather than waiting on a cleaner.
+        try (ZipInputStream zip = new ZipInputStream(body)) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (entry.isDirectory() || !entry.getName().endsWith(".json")) {
+                    continue;
+                }
+                byte[] content = zip.readNBytes(RECORD_BYTES + 1);
+                if (content.length > RECORD_BYTES) {
+                    throw new IOException("The OSV " + osvName + " export holds a record, " + entry.getName()
+                            + ", larger than " + RECORD_BYTES + " bytes");
+                }
+                batch.add(JSON.readTree(content));
+                if (batch.size() >= BATCH) {
+                    flush(osvName, product, generation, batch);
+                    batch.clear();
+                }
             }
         }
         flush(osvName, product, generation, batch);
