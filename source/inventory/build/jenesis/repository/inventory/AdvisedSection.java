@@ -5,6 +5,7 @@ import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.metadata.Section;
 import build.jenesis.repository.metadata.SectionMutation;
 import build.jenesis.repository.metadata.Signal;
+import build.jenesis.repository.store.ArtifactStore;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -26,8 +27,10 @@ public final class AdvisedSection {
      * The root of the reverse index from a name to the copies asked under it: one row per copy, at
      * {@code advised/<ecosystem>/<coordinate>/<sha-256 of the copy>}, the ecosystem without a release qualifier - a
      * feed's change log names {@code Alpine}, a copy is asked under {@code Alpine:v3.19} - and the row the copy's
-     * ecosystem, coordinate and version as JSON. Written where the name is not the copy's own; a row whose copy no
-     * longer records the name, or is gone, is passed over by the reader.
+     * ecosystem, coordinate and version as JSON. Written where the name is not the copy's own, and removed where the
+     * copy stops being held - an eviction, a reclaim, the reconcile finding its pointers gone - as the copy's
+     * {@code cached} row is ({@link #forget}); a row whose copy no longer records the name, or is gone, is passed
+     * over by the reader.
      */
     public static final String INDEX = "advised";
 
@@ -52,6 +55,19 @@ public final class AdvisedSection {
     static String indexKey(AdvisorySource.Query advised, String ecosystem, String coordinate, String version) {
         return indexRoot(advised.ecosystem(), advised.coordinate()) + "/" + HexFormat.of().formatHex(sha256(
                 (ecosystem + "\n" + coordinate + "\n" + version).getBytes(StandardCharsets.UTF_8)));
+    }
+
+    /** Remove the index row of the copy {@code coordinate} at {@code version} of {@code ecosystem} recorded as asked
+     *  under {@code advised}, if any: the copy stops being held, and nothing else would ever name the row again. */
+    static void forget(ArtifactStore store, Optional<AdvisorySource.Query> advised, String ecosystem,
+                       String coordinate, String version) throws IOException {
+        if (advised.isEmpty() || advised.get().equals(new AdvisorySource.Query(ecosystem, coordinate, version))) {
+            return;
+        }
+        String key = indexKey(advised.get(), ecosystem, coordinate, version);
+        if (store.exists(key)) {
+            store.delete(key);
+        }
     }
 
     /** The row naming a copy. */

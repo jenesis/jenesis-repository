@@ -151,7 +151,7 @@ public final class OsvAdvisorySource implements AdvisorySource.Batched, Advisory
     /** The production form, over the deployment clock the reading's retry window is measured on. */
     public static OsvAdvisorySource over(URI base, URI export, Supplier<ArtifactStore> space, Clock clock) {
         return new OsvAdvisorySource(FeedClient.of(FEED, FeedTransport.jdk(CONNECT_TIMEOUT), POLICY), base, export,
-                space, clock, OsvQuery.Shared.node());
+                space, clock, OsvQuery.Shared.decision());
     }
 
     @Override
