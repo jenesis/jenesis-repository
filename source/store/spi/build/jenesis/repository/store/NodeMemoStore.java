@@ -143,6 +143,7 @@ public final class NodeMemoStore extends ForwardingArtifactStore {
         if (remembered.isPresent()) {
             return new ByteArrayInputStream(remembered.get());
         }
+        long mark = documents.mark();
         InputStream in = delegate.open(key);
         byte[] head;
         try {
@@ -153,7 +154,7 @@ public final class NodeMemoStore extends ForwardingArtifactStore {
         }
         if (head.length <= DocumentMemory.ENTRY_CAP) {
             in.close();
-            documents.put(this, key, head);
+            documents.put(this, key, head, mark);
             return new ByteArrayInputStream(head);
         }
         return new SequenceInputStream(new ByteArrayInputStream(head), in);

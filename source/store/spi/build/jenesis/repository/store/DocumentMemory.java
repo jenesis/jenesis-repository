@@ -50,6 +50,11 @@ public final class DocumentMemory {
     private final Duration ttl;
     private final Clock clock;
     private final Cache<String, Entry> documents;
+    /** When each recently forgotten key was forgotten, by {@link #sequence}: a read that began before a key's last
+     *  forget may not remember what it read, since a write landed in between. Held twice the ttl and bounded, as the
+     *  miss memory holds its own. */
+    private final Cache<String, Long> forgotten;
+    private final AtomicLong sequence = new AtomicLong();
     private final AtomicLong hits = new AtomicLong();
     private final AtomicLong misses = new AtomicLong();
 
@@ -75,6 +80,8 @@ public final class DocumentMemory {
                 .maximumWeight(MAX_BYTES)
                 .weigher((String key, Entry entry) -> entry.bytes().length + key.length())
                 .build();
+        this.forgotten = Caffeine.newBuilder().expireAfterWrite(lifetime.multipliedBy(2))
+                .maximumSize(MissMemory.MAX_ENTRIES).build();
     }
 
     /** The one memory of this process, built from {@link #TTL_SETTING} on first use. Process-wide, as the node's
@@ -138,13 +145,30 @@ public final class DocumentMemory {
         return Optional.of(entry.bytes());
     }
 
-    /** Remember {@code bytes} as the document at {@code key} in {@code store}; a document past {@link #ENTRY_CAP}
-     *  or outside the listing family is not kept. */
-    public void put(ArtifactStore store, String key, byte[] bytes) {
+    /** Where the memory's forgets stand: taken before a read whose document may be remembered, and handed to
+     *  {@link #put}. */
+    public long mark() {
+        return sequence.get();
+    }
+
+    /**
+     * Remember {@code bytes}, read by a read begun at {@code mark}, as the document at {@code key} in {@code store} -
+     * unless the key was forgotten since, since a write that landed between the read and this call would otherwise
+     * have its listing served as it stood before it for the whole ttl. A forget racing the put itself is caught by
+     * asking again once the entry is in. A document past {@link #ENTRY_CAP} or outside the listing family is not kept.
+     */
+    public void put(ArtifactStore store, String key, byte[] bytes, long mark) {
         if (ttl.isZero() || !covers(key) || bytes.length > ENTRY_CAP) {
             return;
         }
-        documents.put(id(store, key), new Entry(bytes, clock.instant()));
+        String id = id(store, key);
+        if (forgottenSince(id, mark)) {
+            return;
+        }
+        documents.put(id, new Entry(bytes, clock.instant()));
+        if (forgottenSince(id, mark)) {
+            documents.invalidate(id);
+        }
     }
 
     /** Forget {@code key} in {@code store} - what every write and delete through a {@link NodeMemoStore} does. */
@@ -152,7 +176,14 @@ public final class DocumentMemory {
         if (ttl.isZero() || !covers(key)) {
             return;
         }
-        documents.invalidate(id(store, key));
+        String id = id(store, key);
+        forgotten.put(id, sequence.incrementAndGet());
+        documents.invalidate(id);
+    }
+
+    private boolean forgottenSince(String id, long mark) {
+        Long forgot = forgotten.getIfPresent(id);
+        return forgot != null && forgot > mark;
     }
 
     /** Drop every document and answer how many went. */
