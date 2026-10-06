@@ -361,7 +361,7 @@ class ClosureTaskTest {
     }
 
     @Test
-    void the_vulnerability_ranking_puts_a_version_a_release_relies_on_first() throws IOException {
+    void the_vulnerability_ranking_puts_a_version_with_dependents_first() throws IOException {
         metadata.mutate("Maven", "org.acme:app", "1.0", DependencySection.TAG, DependencySection.record(APP,
                 List.of(new DependencySection.Declared("org.dep:lib", "1.0")), NOW));
         cached("lib", "1.0");
@@ -409,7 +409,25 @@ class ClosureTaskTest {
 
         assertThat(new VulnerabilityRankIndex(store).read(null, 10).lines())
                 .as("the pass that wrote tool's rows moved the reliance epoch the stamp folds, so the index rebuilt")
-                .extracting(VulnerabilityRanking.RankedLine::coordinate).containsExactly("org.dep:lib", "org.dep:aaa");
+                .extracting(VulnerabilityRanking.RankedLine::coordinate, VulnerabilityRanking.RankedLine::usedBy)
+                .containsExactly(tuple("org.dep:lib", 1), tuple("org.dep:aaa", 0));
+    }
+
+    @Test
+    void a_count_of_dependents_reads_the_repositorys_rows_then_the_tenants_and_stops_at_its_cap() throws IOException {
+        String level = "/" + String.join("/", List.of("Maven", "org.dep:lib", "1.0").stream()
+                .map(segment -> URLEncoder.encode(segment, StandardCharsets.UTF_8)).toList());
+        for (String row : List.of("a", "b")) {
+            store.write(ReliedOn.ROOT + level + "/" + row, new ByteArrayInputStream("{}".getBytes(StandardCharsets.UTF_8)));
+            tenant.scope(ReliedOn.SPACE).write(ReliedOn.ROOT + level + "/" + row,
+                    new ByteArrayInputStream("{}".getBytes(StandardCharsets.UTF_8)));
+        }
+
+        assertThat(ReliedOn.usedBy(store, Optional.of(tenant), "Maven", "org.dep:lib", "1.0", 10))
+                .as("the repository's own rows and the tenant's by coordinate").isEqualTo(4);
+        assertThat(ReliedOn.usedBy(store, Optional.of(tenant), "Maven", "org.dep:lib", "1.0", 3))
+                .as("no further than the cap").isEqualTo(3);
+        assertThat(ReliedOn.usedBy(store, Optional.empty(), "Maven", "org.dep:lib", "1.0", 10)).isEqualTo(2);
     }
 
     @Test

@@ -77,7 +77,8 @@ final class ComplianceCommands {
             return 0;
         }
         for (RiskClient.VulnerableArtifact artifact : report.vulnerable()) {
-            System.out.println(artifact.coordinate());
+            System.out.println(artifact.coordinate() + (artifact.usedByText() == null
+                    || artifact.usedByText().isEmpty() ? "" : "  " + artifact.usedByText()));
             for (RiskClient.Advisory advisory : artifact.advisories()) {
                 String fix = advisory.fixed() == null || advisory.fixed().isBlank()
                         ? "no fix available"
