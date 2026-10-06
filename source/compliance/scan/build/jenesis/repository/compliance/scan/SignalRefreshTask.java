@@ -5,6 +5,9 @@ import module org.slf4j;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.Freshness;
 import build.jenesis.repository.compliance.RefreshableSource;
+import build.jenesis.repository.compliance.RepositorySelection;
+import build.jenesis.repository.format.RepositoryType;
+import build.jenesis.repository.store.RepositoryDocument;
 import build.jenesis.repository.store.Requests;
 import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.RepositoryContext;
@@ -25,6 +28,11 @@ import build.jenesis.repository.maintenance.RepositoryContext;
  * last draw into that feed's change log, which the scan pass reads to ask again about the packages whose records
  * changed.
  *
+ * <p>A feed that keeps a copy of its vendor's records ({@link AdvisorySource.Mirror}) is told before it refreshes which
+ * ecosystems to keep: those of the repositories naming it in {@value AdvisorySource#SELECTION}, gathered from every
+ * repository this pass visits - one settings lookup and, for a repository naming a mirror, one read of its
+ * definition.
+ *
  * <p><strong>A failed draw fails the pass</strong> (clause 4): the source is named in an {@link IOException} the
  * scheduler logs and counts, while the prior-good catalogue keeps serving.
  */
@@ -40,6 +48,11 @@ public final class SignalRefreshTask implements MaintenanceTask {
     private final Map<String, RefreshableSource> sources;
     /** The enabled advisory feeds that publish their changes, keyed by signal name. */
     private final Map<String, AdvisorySource.Changes> changes;
+    /** The ecosystems each mirror is named for by the repositories this pass has visited, by signal name; emptied as
+     *  the pass completes. */
+    private final Map<String, Set<String>> wanted = new ConcurrentHashMap<>();
+    /** The names of the enabled sources that keep a copy of their vendor's records. */
+    private final Set<String> mirrors;
 
     public SignalRefreshTask(Duration interval, Map<String, RefreshableSource> sources) {
         this(interval, sources, Map.of());
@@ -50,6 +63,9 @@ public final class SignalRefreshTask implements MaintenanceTask {
         this.interval = interval;
         this.sources = Map.copyOf(sources);
         this.changes = Map.copyOf(changes);
+        this.mirrors = this.sources.entrySet().stream()
+                .filter(source -> source.getValue() instanceof AdvisorySource.Mirror)
+                .map(Map.Entry::getKey).collect(Collectors.toUnmodifiableSet());
     }
 
     @Override
@@ -67,9 +83,28 @@ public final class SignalRefreshTask implements MaintenanceTask {
         return Exclusion.LEASE;
     }
 
-    /** Nothing per repository: what this pass refreshes is deployment-global. */
+    /** What this pass refreshes is deployment-global; a repository only says which ecosystems the mirrors it names
+     *  are to keep. */
     @Override
-    public void repository(RepositoryContext context) {
+    public void repository(RepositoryContext context) throws IOException {
+        if (mirrors.isEmpty()) {
+            return;
+        }
+        Set<String> named = new LinkedHashSet<>();
+        for (String name : RepositorySelection.named(context.config().apply(AdvisorySource.SELECTION))) {
+            if (mirrors.contains(name)) {
+                named.add(name);
+            }
+        }
+        if (named.isEmpty()) {
+            return;
+        }
+        Set<String> ecosystems = RepositoryDocument.read(context.store())
+                .flatMap(document -> RepositoryType.installed(document.format()))
+                .map(RepositoryType::ecosystems).orElse(Set.of());
+        for (String name : named) {
+            wanted.computeIfAbsent(name, _ -> ConcurrentHashMap.newKeySet()).addAll(ecosystems);
+        }
     }
 
     @Override
@@ -77,8 +112,15 @@ public final class SignalRefreshTask implements MaintenanceTask {
         List<String> failed = new ArrayList<>();
         // Every signal is attempted even when an earlier one raised, so a fault under one mirror does not cost the
         // others their draw.
+        Map<String, Set<String>> mirrored = new TreeMap<>();
+        for (String name : List.copyOf(wanted.keySet())) {
+            mirrored.put(name, Set.copyOf(wanted.remove(name)));
+        }
         for (Map.Entry<String, RefreshableSource> source : new TreeMap<>(sources).entrySet()) {
             try {
+                if (source.getValue() instanceof AdvisorySource.Mirror mirror) {
+                    mirror.mirror(mirrored.getOrDefault(source.getKey(), Set.of()));
+                }
                 Optional<String> before = source.getValue().snapshot();
                 Optional<Instant> drawnBefore = source.getValue().freshness().refreshed();
                 Freshness freshness = source.getValue().refresh();

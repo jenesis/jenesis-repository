@@ -3,6 +3,7 @@ package build.jenesis.repository.compliance.spi.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.compliance.AdvisorySource;
+import build.jenesis.repository.compliance.Freshness;
 import build.jenesis.repository.compliance.Severity;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -12,7 +13,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Which of the deployment's advisory feeds screen a repository: every one it switched on where the repository names
  * none, none where it names {@value AdvisorySource#NONE_SELECTED}, exactly those it names otherwise; and the merged
  * source the gate asks narrowed to them - while a source a caller built of its own, the none a published version's gate
- * holds among them, is never widened or narrowed, and a name that is not on makes every query an outage saying so.
+ * holds among them, is never widened or narrowed, and a name that is not on makes every query an outage saying so. A
+ * mirror screens only a repository that names it.
  */
 class AdvisoryFeedSelectionTest {
 
@@ -46,6 +48,55 @@ class AdvisoryFeedSelectionTest {
         assertThat(AdvisorySource.selected(enabled, repository("github,osv,github")).sequencedKeySet())
                 .as("a name given twice counted once").containsExactly("github", "osv");
         assertThat(AdvisorySource.selected(enabled, repository("NONE"))).isEmpty();
+    }
+
+    @Test
+    void a_mirror_screens_only_a_repository_naming_it() {
+        AdvisorySource.Advisory fromMirror = new AdvisorySource.Advisory("GHSA-3", Severity.HIGH, false, null,
+                List.of(), "known to the mirror", List.of());
+        enabled.put("osv-mirror", new Mirror(fromMirror));
+
+        assertThat(AdvisorySource.selected(enabled, _ -> null).sequencedKeySet())
+                .as("a blank selection takes every feed switched on but the mirror").containsExactly("github", "osv");
+        assertThat(AdvisorySource.selected(enabled, repository("osv-mirror"))).containsOnlyKeys("osv-mirror");
+        AdvisorySource merged = AdvisorySource.resolve(enabled);
+        assertThat(merged.advisories("Maven", "org.acme:lib", "1.0"))
+                .as("the deployment's merge asks no mirror").containsExactly(FROM_GITHUB, FROM_OSV);
+        assertThat(AdvisorySource.forRepository(merged, repository("osv,osv-mirror"))
+                .advisories("Maven", "org.acme:lib", "1.0")).containsExactly(FROM_OSV, fromMirror);
+    }
+
+    /** A mirror answering every lookup with one advisory, refreshing nothing. */
+    private record Mirror(AdvisorySource.Advisory answer) implements AdvisorySource.Mirror {
+
+        @Override
+        public List<Advisory> advisories(String ecosystem, String coordinate, String version) {
+            return List.of(answer);
+        }
+
+        @Override
+        public Set<String> ecosystems() {
+            return Set.of("Maven");
+        }
+
+        @Override
+        public Freshness freshness() {
+            return Freshness.FIXED;
+        }
+
+        @Override
+        public void mirror(Set<String> ecosystems) {
+        }
+
+        @Override
+        public Freshness refresh() {
+            return Freshness.FIXED;
+        }
+
+        @Override
+        public Optional<String> snapshot() {
+            return Optional.empty();
+        }
     }
 
     @Test

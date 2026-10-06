@@ -6,22 +6,17 @@ import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.AdvisorySource.Advisory;
 import build.jenesis.repository.compliance.Freshness;
 import build.jenesis.repository.compliance.FeedCache;
-import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.feed.FeedClient;
 import build.jenesis.repository.feed.FeedException;
 import build.jenesis.repository.feed.FeedPolicy;
 import build.jenesis.repository.feed.FeedRequest;
 import build.jenesis.repository.feed.FeedResponse;
 import build.jenesis.repository.feed.FeedTransport;
-import build.jenesis.repository.feed.Osv;
 import build.jenesis.repository.store.ArtifactStore;
-import us.springett.cvss.Cvss;
 
 /**
  * An {@link AdvisorySource} over OSV (osv.dev). For each coordinate it posts {@code /v1/query} for the package at the
- * requested version and maps every vulnerability to an {@link Advisory}. Severity is the CVSS base score computed from
- * the v3 or v2 vector, else GitHub's {@code database_specific.severity} word, else {@link Severity#UNKNOWN} (a
- * malicious record without a score is {@link Severity#NONE}).
+ * requested version and maps every vulnerability to an {@link Advisory} as {@link OsvRecords} reads one.
  *
  * <p>Transport is the {@link FeedClient}'s - client and timeouts, status handling, whole-fetch deadline, byte cap,
  * retries, page cap and fail-closed policy. OSV's own half is the URL, the query body, the {@code next_page_token}
@@ -190,7 +185,7 @@ public final class OsvAdvisorySource implements AdvisorySource.Batched, Advisory
                 }
                 List<Advisory> found = new ArrayList<>();
                 for (OsvQuery.Record named : listed.get(i).records()) {
-                    advisory(records.get(named.id() + " " + named.modified()), query.coordinate())
+                    OsvRecords.advisory(records.get(named.id() + " " + named.modified()), query.coordinate())
                             .ifPresent(found::add);
                 }
                 cache.put(key, List.copyOf(found));
@@ -244,7 +239,7 @@ public final class OsvAdvisorySource implements AdvisorySource.Batched, Advisory
         try {
             List<Advisory> advisories = new ArrayList<>();
             for (JsonNode vuln : shared.answered(client, query, ecosystem, coordinate, version)) {
-                advisory(vuln, coordinate).ifPresent(advisories::add);
+                OsvRecords.advisory(vuln, coordinate).ifPresent(advisories::add);
             }
             return List.copyOf(advisories);
         } catch (FeedException e) {
@@ -270,87 +265,5 @@ public final class OsvAdvisorySource implements AdvisorySource.Batched, Advisory
      *  the client exactly as a live one. */
     private static FeedTransport transport(Endpoint endpoint) {
         return (request, timeout) -> FeedResponse.of(200, endpoint.query(request.body()));
-    }
-
-    /** The advisory a record makes: every record OSV answers, a {@code MAL-} one flagged malicious. */
-    private Optional<Advisory> advisory(JsonNode vuln, String coordinate) {
-        String id = vuln.path("id").asString(null);
-        if (id == null) {
-            return Optional.empty();
-        }
-        boolean malicious = id.startsWith("MAL-");
-        return Optional.of(new Advisory(id, severityOf(vuln, malicious), malicious,
-                Osv.fixedVersions(vuln, coordinate), cvesOf(vuln, id), descriptionOf(vuln), aliasesOf(vuln)));
-    }
-
-    /** Every alias the record names, whatever its namespace - what two feeds' records of one flaw are merged on. */
-    static List<String> aliasesOf(JsonNode vuln) {
-        List<String> aliases = new ArrayList<>();
-        for (JsonNode alias : vuln.path("aliases")) {
-            String value = alias.asString(null);
-            if (value != null && !value.isBlank() && !aliases.contains(value)) {
-                aliases.add(value);
-            }
-        }
-        return aliases;
-    }
-
-    // The summary, else a bounded prefix of the details, so the findings ledger keeps what the advisory says without
-    // re-fetching the feed.
-    private static String descriptionOf(JsonNode vuln) {
-        return Advisory.description(vuln.path("summary").asString(null), vuln.path("details").asString(""));
-    }
-
-    // The advisory's CVE aliases (and its own id when that is a CVE), the keys the known-exploited catalogue uses.
-    private static List<String> cvesOf(JsonNode vuln, String id) {
-        List<String> cves = new ArrayList<>();
-        if (id.startsWith("CVE-")) {
-            cves.add(id);
-        }
-        for (JsonNode alias : vuln.path("aliases")) {
-            String value = alias.asString(null);
-            if (value != null && value.startsWith("CVE-") && !cves.contains(value)) {
-                cves.add(value);
-            }
-        }
-        return cves;
-    }
-
-    private static Severity severityOf(JsonNode vuln, boolean malicious) {
-        double highest = -1.0;
-        for (JsonNode entry : vuln.path("severity")) {
-            String vector = entry.path("score").asString(null);
-            if (vector != null) {
-                highest = Math.max(highest, cvss(vector));
-            }
-        }
-        if (highest >= 0) {
-            return Severity.ofScore(highest);
-        }
-        String word = vuln.path("database_specific").path("severity").asString(null);
-        if (word != null) {
-            // An unrecognised word is a vocabulary this source cannot read, not "nothing severe".
-            return Severity.ofWord(word, Severity.UNKNOWN);
-        }
-        // A malicious-package record (OpenSSF MAL-) carries no score by design: its verdict is the malicious flag.
-        // Banded UNKNOWN it would outrank CRITICAL and a severity floor would reject what the gate's rule quarantines.
-        if (malicious) {
-            return Severity.NONE;
-        }
-        // Severity vectors none of which scored (a vector in no CVSS version the scorer reads), or no severity at all:
-        // unknown, since NONE would be the clean answer clause 4 forbids and a reject-at-or-above floor would admit a
-        // critical advisory. NONE means a feed scored it zero (ofScore(0.0) above).
-        return Severity.UNKNOWN;
-    }
-
-    // The base score of a CVSS v2, v3.0, v3.1 or v4.0 vector, or -1 for one that does not parse as any of them, which
-    // leaves the advisory UNKNOWN rather than scored.
-    private static double cvss(String vector) {
-        try {
-            Cvss parsed = Cvss.fromVector(vector.trim());
-            return parsed == null ? -1.0 : parsed.calculateScore().getBaseScore();
-        } catch (RuntimeException unreadable) {
-            return -1.0;
-        }
     }
 }

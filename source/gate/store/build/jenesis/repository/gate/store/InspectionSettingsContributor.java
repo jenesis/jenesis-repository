@@ -51,7 +51,8 @@ public final class InspectionSettingsContributor implements SettingsContributor 
                         ScreeningMode.DEFAULT, true, Setting.Scope.REPOSITORY).standard(),
                 new Setting(AdvisorySource.SELECTION, "Compliance", "Advisory feeds",
                         "The advisory feeds that screen this repository's cached copies, by name and "
-                                + "comma-separated, among those this deployment switches on; empty for every one, and '"
+                                + "comma-separated, among those this deployment switches on; empty for every one but a "
+                                + "mirror, which screens only a repository naming it, and '"
                                 + AdvisorySource.NONE_SELECTED + "' for none. A feed's switch and its credential stay "
                                 + "the deployment's. A name that is not on is an outage of every screen of the "
                                 + "repository, decided by its screening mode, and fails its scans, rather than "
