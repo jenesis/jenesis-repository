@@ -87,6 +87,26 @@ class MavenClosureTest {
     }
 
     @Test
+    void a_transitive_dependency_records_the_dependency_whose_pom_brought_it_in() throws IOException {
+        release("org.acme", "app", "1.0", """
+                <dependencies>
+                  <dependency><groupId>org.dep</groupId><artifactId>lib</artifactId><version>1.0</version></dependency>
+                </dependencies>""");
+        cached("org.dep", "lib", "1.0", """
+                <dependencies>
+                  <dependency><groupId>org.dep</groupId><artifactId>transitive</artifactId><version>3.0</version></dependency>
+                </dependencies>""");
+        cached("org.dep", "transitive", "3.0", "");
+
+        ClosureSection.Closure closure = resolve("org.acme:app", "1.0");
+
+        assertThat(closure.components()).extracting(ClosureSection.Component::coordinate,
+                        ClosureSection.Component::depth, ClosureSection.Component::viaCoordinate,
+                        ClosureSection.Component::viaVersion)
+                .containsExactly(tuple("org.dep:lib", 1, "", ""), tuple("org.dep:transitive", 2, "org.dep:lib", "1.0"));
+    }
+
+    @Test
     void a_dependency_held_for_review_is_a_cut_that_says_so() throws IOException {
         release("org.acme", "app", "1.0", """
                 <dependencies>

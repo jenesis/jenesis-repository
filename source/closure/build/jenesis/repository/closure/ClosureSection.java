@@ -17,11 +17,11 @@ import tools.jackson.databind.node.ObjectNode;
  * the repository could resolve it from what it and the repositories its fallbacks name hold, when it was resolved, and
  * every subtree that could not be. Absent for a version not yet resolved. The {@code data} payload is
  * {@code {"status":<RESOLVED|PARTIAL|UNDECLARED>,
- * "components":[{"coordinate","version","cached","depth","repository"}],
+ * "components":[{"coordinate","version","cached","depth","repository","via":{"coordinate","version"}}],
  * "cuts":[{"coordinate","requirement","reason"}], "truncated":<bool>, "kind":<a {@link ClosureSource.Kind}>,
  * "source":<the producing source's name>}}, every component
  * in the version's own ecosystem; a component's {@code repository} is present only where a fallback's repository holds
- * it.
+ * it, and its {@code via} only where it was reached through another dependency rather than named by the version.
  */
 public final class ClosureSection {
 
@@ -44,17 +44,67 @@ public final class ClosureSection {
 
     /** One held version the closure reaches: a cached copy where {@code cached}, a release otherwise, {@code depth}
      *  edges from the version resolved, held by the repository the version was published to where {@code repository}
-     *  is empty and by the fallback's repository it names otherwise. */
-    public record Component(String coordinate, String version, boolean cached, int depth, String repository) {
+     *  is empty and by the fallback's repository it names otherwise, and reached through the dependency
+     *  {@code viaCoordinate} at {@code viaVersion} - the one whose declarations named it first - or directly where
+     *  those are empty. */
+    public record Component(String coordinate, String version, boolean cached, int depth, String repository,
+                            String viaCoordinate, String viaVersion) {
 
         public Component {
             repository = repository == null ? "" : repository;
+            viaCoordinate = viaCoordinate == null ? "" : viaCoordinate;
+            viaVersion = viaVersion == null ? "" : viaVersion;
+        }
+
+        /** A dependency the version resolved names itself. */
+        public Component(String coordinate, String version, boolean cached, int depth, String repository) {
+            this(coordinate, version, cached, depth, repository, "", "");
         }
 
         /** Whether a fallback's repository, not the version's own, holds this component. */
         public boolean elsewhere() {
             return !repository.isEmpty();
         }
+
+        /** Whether the version resolved names this dependency itself. */
+        public boolean direct() {
+            return viaCoordinate.isEmpty();
+        }
+    }
+
+    /** One step of a path through a closure: a dependency at the version the closure holds. */
+    public record Hop(String coordinate, String version) {
+    }
+
+    /**
+     * How {@code closure} reaches {@code coordinate} at {@code version}: from the dependency the resolved version names
+     * itself down to it, each step the component the next was first named through. Empty where the closure does not
+     * reach it. A step whose own component the closure does not hold - a dependency that was cut - ends the path there,
+     * named, since nothing records what named it.
+     */
+    public static List<Hop> path(Closure closure, String coordinate, String version) {
+        Map<String, Component> byName = new HashMap<>();
+        for (Component component : closure.components()) {
+            byName.putIfAbsent(component.coordinate() + "@" + component.version(), component);
+        }
+        Component at = byName.get(coordinate + "@" + version);
+        if (at == null) {
+            return List.of();
+        }
+        Deque<Hop> hops = new ArrayDeque<>();
+        Set<String> visited = new HashSet<>();
+        while (at != null && visited.add(at.coordinate() + "@" + at.version())) {
+            hops.addFirst(new Hop(at.coordinate(), at.version()));
+            if (at.direct()) {
+                break;
+            }
+            Component parent = byName.get(at.viaCoordinate() + "@" + at.viaVersion());
+            if (parent == null) {
+                hops.addFirst(new Hop(at.viaCoordinate(), at.viaVersion()));
+            }
+            at = parent;
+        }
+        return List.copyOf(hops);
     }
 
     /** A dependency whose subtree did not resolve: what was asked for and why it ended there. */
@@ -121,7 +171,8 @@ public final class ClosureSection {
         for (JsonNode entry : data.path("components")) {
             components.add(new Component(entry.path("coordinate").asString(""), entry.path("version").asString(""),
                     entry.path("cached").asBoolean(false), entry.path("depth").asInt(0),
-                    entry.path("repository").asString("")));
+                    entry.path("repository").asString(""), entry.path("via").path("coordinate").asString(""),
+                    entry.path("via").path("version").asString("")));
         }
         List<Cut> cuts = new ArrayList<>();
         for (JsonNode entry : data.path("cuts")) {
@@ -155,6 +206,10 @@ public final class ClosureSection {
                         .put("depth", component.depth());
                 if (component.elsewhere()) {
                     entry.put("repository", component.repository());
+                }
+                if (!component.direct()) {
+                    entry.putObject("via").put("coordinate", component.viaCoordinate())
+                            .put("version", component.viaVersion());
                 }
             }
             ArrayNode cuts = data.putArray("cuts");
