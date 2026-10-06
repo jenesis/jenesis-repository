@@ -1,6 +1,7 @@
 package build.jenesis.repository.closure;
 
 import module java.base;
+import build.jenesis.repository.inventory.Mailbox;
 import build.jenesis.repository.inventory.PublishedSection;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.metadata.MetadataDocument;
@@ -33,7 +34,7 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p><b>Following a change.</b> Where what a row names changes - a finding, a hold - the closure pass of the holding
  * repository marks the row's dependent {@linkplain #stale stale} in the dependent's own repository, under
- * {@value #STALE}, and that repository's pass re-derives it. A marker is a request, removed before it is acted on.
+ * {@link #STALE}, and that repository's pass re-derives it. A marker is a request, removed before it is acted on.
  *
  * <p><b>By coordinate, across the tenant.</b> A package a carried bill names in another ecosystem than its version's
  * ({@link ClosureSection.Foreign}) is held by no repository of the walk, so its rows are kept once for the tenant, in
@@ -117,11 +118,10 @@ public final class ReliedOn {
         }
     }
 
-    /** The root of the markers asking a repository's closure pass to re-derive a release: one per release at
-     *  {@code closure/stale/<sha-256 of the release>}, naming its ecosystem, coordinate and version as JSON. */
-    public static final String STALE = "closure/stale";
+    /** The mailbox asking a repository's closure pass to re-derive a release: what its closure reaches changed. */
+    public static final Mailbox STALE = new Mailbox("closure/stale");
 
-    /** What a pass does with one row, or with one stale release. */
+    /** What a pass does with one row. */
     @FunctionalInterface
     interface Visitor<T> {
 
@@ -151,46 +151,7 @@ public final class ReliedOn {
     /** Ask the closure pass of {@code store}, the repository of {@code dependent}, to re-derive it: what its closure
      *  reaches changed. A release asked twice before the pass is one marker. */
     static void stale(ArtifactStore store, String ecosystem, Row dependent) throws IOException {
-        ecosystem = dependent.ecosystemOr(ecosystem);
-        store.write(STALE + "/" + HexFormat.of().formatHex(sha256((ecosystem + "\n" + dependent.coordinate() + "\n"
-                        + dependent.version()).getBytes(StandardCharsets.UTF_8))),
-                new ByteArrayInputStream(JSON.writeValueAsBytes(JSON.createObjectNode().put("ecosystem", ecosystem)
-                        .put("coordinate", dependent.coordinate()).put("version", dependent.version()))));
-    }
-
-    /** Remove up to {@code limit} of {@code store}'s stale markers, handing each release to {@code visitor} once its
-     *  marker is gone - so a change while it runs leaves a marker of its own for the next drain, and one lost to a
-     *  failure is the full pass's to re-derive. A marker that does not parse is removed and passed over. */
-    static void drainStale(ArtifactStore store, int limit,
-                           Visitor<StoreRepositoryInventory.Coordinate> visitor) throws IOException {
-        List<String> names = new ArrayList<>();
-        store.page(STALE, "", limit, names::add);
-        for (String name : names) {
-            String key = STALE + "/" + name;
-            Optional<ArtifactStore.Versioned> marker = store.readVersioned(key);
-            store.delete(key);
-            if (marker.isEmpty()) {
-                continue;
-            }
-            Optional<StoreRepositoryInventory.Coordinate> release = release(marker.get().content());
-            if (release.isPresent()) {
-                visitor.accept(release.get());
-            }
-        }
-    }
-
-    /** The release a stale marker names, or empty for one that does not parse. */
-    private static Optional<StoreRepositoryInventory.Coordinate> release(byte[] marker) {
-        try {
-            JsonNode node = JSON.readTree(marker);
-            String ecosystem = node.path("ecosystem").asString("");
-            String coordinate = node.path("coordinate").asString("");
-            String version = node.path("version").asString("");
-            return ecosystem.isEmpty() || coordinate.isEmpty() || version.isEmpty() ? Optional.empty()
-                    : Optional.of(new StoreRepositoryInventory.Coordinate(ecosystem, coordinate, version));
-        } catch (RuntimeException unreadable) {
-            return Optional.empty();
-        }
+        STALE.post(store, dependent.ecosystemOr(ecosystem), dependent.coordinate(), dependent.version());
     }
 
     /** The level holding the rows of {@code coordinate} at {@code version} of {@code ecosystem}. */

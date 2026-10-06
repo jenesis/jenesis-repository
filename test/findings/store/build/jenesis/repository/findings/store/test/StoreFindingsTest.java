@@ -7,7 +7,7 @@ import build.jenesis.repository.findings.Finding;
 import build.jenesis.repository.findings.Findings;
 import build.jenesis.repository.findings.FindingsProvider;
 import build.jenesis.repository.findings.store.StoreFindings;
-import build.jenesis.repository.inventory.ChangedVersions;
+import build.jenesis.repository.inventory.Mailbox;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 
@@ -69,7 +69,7 @@ class StoreFindingsTest {
 
     private List<String> drain() throws IOException {
         List<String> drained = new ArrayList<>();
-        ChangedVersions.drain(store, 100, version -> drained.add(version.coordinate() + " " + version.version()));
+        Mailbox.CHANGED.drain(store, 100, version -> drained.add(version.coordinate() + " " + version.version()));
         return drained;
     }
 
