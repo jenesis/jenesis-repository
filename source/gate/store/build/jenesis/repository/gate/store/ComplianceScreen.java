@@ -658,7 +658,7 @@ public final class ComplianceScreen implements PublishInterceptor {
     }
 
     /** The rule a file arriving at a version already held for review is held for. */
-    static final String VERSION_HELD_RULE = "Version held";
+    static final String VERSION_HELD_RULE = ComplianceGate.VERSION_HELD_RULE;
 
     /** The rule an upload no inspector could parse is held for. */
     static final String UNREADABLE_RULE = "Unreadable artifact";
