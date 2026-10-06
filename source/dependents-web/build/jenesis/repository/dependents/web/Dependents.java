@@ -77,9 +77,9 @@ public final class Dependents {
         if (built.isEmpty()) {
             return new Declared(true, null, List.of(), null);
         }
-        DependentsQuery.DeclarationPage page = query.declarations(coordinate, after.isBlank() ? null : after, limit);
+        DependentsQuery.DeclarationPage page = query.declarations(ecosystem, coordinate,
+                after.isBlank() ? null : after, limit);
         return new Declared(true, built.get(), Declarations.disclosable(new StoreRepositoryInventory(store),
-                page.declarations().stream().filter(row -> ecosystem.equals(row.ecosystem())).toList(), version),
-                page.nextCursor());
+                page.declarations(), version), page.nextCursor());
     }
 }

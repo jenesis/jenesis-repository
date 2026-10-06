@@ -9,6 +9,7 @@ import build.jenesis.repository.closure.spi.VersionBills;
 import module org.slf4j;
 import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.format.RepositoryType;
+import build.jenesis.repository.inventory.DependencySection;
 import build.jenesis.repository.inventory.Mailbox;
 import build.jenesis.repository.inventory.IncrementalPasses;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
@@ -78,6 +79,9 @@ public final class ClosureTask implements MaintenanceTask {
 
     /** On, in the form the setting catalogue publishes: a version published here is screened through its closure. */
     public static final String DEFAULT = "true";
+
+    /** The space of the resolution's cadence, whose last full pass is when the declared dependents were last built. */
+    static final String RESOLVE = "closure/resolve";
 
     /** The space of the relied-on reconcile's own cadence, beside the resolution's {@code closure/resolve}. */
     private static final String RECONCILE = "closure/reconcile";
@@ -175,7 +179,7 @@ public final class ClosureTask implements MaintenanceTask {
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(context.store());
         UnitFailures failed = context.failures("The closure pass of " + context.tenant() + "/" + context.repository(),
                 "Those versions have no closure or exposure yet; the next pass resolves them.");
-        IncrementalPasses cadence = IncrementalPasses.over(context.store(), NAME, "closure/resolve",
+        IncrementalPasses cadence = IncrementalPasses.over(context.store(), NAME, RESOLVE,
                 context.config(), EVERY);
         Visit visit = new Visit(context, MetadataProvider.installed().over(context.store()), ClosureWalk.of(context),
                 riskBand(context.config()), failed);
@@ -259,7 +263,8 @@ public final class ClosureTask implements MaintenanceTask {
 
         /** Resolve {@code release}'s closure where it has none and {@code resolve} says so, re-derive its exposure,
          *  and write its relied-on rows - blind for a closure resolved now, where missing on a {@code full} pass or
-         *  where the exposure changed. A failure is contained and reported. */
+         *  where the exposure changed - and its declared rows, blind when it is resolved and where missing on a
+         *  {@code full} pass. A failure is contained and reported. */
         private void release(StoreRepositoryInventory.Coordinate release, boolean resolve, boolean full) {
             try {
                 Optional<MetadataDocument> document = metadata.read(release.ecosystem(), release.coordinate(),
@@ -267,6 +272,10 @@ public final class ClosureTask implements MaintenanceTask {
                 Optional<ClosureSection.Closure> closure = document.flatMap(read -> ClosureSection.closure(
                         read.section(ClosureSection.TAG)));
                 boolean fresh = closure.isEmpty();
+                if (resolve && (fresh || full)) {
+                    DeclaredRows.index(context.store(), release, document.flatMap(read -> DependencySection.declared(
+                            read.section(DependencySection.TAG))).orElse(List.of()), fresh);
+                }
                 if (fresh) {
                     closure = resolve ? ClosureTask.this.resolve(through, release, context.now()) : Optional.empty();
                     if (closure.isEmpty()) {
@@ -366,7 +375,7 @@ public final class ClosureTask implements MaintenanceTask {
 
     /** On the reconcile's own full pass, which runs whether or not this repository resolves closures - what it holds
      *  may be relied on by another's - remove the {@link ReliedOn} rows whose dependent no longer relies on what it
-     *  names. */
+     *  names, and the {@link DeclaredRows} whose version no longer declares what they name. */
     private static void reconcile(RepositoryContext context) throws IOException {
         IncrementalPasses cadence = IncrementalPasses.over(context.store(), NAME, RECONCILE, context.config(), EVERY);
         if (!cadence.full()) {
@@ -377,7 +386,8 @@ public final class ClosureTask implements MaintenanceTask {
         try {
             long removed = ReliedOn.reconcile(context.store(), context.repository(), named -> named.equals(
                     context.repository()) ? Optional.of(context.store())
-                    : context.tenantView().repository(named).map(RepositoryContext::store));
+                    : context.tenantView().repository(named).map(RepositoryContext::store))
+                    + DeclaredRows.reconcile(context.store());
             if (removed > 0) {
                 LOGGER.info("Removed {} dependent row(s) no closure names any more in {}/{}", removed,
                         context.tenant(), context.repository());

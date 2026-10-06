@@ -19,7 +19,9 @@ public final class ClosureSettingsContributor implements SettingsContributor {
                                 + "version its requirement admits. It reads only what the repository holds and fetches "
                                 + "nothing, so it states what builds through the repository already fetched, and a "
                                 + "dependency it does not hold is listed as unresolved. The closure is how a version "
-                                + "published here is screened: through the copies it relies on.",
+                                + "published here is screened: through the copies it relies on. The same pass keeps "
+                                + "the versions declaring a dependency on a package, which the Dependents screen "
+                                + "lists.",
                         Setting.Kind.BOOLEAN, ClosureTask.DEFAULT, true, Setting.Scope.REPOSITORY).essential(),
                 new Setting(ClosureTaskProvider.INTERVAL.key(), "Compliance", "Closure resolution interval",
                         "How often newly published versions are resolved to their closures. A version waits at most "

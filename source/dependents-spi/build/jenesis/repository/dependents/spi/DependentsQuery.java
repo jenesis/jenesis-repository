@@ -13,17 +13,18 @@ import module java.base;
 public interface DependentsQuery {
 
     /**
-     * One bounded page of the versions whose manifest declares a dependency on the package {@code dependency} - spelled
-     * as its ecosystem spells a coordinate, without a version - each with the requirement the manifest states,
-     * resumable by the opaque {@code cursor}.
+     * One bounded page of the versions whose manifest declares a dependency on the package {@code dependency} of
+     * {@code ecosystem} - spelled as its ecosystem spells a coordinate, without a version - each with the requirement
+     * the manifest states, resumable by the opaque {@code cursor}.
      *
-     * <p>It answers what the index recorded, so a version since deleted or withheld may be listed until the next pass;
-     * a surface that discloses names screens each row.
+     * <p>Each declaration is confirmed against what the declaring version records now - still published, still
+     * declaring the package, and the requirement as it now reads - so a deleted version is never listed. A hold is not
+     * judged here: a surface that discloses names screens each row for a withheld version.
      *
      * @param cursor a previous page's {@link DeclarationPage#nextCursor()}, or {@code null}/empty for the first page
      * @param limit the maximum declarations to return (a non-positive limit yields an empty page)
      */
-    DeclarationPage declarations(String dependency, String cursor, int limit) throws IOException;
+    DeclarationPage declarations(String ecosystem, String dependency, String cursor, int limit) throws IOException;
 
     /** When the declared dependencies last completed a pass over every published version, or empty before the first:
      *  an empty page before it reads as "not yet indexed", never as "nothing declares it". */

@@ -2,12 +2,15 @@ package build.jenesis.repository.dependents.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
-import build.jenesis.repository.dependents.DeclaredDependents;
+import build.jenesis.repository.closure.ClosureTask;
+import build.jenesis.repository.closure.spi.ClosureSource;
 import build.jenesis.repository.dependents.web.Declarations;
 import build.jenesis.repository.dependents.web.Dependents;
 import build.jenesis.repository.dependents.web.DependentsController;
 import build.jenesis.repository.inventory.DependencySection;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
+import build.jenesis.repository.maintenance.RepositoryContext;
+import build.jenesis.repository.maintenance.UnitFailures;
 import build.jenesis.repository.metadata.MetadataKey;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.store.ArtifactStore;
@@ -22,7 +25,8 @@ import static org.assertj.core.api.Assertions.tuple;
 /**
  * The dependents endpoint's answers and refusals.
  *
- * <p>Its declared half says when the index has not been built yet rather than answering an empty list, which would
+ * <p>The declared rows are the closure pass's, so a test seeds them by running it. Its declared half says when they
+ * have not been built yet rather than answering an empty list, which would
  * report "nothing declares this" for a package half the estate names - a wrong answer that reads exactly like a right
  * one - and it says so inside the answer, so the resolved half still stands beside it.
  */
@@ -71,8 +75,8 @@ public class DependentsControllerTest {
         inventory.recording("npm", "lib", "2.0.0", false, Instant.now())
                 .file("/package.tgz")
                 .dependencies(List.of(new DependencySection.Declared("lodash", "4.17.21"))).commit();
-        new DeclaredDependents(store).pass(_ -> null);
-        // Deleted since the pass: the tier still records it until its next full pass, and the answer must not name it.
+        closurePass(store);
+        // Deleted since the pass: its row stays until the reconcile's next full pass, and the answer must not name it.
         store.delete(MetadataKey.version("npm", "app", "1.0.0"));
         Servlets.Response response = Servlets.response();
 
@@ -105,7 +109,7 @@ public class DependentsControllerTest {
         inventory.recording("npm", "any", "4.0.0", false, Instant.now())
                 .file("/package.tgz")
                 .dependencies(List.of(new DependencySection.Declared("lodash", ""))).commit();
-        new DeclaredDependents(store).pass(_ -> null);
+        closurePass(store);
 
         Dependents.View view = new DependentsController(repositories, Web.routing(repositories,
                 Scopes.DEFAULT_TENANT))
@@ -135,7 +139,7 @@ public class DependentsControllerTest {
                     .file("/app-" + entry.getKey())
                     .dependencies(List.of(new DependencySection.Declared(entry.getValue(), ""))).commit();
         }
-        new DeclaredDependents(store).pass(_ -> null);
+        closurePass(store);
 
         for (Map.Entry<String, String> entry : dependencies.entrySet()) {
             Dependents.View view = controller().dependents("releases", entry.getKey(), entry.getValue(), "1.0", "",
@@ -163,5 +167,50 @@ public class DependentsControllerTest {
         controller().badRequest(response.servlet());
 
         assertThat(response.status()).isEqualTo(400);
+    }
+
+    /** The closure pass over {@code store}, the {@code releases} repository, which keeps its declared rows. */
+    private static void closurePass(ArtifactStore store) throws IOException {
+        UnitFailures failures = new UnitFailures("the closure pass", "nothing");
+        new ClosureTask(Duration.ofMinutes(5), ClosureSource.installed()).repository(new Pass(store, failures));
+        failures.rethrow();
+    }
+
+    /** One repository's pass with nothing configured: every setting at its default. */
+    private record Pass(ArtifactStore store, UnitFailures failures) implements RepositoryContext {
+
+        @Override
+        public String tenant() {
+            return Scopes.DEFAULT_TENANT;
+        }
+
+        @Override
+        public String repository() {
+            return "releases";
+        }
+
+        @Override
+        public UnaryOperator<String> config() {
+            return _ -> null;
+        }
+
+        @Override
+        public UnitFailures failures(String work, String consequence) {
+            return failures;
+        }
+
+        @Override
+        public Instant now() {
+            return Instant.now();
+        }
+
+        @Override
+        public void gauge(String name, String description, Map<String, String> tags, double value) {
+        }
+
+        @Override
+        public TenantView tenantView() {
+            return TenantView.NONE;
+        }
     }
 }
