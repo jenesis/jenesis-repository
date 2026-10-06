@@ -9,7 +9,7 @@ import module java.base;
  * {@code id}, so a consumer that cannot evaluate it sees an identifier it does not recognise rather than half of it.
  *
  * <p>A plain value rather than the compliance SPI's {@code ComplianceGate.DeclaredLicense}: this module serves the
- * reverse-dependency index and the reachability engine too, and takes no edge to the compliance SPI.
+ * closure and the bills of materials it serves too, and takes no edge to the compliance SPI.
  */
 public record DependencyLicense(String id, String name, String url) {
 

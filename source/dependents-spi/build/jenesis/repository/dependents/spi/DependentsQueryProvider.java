@@ -7,7 +7,7 @@ import build.jenesis.repository.store.Providers;
 /**
  * Discovers the declared-dependencies index and binds it to a repository's scoped store, so the query surface reaches
  * the read model without depending on the optional index module. Without one {@link #installed()} is empty:
- * {@code /api/dependents} answers {@code 501} and the console hides the panel. Stateless; one instance serves every
+ * the dependents surfaces say the declared index is not installed. Stateless; one instance serves every
  * tenant and repository.
  *
  * <h2>Contract</h2>

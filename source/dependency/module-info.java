@@ -1,7 +1,7 @@
 /**
  * The dependency-graph primitive: it parses the SBOM embedded in a stored artifact (CycloneDX or SPDX) into a
  * format-neutral {@link build.jenesis.repository.dependency.DependencyGraph} of components and edges, which a
- * lease-guarded sweep folds into the reverse-dependency index. A store-agnostic library over streams, holding no
+ * carried bill turns into a version's closure. A store-agnostic library over streams, holding no
  * persistence, reused by the inventory and analysis modules.
  *
  * @jenesis.release 25

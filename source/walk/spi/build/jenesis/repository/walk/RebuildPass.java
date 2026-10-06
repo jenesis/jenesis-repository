@@ -21,7 +21,7 @@ import build.jenesis.repository.store.ServableNames;
  * <p><b>Which passes ride this walk, and which open their own.</b> "N rebuilders never mean N walks" is a promise
  * about consumers that want <em>this</em> enumeration: every serving pointer, as a path and a hash, with the withheld
  * screen applied. A pass opens a walk of its own exactly when one of three things differs, and says which in its own
- * javadoc: its <em>roots</em> (the collector's sweep and the reverse-dependency index read {@code blobs/}, the
+ * javadoc: its <em>roots</em> (the collector's sweep reads {@code blobs/}, the
  * reconcile's reverse leg reads the derived roots), its <em>granularity</em> (search and retention stream one row
  * per published version with its coordinate, where this pass would hand them several pointers per version and no
  * coordinate; the size roll-up folds directories post-order), or its <em>completeness rule</em> (the collector's

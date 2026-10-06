@@ -27,8 +27,8 @@ public record DependencyComponent(String ref, String group, String name, String 
     }
 
     /** A stable coordinate for this component: the {@code purl} when recorded, else {@code group:name:version} from the
-     *  parts (a missing group or version drops its segment). A reverse-dependency index groups on it, so two SBOMs
-     *  naming one dependency by the same purl collapse onto one node. */
+     *  parts (a missing group or version drops its segment), so two SBOMs naming one dependency by the same purl name
+     *  it alike. */
     public String coordinate() {
         if (purl != null && !purl.isBlank()) {
             return purl.trim();

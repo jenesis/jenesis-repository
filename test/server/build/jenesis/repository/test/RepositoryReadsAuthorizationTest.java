@@ -47,7 +47,7 @@ class RepositoryReadsAuthorizationTest {
         Map<String, Object> attributes = new HashMap<>();
         HttpServletRequest request = mock(HttpServletRequest.class);
         when(request.getMethod()).thenReturn("GET");
-        when(request.getRequestURI()).thenReturn("/api/repository/relied-on");
+        when(request.getRequestURI()).thenReturn("/api/repository/dependents");
         when(request.getQueryString()).thenReturn("repo=proxy&ecosystem=Maven&coordinate=org.dep:lib&version=1.0");
         when(request.getHeader("Jenesis-Repository-Key")).thenReturn(key);
         when(request.getRemoteAddr()).thenReturn("127.0.0.1");

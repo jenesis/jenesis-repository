@@ -15,9 +15,8 @@ public final class DependentsSettingsContributor implements SettingsContributor 
         return List.of(
                 new Setting("dependents-index", "Dependencies", "Declared-dependencies index",
                         "Index, on the background pass, the dependencies each published version's manifest declares, "
-                                + "with the requirement each states - what \"who declares a dependency on X\" answers "
-                                + "from. Which versions rely on X as their resolved closures reach it is the closure's "
-                                + "relied-on index.",
+                                + "with the requirement each states - a version's declared dependents. Its resolved "
+                                + "dependents, the published versions whose closures reach it, are the closure's.",
                         Setting.Kind.BOOLEAN, "true", true).gate().standard(),
                 new Setting(DependentsIndexTaskProvider.INTERVAL.key(), "Dependencies",
                         "Declared-dependencies pass interval",

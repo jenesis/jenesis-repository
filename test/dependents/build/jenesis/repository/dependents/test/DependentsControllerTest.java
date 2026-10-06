@@ -4,6 +4,7 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.dependents.DeclaredDependents;
 import build.jenesis.repository.dependents.web.Declarations;
+import build.jenesis.repository.dependents.web.Dependents;
 import build.jenesis.repository.dependents.web.DependentsController;
 import build.jenesis.repository.inventory.DependencySection;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
@@ -19,12 +20,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
 /**
- * The declared-dependencies endpoint's answers and refusals.
+ * The dependents endpoint's answers and refusals.
  *
- * <p>It distinguishes <em>not installed</em> (501 - this deployment does not carry the module) from <em>not built
- * yet</em> (503 - it does, and the pass has not run), which is the same distinction the CLI's exit code 3 exists for:
- * both are a missing answer and only one of them is worth waiting for. Answering either as an empty list would report
- * "nothing declares this" for a package half the estate names - a wrong answer that reads exactly like a right one.
+ * <p>Its declared half says when the index has not been built yet rather than answering an empty list, which would
+ * report "nothing declares this" for a package half the estate names - a wrong answer that reads exactly like a right
+ * one - and it says so inside the answer, so the resolved half still stands beside it.
  */
 public class DependentsControllerTest {
 
@@ -37,25 +37,27 @@ public class DependentsControllerTest {
     }
 
     @Test
-    void a_request_naming_no_package_is_refused() throws Exception {
+    void a_request_naming_no_ecosystem_is_refused() throws Exception {
         Servlets.Response response = Servlets.response();
 
-        Object view = controller().dependents("releases", null, null, "", 500,
-                Servlets.request("GET", "/ui/dependents"), response.servlet());
+        Object view = controller().dependents("releases", "", "lodash", null, "", "", 50,
+                Servlets.request("GET", "/api/repository/dependents"), response.servlet());
 
         assertThat(response.status()).isEqualTo(400);
         assertThat(view).isNull();
     }
 
     @Test
-    void the_index_says_it_is_not_built_until_its_first_full_pass() throws Exception {
+    void the_declared_half_says_it_is_not_built_until_its_first_full_pass_and_no_version_asks_no_resolved_half()
+            throws Exception {
         Servlets.Response response = Servlets.response();
 
-        Object view = controller().dependents("releases", "lodash", null, "", 500,
-                Servlets.request("GET", "/ui/dependents"), response.servlet());
+        Dependents.View view = controller().dependents("releases", "npm", "lodash", null, "", "", 50,
+                Servlets.request("GET", "/api/repository/dependents"), response.servlet());
 
-        assertThat(response.status()).isEqualTo(503);
-        assertThat(view).isNull();
+        assertThat(response.status()).as("a half that cannot answer says so in the answer").isEqualTo(200);
+        assertThat(view.declared()).isEqualTo(new Dependents.Declared(true, null, List.of(), null));
+        assertThat(view.resolved()).as("no version, so no published version built against it to list").isNull();
     }
 
     @Test
@@ -74,15 +76,16 @@ public class DependentsControllerTest {
         store.delete(MetadataKey.version("npm", "app", "1.0.0"));
         Servlets.Response response = Servlets.response();
 
-        DependentsController.DependentsView view = new DependentsController(repositories, Web.routing(repositories,
+        Dependents.View view = new DependentsController(repositories, Web.routing(repositories,
                 Scopes.DEFAULT_TENANT))
-                .dependents("releases", "lodash", null, "", 500, Servlets.request("GET", "/ui/dependents"),
-                        response.servlet());
+                .dependents("releases", "npm", "lodash", null, "", "", 50,
+                        Servlets.request("GET", "/api/repository/dependents"), response.servlet());
 
         assertThat(response.status()).isEqualTo(200);
-        assertThat(view.declared()).containsExactly(new Declarations.Row("npm", "lib", "2.0.0", "4.17.21", null));
-        assertThat(view.dependency()).isEqualTo("lodash");
-        assertThat(view.declaredLastBuilt()).isNotNull();
+        assertThat(view.declared().declarations())
+                .containsExactly(new Declarations.Row("npm", "lib", "2.0.0", "4.17.21", null));
+        assertThat(view.coordinate()).isEqualTo("lodash");
+        assertThat(view.declared().built()).isNotNull();
     }
 
     @Test
@@ -99,25 +102,55 @@ public class DependentsControllerTest {
         inventory.recording("npm", "tool", "3.0.0", false, Instant.now())
                 .file("/package.tgz")
                 .dependencies(List.of(new DependencySection.Declared("lodash", "latest"))).commit();
+        inventory.recording("npm", "any", "4.0.0", false, Instant.now())
+                .file("/package.tgz")
+                .dependencies(List.of(new DependencySection.Declared("lodash", ""))).commit();
         new DeclaredDependents(store).pass(_ -> null);
 
-        DependentsController.DependentsView view = new DependentsController(repositories, Web.routing(repositories,
+        Dependents.View view = new DependentsController(repositories, Web.routing(repositories,
                 Scopes.DEFAULT_TENANT))
-                .dependents("releases", "lodash", "4.17.21", "", 500, Servlets.request("GET", "/ui/dependents"),
-                        Servlets.response().servlet());
+                .dependents("releases", "npm", "lodash", "4.17.21", "", "", 50,
+                        Servlets.request("GET", "/api/repository/dependents"), Servlets.response().servlet());
 
-        assertThat(view.declared()).extracting(Declarations.Row::coordinate, Declarations.Row::admits)
-                .containsExactly(tuple("app", "admits"), tuple("lib", "excludes"),
+        assertThat(view.declared().declarations()).extracting(Declarations.Row::coordinate, Declarations.Row::admits)
+                .containsExactlyInAnyOrder(tuple("app", "admits"), tuple("lib", "excludes"),
                         // A dist-tag is not a range: what it names is decided by the registry, not the requirement.
-                        tuple("tool", "unknown"));
+                        tuple("tool", "unknown"),
+                        tuple("any", "admits"));
+        assertThat(view.declared().declarations()).filteredOn(row -> row.coordinate().equals("any"))
+                .as("a requirement stating no version admits every one").extracting(Declarations.Row::admits)
+                .containsExactly("admits");
+    }
+
+    @Test
+    void a_declaration_stating_no_requirement_admits_every_version_in_every_ecosystem() throws Exception {
+        Repositories repositories = Web.repositories(root);
+        ArtifactStore store = repositories.store(Scopes.DEFAULT_TENANT, "releases");
+        StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
+        Map<String, String> dependencies = Map.of("Maven", "org.dep:lib", "PyPI", "lib", "crates.io", "lib",
+                "RubyGems", "lib");
+        for (Map.Entry<String, String> entry : dependencies.entrySet()) {
+            inventory.recording(entry.getKey(), "app-" + entry.getKey().toLowerCase(Locale.ROOT), "1.0", false,
+                            Instant.now())
+                    .file("/app-" + entry.getKey())
+                    .dependencies(List.of(new DependencySection.Declared(entry.getValue(), ""))).commit();
+        }
+        new DeclaredDependents(store).pass(_ -> null);
+
+        for (Map.Entry<String, String> entry : dependencies.entrySet()) {
+            Dependents.View view = controller().dependents("releases", entry.getKey(), entry.getValue(), "1.0", "",
+                    "", 50, Servlets.request("GET", "/api/repository/dependents"), Servlets.response().servlet());
+            assertThat(view.declared().declarations()).as(entry.getKey())
+                    .extracting(Declarations.Row::admits).containsExactly("admits");
+        }
     }
 
     @Test
     void an_invalid_repository_name_is_refused_before_any_store_read() throws Exception {
         Servlets.Response response = Servlets.response();
 
-        Object view = controller().dependents("../etc", "lodash", null, "", 500,
-                Servlets.request("GET", "/ui/dependents"), response.servlet());
+        Object view = controller().dependents("../etc", "npm", "lodash", null, "", "", 50,
+                Servlets.request("GET", "/api/repository/dependents"), response.servlet());
 
         assertThat(response.status()).isEqualTo(400);
         assertThat(view).isNull();

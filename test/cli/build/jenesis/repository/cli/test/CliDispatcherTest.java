@@ -190,30 +190,43 @@ public class CliDispatcherTest {
     }
 
     @Test
-    public void dependents_prints_the_versions_declaring_a_package_apart_with_their_requirement() throws Exception {
+    public void dependents_prints_the_versions_built_against_a_version_apart_from_those_declaring_it()
+            throws Exception {
         dependentsStatus = 200;
-        dependentsBody = "{\"dependency\":\"lodash\",\"declared\":["
+        dependentsBody = "{\"repository\":\"releases\",\"ecosystem\":\"npm\",\"coordinate\":\"lodash\","
+                + "\"version\":\"4.17.21\",\"resolved\":{\"dependents\":["
+                + "{\"repository\":\"releases\",\"ecosystem\":\"npm\",\"coordinate\":\"web\","
+                + "\"version\":\"2.0.0\",\"path\":[{\"coordinate\":\"app\",\"version\":\"1.0.0\"},"
+                + "{\"coordinate\":\"lodash\",\"version\":\"4.17.21\"}],\"cut\":false,\"byCoordinate\":false}],"
+                + "\"examined\":1,\"next\":\"r2\"},"
+                + "\"declared\":{\"installed\":true,\"built\":\"2026-10-06T00:00:00Z\",\"declarations\":["
                 + "{\"ecosystem\":\"npm\",\"coordinate\":\"app\",\"version\":\"1.0.0\","
                 + "\"requirement\":\"^4.17.0\",\"admits\":\"admits\"},"
                 + "{\"ecosystem\":\"npm\",\"coordinate\":\"lib\",\"version\":\"2.0.0\",\"requirement\":\"\"}],"
-                + "\"nextDeclaredCursor\":\"tok\"}";
+                + "\"next\":\"tok\"}}";
         String out = capture(() -> assertThat(
-                Cli.run(new String[] {"dependents", "releases", "lodash", "--version", "4.17.21",
-                        "--cursor", "c1"})).isZero());
-        assertThat(dependentsQuery).as("the package and the cursor reach the declared answer")
-                .contains("package=lodash").contains("version=4.17.21").contains("after=c1");
-        assertThat(out).contains("npm  app  1.0.0  ^4.17.0  admits")
+                Cli.run(new String[] {"dependents", "releases", "npm", "lodash", "--version", "4.17.21",
+                        "--cursor", "c1", "--declared-cursor", "d1"})).isZero());
+        assertThat(dependentsQuery).as("the package, the version and each half's cursor reach the answer")
+                .contains("ecosystem=npm").contains("coordinate=lodash").contains("version=4.17.21")
+                .contains("after=c1").contains("declaredAfter=d1");
+        assertThat(out).contains("Resolved dependents:").contains("web 2.0.0 of releases")
+                .contains("through app 1.0.0").contains("more: --cursor r2")
+                .contains("Declared dependents:").contains("npm  app  1.0.0  ^4.17.0  admits")
                 .as("a declaration stating no requirement says so rather than printing nothing")
                 .contains("npm  lib  2.0.0  -")
-                .contains("next cursor: tok");
+                .contains("more: --declared-cursor tok");
     }
 
     @Test
-    public void dependents_reports_when_the_index_is_not_installed() throws Exception {
-        dependentsStatus = 501;
+    public void dependents_says_which_half_has_nothing_to_answer_and_why() throws Exception {
+        dependentsStatus = 200;
+        dependentsBody = "{\"repository\":\"releases\",\"ecosystem\":\"npm\",\"coordinate\":\"lodash\","
+                + "\"version\":null,\"resolved\":null,\"declared\":{\"installed\":false,\"built\":null,"
+                + "\"declarations\":[],\"next\":null}}";
         String out = capture(() -> assertThat(
-                Cli.run(new String[] {"dependents", "releases", "lodash"})).isZero());
-        assertThat(out).contains("not installed");
+                Cli.run(new String[] {"dependents", "releases", "npm", "lodash"})).isZero());
+        assertThat(out).contains("Name a version").contains("not installed");
     }
 
     @Test
@@ -405,7 +418,7 @@ public class CliDispatcherTest {
                 return respond(importStatusStatus, "{\"state\":\"done\",\"imported\":0,\"skipped\":0,"
                         + "\"skippedFormats\":[],\"cursor\":null,\"asset\":null,\"error\":\"\"}");
             }
-            if (matches(path, "/api/dependents")) {
+            if (matches(path, "/api/repository/dependents")) {
                 dependentsQuery = query;
                 return respond(dependentsStatus, dependentsBody);
             }

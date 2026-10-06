@@ -5,10 +5,10 @@ import module java.base;
 /**
  * The read model of one repository's declared dependencies, bound to its scoped store by a
  * {@link DependentsQueryProvider}: for a package, the versions whose manifest declares a dependency on it and the
- * requirement each states - what the console, the CLI and {@code /api/dependents} answer "who declares a dependency on
- * X" from, a page at a time. Which published versions rely on a version, as their resolved closures reach it, is the
- * closure's relied-on index; a declaration is a requirement, whose resolution is a client's later decision, so the two
- * are kept apart and a declaration never counts as reaching a version.
+ * requirement each states - the declared dependents the console, the CLI and {@code /api/repository/dependents} answer
+ * from, a page at a time. The resolved dependents - the published versions whose closures reach a version - are the
+ * closure's; a declaration is a requirement, whose resolution is a client's later decision, so the two are kept apart
+ * and a declaration never counts as reaching a version.
  */
 public interface DependentsQuery {
 
