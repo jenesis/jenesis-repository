@@ -157,6 +157,22 @@ public class PullThroughHooksTest {
         assertThat(format.local).containsOnlyKeys("/spyproxy/commit");
     }
 
+    /** A request whose name the upstream resolves to another - a branch to its commit - is refused where that other
+     *  name is held, which the guard over the name asked for cannot see. */
+    @Test
+    void a_request_resolving_to_a_held_name_is_refused_rather_than_fetched_again() throws IOException {
+        SpyFormat format = new SpyFormat();
+        format.upstream.put(UPSTREAM_BASE + "spyproxy/branch", UPSTREAM);
+        format.keptAs = Map.of("/spyproxy/branch", "/spyproxy/commit");
+
+        FakeExchange miss = new FakeExchange("GET", "/spyproxy/branch");
+        new PullThroughCache(format.fetcher, ObservationRegistry.NOOP, new SpyHooks(),
+                (path, _) -> path.equals("/spyproxy/commit")).serve(format, format, UPSTREAM_BASE, miss, store);
+
+        assertThat(miss.status).isEqualTo(404);
+        assertThat(format.proxied).as("nothing fetched under the held name").isEmpty();
+    }
+
     @Test
     void a_format_that_keeps_nothing_elsewhere_hands_its_leg_the_request_unchanged() throws IOException {
         SpyFormat format = new SpyFormat();

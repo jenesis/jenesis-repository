@@ -130,7 +130,9 @@ final class OciManifests {
         Publication.Commit commit = origin == Origin.RELAYED ? Publication.relaying(committing) : committing.call();
         String hex = commit.hash();
         if (commit.disposition() != PublishInterceptor.Disposition.ACCEPT) {
-            // The bytes are already at blobs/<hex>; the marker keeps them from serving by digest.
+            // The bytes are already at blobs/<hex>; the marker keeps them from serving by digest. The manifest alone is
+            // marked: it is what names the image's config and layers, which are shared content another image may name
+            // too, so a client reaches a held image's layers only through the manifest this refuses.
             Withheld.mark(store, hex, descriptor);
             if (commit.disposition() == PublishInterceptor.Disposition.QUARANTINE) {
                 // A held referrer is recorded but not listed: a reviewer's release lists it, a discard never does.

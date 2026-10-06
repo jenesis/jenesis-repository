@@ -308,6 +308,11 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Path
             archive(exchange, blobs, repo, scope, name, version);
             return true;
         }
+        // A held release's own documents - its metadata, its manifest - are not relayed, as its archive is not served.
+        if ((rest.length == 3 || rest.length == 4 && rest[3].equals("Package.swift"))
+                && HeldVersions.held(store, ECOSYSTEM, rest[0] + "." + strip(rest[1]), strip(rest[2]))) {
+            return false;
+        }
         if (rest.length == 3) {
             return relay(exchange, store, fetcher, URI.create(root + rest[0] + "/" + rest[1] + "/" + strip(rest[2])), "json",
                     ProxyRelay.Document.PINNED);

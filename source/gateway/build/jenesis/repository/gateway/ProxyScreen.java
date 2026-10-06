@@ -756,7 +756,16 @@ public final class ProxyScreen {
      *  runs {@link ComplianceGate#assessUnclaimed}, which skips that dimension - a raw fetch is screened for the
      *  deny-list without being over-quarantined as unknown-license. */
     private ComplianceGate.Subject pathDerivedSubject(String path) {
-        Optional<ArtifactDescriptor> described = new StoreRepositoryInventory(store).describe(path);
+        StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
+        Optional<ArtifactDescriptor> described = inventory.describe(path);
+        if (described.isEmpty() || described.get().coordinate() == null || described.get().version() == null) {
+            // A file the layout files under a version without describing it as one - a Go module's .info and .mod
+            // beside its archive - is that version's.
+            Optional<ArtifactDescriptor> member = inventory.versionOf(path);
+            if (member.isPresent() && member.get().coordinate() != null) {
+                described = member;
+            }
+        }
         if (described.isEmpty() || described.get().coordinate() == null) {
             return new ComplianceGate.Subject("", fileName(path), "", List.of());
         }

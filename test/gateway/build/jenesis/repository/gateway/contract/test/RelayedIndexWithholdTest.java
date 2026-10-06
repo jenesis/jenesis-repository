@@ -2,6 +2,7 @@ package build.jenesis.repository.gateway.contract.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -378,6 +379,106 @@ class RelayedIndexWithholdTest {
                 .as("another gem's line is as it was")
                 .contains("rake 13.0.0 fedcba9876543210fedcba9876543210")
                 .startsWith("created_at: 2026-10-01T00:00:00Z\n---\n");
+    }
+
+    @Test
+    void a_terraform_provider_version_s_own_documents_are_not_relayed_while_it_is_held() throws IOException {
+        byte[] document = ("{\"filename\":\"terraform-provider-widget_1.1.0_linux_amd64.zip\","
+                + "\"download_url\":\"https://upstream.example/widget.zip\"}").getBytes(StandardCharsets.UTF_8);
+        String path = "/terraform/main/v1/providers/acme/widget/1.1.0/download/linux/amd64";
+        Map<String, byte[]> answers = Map.of("/download/linux/amd64", document);
+        assertThat(relay("terraform", path, answers).body()).as("nothing held: its package document")
+                .contains("terraform-provider-widget_1.1.0_linux_amd64.zip");
+
+        UpstreamMemory.reset();
+        hold("/terraform/main/providers/acme/widget/1.1.0/terraform-provider-widget_1.1.0_linux_amd64.zip",
+                "Terraform", "acme/widget", "1.1.0");
+
+        refused("terraform", path, answers);
+        refused("terraform", "/terraform/main/providers/acme/widget/1.1.0/SHA256SUMS?os=linux&arch=amd64", answers);
+    }
+
+    @Test
+    void a_swift_release_s_own_documents_are_not_relayed_while_it_is_held() throws IOException {
+        byte[] metadata = "{\"id\":\"acme.widget\",\"version\":\"1.1.0\"}".getBytes(StandardCharsets.UTF_8);
+        Map<String, byte[]> answers = Map.of("/acme/widget/1.1.0", metadata,
+                "/Package.swift", "// swift-tools-version:5.9".getBytes(StandardCharsets.UTF_8));
+        assertThat(relay("swift", "/swift/main/acme/widget/1.1.0", answers).body()).contains("acme.widget");
+
+        UpstreamMemory.reset();
+        hold("/swift/main/acme/widget/1.1.0.zip", "Swift", "acme.widget", "1.1.0");
+
+        refused("swift", "/swift/main/acme/widget/1.1.0", answers);
+        refused("swift", "/swift/main/acme/widget/1.1.0/Package.swift", answers);
+    }
+
+    @Test
+    void a_held_pod_version_s_podspec_is_not_relayed() throws IOException {
+        byte[] podspec = "{\"name\":\"Alamofire\",\"version\":\"5.9.0\",\"source\":{\"git\":\"https://git.example/a\"}}"
+                .getBytes(StandardCharsets.UTF_8);
+        String path = "/cocoapods/main/Specs/a/b/c/Alamofire/5.9.0/Alamofire.podspec.json";
+        assertThat(relay("cocoapods", path, podspec).body()).as("nothing held: the podspec").contains("Alamofire");
+
+        UpstreamMemory.reset();
+        hold("/cocoapods/main/pods/Alamofire/5.9.0/Alamofire.zip", "CocoaPods", "Alamofire", "5.9.0");
+
+        refused("cocoapods", path, Map.of("", podspec));
+    }
+
+    @Test
+    void a_held_nuget_version_s_manifest_is_neither_fetched_nor_served() throws IOException {
+        String nuspec = "/nuget/v3-flatcontainer/acme.lib/1.1.0/acme.lib.nuspec";
+        new Blobs(store).write("nuget/acme.lib/1.1.0/acme.lib.nuspec", "<package/>".getBytes(StandardCharsets.UTF_8));
+        Exchange cached = new Exchange(nuspec);
+        discover("nuget").handle(cached, store);
+        assertThat(cached.status).as("nothing held: the cached manifest serves").isEqualTo(200);
+
+        hold("/nuget/v3-flatcontainer/acme.lib/1.1.0/acme.lib.1.1.0.nupkg", "NuGet", "acme.lib", "1.1.0");
+
+        Exchange held = new Exchange(nuspec);
+        discover("nuget").handle(held, store);
+        assertThat(held.status).as("kept beside a package held for review").isEqualTo(404);
+        refused("nuget", "/nuget/v3-flatcontainer/acme.lib/1.1.0/acme.lib.dll.config",
+                Map.of("", "<config/>".getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void a_held_npm_version_s_own_document_is_not_relayed_however_it_is_named() throws IOException {
+        byte[] document = "{\"name\":\"widget\",\"version\":\"1.1.0\",\"dist\":{\"tarball\":\"t\"}}"
+                .getBytes(StandardCharsets.UTF_8);
+        assertThat(relay("npm", "/npm/widget/1.1.0", document).body()).as("nothing held").contains("1.1.0");
+
+        UpstreamMemory.reset();
+        hold("/npm/widget/-/widget-1.1.0.tgz", "npm", "widget", "1.1.0");
+
+        refused("npm", "/npm/widget/1.1.0", Map.of("", document));
+        refused("npm", "/npm/widget/latest", Map.of("", document));
+    }
+
+    @Test
+    void a_held_conan_version_s_revision_listing_is_not_relayed() throws IOException {
+        byte[] revisions = "{\"revisions\":[{\"revision\":\"0a1b\",\"time\":\"2026-01-01T00:00:00Z\"}]}"
+                .getBytes(StandardCharsets.UTF_8);
+        String path = "/conan/main/v2/conans/zlib/1.3.1/_/_/revisions";
+        assertThat(relay("conan", path, revisions).body()).as("nothing held").contains("0a1b");
+
+        UpstreamMemory.reset();
+        hold("/conan/main/v2/conans/zlib/1.3.1/_/_/revisions/0a1b/files/conanfile.py", "Conan", "zlib", "1.3.1");
+
+        refused("conan", path, Map.of("", revisions));
+    }
+
+    /** {@code path} not relayed through {@code format}'s proxy leg, from an upstream answering as {@link #relay} does. */
+    private void refused(String format, String path, Map<String, byte[]> answers) throws IOException {
+        ProxyFormat.Fetcher.Buffered upstream = (url, headers) -> answers.entrySet().stream()
+                .filter(answer -> url.toString().endsWith(answer.getKey()))
+                .findFirst()
+                .map(answer -> new ProxyFormat.Fetched(200, answer.getValue(), Map.of()))
+                .or(() -> Optional.of(new ProxyFormat.Fetched(404, new byte[0], Map.of())));
+        Exchange exchange = new Exchange(path);
+        assertThat(((ProxyFormat) discover(format)).proxy(exchange, store, URI.create("https://upstream.example/"),
+                upstream)).as("%s does not relay %s", format, path).isFalse();
+        assertThat(exchange.status).as("and answers nothing for it").isEqualTo(-1);
     }
 
     private static byte[] md5(byte[] bytes) {

@@ -163,14 +163,17 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
                 && !Character.isDigit(file.charAt(at + needle.length()));
     }
 
+    /** The suffix of a PEP 658 metadata sidecar, served beside the distribution it names. */
+    private static final String METADATA_SUFFIX = ".metadata";
+
     /** The distribution extensions a describable file carries, the set the PyPI inspector screens. */
     private static final List<String> DIST_EXTENSIONS = List.of(".whl", ".tar.gz", ".zip", ".egg");
 
     /** The coordinate a distribution path carries ({@code /pypi/simple/<project>/<file>}), the project PEP
-     *  503-normalized as everywhere else. The indexes and a PEP 658 {@code .metadata} sidecar name no version. The
-     *  version is peeled from the filename as the inspector does: a wheel's second {@code -} field (the wheel spec
-     *  escapes the name's dashes), an sdist's or egg's after the normalized project prefix; a filename neither fits
-     *  describes coordinate-less. */
+     *  503-normalized as everywhere else; a PEP 658 {@code <file>.metadata} sidecar carries its distribution's, as a file
+     *  of that version, so a hold on the version covers it. The indexes name no version. The version is peeled from the
+     *  filename as the inspector does: a wheel's second {@code -} field (the wheel spec escapes the name's dashes), an
+     *  sdist's or egg's after the normalized project prefix; a filename neither fits describes coordinate-less. */
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
         if (!path.startsWith("/pypi/simple/")) {
@@ -183,6 +186,9 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
         }
         String project = normalize(after.substring(0, slash));
         String file = after.substring(slash + 1);
+        if (file.endsWith(METADATA_SUFFIX)) {
+            file = file.substring(0, file.length() - METADATA_SUFFIX.length());
+        }
         if (file.indexOf('/') >= 0) {
             // A distribution path is exactly <project>/<filename>, so no slash can leak into the parsed version.
             return Optional.empty();
@@ -818,7 +824,9 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
 
     /** PEP 740's provenance endpoint, {@code /integrity/<project>/<version>/<file>/provenance}: the distribution's
      *  uploaded attestations as one bundle per publisher. The publisher is what each certificate's identity says; the
-     *  verifier reads it. */
+     *  verifier reads it. Answered only while the distribution itself is served: attestations kept beside a fill held
+     *  for review, or of a distribution since withheld, are evidence for a reviewer, never a document a client may
+     *  read about a file it cannot fetch. */
     private void provenance(String rest, Blobs blobs, FormatExchange exchange) throws IOException {
         String[] parts = rest.split("/");
         if (parts.length != 4 || !parts[3].equals("provenance") || Keys.unsafe(parts[0]) || Keys.unsafe(parts[2])) {
@@ -830,6 +838,10 @@ public final class PyPiFormat implements RepositoryFormat, ProxyLeg, BlobLayout,
             return;
         }
         String key = attestationsKey(normalize(parts[0]), parts[2]);
+        if (blobs.locate("pypi/" + normalize(parts[0]) + "/files/" + parts[2]).isEmpty()) {
+            exchange.respond(404);
+            return;
+        }
         ByteArrayOutputStream stored = new ByteArrayOutputStream();
         if (!blobs.read(key, stored)) {
             exchange.respond(404);

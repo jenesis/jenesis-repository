@@ -322,10 +322,19 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
 
     /** The coordinate a {@code .deb} request path carries, from its {@code <package>_<version>_<arch>.deb} filename:
      *  the package name, as the compliance inspector reads it from the control. The filename version lacks any epoch.
-     *  The generated indexes and the keyring endpoints name no package and stay empty, as does a filename off the
+     *  A source package's files - {@code <source>_<version>.dsc}, its {@code .debian.tar.*} or {@code .diff.gz} and
+     *  its {@code .orig.tar.*} - carry the source package and version, so they are screened by coordinate as a
+     *  {@code .deb} is; an {@code .orig} tarball names the upstream version alone, as the archive spells it. The
+     *  generated indexes and the keyring endpoints name no package and stay empty, as does a filename off the
      *  convention. */
     @Override
     public Optional<ArtifactDescriptor> describe(String path) {
+        if (path.startsWith("/debian/")) {
+            Optional<ArtifactDescriptor> source = source(path);
+            if (source.isPresent()) {
+                return source;
+            }
+        }
         if (!path.startsWith("/debian/") || !path.endsWith(".deb")) {
             return Optional.empty();
         }
@@ -337,6 +346,34 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
         return Optional.of(new ArtifactDescriptor("Debian", parts[0], parts[1], path,
                 "application/vnd.debian.binary-package", false, null, -1L));
     }
+
+    /** A source package's file, by the suffix the archive gives each, where the path names one. */
+    private static Optional<ArtifactDescriptor> source(String path) {
+        String file = path.substring(path.lastIndexOf('/') + 1);
+        String stem = null;
+        for (String suffix : SOURCE_SUFFIXES) {
+            int at = file.indexOf(suffix);
+            if (at > 0 && SOURCE_TAILS.contains(file.substring(at + suffix.length()))) {
+                stem = file.substring(0, at);
+                break;
+            }
+        }
+        if (stem == null) {
+            return Optional.empty();
+        }
+        String[] parts = stem.split("_");
+        if (parts.length != 2 || parts[0].isEmpty() || parts[1].isEmpty() || !Character.isDigit(parts[1].charAt(0))) {
+            return Optional.of(ArtifactDescriptor.at("Debian", path));
+        }
+        return Optional.of(new ArtifactDescriptor("Debian", parts[0], parts[1], path, "application/octet-stream",
+                false, null, -1L));
+    }
+
+    /** The suffixes a source package's files carry before their compression, the {@code .dsc} with none. */
+    private static final List<String> SOURCE_SUFFIXES = List.of(".dsc", ".debian.tar", ".orig.tar", ".diff");
+
+    /** What may follow a {@link #SOURCE_SUFFIXES source suffix}: nothing, or a compression's extension. */
+    private static final Set<String> SOURCE_TAILS = Set.of("", ".gz", ".xz", ".bz2", ".lzma", ".zst");
 
     // An original CC0 line glyph (a two-arc swirl).
     private static final IconResource ICON = IconResource.svg("""
