@@ -1,16 +1,9 @@
 package build.jenesis.repository.dependents.requirements;
 
 import module java.base;
+import io.github.nscuro.versatile.VersException;
+import io.github.nscuro.versatile.VersionFactory;
 import io.github.nscuro.versatile.spi.Version;
-import io.github.nscuro.versatile.spi.VersionProvider;
-import io.github.nscuro.versatile.version.ApkVersion;
-import io.github.nscuro.versatile.version.DebianVersion;
-import io.github.nscuro.versatile.version.GemVersion;
-import io.github.nscuro.versatile.version.GenericVersion;
-import io.github.nscuro.versatile.version.GoVersion;
-import io.github.nscuro.versatile.version.NugetVersion;
-import io.github.nscuro.versatile.version.PythonVersion;
-import io.github.nscuro.versatile.version.RpmVersion;
 
 /**
  * A requirement grammar whose comparisons are one ecosystem's version order as versatile implements it - the order the
@@ -32,18 +25,6 @@ abstract class SchemeRequirement implements Requirements.Grammar {
     /** One comparator of a requirement. */
     record Bound(Op op, String version) {
     }
-
-    /** Each scheme's versions, asked of its provider directly: versatile's own factory discovers the providers
-     *  through a service its module does not declare it uses, which a named module may not do. */
-    private static final Map<String, VersionProvider> PROVIDERS = Map.of(
-            "pypi", new PythonVersion.Provider(),
-            "nuget", new NugetVersion.Provider(),
-            "gem", new GemVersion.Provider(),
-            "golang", new GoVersion.Provider(),
-            "deb", new DebianVersion.Provider(),
-            "rpm", new RpmVersion.Provider(),
-            "alpine", new ApkVersion.Provider(),
-            "generic", new GenericVersion.Provider());
 
     private final String scheme;
 
@@ -112,9 +93,14 @@ abstract class SchemeRequirement implements Requirements.Grammar {
     /** Two versions in {@code scheme}'s order, raising an {@link IllegalArgumentException} for one it does not
      *  parse. */
     static int order(String scheme, String left, String right) {
-        VersionProvider provider = PROVIDERS.get(scheme);
-        Version parsedLeft = provider.getVersion(scheme, left);
-        Version parsedRight = provider.getVersion(scheme, right);
+        Version parsedLeft;
+        Version parsedRight;
+        try {
+            parsedLeft = VersionFactory.forScheme(scheme, left);
+            parsedRight = VersionFactory.forScheme(scheme, right);
+        } catch (VersException unserved) {
+            throw new IllegalArgumentException(unserved.getMessage(), unserved);
+        }
         return Integer.signum(parsedLeft.compareTo(parsedRight));
     }
 
