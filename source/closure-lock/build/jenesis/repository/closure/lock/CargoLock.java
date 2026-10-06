@@ -37,7 +37,7 @@ public final class CargoLock implements ClosureSource {
 
     @Override
     public Kind kind() {
-        return Kind.BILL;
+        return Kind.LOCK;
     }
 
     @Override
@@ -52,7 +52,7 @@ public final class CargoLock implements ClosureSource {
             return Optional.empty();
         }
         return Optional.of(CarriedClosure.place(walk, ecosystem, coordinate, version, entries.get(),
-                "the version's Cargo.lock", NAME, now));
+                "the version's Cargo.lock", this, now));
     }
 
     /** One pinned package: its name, version, where it comes from, and the packages it lists. */

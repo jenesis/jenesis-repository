@@ -41,7 +41,7 @@ public final class NpmShrinkwrap implements ClosureSource {
 
     @Override
     public Kind kind() {
-        return Kind.BILL;
+        return Kind.LOCK;
     }
 
     @Override
@@ -56,7 +56,7 @@ public final class NpmShrinkwrap implements ClosureSource {
             return Optional.empty();
         }
         return Optional.of(CarriedClosure.place(walk, ecosystem, coordinate, version, entries.get(),
-                "the version's npm-shrinkwrap.json", NAME, now));
+                "the version's npm-shrinkwrap.json", this, now));
     }
 
     /** One installed package: its name, version, what it declares it needs, and how the lock marks it. */

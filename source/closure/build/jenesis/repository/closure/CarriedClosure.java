@@ -56,12 +56,13 @@ public final class CarriedClosure {
     /**
      * {@code entries}, which the release {@code coordinate} at {@code version} of {@code ecosystem} carries in what
      * {@code document} names ("the version's bill", "the version's lock file"), placed in {@code walk}'s repositories
-     * as of {@code now} and attributed to {@code source}. A package named twice at one version is placed once, where it is first named; at
-     * two versions it is placed twice, since a carried document records what its build installed, and an npm or Cargo
-     * build installs two versions of one package side by side.
+     * as of {@code now} and attributed to {@code source}, under its own kind and name. A package named twice at one
+     * version is placed once, where it is first named; at two versions it is placed twice, since a carried document
+     * records what its build installed, and an npm or Cargo build installs two versions of one package side by side.
      */
     public static ClosureSection.Closure place(ClosureWalk walk, String ecosystem, String coordinate, String version,
-                                               List<Entry> entries, String document, String source, Instant now)
+                                               List<Entry> entries, String document, ClosureSource source,
+                                               Instant now)
             throws IOException {
         List<Holder> holders = walk.members().stream().map(Holder::new).toList();
         List<ClosureSection.Component> components = new ArrayList<>();
@@ -101,7 +102,7 @@ public final class CarriedClosure {
             }
         }
         return new ClosureSection.Closure(cuts.isEmpty() && !truncated ? ClosureSection.Status.RESOLVED
-                : ClosureSection.Status.PARTIAL, components, cuts, truncated, now, ClosureSource.Kind.BILL, source,
+                : ClosureSection.Status.PARTIAL, components, cuts, truncated, now, source.kind(), source.name(),
                 foreign);
     }
 

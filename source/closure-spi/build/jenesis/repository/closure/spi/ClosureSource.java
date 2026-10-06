@@ -4,11 +4,11 @@ import module java.base;
 
 /**
  * One way a release's bill of materials - its transitive closure - is produced, discovered and named, serving the
- * ecosystems it declares: the bill the release carries, an ecosystem's own resolver (Maven Resolver for Maven), a
- * scanner that reads what an artifact contains, or the walk over each held version's declarations. The closure pass
- * asks the sources serving a release's ecosystem in {@link Kind} order - a carried bill, then a resolver, then a
- * scanner, then the declaration walk - and, within a kind, by name; the first that answers is the closure, and the
- * rest are not asked.
+ * ecosystems it declares: the lock file the release carries, the bill it carries, an ecosystem's own resolver (Maven
+ * Resolver for Maven), a scanner that reads what an artifact contains, or the walk over each held version's
+ * declarations. The closure pass asks the sources serving a release's ecosystem in {@link Kind} order - a carried lock
+ * file, a carried bill, a resolver, a scanner, then the declaration walk - and, within a kind, by name; the first that
+ * answers is the closure, recorded under that source's own kind and name, and the rest are not asked.
  *
  * <h2>Contract</h2>
  * <ol>
@@ -35,6 +35,9 @@ public interface ClosureSource {
 
     /** Where a source stands in the order the pass asks in. */
     enum Kind {
+        /** A lock file the release carries, as the package manager that resolved it wrote it: exact, and of the
+         *  release's own ecosystem, so it is asked before a bill, which a build generated afterwards. */
+        LOCK,
         /** The bill the release carries, as its build resolved it. */
         BILL,
         /** The ecosystem's own resolver over the descriptors the walk holds. */

@@ -79,7 +79,7 @@ public final class CarriedBill implements ClosureSource {
                             "named by the version's bill in a form this repository cannot place")));
         }
         return Optional.of(CarriedClosure.place(walk, ecosystem, coordinate, version, entries, "the version's bill",
-                NAME, now));
+                this, now));
     }
 
     /** The first bill among the version's files that names a closure: a published bill before an embedding archive. */
