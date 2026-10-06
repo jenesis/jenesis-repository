@@ -13,6 +13,8 @@
  */
 open module build.jenesis.repository.closure.test {
     requires build.jenesis.repository.closure;
+    // The eviction that takes back a dependent's rows.
+    requires build.jenesis.repository.cleanup;
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.compliance.maven;
     requires build.jenesis.repository.compliance.scan;

@@ -155,6 +155,53 @@ public final class ReliedOn {
     public static int index(ClosureWalk walk, String ecosystem, Row dependent, ClosureSection.Closure closure,
                             ExposureSection.Exposure exposure, boolean blind, Optional<ArtifactStore> tenant,
                             Map<Object, ArtifactStore> touched) throws IOException {
+        int written = 0;
+        for (Placed placed : placed(walk, ecosystem, dependent, closure, exposure.reached(), tenant)) {
+            written += put(placed.holder(), placed.key(), placed.row(), blind, touched);
+        }
+        return written;
+    }
+
+    /**
+     * Take back the rows {@code retired}, a closure {@code dependent} gave up, wrote - those it and the exposure
+     * {@code retiredReached} placed, less those {@code current}, the dependent's closure now, and its exposure
+     * {@code currentReached} place - from every holder the walk still reaches; a holder it no longer reaches keeps its
+     * rows for its reconcile. Answers how many were removed, and adds every store a row was removed from to
+     * {@code touched}.
+     */
+    static int retire(ClosureWalk walk, String ecosystem, Row dependent, ClosureSection.Closure retired,
+                      List<ExposureSection.Reached> retiredReached, Optional<ClosureSection.Closure> current,
+                      List<ExposureSection.Reached> currentReached, Optional<ArtifactStore> tenant,
+                      Map<Object, ArtifactStore> touched) throws IOException {
+        Set<Map.Entry<Object, String>> kept = new HashSet<>();
+        if (current.isPresent()) {
+            for (Placed placed : placed(walk, ecosystem, dependent, current.get(), currentReached, tenant)) {
+                kept.add(Map.entry(placed.holder().identity(), placed.key()));
+            }
+        }
+        int removed = 0;
+        for (Placed placed : placed(walk, ecosystem, dependent, retired, retiredReached, tenant)) {
+            if (!kept.contains(Map.entry(placed.holder().identity(), placed.key()))
+                    && placed.holder().exists(placed.key())) {
+                placed.holder().delete(placed.key());
+                touched.putIfAbsent(placed.holder().identity(), placed.holder());
+                removed++;
+            }
+        }
+        return removed;
+    }
+
+    /** A row a closure places: the store holding it, its key, and what it says. */
+    private record Placed(ArtifactStore holder, String key, byte[] row) {
+    }
+
+    /** The rows {@code closure} of {@code dependent}, and the exposure {@code reached} derived from it, place - each
+     *  component in the repository of the walk holding it, each version the exposure names as held where the closure
+     *  stopped, and each package of another ecosystem in the tenant's space - leaving out a holder the walk does not
+     *  reach. */
+    private static List<Placed> placed(ClosureWalk walk, String ecosystem, Row dependent,
+                                       ClosureSection.Closure closure, List<ExposureSection.Reached> reached,
+                                       Optional<ArtifactStore> tenant) {
         Map<String, ArtifactStore> holders = new HashMap<>();
         List<ClosureWalk.Member> members = walk.members();
         for (int i = 1; i < members.size(); i++) {
@@ -162,24 +209,27 @@ public final class ReliedOn {
         }
         byte[] row = JSON.writeValueAsBytes(JSON.createObjectNode().put("repository", dependent.repository())
                 .put("coordinate", dependent.coordinate()).put("version", dependent.version()));
+        List<Placed> placed = new ArrayList<>();
         Set<String> components = new HashSet<>();
-        int written = 0;
         for (ClosureSection.Component component : closure.components()) {
             components.add(component.coordinate() + "@" + component.version() + "@" + component.repository());
             ArtifactStore holder = component.elsewhere() ? holders.get(component.repository())
                     : members.getFirst().store();
-            written += put(holder, key(ecosystem, component.coordinate(), component.version(), dependent), row, blind,
-                    touched);
+            if (holder != null) {
+                placed.add(new Placed(holder, key(ecosystem, component.coordinate(), component.version(), dependent),
+                        row));
+            }
         }
-        for (ExposureSection.Reached reached : exposure.reached()) {
-            if (!reached.held() || reached.version().isBlank() || !reached.ecosystem().isEmpty() || components.contains(
-                    reached.coordinate() + "@" + reached.version() + "@" + reached.repository())) {
+        for (ExposureSection.Reached held : reached) {
+            if (!held.held() || held.version().isBlank() || !held.ecosystem().isEmpty() || components.contains(
+                    held.coordinate() + "@" + held.version() + "@" + held.repository())) {
                 continue;
             }
-            ArtifactStore holder = reached.repository().isEmpty() ? members.getFirst().store()
-                    : holders.get(reached.repository());
-            written += put(holder, key(ecosystem, reached.coordinate(), reached.version(), dependent), row, blind,
-                    touched);
+            ArtifactStore holder = held.repository().isEmpty() ? members.getFirst().store()
+                    : holders.get(held.repository());
+            if (holder != null) {
+                placed.add(new Placed(holder, key(ecosystem, held.coordinate(), held.version(), dependent), row));
+            }
         }
         if (!closure.foreign().isEmpty() && tenant.isPresent()) {
             ArtifactStore space = tenant.get().scope(SPACE);
@@ -187,16 +237,16 @@ public final class ReliedOn {
                     .put("coordinate", dependent.coordinate()).put("version", dependent.version())
                     .put("ecosystem", ecosystem));
             for (ClosureSection.Foreign foreign : closure.foreign()) {
-                written += put(space, key(foreign.ecosystem(), foreign.coordinate(), foreign.version(), dependent),
-                        across, blind, touched);
+                placed.add(new Placed(space, key(foreign.ecosystem(), foreign.coordinate(), foreign.version(),
+                        dependent), across));
             }
         }
-        return written;
+        return placed;
     }
 
     private static int put(ArtifactStore holder, String key, byte[] row, boolean blind,
                            Map<Object, ArtifactStore> touched) throws IOException {
-        if (holder == null || !blind && holder.exists(key)) {
+        if (!blind && holder.exists(key)) {
             return 0;
         }
         holder.write(key, new ByteArrayInputStream(row));

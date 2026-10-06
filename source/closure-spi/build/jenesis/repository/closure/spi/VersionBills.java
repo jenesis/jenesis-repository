@@ -2,7 +2,9 @@ package build.jenesis.repository.closure.spi;
 
 import module java.base;
 import build.jenesis.repository.inventory.Mailbox;
+import build.jenesis.repository.metadata.MetadataDocument;
 import build.jenesis.repository.metadata.MetadataProvider;
+import build.jenesis.repository.metadata.MetadataStore;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Checksums;
 
@@ -13,8 +15,9 @@ import build.jenesis.repository.store.Checksums;
  * closure.
  *
  * <p>Attaching one replaces the bill attached before, clears the closure the version had - resolved before the bill
- * was there, by whichever source answered then - and asks the closure pass to resolve it again ({@link #ATTACHED}), so
- * the next pass over the repository resolves it from the bill. Detaching does the same without it. Kept per
+ * was there, by whichever source answered then, and {@linkplain RetiredClosures retired} so the rows it wrote go - and
+ * asks the closure pass to resolve it again ({@link #ATTACHED}), so the next pass over the repository resolves it from
+ * the bill. Detaching does the same without it. Kept per
  * repository, at {@code closure/bills/<sha-256 of the version>}, one document per version, as the scanner wrote it -
  * a CycloneDX or SPDX document, which the reader tells apart.
  *
@@ -72,8 +75,13 @@ public final class VersionBills {
 
     private static void resolveAgain(ArtifactStore store, String ecosystem, String coordinate, String version)
             throws IOException {
-        MetadataProvider.installed().over(store).mutate(ecosystem, coordinate, version, ClosureSection.TAG,
-                _ -> null);
+        MetadataStore metadata = MetadataProvider.installed().over(store);
+        // The rows the closure wrote elsewhere go once the pass here reads what it was.
+        Optional<MetadataDocument> document = metadata.read(ecosystem, coordinate, version);
+        if (document.isPresent()) {
+            RetiredClosures.retire(store, ecosystem, coordinate, version, document.get());
+        }
+        metadata.mutate(ecosystem, coordinate, version, ClosureSection.TAG, _ -> null);
         ATTACHED.post(store, ecosystem, coordinate, version);
     }
 

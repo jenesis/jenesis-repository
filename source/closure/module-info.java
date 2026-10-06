@@ -23,7 +23,9 @@
  * pass indexes which published versions rely on each version a repository holds
  * ({@link build.jenesis.repository.closure.ReliedOn}), read a page at a time from the copy's side, and which versions
  * declare a dependency on each package ({@link build.jenesis.repository.closure.DeclaredRows}) - a version's resolved
- * and declared dependents.
+ * and declared dependents. A version evicted, or whose closure is cleared to be resolved again, takes its rows back
+ * ({@link build.jenesis.repository.closure.ClosureEvictionObserver},
+ * {@link build.jenesis.repository.closure.spi.RetiredClosures}).
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -52,6 +54,8 @@ module build.jenesis.repository.closure {
             with build.jenesis.repository.closure.ReliedOnReliance;
     provides build.jenesis.repository.dependents.spi.DependentsQueryProvider
             with build.jenesis.repository.closure.DeclaredRowsProvider;
+    provides build.jenesis.repository.inventory.EvictionObserver
+            with build.jenesis.repository.closure.ClosureEvictionObserver;
     provides build.jenesis.repository.maintenance.MaintenanceTaskProvider
             with build.jenesis.repository.closure.ClosureTaskProvider;
     provides build.jenesis.repository.maintenance.StorageNamespace

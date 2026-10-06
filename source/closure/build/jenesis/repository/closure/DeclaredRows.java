@@ -22,7 +22,8 @@ import tools.jackson.databind.node.ObjectNode;
  * its recorded dependencies still name the package ({@link #page}), and the requirement a page answers is the one
  * they record now. A row nothing confirms is passed over by the reader and removed by the {@link #reconcile} the
  * closure pass's full pass runs. The pass writes a version's rows blind when it resolves its closure and where missing
- * on a full pass, so a version published before the rows existed is indexed by the next full pass.
+ * on a full pass, so a version published before the rows existed is indexed by the next full pass; an eviction takes a
+ * version's rows with it ({@link ClosureEvictionObserver}).
  */
 final class DeclaredRows {
 
@@ -53,6 +54,20 @@ final class DeclaredRows {
                 row.put("coordinate", release.coordinate());
                 row.put("version", release.version());
                 store.write(key, new ByteArrayInputStream(JSON.writeValueAsBytes(row)));
+            }
+        }
+    }
+
+    /** Delete the rows of {@code declared}, what {@code version} of {@code coordinate} declares in {@code store}. */
+    static void forget(ArtifactStore store, String ecosystem, String coordinate, String version,
+                       List<DependencySection.Declared> declared) throws IOException {
+        for (DependencySection.Declared declaration : declared) {
+            if (declaration.coordinate() == null || declaration.coordinate().isBlank()) {
+                continue;
+            }
+            String key = key(ecosystem, declaration.coordinate(), coordinate, version);
+            if (store.exists(key)) {
+                store.delete(key);
             }
         }
     }
