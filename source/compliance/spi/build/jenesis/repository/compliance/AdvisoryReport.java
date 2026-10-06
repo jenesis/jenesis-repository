@@ -6,19 +6,21 @@ import module java.base;
  * Assembles a vulnerability report from per-coordinate advisory findings and the installed {@link AdvisorySignal}
  * columns - the one place the report's shape and ordering live, shared by the server API and the console so the two
  * cannot drift. Each signal is evaluated once over the whole batch (so a network signal queries once), the rows are
- * rebuilt per coordinate, and the lines are ordered <em>reachable first</em> - a coordinate confirmed to sit on a
- * build graph (something in the repository depends on it, per the reverse-dependency index) above one only scored
- * in the abstract - then by each signal's strongest rank in signal order (the most urgent first), then by
- * coordinate. Reachability is the primary key so "what the build actually reaches" always sorts above a merely
- * scored coordinate, exactly the marking the compliance gate stamps on a finding.
+ * rebuilt per coordinate, and the lines are ordered <em>with dependents first</em> - a coordinate a published
+ * version is built against, as its resolved dependents say, above one only scored in the abstract - then by each
+ * signal's strongest rank in signal order (the most urgent first), then by coordinate. Having dependents is the
+ * primary key so what builds actually use always sorts above a merely scored coordinate; each line carries how many
+ * dependents it has, which a surface shows as "Used by". Whether vulnerable code is reachable from a dependent is a
+ * call-graph verdict, a badge of its own, and not what this orders by.
  */
 public final class AdvisoryReport {
 
     private AdvisoryReport() {
     }
 
-    /** One vulnerable coordinate and its advisory rows. */
-    public record Line(String coordinate, List<Row> advisories) {
+    /** One vulnerable coordinate, how many published versions are built against it - {@code 0} where none is known -
+     *  and its advisory rows. */
+    public record Line(String coordinate, int usedBy, List<Row> advisories) {
     }
 
     /** One advisory: its fixed facts (id, severity, malicious, fixed version) and one cell per installed signal. */
@@ -29,21 +31,19 @@ public final class AdvisoryReport {
     public record Cell(String name, String label, String value, double rank) {
     }
 
-    /** Assemble the report lines with no reachability known - every coordinate is treated as merely-scored, so the
-     *  ordering falls back to the signal ranks then coordinate, for a caller with no reverse-dependency index
-     *  installed. */
+    /** Assemble the report lines with no dependents known - every coordinate is treated as merely scored, so the
+     *  ordering falls back to the signal ranks then coordinate, for a caller with no dependents to read. */
     public static List<Line> assemble(List<AdvisorySignal> signals,
                                       SequencedMap<String, List<AdvisorySource.Advisory>> findings) {
-        return assemble(signals, findings, Set.of());
+        return assemble(signals, findings, Map.of());
     }
 
     /** Assemble the report lines from each coordinate's advisories (in finding order), evaluating every signal once
-     *  over the flattened batch. A line whose coordinate is in {@code reachable} - confirmed to sit on a build graph
-     *  (something in the repository depends on it) - sorts above every merely-scored line, so a reviewer meets the
-     *  advisories that actually reach a build first. */
+     *  over the flattened batch. A line whose coordinate {@code usedBy} counts dependents for sorts above every
+     *  merely-scored line, so a reviewer meets the advisories builds actually use first. */
     public static List<Line> assemble(List<AdvisorySignal> signals,
                                       SequencedMap<String, List<AdvisorySource.Advisory>> findings,
-                                      Set<String> reachable) {
+                                      Map<String, Integer> usedBy) {
         List<AdvisorySource.Advisory> flattened = new ArrayList<>();
         for (List<AdvisorySource.Advisory> advisories : findings.values()) {
             flattened.addAll(advisories);
@@ -82,13 +82,13 @@ public final class AdvisoryReport {
                 rows.add(new Row(advisory.id(), advisory.severity(), advisory.malicious(), advisory.fixed(), cells));
                 index++;
             }
-            lines.add(new Line(finding.getKey(), rows));
+            lines.add(new Line(finding.getKey(), Math.max(0, usedBy.getOrDefault(finding.getKey(), 0)), rows));
         }
-        // Decorate each line with its reachability flag and its per-signal strongest rank once, so the sort compares
+        // Decorate each line with whether it has dependents and its per-signal strongest rank once, so the sort compares
         // precomputed keys rather than re-streaming every line's advisories for a fresh max() on each of the O(n log n)
         // pairwise comparisons (the strongest rank per column is fixed the moment the rows are built).
         int signalCount = signals.size();
-        record Ranked(Line line, boolean reachable, double[] ranks) {
+        record Ranked(Line line, boolean depended, double[] ranks) {
         }
         List<Ranked> ranked = new ArrayList<>(lines.size());
         for (Line line : lines) {
@@ -98,9 +98,9 @@ public final class AdvisoryReport {
                     ranks[column] = Math.max(ranks[column], row.signals().get(column).rank());
                 }
             }
-            ranked.add(new Ranked(line, reachable.contains(line.coordinate()), ranks));
+            ranked.add(new Ranked(line, line.usedBy() > 0, ranks));
         }
-        Comparator<Ranked> ordering = Comparator.comparing(Ranked::reachable).reversed();  // reachable-on-a-graph first
+        Comparator<Ranked> ordering = Comparator.comparing(Ranked::depended).reversed();  // with dependents first
         for (int column = 0; column < signalCount; column++) {
             int position = column;
             ordering = ordering.thenComparing(

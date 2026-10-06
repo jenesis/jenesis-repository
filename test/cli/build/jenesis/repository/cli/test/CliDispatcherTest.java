@@ -267,13 +267,15 @@ public class CliDispatcherTest {
     @Test
     public void vulnerabilities_renders_the_ai_badges_and_sends_the_facets() throws Exception {
         vulnerabilitiesBody = "{\"scanned\":true,\"vulnerable\":[{"
-                + "\"coordinate\":\"org.acme:lib:1.0\",\"advisories\":[{"
+                + "\"coordinate\":\"org.acme:lib:1.0\",\"usedBy\":100,\"usedByText\":\"Used by 100+\","
+                + "\"advisories\":[{"
                 + "\"id\":\"GHSA-x\",\"severity\":\"HIGH\",\"malicious\":false,\"fixed\":\"2.0\","
                 + "\"reachability\":\"unknown\",\"applicability\":\"not-applicable\",\"signals\":[]}]}]}";
         String out = capture(() -> assertThat(Cli.run(new String[] {"vulnerabilities", "releases",
                 "--reachability", "unknown", "--applicability", "not-applicable"})).isZero());
         assertThat(out).as("both AI labels render beside the advisory, separately attributed")
-                .contains("GHSA-x").contains("unknown").contains("AI: not applicable");
+                .contains("GHSA-x").contains("unknown").contains("AI: not applicable")
+                .as("and its dependents as the server says them").contains("org.acme:lib:1.0  Used by 100+");
         assertThat(vulnerabilityQueries.getLast()).as("both facets reach the API as query parameters")
                 .contains("repo=releases").contains("reachability=unknown")
                 .contains("applicability=not-applicable");

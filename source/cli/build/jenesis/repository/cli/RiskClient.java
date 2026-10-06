@@ -235,7 +235,9 @@ public final class RiskClient extends ClientCalls {
                                       String nextCursor, List<String> feedWarnings) {
     }
 
-    public record VulnerableArtifact(String coordinate, List<Advisory> advisories) {
+    /** One vulnerable coordinate, how its dependents are said ({@code Used by 3}, empty where none is known), and
+     *  its advisories. */
+    public record VulnerableArtifact(String coordinate, String usedByText, List<Advisory> advisories) {
     }
 
     /** {@code signals} carries one evaluated cell per report column - the known-exploited flag and the EPSS

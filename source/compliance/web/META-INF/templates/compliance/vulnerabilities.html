@@ -90,7 +90,9 @@
                 <th:block th:each="artifact : ${report.vulnerable()}">
                 <tr class="app-list__lead">
                     <td><th:block th:replace="~{base :: artifactLink(${artifact.coordinate()}, ${artifact.ecosystem() == null}
-                            ? null : @{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${artifact.ecosystem()},coordinate=${artifact.bareCoordinate()})})}"></th:block></td>
+                            ? null : @{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${artifact.ecosystem()},coordinate=${artifact.bareCoordinate()})})}"></th:block>
+                        <span th:unless="${artifact.usedByText().isEmpty()}" class="app-badge"
+                              th:text="${artifact.usedByText()}">Used by 3</span></td>
                     <td><span th:replace="~{base :: severity(${artifact.worst()})}">Critical</span></td>
                     <td class="app-list__num"><small th:text="${artifact.advisories().size() == 1 ? '1 advisory'
                             : artifact.advisories().size() + ' advisories'}">3 advisories</small></td>

@@ -8,6 +8,7 @@
  * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.compliance.scan.test {
+    requires build.jenesis.repository.closure.spi;
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.compliance.scan;
     requires build.jenesis.repository.inventory;
