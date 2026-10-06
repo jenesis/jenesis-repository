@@ -15,8 +15,8 @@ import build.jenesis.repository.store.ArtifactStore;
  * walk holding it - held for review, and its findings at or above the risk band. A component is looked up where the
  * closure says it is held; a cut naming a version some repository of the walk holds for review is the held copy the
  * closure stopped at, and is looked up there. A package the version's bill names in another ecosystem is looked up in
- * every repository of the tenant, since any copy of it may be the one the build installed: each copy held or carrying
- * findings is reached, named by the repository holding it. Point reads only, a few per version reached - and per
+ * every repository of the tenant that may hold one of its ecosystem, since any copy of it may be the one the build
+ * installed: each copy held or carrying findings is reached, named by the repository holding it. Point reads only, a few per version reached - and per
  * repository of the tenant for such a package - so the work is bounded by the closure's own bound; nothing is asked of
  * a feed.
  */
@@ -25,14 +25,14 @@ final class Exposures {
     private Exposures() {
     }
 
-    /** The tenant's repositories a closure's packages of other ecosystems are looked up in: their names, asked only
-     *  of a closure naming such a package, and each one's store. */
+    /** The tenant's repositories a closure's packages of other ecosystems are looked up in: those that may hold a
+     *  package of an ecosystem, asked only of a closure naming such a package, and each one's store. */
     interface Tenant {
 
         /** No repository beyond the walk's: a closure's packages of other ecosystems are found nowhere. */
         Tenant NONE = new Tenant() {
             @Override
-            public List<String> repositories() {
+            public List<String> repositories(String ecosystem) {
                 return List.of();
             }
 
@@ -42,7 +42,9 @@ final class Exposures {
             }
         };
 
-        List<String> repositories() throws IOException;
+        /** The names of the repositories that may hold a package of {@code ecosystem}: those whose type serves it,
+         *  and those whose type cannot be read here, which cannot be ruled out. */
+        List<String> repositories(String ecosystem) throws IOException;
 
         Optional<ArtifactStore> store(String repository);
     }
@@ -85,10 +87,9 @@ final class Exposures {
                 }
             }
         }
-        List<String> repositories = closure.foreign().isEmpty() ? List.of() : tenant.repositories();
         for (ClosureSection.Foreign foreign : closure.foreign()) {
             examined++;
-            for (String repository : repositories) {
+            for (String repository : tenant.repositories(foreign.ecosystem())) {
                 Optional<ArtifactStore> store = tenant.store(repository);
                 if (store.isEmpty()) {
                     continue;

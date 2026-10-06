@@ -21,8 +21,8 @@ import build.jenesis.repository.definitions.RoutingSettingsContributor;
 import build.jenesis.repository.inventory.Mailbox;
 import build.jenesis.repository.inventory.DependencySection;
 import build.jenesis.repository.inventory.HeldSubjects;
-import build.jenesis.repository.inventory.IncrementalPasses;
 import build.jenesis.repository.inventory.PublishedSection;
+import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.maintenance.RepositoryContext;
 import build.jenesis.repository.maintenance.TenantContext;
@@ -291,7 +291,7 @@ class ClosureTaskTest {
 
         // The finding is superseded: the next full pass follows the copy, with no feed asked and no closure re-resolved.
         ledger.supersede("Maven", "org.dep:vulnerable", "1.0", "osv", "CVE-2026-0001", "withdrawn");
-        pass("releases", Map.of(IncrementalPasses.FULL_EVERY, "1"), null, NOW.plus(Duration.ofHours(1)));
+        pass("releases", Map.of(ClosureTask.FULL_EVERY, "1"), null, NOW.plus(Duration.ofHours(1)));
 
         assertThat(exposure("2.0").orElseThrow().reached()).as("only the hold is inherited now")
                 .containsExactly(new ExposureSection.Reached("org.dep:held", "1.0", "", true, 0, ""));
@@ -425,7 +425,7 @@ class ClosureTaskTest {
         // web waits for a closure again: its rows stay, since its pass writes them before it records one.
         MetadataStore group = MetadataProvider.installed().over(tenant.scope("group"));
         group.mutate("Maven", "org.acme:web", "1.0", ClosureSection.TAG, _ -> null);
-        Map<String, String> full = Map.of(IncrementalPasses.FULL_EVERY, "1");
+        Map<String, String> full = Map.of(ClosureTask.FULL_EVERY, "1");
         pass("releases", full, "false", NOW.plus(Duration.ofHours(1)));
         assertThat(rows()).as("a dependent waiting for its closure keeps its rows").hasSize(3);
 
@@ -451,7 +451,7 @@ class ClosureTaskTest {
         pass("releases", Map.of(), null, NOW.plus(Duration.ofMinutes(10)));
         assertThat(rows()).as("an incremental pass that finds the closure recorded writes nothing").isEmpty();
 
-        pass("releases", Map.of(IncrementalPasses.FULL_EVERY, "1"), null, NOW.plus(Duration.ofHours(1)));
+        pass("releases", Map.of(ClosureTask.FULL_EVERY, "1"), null, NOW.plus(Duration.ofHours(1)));
         assertThat(reliedOn("org.dep:lib", "1.0", _ -> true).dependents())
                 .extracting(Reliance.Dependent::coordinate).containsExactly("org.acme:app");
     }
@@ -502,6 +502,24 @@ class ClosureTaskTest {
         assertThat(reliedOnAcross(tenant.scope("group"), "group", "left-pad").dependents())
                 .as("as does the page of any repository's copy: the tenant's rows are the coordinate's")
                 .extracting(Reliance.Dependent::coordinate).containsExactly("org.acme:app");
+    }
+
+    @Test
+    void a_repository_whose_type_serves_another_ecosystem_is_not_asked_for_a_copy() throws IOException {
+        // group is a Maven repository, which can hold no npm package, so a copy recorded there is not looked for; the
+        // proxy's type is not one this node reads, so it is asked.
+        RepositoryType.create(tenant.scope("group"), "maven");
+        for (String repository : List.of("group", "npm-proxy")) {
+            ArtifactStore holder = tenant.scope(repository);
+            new StoreRepositoryInventory(holder).cache("npm", "left-pad", "1.3.0", "https://registry.example/", NOW);
+            FindingsProvider.installed().orElseThrow().over(holder).record("npm", "left-pad", "1.3.0", Finding.of(
+                    "CVE-2026-0009", "osv", Finding.Kind.VULNERABILITY, "advisory", Severity.HIGH, "recorded", NOW));
+        }
+
+        passNaming("left-pad", NOW);
+
+        assertThat(exposure("1.0").orElseThrow().reached()).extracting(ExposureSection.Reached::repository)
+                .as("reached where a copy of its ecosystem may be held, and nowhere else").containsExactly("npm-proxy");
     }
 
     @Test

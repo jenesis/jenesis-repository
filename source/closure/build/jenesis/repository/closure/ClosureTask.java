@@ -8,6 +8,7 @@ import build.jenesis.repository.closure.spi.ExposureSection;
 import build.jenesis.repository.closure.spi.VersionBills;
 import module org.slf4j;
 import build.jenesis.repository.compliance.Severity;
+import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.inventory.Mailbox;
 import build.jenesis.repository.inventory.IncrementalPasses;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
@@ -23,11 +24,13 @@ import build.jenesis.repository.metadata.SectionMutation;
 import build.jenesis.repository.findings.FindingsProvider;
 import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.RepositoryDocument;
 
 /**
  * Resolves the closure of every release that has none, in a repository whose {@value #SETTING} is on: on the
- * {@link IncrementalPasses} cadence, the releases published since the last full pass, and on a full pass every
- * release - which is how a version published before the setting was on is resolved. A closure resolves through the
+ * {@link IncrementalPasses} cadence, the releases published since the last full pass, and on a full pass - every
+ * {@value #FULL_EVERY} passes - every release, which is how a version published before the setting was on is
+ * resolved. A closure resolves through the
  * repository and the repositories its fallbacks name ({@link ClosureWalk}), by the first {@link ClosureSource} serving
  * the release's ecosystem that answers. A version is resolved once: its
  * closure is a section of its document ({@link ClosureSection}), and a version that has one is not resolved again -
@@ -58,6 +61,17 @@ public final class ClosureTask implements MaintenanceTask {
 
     /** The task name - also the {@code locks/closure-resolve} object the pass locks on. */
     public static final String NAME = "closure-resolve";
+
+    /** The dial naming every how many closure passes one is full: {@code jenrepo.closure-full-every}. */
+    public static final String FULL_EVERY = "closure-full-every";
+
+    /** A week of passes at the hourly cadence. What a closure reaches is followed between full passes by what
+     *  changed - a copy's findings or holds, a bill attached - and a release published since is visited by the
+     *  incremental leg, so the full pass is the backstop for a row or a resolution a lost write left behind. */
+    public static final int DEFAULT_FULL_EVERY = 7 * IncrementalPasses.DEFAULT_FULL_EVERY;
+
+    /** {@link #FULL_EVERY} at {@link #DEFAULT_FULL_EVERY}. */
+    public static final IncrementalPasses.Every EVERY = new IncrementalPasses.Every(FULL_EVERY, DEFAULT_FULL_EVERY);
 
     /** The repository setting that switches closure resolution on. */
     public static final String SETTING = "closure-resolution";
@@ -162,7 +176,7 @@ public final class ClosureTask implements MaintenanceTask {
         UnitFailures failed = context.failures("The closure pass of " + context.tenant() + "/" + context.repository(),
                 "Those versions have no closure or exposure yet; the next pass resolves them.");
         IncrementalPasses cadence = IncrementalPasses.over(context.store(), NAME, "closure/resolve",
-                context.config());
+                context.config(), EVERY);
         Visit visit = new Visit(context, MetadataProvider.installed().over(context.store()), ClosureWalk.of(context),
                 riskBand(context.config()), failed);
         // What another repository's pass found changed among what these releases reach, re-derived first and with
@@ -210,12 +224,29 @@ public final class ClosureTask implements MaintenanceTask {
                 /** The tenant's repositories, listed once for the visit and only where a closure asks. */
                 private List<String> repositories;
 
+                /** What each repository's type serves, read once for the visit; empty where its type is unknown. */
+                private final Map<String, Optional<Set<String>>> serves = new HashMap<>();
+
                 @Override
-                public List<String> repositories() throws IOException {
+                public List<String> repositories(String ecosystem) throws IOException {
                     if (repositories == null) {
                         repositories = context.tenantView().repositories();
                     }
-                    return repositories;
+                    List<String> serving = new ArrayList<>();
+                    for (String repository : repositories) {
+                        Optional<Set<String>> served = serves.get(repository);
+                        if (served == null) {
+                            Optional<ArtifactStore> store = store(repository);
+                            served = store.isEmpty() ? Optional.empty() : RepositoryDocument.read(store.get())
+                                    .flatMap(document -> RepositoryType.installed(document.format()))
+                                    .map(RepositoryType::ecosystems);
+                            serves.put(repository, served);
+                        }
+                        if (served.isEmpty() || served.get().contains(ecosystem)) {
+                            serving.add(repository);
+                        }
+                    }
+                    return serving;
                 }
 
                 @Override
@@ -313,7 +344,7 @@ public final class ClosureTask implements MaintenanceTask {
     @Override
     public void tenant(TenantContext context) throws IOException {
         ArtifactStore space = context.store().scope(ReliedOn.SPACE);
-        IncrementalPasses cadence = IncrementalPasses.over(space, NAME, RECONCILE, context.config());
+        IncrementalPasses cadence = IncrementalPasses.over(space, NAME, RECONCILE, context.config(), EVERY);
         if (!cadence.full()) {
             cadence.completed(context.now(), true);
             return;
@@ -337,7 +368,7 @@ public final class ClosureTask implements MaintenanceTask {
      *  may be relied on by another's - remove the {@link ReliedOn} rows whose dependent no longer relies on what it
      *  names. */
     private static void reconcile(RepositoryContext context) throws IOException {
-        IncrementalPasses cadence = IncrementalPasses.over(context.store(), NAME, RECONCILE, context.config());
+        IncrementalPasses cadence = IncrementalPasses.over(context.store(), NAME, RECONCILE, context.config(), EVERY);
         if (!cadence.full()) {
             cadence.completed(context.now(), true);
             return;
