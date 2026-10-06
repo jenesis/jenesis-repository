@@ -4,6 +4,6 @@ package build.jenesis.repository.dependents.requirements;
 public final class GoGrammar extends SchemeGrammar {
 
     public GoGrammar() {
-        super("Go", "golang");
+        super("Go", "golang", new GoRequirement());
     }
 }

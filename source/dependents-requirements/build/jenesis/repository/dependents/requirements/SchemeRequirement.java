@@ -1,6 +1,7 @@
 package build.jenesis.repository.dependents.requirements;
 
 import module java.base;
+import build.jenesis.repository.closure.RequirementGrammar;
 import io.github.nscuro.versatile.VersException;
 import io.github.nscuro.versatile.VersionFactory;
 import io.github.nscuro.versatile.spi.Version;
@@ -12,9 +13,9 @@ import io.github.nscuro.versatile.spi.Version;
  * else: the reading is the grammar's, the order is the library's.
  *
  * <p>A requirement a subclass cannot read, and a version or bound the scheme does not parse, answer
- * {@link Requirements.Verdict#UNKNOWN}.
+ * {@link RequirementGrammar.Admission#UNKNOWN}.
  */
-abstract class SchemeRequirement implements Requirements.Grammar {
+abstract class SchemeRequirement implements ClosureGrammar.Reader {
 
     /** How a bound compares a version. {@link #PREFIX} admits the version it names and every version continuing it
      *  past a separator ({@code 1.2} admits {@code 1.2}, {@code 1.2.5} and {@code 1.2rc1}, never {@code 1.20}). */
@@ -42,10 +43,11 @@ abstract class SchemeRequirement implements Requirements.Grammar {
     }
 
     @Override
-    public final Requirements.Verdict admits(String requirement, String version) {
+    public final RequirementGrammar.Admission admits(String requirement, String version) {
         Optional<List<List<Bound>>> alternatives = read(requirement);
-        if (alternatives.isEmpty()) {
-            return Requirements.Verdict.UNKNOWN;
+        if (alternatives.isEmpty() || alternatives.get().stream().flatMap(List::stream)
+                .anyMatch(bound -> !bound.version().isEmpty() && bound.version().chars().noneMatch(Character::isDigit))) {
+            return RequirementGrammar.Admission.UNKNOWN;        // a bound naming no version is not one this reads
         }
         try {
             for (List<Bound> conjunction : alternatives.get()) {
@@ -54,12 +56,12 @@ abstract class SchemeRequirement implements Requirements.Grammar {
                     holds &= holds(bound, compared(version, bound));
                 }
                 if (holds) {
-                    return Requirements.Verdict.ADMITS;
+                    return RequirementGrammar.Admission.ADMITS;
                 }
             }
-            return Requirements.Verdict.EXCLUDES;
+            return RequirementGrammar.Admission.EXCLUDES;
         } catch (IllegalArgumentException unparsed) {
-            return Requirements.Verdict.UNKNOWN;
+            return RequirementGrammar.Admission.UNKNOWN;
         }
     }
 

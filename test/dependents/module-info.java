@@ -12,6 +12,8 @@
  */
 open module build.jenesis.repository.dependents.test {
     requires build.jenesis.repository.dependents;
+    // The installed requirement grammars the declared rows' marker reads.
+    requires build.jenesis.repository.dependents.requirements;
     // The console's dependents screen, driven through its controller over the web kit's in-process repositories.
     requires build.jenesis.repository.dependents.web;
     requires build.jenesis.repository.web.testkit;

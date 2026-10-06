@@ -4,6 +4,6 @@ package build.jenesis.repository.dependents.requirements;
 public final class NuGetGrammar extends SchemeGrammar {
 
     public NuGetGrammar() {
-        super("NuGet", "nuget");
+        super("NuGet", "nuget", new NuGetRequirement());
     }
 }

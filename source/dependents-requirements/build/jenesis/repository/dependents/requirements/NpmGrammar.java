@@ -7,7 +7,7 @@ import org.semver4j.Semver;
 public final class NpmGrammar extends ClosureGrammar {
 
     public NpmGrammar() {
-        super("npm");
+        super("npm", new NpmRequirement());
     }
 
     @Override

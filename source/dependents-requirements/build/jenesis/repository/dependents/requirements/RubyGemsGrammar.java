@@ -4,6 +4,6 @@ package build.jenesis.repository.dependents.requirements;
 public final class RubyGemsGrammar extends SchemeGrammar {
 
     public RubyGemsGrammar() {
-        super("RubyGems", "gem");
+        super("RubyGems", "gem", new RubyGemsRequirement());
     }
 }
