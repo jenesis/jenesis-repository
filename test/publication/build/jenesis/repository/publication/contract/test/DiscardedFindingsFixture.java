@@ -10,6 +10,7 @@ import build.jenesis.repository.hooks.testkit.Coordinates;
 import build.jenesis.repository.hooks.testkit.HoldReleaseFixture;
 import build.jenesis.repository.hooks.testkit.HookTestFormat;
 import build.jenesis.repository.hooks.testkit.Hooks;
+import build.jenesis.repository.inventory.ChangedVersions;
 import build.jenesis.repository.metadata.MetadataKey;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.testkit.PublicationHookContract.Property;
@@ -45,8 +46,9 @@ final class DiscardedFindingsFixture extends HoldReleaseFixture {
 
     @Override
     public List<String> namespaces() {
-        // The findings are a section of the version's metadata document, which a discard drops.
-        return ReleaseSpaces.of(MetadataKey.PREFIX);
+        // The findings are a section of the version's metadata document, which a discard drops; dropping them
+        // changes what relies on the version inherits, which the ledger records beside them.
+        return ReleaseSpaces.of(MetadataKey.PREFIX, ChangedVersions.ROOT);
     }
 
     @Override

@@ -13,6 +13,7 @@ import build.jenesis.repository.findings.Finding;
 import build.jenesis.repository.findings.Findings;
 import build.jenesis.repository.findings.FindingsProvider;
 import build.jenesis.repository.definitions.RoutingSettingsContributor;
+import build.jenesis.repository.inventory.ChangedVersions;
 import build.jenesis.repository.inventory.DependencySection;
 import build.jenesis.repository.inventory.HeldSubjects;
 import build.jenesis.repository.inventory.IncrementalPasses;
@@ -329,14 +330,70 @@ class ClosureTaskTest {
                 .extracting(ReliedOn.Dependent::coordinate).containsExactly("org.acme:app");
     }
 
+    @Test
+    void a_new_finding_on_a_copy_reaches_a_release_relying_on_it_before_its_full_pass() throws IOException {
+        metadata.mutate("Maven", "org.acme:app", "1.0", DependencySection.TAG, DependencySection.record(APP,
+                List.of(new DependencySection.Declared("org.dep:lib", "1.0")), NOW));
+        cached("lib", "1.0");
+        web("org.acme:app", NOW.minus(Duration.ofDays(1)));
+        Map<String, String> group = Map.of(RoutingSettingsContributor.KEY, "writable fallback releases");
+        pass(null, NOW);
+        pass("group", group, null, NOW);
+        assertThat(webExposure()).as("nothing it reaches is vulnerable yet").isEmpty();
+
+        // The copy is found vulnerable; neither repository's next pass is a full one, and web is not a recent publish.
+        FindingsProvider.installed().orElseThrow().over(store).record("Maven", "org.dep:lib", "1.0", Finding.of(
+                "CVE-2026-0004", "osv", Finding.Kind.VULNERABILITY, "advisory", Severity.HIGH, "recorded", NOW));
+        pass("releases", Map.of(), null, NOW.plus(Duration.ofHours(1)));
+        pass("group", group, null, NOW.plus(Duration.ofHours(1)));
+
+        assertThat(webExposure()).as("inherited through the index, along its path, with no feed asked")
+                .containsExactly(new ExposureSection.Reached("org.dep:lib", "1.0", "releases", false, 1, "HIGH",
+                        List.of(new ClosureSection.Hop("org.acme:app", "1.0"),
+                                new ClosureSection.Hop("org.dep:lib", "1.0"))));
+        assertThat(store.isEmpty(ChangedVersions.ROOT)).as("the change was taken up").isTrue();
+        assertThat(tenant.scope("group").isEmpty(ReliedOn.STALE)).as("and the request it made").isTrue();
+    }
+
+    @Test
+    void a_hold_placed_and_ended_marks_its_version_changed_and_a_repeated_record_does_not() throws IOException {
+        String held = "/maven/org/dep/held/1.0/held-1.0.pom";
+        Publication publication = new Publication(store);
+        String hash = publication.storeBlob(new ByteArrayInputStream("<project/>".getBytes(StandardCharsets.UTF_8)));
+        HeldSubjects.hold(publication, store, held, hash, "Maven", "org.dep:held", "1.0");
+        assertThat(changed()).as("a hold placed").containsExactly("org.dep:held 1.0");
+
+        HeldSubjects.record(store, held, "Maven", "org.dep:held", "1.0");
+        assertThat(changed()).as("recorded again by a converging sweep").isEmpty();
+
+        HeldSubjects.forget(store, held);
+        assertThat(changed()).as("a hold ended").containsExactly("org.dep:held 1.0");
+    }
+
+    private List<String> changed() throws IOException {
+        List<String> drained = new ArrayList<>();
+        ChangedVersions.drain(store, 100, version -> drained.add(version.coordinate() + " " + version.version()));
+        return drained;
+    }
+
+    private List<ExposureSection.Reached> webExposure() throws IOException {
+        return ExposureSection.exposure(MetadataProvider.installed().over(tenant.scope("group"))
+                .section("Maven", "org.acme:web", "1.0", ExposureSection.TAG)).orElseThrow().reached();
+    }
+
     /** web 1.0, published to the group, declaring {@code dependency} at 1.0. */
     private void web(String dependency) throws IOException {
+        web(dependency, NOW);
+    }
+
+    /** web 1.0, published to the group at {@code at}, declaring {@code dependency} at 1.0. */
+    private void web(String dependency, Instant at) throws IOException {
         ArtifactStore group = tenant.scope("group");
         String path = "/maven/org/acme/web/1.0/web-1.0.pom";
         Publication publication = new Publication(group);
         publication.link(path, publication.storeBlob(new ByteArrayInputStream(
                 "<project/>".getBytes(StandardCharsets.UTF_8))));
-        new StoreRepositoryInventory(group).record(path, NOW);
+        new StoreRepositoryInventory(group).record(path, at);
         MetadataProvider.installed().over(group).mutate("Maven", "org.acme:web", "1.0", DependencySection.TAG,
                 DependencySection.record(path, List.of(new DependencySection.Declared(dependency, "1.0")), NOW));
     }
