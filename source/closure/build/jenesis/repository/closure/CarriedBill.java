@@ -2,6 +2,7 @@ package build.jenesis.repository.closure;
 
 import module java.base;
 import build.jenesis.repository.closure.spi.ClosureSource;
+import build.jenesis.repository.closure.spi.VersionBills;
 import build.jenesis.repository.compliance.Ecosystems;
 import build.jenesis.repository.compliance.PackageUrls;
 import build.jenesis.repository.dependency.ArtifactSbom;
@@ -14,7 +15,8 @@ import build.jenesis.repository.store.Publication;
 
 /**
  * A release's closure as the build that made it resolved it: the bill of materials the version carries - published as
- * a file of its own (a {@code -cyclonedx.json}, an {@code .spdx.json}) or embedded in its archive - taken as written,
+ * a file of its own (a {@code -cyclonedx.json}, an {@code .spdx.json}), embedded in its archive, or attached to it by
+ * a scanner of its content ({@link VersionBills}) - taken as written,
  * where it names more than the version's direct dependencies, each component placed in the walk's repositories as
  * the pass places what a release carries. A bill that names the direct dependencies alone - or none -
  * is not a closure, and the resolvers answer instead.
@@ -34,11 +36,11 @@ public final class CarriedBill implements ClosureSource.Carried {
         return NAME;
     }
 
-    /** Every ecosystem: a bill published as a file of a version is read whatever its format, and an archive's
-     *  embedded one wherever the version's files are archives. */
+    /** Every ecosystem an installed format declares: a bill published as a file of a version, or attached to it, is
+     *  read whatever its format, and an archive's embedded one wherever the version's files are archives. */
     @Override
     public Set<String> ecosystems() {
-        return Ecosystems.canonical();
+        return StoreRepositoryInventory.installedEcosystems();
     }
 
     @Override
@@ -79,7 +81,8 @@ public final class CarriedBill implements ClosureSource.Carried {
         return Optional.of(new ClosureSource.Carriage("the version's bill", entries));
     }
 
-    /** The first bill among the version's files that names a closure: a published bill before an embedding archive. */
+    /** The first bill that names a closure among the version's files - a published bill before an embedding archive -
+     *  and then the bill attached to it ({@link VersionBills}). */
     private static Optional<DependencyGraph> bill(ArtifactStore release, String ecosystem, String coordinate,
                                                   String version) throws IOException {
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(release);
@@ -95,6 +98,16 @@ public final class CarriedBill implements ClosureSource.Carried {
             Optional<DependencyGraph> read;
             try (InputStream in = release.open(key.get())) {
                 read = read(path, in);
+            }
+            if (read.isPresent() && namesClosure(read.get())) {
+                return read;
+            }
+        }
+        Optional<InputStream> attached = VersionBills.open(release, ecosystem, coordinate, version);
+        if (attached.isPresent()) {
+            Optional<DependencyGraph> read;
+            try (InputStream in = attached.get()) {
+                read = ArtifactSbom.document(in);
             }
             if (read.isPresent() && namesClosure(read.get())) {
                 return read;
