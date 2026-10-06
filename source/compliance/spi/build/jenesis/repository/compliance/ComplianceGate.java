@@ -34,6 +34,10 @@ public final class ComplianceGate {
     /** The rule an artifact is held for while an advisory feed it must be screened against cannot answer. */
     public static final String FEED_UNAVAILABLE_RULE = "Advisory feed unavailable";
 
+    /** The rule a file is held for because another file of its version is held for review: a version is reviewed
+     *  whole, whether its files are published or fetched through a proxy. */
+    public static final String VERSION_HELD_RULE = "Version held";
+
     private final VulnerabilityPolicy vulnerabilityPolicy;
     private final MaliciousPackagePolicy maliciousPolicy;
     private final DenyListPolicy denyListPolicy;
