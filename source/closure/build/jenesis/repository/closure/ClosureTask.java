@@ -84,20 +84,37 @@ public final class ClosureTask implements MaintenanceTask {
     }
 
     /** The first answer of the sources serving {@code release}'s ecosystem, in their order - a carried lock file, a
-     *  carried bill, a resolver, a scanner, then the declaration walk - attributed to the source that gave it. */
+     *  carried bill, a resolver, then the declaration walk. */
     private Optional<ClosureSection.Closure> resolve(ClosureWalk through, StoreRepositoryInventory.Coordinate release,
                                                      Instant now) throws IOException {
         for (ClosureSource source : sources) {
             if (!source.ecosystems().contains(release.ecosystem())) {
                 continue;
             }
-            Optional<ClosureSection.Closure> closure = source.resolve(through, release.ecosystem(),
+            Optional<ClosureSection.Closure> closure = ask(source, through, release.ecosystem(),
                     release.coordinate(), release.version(), now);
             if (closure.isPresent()) {
-                return Optional.of(closure.get().attributed(source));
+                return closure;
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * What the pass records when it asks {@code source} about {@code coordinate} at {@code version} of
+     * {@code ecosystem}, over {@code walk} as of {@code now}: a carried source's document placed in the walk's
+     * repositories, a resolving source's closure as it answered it, either attributed to {@code source}; empty where
+     * it has nothing to say.
+     */
+    public static Optional<ClosureSection.Closure> ask(ClosureSource source, ClosureWalk walk, String ecosystem,
+                                                       String coordinate, String version, Instant now)
+            throws IOException {
+        Optional<ClosureSection.Closure> closure = switch (source) {
+            case ClosureSource.Carried carried -> CarriedClosure.resolve(carried, walk, ecosystem, coordinate,
+                    version, now);
+            case ClosureSource.Resolving resolving -> resolving.resolve(walk, ecosystem, coordinate, version, now);
+        };
+        return closure.map(answer -> answer.attributed(source));
     }
 
     /** The band from which a finding of a version the closure reaches counts against it, as the deployment's

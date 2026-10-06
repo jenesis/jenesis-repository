@@ -23,43 +23,32 @@ public final class CarriedClosure {
     }
 
     /**
-     * One package a carried document names: where it can be placed, its ecosystem, coordinate and version at
-     * {@code depth} from the root, and the package {@code viaCoordinate} at {@code viaVersion} whose dependencies named
-     * it - none where the root named it itself; where it cannot, {@code unplaced} says why and the rest is what the
-     * document wrote.
+     * The closure {@code source} reads out of what {@code coordinate} at {@code version} of {@code ecosystem} carries,
+     * placed in {@code walk}'s repositories as of {@code now} and attributed to {@code source}; empty where it carries
+     * nothing {@code source} reads. The release is the first repository of the walk's, and the source is handed its
+     * store alone.
      */
-    public record Entry(String ecosystem, String coordinate, String version, int depth, String viaCoordinate,
-                        String viaVersion, String unplaced) {
-
-        /** A package the root names itself, placed at {@code depth}. */
-        public static Entry placed(String ecosystem, String coordinate, String version, int depth) {
-            return new Entry(ecosystem, coordinate, version, depth, "", "", null);
+    public static Optional<ClosureSection.Closure> resolve(ClosureSource.Carried source, ClosureWalk walk,
+                                                           String ecosystem, String coordinate, String version,
+                                                           Instant now) throws IOException {
+        Optional<ClosureSource.Carriage> carriage = source.read(walk.members().getFirst().store(), ecosystem,
+                coordinate, version);
+        if (carriage.isEmpty()) {
+            return Optional.empty();
         }
-
-        /** A package placed at {@code depth}, named by the dependencies of {@code viaCoordinate} at
-         *  {@code viaVersion}. */
-        public static Entry placed(String ecosystem, String coordinate, String version, int depth,
-                                   String viaCoordinate, String viaVersion) {
-            return new Entry(ecosystem, coordinate, version, depth, viaCoordinate, viaVersion, null);
-        }
-
-        /** A package named in a form no repository can place, for {@code reason}. */
-        public static Entry unplaced(String coordinate, String version, String reason) {
-            return new Entry(null, coordinate, version == null ? "" : version, 0, "", "", reason);
-        }
+        return Optional.of(place(walk, ecosystem, coordinate, version, carriage.get(), source, now));
     }
 
     /**
-     * {@code entries}, which the release {@code coordinate} at {@code version} of {@code ecosystem} carries in what
-     * {@code document} names ("the version's bill", "the version's lock file"), placed in {@code walk}'s repositories
-     * as of {@code now} and attributed to {@code source}, under its own kind and name. A package named twice at one
+     * {@code carriage}, what the release {@code coordinate} at {@code version} of {@code ecosystem} carries, placed in
+     * {@code walk}'s repositories as of {@code now} and attributed to {@code source}, under its own kind and name. A package named twice at one
      * version is placed once, where it is first named; at two versions it is placed twice, since a carried document
      * records what its build installed, and an npm or Cargo build installs two versions of one package side by side.
      */
-    public static ClosureSection.Closure place(ClosureWalk walk, String ecosystem, String coordinate, String version,
-                                               List<Entry> entries, String document, ClosureSource source,
-                                               Instant now)
+    static ClosureSection.Closure place(ClosureWalk walk, String ecosystem, String coordinate, String version,
+                                        ClosureSource.Carriage carriage, ClosureSource source, Instant now)
             throws IOException {
+        String document = carriage.document();
         List<ClosureWalk.Member> members = walk.members();
         List<Holdings> holdings = members.stream().map(member -> Holdings.of(member.store())).toList();
         List<ClosureSection.Component> components = new ArrayList<>();
@@ -68,7 +57,7 @@ public final class CarriedClosure {
         Set<String> seen = new HashSet<>();
         seen.add(ecosystem + "@" + coordinate + "@" + version);
         boolean truncated = false;
-        for (Entry entry : entries) {
+        for (ClosureSource.Entry entry : carriage.entries()) {
             if (entry.unplaced() != null) {
                 cuts.add(new ClosureSection.Cut(entry.coordinate(), entry.version(), entry.unplaced()));
                 continue;

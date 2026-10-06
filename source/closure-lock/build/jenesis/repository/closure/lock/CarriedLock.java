@@ -2,8 +2,8 @@ package build.jenesis.repository.closure.lock;
 
 import module java.base;
 import module org.apache.commons.compress;
-import build.jenesis.repository.closure.spi.ClosureWalk;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
+import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
 
@@ -23,13 +23,12 @@ final class CarriedLock {
     }
 
     /** The bytes of the member named {@code file} at the top directory of the first of {@code coordinate} at
-     *  {@code version}'s files that carries one, or empty. */
-    static Optional<byte[]> read(ClosureWalk walk, String ecosystem, String coordinate, String version, String file)
-            throws IOException {
-        ClosureWalk.Member own = walk.members().getFirst();
-        for (String key : new StoreRepositoryInventory(own.store()).contentKeys(ecosystem, coordinate, version)) {
+     *  {@code version}'s files in {@code release} that carries one, or empty. */
+    static Optional<byte[]> read(ArtifactStore release, String ecosystem, String coordinate, String version,
+                                 String file) throws IOException {
+        for (String key : new StoreRepositoryInventory(release).contentKeys(ecosystem, coordinate, version)) {
             byte[] found;
-            try (InputStream in = own.store().open(key)) {
+            try (InputStream in = release.open(key)) {
                 found = ArchiveWalk.walk(in, screened -> member(screened, file)).orNull();
             }
             if (found != null) {

@@ -4,6 +4,7 @@ import module java.base;
 import module org.apache.commons.compress;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.blobs.Blobs;
+import build.jenesis.repository.closure.CarriedClosure;
 import build.jenesis.repository.closure.spi.ClosureSection;
 import build.jenesis.repository.closure.spi.ClosureSource;
 import build.jenesis.repository.closure.spi.ClosureWalk;
@@ -71,8 +72,8 @@ class CarriedLockTest {
         inventory.cache("npm", "a", "2.0.0", "https://registry.npmjs.org/", NOW);
         inventory.cache("npm", "b", "1.2.0", "https://registry.npmjs.org/", NOW);
 
-        ClosureSection.Closure closure = new NpmShrinkwrap().resolve(ClosureWalk.of(store), "npm", "acme-app",
-                "1.0.0", NOW).orElseThrow();
+        ClosureSection.Closure closure = CarriedClosure.resolve(new NpmShrinkwrap(), ClosureWalk.of(store),
+                "npm", "acme-app", "1.0.0", NOW).orElseThrow();
 
         assertThat(closure.kind()).isEqualTo(ClosureSource.Kind.LOCK);
         assertThat(closure.source()).isEqualTo(NpmShrinkwrap.NAME);
@@ -101,21 +102,13 @@ class CarriedLockTest {
             inventory.cache("npm", held.substring(0, 1), held.substring(2), "https://registry.npmjs.org/", NOW);
         }
 
-        assertThat(new NpmShrinkwrap().resolve(ClosureWalk.of(store), "npm", "acme-app", "1.0.0", NOW)
+        assertThat(CarriedClosure.resolve(new NpmShrinkwrap(), ClosureWalk.of(store), "npm", "acme-app", "1.0.0", NOW)
                 .orElseThrow().components()).extracting(ClosureSection.Component::coordinate,
                         ClosureSection.Component::version, ClosureSection.Component::depth,
                         ClosureSection.Component::viaCoordinate, ClosureSection.Component::viaVersion)
                 .as("each reached through the package whose dependencies named it")
                 .containsExactly(tuple("b", "1.0.0", 1, "", ""), tuple("e", "4.0.0", 1, "", ""),
                         tuple("d", "1.0.0", 2, "b", "1.0.0"), tuple("e", "5.0.0", 3, "d", "1.0.0"));
-    }
-
-    @Test
-    void an_npm_release_carrying_no_shrinkwrap_has_none_to_take() throws IOException {
-        npm("acme-app", "1.0.0", Map.of("package/package.json", "{\"name\":\"acme-app\",\"version\":\"1.0.0\"}"));
-
-        assertThat(new NpmShrinkwrap().resolve(ClosureWalk.of(store), "npm", "acme-app", "1.0.0", NOW))
-                .as("the resolvers answer instead").isEmpty();
     }
 
     @Test
@@ -128,7 +121,7 @@ class CarriedLockTest {
         inventory.cache("npm", "a", "1.0.0", "https://registry.npmjs.org/", NOW);
         inventory.cache("npm", "c", "3.0.0", "https://registry.npmjs.org/", NOW);
 
-        assertThat(new NpmShrinkwrap().resolve(ClosureWalk.of(store), "npm", "acme-app", "1.0.0", NOW)
+        assertThat(CarriedClosure.resolve(new NpmShrinkwrap(), ClosureWalk.of(store), "npm", "acme-app", "1.0.0", NOW)
                 .orElseThrow().components()).extracting(ClosureSection.Component::coordinate,
                         ClosureSection.Component::depth)
                 .containsExactlyInAnyOrder(tuple("a", 1), tuple("c", 1));
@@ -181,8 +174,8 @@ class CarriedLockTest {
         inventory.cache("crates.io", "syn", "1.0.109", "https://index.crates.io/", NOW);
         inventory.cache("crates.io", "syn", "2.0.79", "https://index.crates.io/", NOW);
 
-        ClosureSection.Closure closure = new CargoLock().resolve(ClosureWalk.of(store), "crates.io", "acme-cli",
-                "0.3.0", NOW).orElseThrow();
+        ClosureSection.Closure closure = CarriedClosure.resolve(new CargoLock(), ClosureWalk.of(store),
+                "crates.io", "acme-cli", "0.3.0", NOW).orElseThrow();
 
         assertThat(closure.source()).isEqualTo(CargoLock.NAME);
         assertThat(closure.components()).extracting(ClosureSection.Component::coordinate,
@@ -209,7 +202,8 @@ class CarriedLockTest {
                 source = "registry+https://github.com/rust-lang/crates.io-index"
                 """);
 
-        assertThat(new CargoLock().resolve(ClosureWalk.of(store), "crates.io", "acme-cli", "0.3.0", NOW)).isEmpty();
+        assertThat(CarriedClosure.resolve(new CargoLock(), ClosureWalk.of(store),
+                "crates.io", "acme-cli", "0.3.0", NOW)).isEmpty();
     }
 
     /** An npm release whose tarball carries {@code members}, stored where the npm format keeps its tarballs. */

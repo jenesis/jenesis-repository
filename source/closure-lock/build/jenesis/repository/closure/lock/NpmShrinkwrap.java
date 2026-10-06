@@ -1,11 +1,9 @@
 package build.jenesis.repository.closure.lock;
 
 import module java.base;
-import build.jenesis.repository.closure.CarriedClosure;
-import build.jenesis.repository.closure.spi.ClosureSection;
 import build.jenesis.repository.closure.spi.ClosureSource;
-import build.jenesis.repository.closure.spi.ClosureWalk;
 import build.jenesis.repository.compliance.Ecosystems;
+import build.jenesis.repository.store.ArtifactStore;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -20,7 +18,7 @@ import tools.jackson.databind.json.JsonMapper;
  * repository holds, and is a cut. A lock that does not parse, or names no root, is no closure, and the resolvers
  * answer instead.
  */
-public final class NpmShrinkwrap implements ClosureSource {
+public final class NpmShrinkwrap implements ClosureSource.Carried {
 
     /** The source's name. */
     public static final String NAME = "carried-lock-npm";
@@ -45,18 +43,17 @@ public final class NpmShrinkwrap implements ClosureSource {
     }
 
     @Override
-    public Optional<ClosureSection.Closure> resolve(ClosureWalk walk, String ecosystem, String coordinate,
-                                                    String version, Instant now) throws IOException {
-        Optional<byte[]> lock = CarriedLock.read(walk, ecosystem, coordinate, version, "npm-shrinkwrap.json");
+    public Optional<ClosureSource.Carriage> read(ArtifactStore release, String ecosystem, String coordinate,
+                                                 String version) throws IOException {
+        Optional<byte[]> lock = CarriedLock.read(release, ecosystem, coordinate, version, "npm-shrinkwrap.json");
         if (lock.isEmpty()) {
             return Optional.empty();
         }
-        Optional<List<CarriedClosure.Entry>> entries = entries(lock.get());
+        Optional<List<ClosureSource.Entry>> entries = entries(lock.get());
         if (entries.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(CarriedClosure.place(walk, ecosystem, coordinate, version, entries.get(),
-                "the version's npm-shrinkwrap.json", this, now));
+        return Optional.of(new ClosureSource.Carriage("the version's npm-shrinkwrap.json", entries.get()));
     }
 
     /** One installed package: its name, version, what it declares it needs, and how the lock marks it. */
@@ -66,7 +63,7 @@ public final class NpmShrinkwrap implements ClosureSource {
 
     /** The packages {@code lock} installs for a consumer, each at its distance from the root, or empty where it does
      *  not parse. */
-    static Optional<List<CarriedClosure.Entry>> entries(byte[] lock) {
+    static Optional<List<ClosureSource.Entry>> entries(byte[] lock) {
         JsonNode root;
         try {
             root = JSON.readTree(lock);
@@ -91,7 +88,7 @@ public final class NpmShrinkwrap implements ClosureSource {
         } else {
             return Optional.empty();
         }
-        List<CarriedClosure.Entry> entries = new ArrayList<>();
+        List<ClosureSource.Entry> entries = new ArrayList<>();
         Map<String, Integer> depths = new HashMap<>();
         // The install path whose dependencies first named each one reached, "" for the root's own.
         Map<String, String> parents = new HashMap<>();
@@ -104,20 +101,20 @@ public final class NpmShrinkwrap implements ClosureSource {
             Installed at = installed.get(path);
             int depth = depths.get(path);
             if (at.link()) {
-                entries.add(CarriedClosure.Entry.unplaced(at.name(), at.version(),
+                entries.add(ClosureSource.Entry.unplaced(at.name(), at.version(),
                         "linked by the version's npm-shrinkwrap.json to a folder, which names nothing a repository "
                                 + "holds"));
                 continue;
             }
             if (at.version() == null || at.version().isBlank()) {
-                entries.add(CarriedClosure.Entry.unplaced(at.name(), "",
+                entries.add(ClosureSource.Entry.unplaced(at.name(), "",
                         "named by the version's npm-shrinkwrap.json with no version"));
                 continue;
             }
             Installed via = installed.get(parents.getOrDefault(path, ""));
             entries.add(via == null
-                    ? CarriedClosure.Entry.placed(Ecosystems.NPM, at.name(), at.version(), depth)
-                    : CarriedClosure.Entry.placed(Ecosystems.NPM, at.name(), at.version(), depth, via.name(),
+                    ? ClosureSource.Entry.placed(Ecosystems.NPM, at.name(), at.version(), depth)
+                    : ClosureSource.Entry.placed(Ecosystems.NPM, at.name(), at.version(), depth, via.name(),
                             via.version()));
             for (String need : at.needs()) {
                 reach(installed, path, need, depth + 1, depths, parents, queue);

@@ -3,6 +3,7 @@ package build.jenesis.repository.closure.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.closure.CarriedBill;
+import build.jenesis.repository.closure.CarriedClosure;
 import build.jenesis.repository.closure.spi.ClosureSection;
 import build.jenesis.repository.closure.spi.ClosureSource;
 import build.jenesis.repository.closure.spi.ClosureWalk;
@@ -62,8 +63,8 @@ class CarriedBillTest {
         HeldSubjects.hold(publication, store, held, publication.storeBlob(new ByteArrayInputStream(new byte[]{1})),
                 "Maven", "org.dep:c", "3.0");
 
-        ClosureSection.Closure closure = new CarriedBill().resolve(ClosureWalk.of(store), "Maven", "org.acme:app", "1.0",
-                NOW).orElseThrow();
+        ClosureSection.Closure closure = CarriedClosure.resolve(new CarriedBill(), ClosureWalk.of(store),
+                "Maven", "org.acme:app", "1.0", NOW).orElseThrow();
 
         assertThat(closure.kind()).isEqualTo(ClosureSource.Kind.BILL);
         assertThat(closure.source()).isEqualTo(CarriedBill.NAME);
@@ -89,15 +90,9 @@ class CarriedBillTest {
                  "components":[{"bom-ref":"a","name":"a","version":"1.1","purl":"pkg:maven/org.dep/a@1.1"}],
                  "dependencies":[{"ref":"root","dependsOn":["a"]}]}"""));
 
-        assertThat(new CarriedBill().resolve(ClosureWalk.of(store), "Maven", "org.acme:app", "1.0", NOW))
+        assertThat(CarriedClosure.resolve(new CarriedBill(), ClosureWalk.of(store),
+                "Maven", "org.acme:app", "1.0", NOW))
                 .as("the resolvers fill in what it does not name").isEmpty();
-    }
-
-    @Test
-    void a_release_carrying_no_bill_has_none_to_take() throws IOException {
-        release(JAR, jar(null));
-
-        assertThat(new CarriedBill().resolve(ClosureWalk.of(store), "Maven", "org.acme:app", "1.0", NOW)).isEmpty();
     }
 
     private void release(String path, byte[] body) throws IOException {
@@ -105,17 +100,15 @@ class CarriedBillTest {
         inventory.record(path, NOW);
     }
 
-    /** A jar carrying {@code bill} at the CycloneDX location, or none. */
+    /** A jar carrying {@code bill} at the CycloneDX location. */
     private static byte[] jar(String bill) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         Manifest manifest = new Manifest();
         manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
         try (JarOutputStream out = new JarOutputStream(bytes, manifest)) {
-            if (bill != null) {
-                out.putNextEntry(new JarEntry("META-INF/sbom/app.cdx.json"));
-                out.write(bill.getBytes(StandardCharsets.UTF_8));
-                out.closeEntry();
-            }
+            out.putNextEntry(new JarEntry("META-INF/sbom/app.cdx.json"));
+            out.write(bill.getBytes(StandardCharsets.UTF_8));
+            out.closeEntry();
             out.putNextEntry(new JarEntry("org/acme/App.class"));
             out.write(new byte[]{(byte) 0xCA, (byte) 0xFE});
             out.closeEntry();
