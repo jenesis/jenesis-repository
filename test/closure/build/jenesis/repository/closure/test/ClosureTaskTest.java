@@ -662,18 +662,23 @@ class ClosureTaskTest {
             }
 
             @Override
-            public Optional<RepositoryContext> repository(String name) {
-                return Optional.of(context(name, Map.of(), setting, now, failures));
-            }
+            public TenantView tenantView() {
+                return new TenantView() {
+                    @Override
+                    public Optional<RepositoryContext> repository(String name) {
+                        return Optional.of(context(name, Map.of(), setting, now, failures));
+                    }
 
-            @Override
-            public Optional<ArtifactStore> tenantStore() {
-                return Optional.of(tenant);
-            }
+                    @Override
+                    public Optional<ArtifactStore> store() {
+                        return Optional.of(tenant);
+                    }
 
-            @Override
-            public List<String> repositories() {
-                return List.of("group", "npm-proxy", "releases");
+                    @Override
+                    public List<String> repositories() {
+                        return List.of("group", "npm-proxy", "releases");
+                    }
+                };
             }
 
             @Override

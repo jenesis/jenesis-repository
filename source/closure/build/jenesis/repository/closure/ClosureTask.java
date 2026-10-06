@@ -185,7 +185,7 @@ public final class ClosureTask implements MaintenanceTask {
                 @Override
                 public List<String> repositories() throws IOException {
                     if (repositories == null) {
-                        repositories = context.repositories();
+                        repositories = context.tenantView().repositories();
                     }
                     return repositories;
                 }
@@ -193,7 +193,7 @@ public final class ClosureTask implements MaintenanceTask {
                 @Override
                 public Optional<ArtifactStore> store(String repository) {
                     return repository.equals(context.repository()) ? Optional.of(context.store())
-                            : context.repository(repository).map(RepositoryContext::store);
+                            : context.tenantView().repository(repository).map(RepositoryContext::store);
                 }
             };
         }
@@ -224,7 +224,7 @@ public final class ClosureTask implements MaintenanceTask {
                 if (fresh || changed || full) {
                     indexed += ReliedOn.index(through, release.ecosystem(), new ReliedOn.Row(context.repository(),
                             release.coordinate(), release.version()), closure.get(), derived, fresh,
-                            context.tenantStore(), touched);
+                            context.tenantView().store(), touched);
                 }
                 // A fresh closure and its exposure are one compare-and-set, never two.
                 SequencedMap<String, SectionMutation> writes = new LinkedHashMap<>();
@@ -253,12 +253,12 @@ public final class ClosureTask implements MaintenanceTask {
      *  resolves closures; a failure is contained and reported, and the full passes there re-derive what it missed. */
     private static void propagate(RepositoryContext context) {
         try {
-            Optional<ArtifactStore> space = context.tenantStore().map(tenant -> tenant.scope(ReliedOn.SPACE));
+            Optional<ArtifactStore> space = context.tenantView().store().map(tenant -> tenant.scope(ReliedOn.SPACE));
             Mailbox.CHANGED.drain(context.store(), DRAIN, changed -> {
                 ReliedOn.Visitor<ReliedOn.Row> mark = dependent -> {
                     Optional<ArtifactStore> store = dependent.repository().equals(context.repository())
                             ? Optional.of(context.store())
-                            : context.repository(dependent.repository()).map(RepositoryContext::store);
+                            : context.tenantView().repository(dependent.repository()).map(RepositoryContext::store);
                     if (store.isPresent()) {
                         ReliedOn.stale(store.get(), changed.ecosystem(), dependent);
                     }
@@ -318,7 +318,7 @@ public final class ClosureTask implements MaintenanceTask {
         try {
             long removed = ReliedOn.reconcile(context.store(), context.repository(), named -> named.equals(
                     context.repository()) ? Optional.of(context.store())
-                    : context.repository(named).map(RepositoryContext::store));
+                    : context.tenantView().repository(named).map(RepositoryContext::store));
             if (removed > 0) {
                 LOGGER.info("Removed {} relied-on row(s) no closure names any more in {}/{}", removed,
                         context.tenant(), context.repository());

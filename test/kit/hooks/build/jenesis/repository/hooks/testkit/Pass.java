@@ -19,6 +19,11 @@ import build.jenesis.repository.store.ArtifactStore;
 public record Pass(ArtifactStore store, Instant now, UnaryOperator<String> config) implements RepositoryContext {
 
     @Override
+    public TenantView tenantView() {
+        return TenantView.NONE;
+    }
+
+    @Override
     public UnitFailures failures(String work, String consequence) {
         return new UnitFailures(work, consequence);
     }
