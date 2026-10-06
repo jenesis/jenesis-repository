@@ -58,7 +58,9 @@ import build.jenesis.repository.walk.Trees;
  * documents remembered together for the upstream ttl and each index fetched by the digest they name
  * ({@link DebianSuiteMemory}). The leg keeps the
  * digest each {@code Packages} declared per package, the digest of that index as relayed, and the suite's
- * {@code InRelease} whole, so this repository can verify the same chain ({@link #indexCoverage}).
+ * {@code InRelease} whole, so this repository can verify the same chain ({@link #indexCoverage}). A cached package
+ * that is held stays listed in the relayed {@code Packages}, since leaving its stanza out would break the signature
+ * the client verifies the index by; the package itself is refused when it is fetched, and that refusal is the hold.
  */
 public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayout, ArtifactSignatures,
         RepositoryImporter.Delegating, RepositoryExporter {

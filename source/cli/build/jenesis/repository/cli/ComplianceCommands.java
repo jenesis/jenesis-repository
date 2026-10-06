@@ -399,6 +399,15 @@ final class ComplianceCommands {
                     + (cut.requirement() == null || cut.requirement().isBlank() ? "" : " " + cut.requirement())
                     + " - " + cut.reason());
         }
+        List<ProvenanceClient.ClosureForeign> foreign = closure.foreign() == null ? List.of() : closure.foreign();
+        if (!foreign.isEmpty()) {
+            System.out.println("  its bill names " + foreign.size() + " package(s) of other ecosystems, relied on by "
+                    + "coordinate across the tenant:");
+            for (ProvenanceClient.ClosureForeign entry : foreign) {
+                System.out.printf(Locale.ROOT, "    %s %s  %s, depth %d%n", entry.coordinate(), entry.version(),
+                        entry.ecosystem(), entry.depth());
+            }
+        }
         if (closure.truncated()) {
             System.out.println("    the closure stopped at its bound; what lies past it is not listed");
         }
@@ -411,7 +420,10 @@ final class ComplianceCommands {
             for (ProvenanceClient.ClosureReached version : reached) {
                 String repository = version.repository() == null || version.repository().isBlank() ? ""
                         : " of " + version.repository();
-                System.out.println("    " + version.coordinate() + " " + version.version() + repository + "  "
+                String ecosystem = version.ecosystem() == null || version.ecosystem().isBlank() ? ""
+                        : " (" + version.ecosystem() + ")";
+                System.out.println("    " + version.coordinate() + " " + version.version() + ecosystem + repository
+                        + "  "
                         + (version.held() ? "held for review" : "")
                         + (version.held() && version.findings() > 0 ? ", " : "")
                         + (version.findings() > 0 ? version.findings() + " finding(s), the worst "
@@ -456,7 +468,9 @@ final class ComplianceCommands {
         System.out.println(subject + " is relied on by:");
         for (ProvenanceClient.Dependent dependent : dependents) {
             System.out.println("    " + dependent.coordinate() + " " + dependent.version() + " of "
-                    + dependent.repository() + (dependent.cut() ? "  its closure stops here, held for review" : ""));
+                    + dependent.repository() + (dependent.cut() ? "  its closure stops here, held for review" : "")
+                    + (dependent.byCoordinate() ? "  its " + dependent.ecosystem() + " bill names it by coordinate"
+                    : ""));
             through(dependent.path());
         }
         if (page.next() != null) {

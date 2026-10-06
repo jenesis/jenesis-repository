@@ -20,6 +20,7 @@ import build.jenesis.repository.inventory.IncrementalPasses;
 import build.jenesis.repository.inventory.PublishedSection;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.maintenance.RepositoryContext;
+import build.jenesis.repository.maintenance.TenantContext;
 import build.jenesis.repository.maintenance.UnitFailures;
 import build.jenesis.repository.metadata.MetadataProvider;
 import build.jenesis.repository.metadata.MetadataStore;
@@ -28,6 +29,7 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Publication;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 /**
  * The closure pass resolves a release that has no closure, once: its closure lands in the version's document, a later
@@ -239,11 +241,11 @@ class ClosureTaskTest {
 
         assertThat(reliedOn("org.dep:lib", "1.0", _ -> true).dependents()).as("both, each with its path")
                 .containsExactlyInAnyOrder(
-                        new ReliedOn.Dependent("releases", "org.acme:app", "1.0",
-                                List.of(new ClosureSection.Hop("org.dep:lib", "1.0")), false),
-                        new ReliedOn.Dependent("group", "org.acme:web", "1.0",
+                        new ReliedOn.Dependent("releases", "Maven", "org.acme:app", "1.0",
+                                List.of(new ClosureSection.Hop("org.dep:lib", "1.0")), false, false),
+                        new ReliedOn.Dependent("group", "Maven", "org.acme:web", "1.0",
                                 List.of(new ClosureSection.Hop("org.acme:app", "1.0"),
-                                        new ClosureSection.Hop("org.dep:lib", "1.0")), false));
+                                        new ClosureSection.Hop("org.dep:lib", "1.0")), false, false));
         assertThat(reliedOn("org.dep:lib", "1.0", "releases"::equals).dependents())
                 .as("a repository the caller may not read is left out")
                 .extracting(ReliedOn.Dependent::repository).containsExactly("releases");
@@ -264,8 +266,8 @@ class ClosureTaskTest {
         pass(null, NOW);
 
         assertThat(reliedOn("org.dep:held", "1.0", _ -> true).dependents()).singleElement()
-                .isEqualTo(new ReliedOn.Dependent("releases", "org.acme:app", "1.0",
-                        List.of(new ClosureSection.Hop("org.dep:held", "1.0")), true));
+                .isEqualTo(new ReliedOn.Dependent("releases", "Maven", "org.acme:app", "1.0",
+                        List.of(new ClosureSection.Hop("org.dep:held", "1.0")), true, false));
     }
 
     @Test
@@ -353,6 +355,135 @@ class ClosureTaskTest {
                                 new ClosureSection.Hop("org.dep:lib", "1.0"))));
         assertThat(store.isEmpty(ChangedVersions.ROOT)).as("the change was taken up").isTrue();
         assertThat(tenant.scope("group").isEmpty(ReliedOn.STALE)).as("and the request it made").isTrue();
+    }
+
+    @Test
+    void a_package_a_bill_names_in_another_ecosystem_is_relied_on_through_any_copy_the_tenant_holds()
+            throws IOException {
+        ArtifactStore npm = tenant.scope("npm-proxy");
+        new StoreRepositoryInventory(npm).cache("npm", "left-pad", "1.3.0", "https://registry.example/", NOW);
+        FindingsProvider.installed().orElseThrow().over(npm).record("npm", "left-pad", "1.3.0", Finding.of(
+                "CVE-2026-0007", "osv", Finding.Kind.VULNERABILITY, "advisory", Severity.HIGH, "recorded", NOW));
+
+        passNaming("left-pad", NOW);
+
+        assertThat(exposure("1.0").orElseThrow().reached())
+                .as("the copy another repository of the tenant holds, found by its coordinate")
+                .containsExactly(new ExposureSection.Reached("left-pad", "1.3.0", "npm-proxy", false, 1, "HIGH",
+                        List.of(), "npm"));
+        assertThat(reliedOnAcross(npm, "npm-proxy", "left-pad").dependents())
+                .as("and the copy's page names the release, which relies on it by coordinate")
+                .containsExactly(new ReliedOn.Dependent("releases", "Maven", "org.acme:app", "1.0",
+                        List.of(new ClosureSection.Hop("left-pad", "1.3.0")), false, true));
+        assertThat(reliedOnAcross(tenant.scope("group"), "group", "left-pad").dependents())
+                .as("as does the page of any repository's copy: the tenant's rows are the coordinate's")
+                .extracting(ReliedOn.Dependent::coordinate).containsExactly("org.acme:app");
+    }
+
+    @Test
+    void a_new_finding_on_any_copy_reaches_a_release_naming_it_by_coordinate_before_its_full_pass()
+            throws IOException {
+        ArtifactStore npm = tenant.scope("npm-proxy");
+        new StoreRepositoryInventory(npm).cache("npm", "left-pad", "1.3.0", "https://registry.example/", NOW);
+        Instant first = NOW.plus(Duration.ofDays(1));
+        passNaming("left-pad", first);
+        assertThat(exposure("1.0").orElseThrow().reached()).as("nothing found yet").isEmpty();
+
+        // The copy is found vulnerable; neither repository's next pass is a full one, and app, published before the
+        // first, is not a recent publish its next pass would visit anyway.
+        FindingsProvider.installed().orElseThrow().over(npm).record("npm", "left-pad", "1.3.0", Finding.of(
+                "CVE-2026-0008", "osv", Finding.Kind.VULNERABILITY, "advisory", Severity.HIGH, "recorded", NOW));
+        pass("npm-proxy", Map.of(), null, first.plus(Duration.ofHours(1)));
+        passNaming("left-pad", first.plus(Duration.ofHours(1)));
+
+        assertThat(exposure("1.0").orElseThrow().reached())
+                .as("followed through the tenant's rows, with no feed asked")
+                .extracting(ExposureSection.Reached::coordinate, ExposureSection.Reached::ecosystem,
+                        ExposureSection.Reached::repository)
+                .containsExactly(tuple("left-pad", "npm", "npm-proxy"));
+    }
+
+    @Test
+    void a_row_across_the_tenant_goes_once_its_dependent_no_longer_names_the_package() throws IOException {
+        passNaming(List.of("left-pad", "right-pad"), NOW);
+        ArtifactStore space = tenant.scope(ReliedOn.SPACE);
+        assertThat(space.isEmpty(ReliedOn.ROOT)).as("indexed for the tenant").isFalse();
+
+        // app's closure no longer names left-pad: the bill it carries was replaced.
+        metadata.mutate("Maven", "org.acme:app", "1.0", ClosureSection.TAG, ClosureSection.record(named(List.of("right-pad"))));
+        new ClosureTask(Duration.ofMinutes(5), ClosureSource.installed()).tenant(tenantContext(NOW));
+
+        List<String> left = new ArrayList<>();
+        space.scan(ReliedOn.ROOT, "", 100, listed -> left.add(listed.key()));
+        assertThat(left).as("the row of what it no longer names goes, the one of what it still names stays")
+                .singleElement().satisfies(key -> assertThat(key).contains("right-pad"));
+    }
+
+    /** A closure of app 1.0 whose bill names each of {@code names} of npm at 1.3.0, and nothing in its own
+     *  ecosystem. */
+    private static ClosureSection.Closure named(List<String> names) {
+        return new ClosureSection.Closure(ClosureSection.Status.RESOLVED, List.of(), List.of(), false, NOW,
+                ClosureSource.Kind.BILL, "bill", names.stream()
+                .map(name -> new ClosureSection.Foreign("npm", name, "1.3.0", 1, "", "")).toList());
+    }
+
+    /** A pass over the releases whose only source answers {@link #named} {@code name}. */
+    private void passNaming(String name, Instant now) throws IOException {
+        passNaming(List.of(name), now);
+    }
+
+    /** A pass over the releases whose only source answers {@link #named} {@code names}; a release resolved once keeps
+     *  its closure, so the source is asked the first time only. */
+    private void passNaming(List<String> names, Instant now) throws IOException {
+        UnitFailures failures = new UnitFailures("the closure pass", "nothing");
+        new ClosureTask(Duration.ofMinutes(5), List.of(source("bill", ClosureSource.Kind.BILL, Set.of("Maven"),
+                Optional.of(named(names)), new ArrayList<>()))).repository(context("releases", Map.of(), null, now,
+                failures));
+        failures.rethrow();
+    }
+
+    private ReliedOn.Page reliedOnAcross(ArtifactStore holder, String holderName, String name) throws IOException {
+        return ReliedOn.pageAcross(holder, holderName, Optional.of(tenant), named -> Optional.of(tenant.scope(named)),
+                _ -> true, "npm", name, "1.3.0", "", 50);
+    }
+
+    private TenantContext tenantContext(Instant now) {
+        return new TenantContext() {
+            @Override
+            public String tenant() {
+                return "default";
+            }
+
+            @Override
+            public ArtifactStore store() {
+                return tenant;
+            }
+
+            @Override
+            public ArtifactStore system() {
+                return tenant.scope("unused-system");
+            }
+
+            @Override
+            public UnaryOperator<String> config() {
+                return _ -> null;
+            }
+
+            @Override
+            public long quotaLimit() {
+                return 0;
+            }
+
+            @Override
+            public long recomputeQuota() {
+                return 0;
+            }
+
+            @Override
+            public Instant now() {
+                return now;
+            }
+        };
     }
 
     @Test
@@ -456,6 +587,16 @@ class ClosureTaskTest {
             @Override
             public Optional<RepositoryContext> repository(String name) {
                 return Optional.of(context(name, Map.of(), setting, now, failures));
+            }
+
+            @Override
+            public Optional<ArtifactStore> tenantStore() {
+                return Optional.of(tenant);
+            }
+
+            @Override
+            public List<String> repositories() {
+                return List.of("group", "npm-proxy", "releases");
             }
 
             @Override

@@ -33,6 +33,7 @@ module build.jenesis.repository.closure {
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.maintenance;
     requires build.jenesis.repository.metadata;
+    requires build.jenesis.repository.scope;
     requires build.jenesis.repository.settings;
     requires tools.jackson.databind;
     requires org.slf4j;

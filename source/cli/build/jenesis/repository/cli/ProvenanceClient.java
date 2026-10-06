@@ -131,6 +131,10 @@ public final class ProvenanceClient extends ClientCalls {
     public record ClosureCut(String coordinate, String requirement, String reason) {
     }
 
+    /** A package the version's bill names in another ecosystem, relied on by coordinate across the tenant. */
+    public record ClosureForeign(String ecosystem, String coordinate, String version, int depth) {
+    }
+
     /** A version's closure as the API answers it: {@code state} is {@code RESOLVED}, {@code PARTIAL},
      *  {@code UNDECLARED}, {@code PENDING} (a release not yet resolved) or {@code CACHED} (a copy with no closure of its
      *  own); {@code resolved}, {@code kind} - {@code BILL} the bill the version carries, {@code RESOLVER} an ecosystem's
@@ -140,7 +144,8 @@ public final class ProvenanceClient extends ClientCalls {
     public record Closure(String repository, String ecosystem, String coordinate, String version, String state,
                           String resolved, String kind, String source, boolean truncated,
                           List<ClosureComponent> components,
-                          List<ClosureCut> cuts, ClosureExposure exposure, ScreenedThrough screenedThrough) {
+                          List<ClosureCut> cuts, List<ClosureForeign> foreign, ClosureExposure exposure,
+                          ScreenedThrough screenedThrough) {
     }
 
     /** What a version was screened through: {@code basis} is {@code FEEDS} (a cached copy asked of {@code feeds}),
@@ -150,20 +155,23 @@ public final class ProvenanceClient extends ClientCalls {
     }
 
     /** One version a closure reaches that is held for review or carries findings: {@code repository} is empty where
-     *  the version's own repository holds it, and {@code worst} the worst severity among {@code findings}. */
+     *  the version's own repository holds it, {@code worst} the worst severity among {@code findings}, and
+     *  {@code ecosystem} empty unless the version's bill names it in another ecosystem, a copy of which
+     *  {@code repository} holds. */
     public record ClosureReached(String coordinate, String version, String repository, boolean held, int findings,
-                                 String worst, List<ClosureHop> path) {
+                                 String worst, List<ClosureHop> path, String ecosystem) {
     }
 
     /** One step of a path through a closure: a dependency at the version the closure holds. */
     public record ClosureHop(String coordinate, String version) {
     }
 
-    /** A published version relying on the version asked about, in {@code repository}: the path its closure reaches
-     *  that version along, from the dependency it names itself down to it, and whether its closure stopped there
-     *  because the version is held for review. */
-    public record Dependent(String repository, String coordinate, String version, List<ClosureHop> path,
-                            boolean cut) {
+    /** A published version relying on the version asked about, in {@code repository} and {@code ecosystem}: the path
+     *  its closure reaches that version along, from the dependency it names itself down to it, whether its closure
+     *  stopped there because the version is held for review, and whether its bill names the version by coordinate in
+     *  another ecosystem, relying on whichever copy its build installed. */
+    public record Dependent(String repository, String ecosystem, String coordinate, String version,
+                            List<ClosureHop> path, boolean cut, boolean byCoordinate) {
     }
 
     /** One page of the published versions relying on a version; {@code next} is the cursor of the next page,

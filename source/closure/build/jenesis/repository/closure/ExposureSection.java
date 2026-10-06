@@ -16,8 +16,10 @@ import tools.jackson.databind.node.ObjectNode;
  * for a version with no closure. The {@code data} payload is
  * {@code {"examined":<components and held cuts looked at>,
  * "reached":[{"coordinate","version","repository","held":<bool>,"findings":<count>,"worst":<severity or "">,
- * "path":[{"coordinate","version"}]}]}}, a component's {@code repository} present only where a fallback's repository
- * holds it and its {@code path} only where the closure reaches it through another dependency.
+ * "path":[{"coordinate","version"}],"ecosystem"}]}}, a component's {@code repository} present only where a fallback's
+ * repository holds it, its {@code path} only where the closure reaches it through another dependency, and its
+ * {@code ecosystem} only for a package the version's bill names in another ecosystem, whose {@code repository} is the
+ * one of the tenant holding the copy found.
  *
  * <p>The signal is neutral: a published version is held for no vulnerability, and what it inherits is shown on its
  * surfaces rather than scored by the gate.
@@ -38,15 +40,24 @@ public final class ExposureSection {
     /** One version the closure reaches that is held for review, carries findings at or above the risk band, or both;
      *  held by the version's own repository where {@code repository} is empty, and reached along {@code path} - from
      *  the dependency the version names itself down to this one, both included, which is this one alone where the
-     *  version names it or where the closure stopped at it. */
+     *  version names it or where the closure stopped at it. {@code ecosystem} is empty for a version of the closure's
+     *  own ecosystem, and names the ecosystem of a {@linkplain ClosureSection.Foreign package of another}, a copy of
+     *  which {@code repository} holds. */
     public record Reached(String coordinate, String version, String repository, boolean held, int findings,
-                          String worst, List<ClosureSection.Hop> path) {
+                          String worst, List<ClosureSection.Hop> path, String ecosystem) {
 
         public Reached {
             repository = repository == null ? "" : repository;
             worst = worst == null ? "" : worst;
             path = path == null || path.isEmpty() ? List.of(new ClosureSection.Hop(coordinate, version))
                     : List.copyOf(path);
+            ecosystem = ecosystem == null ? "" : ecosystem;
+        }
+
+        /** A version of the closure's own ecosystem, reached along {@code path}. */
+        public Reached(String coordinate, String version, String repository, boolean held, int findings,
+                       String worst, List<ClosureSection.Hop> path) {
+            this(coordinate, version, repository, held, findings, worst, path, "");
         }
 
         /** A version the closure reaches directly, or stopped at. */
@@ -95,7 +106,8 @@ public final class ExposureSection {
                 }
                 reached.add(new Reached(entry.path("coordinate").asString(""), entry.path("version").asString(""),
                         entry.path("repository").asString(""), entry.path("held").asBoolean(false),
-                        entry.path("findings").asInt(0), entry.path("worst").asString(""), path));
+                        entry.path("findings").asInt(0), entry.path("worst").asString(""), path,
+                        entry.path("ecosystem").asString("")));
             }
             return new Exposure(reached, data.path("examined").asInt(0), derived);
         });
@@ -113,6 +125,9 @@ public final class ExposureSection {
                         .put("findings", entry.findings()).put("worst", entry.worst());
                 if (!entry.repository().isEmpty()) {
                     row.put("repository", entry.repository());
+                }
+                if (!entry.ecosystem().isEmpty()) {
+                    row.put("ecosystem", entry.ecosystem());
                 }
                 if (entry.path().size() > 1) {
                     ArrayNode path = row.putArray("path");

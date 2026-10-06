@@ -293,7 +293,8 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, PathKe
      * {@code <upstream>/<architecture>/<file>} and nothing an upstream advertises is followed.
      *
      * <p>{@code APKINDEX.tar.gz} is an ENUMERATION, fetched fresh, and only an upstream 404/410 reaches the client as a
-     * 404. It is relayed as is, signed with the upstream's key.
+     * 404. It is relayed as is, signed with the upstream's key, so a held package stays listed in it; the package is
+     * refused when it is fetched, and that refusal is the hold.
      *
      * <p>A package is PINNED and held to that index: its control member against {@code C:}, and its data member against
      * the {@code datahash} the control member carries, together covering every installed byte. An unreadable index
