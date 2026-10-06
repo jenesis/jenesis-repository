@@ -153,14 +153,6 @@ public final class ComplianceScreen implements PublishInterceptor {
      *  outage it was admitted through, findings it recorded rather than held - or {@code null} where it did not. */
     private final ThreadLocal<String> governed = new ThreadLocal<>();
 
-    /** The reason an upload screened while a feed could not answer carries, beside the outage itself. */
-    static final String ADMITTED_REASON = "Admitted on the checks that could answer, as the repository's screening "
-            + "mode says, while an advisory feed cannot";
-
-    /** The reason an upload the screen would have withheld carries when the repository records instead. */
-    static final String RECORDED_REASON = "Recorded, not held: the repository's screening mode records what the "
-            + "screen finds and holds none of it";
-
     /** The {@code ServiceLoader} constructor: the screen judges each call by the {@link Binding} its store carries. */
     public ComplianceScreen() {
         this.explicit = null;
@@ -561,8 +553,8 @@ public final class ComplianceScreen implements PublishInterceptor {
         return disposition(mode, decided);
     }
 
-    /** An assessment, the outage it was reached around where a feed could not answer, or - where nothing could
-     *  decide - no assessment and the failure. */
+    /** An assessment, the reason it carries for the outage it was reached around where a feed could not answer
+     *  ({@link ScreeningMode#admitted}), or - where nothing could decide - no assessment and the failure. */
     private record Decided(ComplianceGate.Assessment assessment, String outage, RuntimeException failure) {
     }
 
@@ -579,7 +571,7 @@ public final class ComplianceScreen implements PublishInterceptor {
                     ComplianceGate.Assessment withoutFeed = assess.apply(current.advisories(AdvisorySource.none()));
                     LOGGER.warn("Screened an upload without the advisory feeds, one of which cannot answer; the "
                             + "repository's screening mode is " + mode, failure);
-                    return new Decided(withoutFeed, message(failure), null);
+                    return new Decided(withoutFeed, ScreeningMode.admitted(failure), null);
                 } catch (RuntimeException again) {
                     failure.addSuppressed(again);
                 }
@@ -596,11 +588,11 @@ public final class ComplianceScreen implements PublishInterceptor {
         Verdict verdict = assessment.verdict();
         List<String> notes = new ArrayList<>();
         if (decided.outage() != null) {
-            notes.add(ADMITTED_REASON + ": " + decided.outage());
+            notes.add(decided.outage());
         }
         if (mode == ScreeningMode.RECORD && verdict.compareTo(assessment.denied()) > 0) {
             verdict = assessment.denied();
-            notes.add(RECORDED_REASON);
+            notes.add(ScreeningMode.RECORDED_REASON);
         }
         if (!notes.isEmpty()) {
             governed.set(String.join("; ", notes));
@@ -610,11 +602,6 @@ public final class ComplianceScreen implements PublishInterceptor {
             case QUARANTINE -> Disposition.QUARANTINE;
             case REJECT -> Disposition.REJECT;
         };
-    }
-
-    private static String message(RuntimeException failure) {
-        Throwable cause = failure.getCause() != null ? failure.getCause() : failure;
-        return cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
     }
 
     /** The reasons the review screens and the publisher's answer both carry - see {@link #reasonsOf}. */
