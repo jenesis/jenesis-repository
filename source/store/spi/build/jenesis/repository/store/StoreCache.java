@@ -46,9 +46,10 @@ public final class StoreCache {
     private static final Set<StoreCache> CACHES = Collections.synchronizedSet(
             Collections.newSetFromMap(new WeakHashMap<>()));
 
-    /** The shared caches by store identity and name - see {@link #of}. Weak, so a cache lives as long as something
-     *  holds it and a test's store does not pin one for the life of the JVM. */
-    private static final Map<String, WeakReference<StoreCache>> SHARED = new HashMap<>();
+    /** The shared caches by store identity and name - see {@link #of}. Soft, so a cache a caller asks for on every
+     *  read and holds for none survives a collection, which a weakly held one would not, while a test's store does not
+     *  pin one for the life of the JVM: it goes when the heap needs the room. */
+    private static final Map<String, SoftReference<StoreCache>> SHARED = new HashMap<>();
 
     private final String name;
     /** {@code jenrepo.cache.<name>}, validated against the signal grammar when the cache is made - a name the report
@@ -96,12 +97,12 @@ public final class StoreCache {
         store = ReadMemo.underlying(store);
         String key = store.identity() + "\u0000" + name;
         synchronized (SHARED) {
-            WeakReference<StoreCache> reference = SHARED.get(key);
+            SoftReference<StoreCache> reference = SHARED.get(key);
             StoreCache shared = reference == null ? null : reference.get();
             if (shared == null) {
                 shared = new StoreCache(name, store, ttl);
                 SHARED.values().removeIf(each -> each.get() == null);
-                SHARED.put(key, new WeakReference<>(shared));
+                SHARED.put(key, new SoftReference<>(shared));
             }
             return shared;
         }
