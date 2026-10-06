@@ -20,7 +20,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * An index relayed from an upstream lists no version this repository holds for review: a copy the proxy fetched and
  * held answers {@code 404}, so a client that found it listed would select it and fail. Each format's relay - an npm
  * packument, a {@code maven-metadata.xml} and its checksum, a PyPI Simple page, a NuGet version index, a Cargo index
- * file, a Go version list, a Terraform version list, a Swift release list, a Helm repository index - is answered by
+ * file, a Go version list, a Terraform version list, a Swift release list, a Helm repository index, a conda package
+ * list, a RubyGems compact index - is answered by
  * an in-memory upstream listing two versions, the newer one held as the proxy holds a copy at its fill, and is
  * required to leave the held one out and keep the other; with nothing held, the upstream's list is served whole.
  */
@@ -311,6 +312,80 @@ class RelayedIndexWithholdTest {
 
         assertThat(served).as("the held version of one chart is left out, the same version of another kept")
                 .doesNotContain("widget-1.1.0.tgz").contains("widget-1.0.0.tgz").contains("gadget-1.1.0.tgz");
+    }
+
+    @Test
+    void a_conda_package_list_leaves_out_a_held_version_and_its_compressed_forms_stand_aside() throws IOException {
+        byte[] repodata = """
+                {"info": {"subdir": "linux-64"}, "repodata_version": 1,
+                 "packages": {
+                   "numpy-1.26.0-py312_0.tar.bz2": {"name": "numpy", "version": "1.26.0", "depends": ["python"]},
+                   "numpy-1.26.1-py312_0.tar.bz2": {"name": "numpy", "version": "1.26.1", "depends": ["python"]}},
+                 "packages.conda": {
+                   "numpy-1.26.1-py312_1.conda": {"name": "numpy", "version": "1.26.1"},
+                   "scipy-1.26.1-py312_0.conda": {"name": "scipy", "version": "1.26.1"}},
+                 "removed": []}
+                """.getBytes(StandardCharsets.UTF_8);
+        assertThat(relay("conda", "/conda/main/linux-64/repodata.json", repodata).bytes())
+                .as("nothing held: the upstream's list, as it serves it").isEqualTo(repodata);
+
+        UpstreamMemory.reset();
+        hold("/conda/main/linux-64/numpy-1.26.1-py312_0.tar.bz2", "conda", "numpy", "1.26.1");
+        JsonNode served = JSON.readTree(relay("conda", "/conda/main/linux-64/repodata.json", repodata).body());
+
+        assertThat(served.path("packages").propertyNames()).as("the held version is not listed, in either form")
+                .containsExactly("numpy-1.26.0-py312_0.tar.bz2");
+        assertThat(served.path("packages.conda").propertyNames())
+                .as("the same version of another package is kept").containsExactly("scipy-1.26.1-py312_0.conda");
+        assertThat(served.path("info").path("subdir").asString("")).as("every other field as it was")
+                .isEqualTo("linux-64");
+        assertThat(served.path("packages").path("numpy-1.26.0-py312_0.tar.bz2").path("depends").get(0)
+                .asString("")).isEqualTo("python");
+
+        Exchange compressed = new Exchange("/conda/main/linux-64/repodata.json.zst");
+        assertThat(((ProxyFormat) discover("conda")).proxy(compressed, store, URI.create("https://upstream.example/"),
+                (ProxyFormat.Fetcher.Buffered) (_, _) -> Optional.of(new ProxyFormat.Fetched(200, new byte[]{1},
+                        Map.of())))).isTrue();
+        assertThat(compressed.status).as("a compressed form would list it, so the client reads the rewritten one")
+                .isEqualTo(404);
+    }
+
+    @Test
+    void a_compact_index_leaves_out_a_held_version_and_names_the_rewritten_info_it_serves() throws IOException {
+        byte[] info = """
+                ---
+                3.0.0 |checksum:aaaa,ruby:>= 2.4.0
+                3.1.0 |checksum:bbbb,ruby:>= 2.4.0
+                """.getBytes(StandardCharsets.UTF_8);
+        byte[] versions = """
+                created_at: 2026-10-01T00:00:00Z
+                ---
+                rack 3.0.0,3.1.0 0123456789abcdef0123456789abcdef
+                rake 13.0.0 fedcba9876543210fedcba9876543210
+                """.getBytes(StandardCharsets.UTF_8);
+        Map<String, byte[]> upstream = Map.of("info/rack", info, "versions", versions);
+        assertThat(relay("rubygems", "/rubygems/versions", upstream).bytes()).as("nothing held: as the upstream serves it")
+                .isEqualTo(versions);
+
+        hold("/rubygems/gems/rack-3.1.0.gem", "RubyGems", "rack", "3.1.0");
+        String served = relay("rubygems", "/rubygems/info/rack", upstream).body();
+        assertThat(served).as("the held version's line is left out").doesNotContain("3.1.0")
+                .contains("3.0.0 |checksum:aaaa");
+        String listed = relay("rubygems", "/rubygems/versions", upstream).body();
+
+        assertThat(listed).as("the held version is not listed, and the gem's line names the info it is served")
+                .contains("rack 3.0.0 " + HexFormat.of().formatHex(md5(served.getBytes(StandardCharsets.UTF_8))))
+                .as("another gem's line is as it was")
+                .contains("rake 13.0.0 fedcba9876543210fedcba9876543210")
+                .startsWith("created_at: 2026-10-01T00:00:00Z\n---\n");
+    }
+
+    private static byte[] md5(byte[] bytes) {
+        try {
+            return MessageDigest.getInstance("MD5").digest(bytes);
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException(impossible);
+        }
     }
 
     /** {@code path} held for review as the proxy holds a copy at its fill: its subject recorded and its review pointer

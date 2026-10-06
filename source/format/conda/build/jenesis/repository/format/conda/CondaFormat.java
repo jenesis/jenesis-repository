@@ -27,12 +27,15 @@ import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.ServableNames;
 import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.walk.ScreenedNames;
 import build.jenesis.repository.walk.Traversal;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.JsonGenerator;
 import tools.jackson.core.JsonParser;
 import tools.jackson.core.JsonToken;
 import build.jenesis.repository.store.OwnerOnly;
@@ -55,7 +58,8 @@ import build.jenesis.repository.store.OwnerOnly;
  * <p><b>Pull-through proxy.</b> A local miss is served from an upstream channel, {@code /conda/<repo>/<subdir>/<file>}
  * mapping to {@code <upstream>/<subdir>/<file>}. A package is immutable, streamed into the store and cached; the index
  * ({@code repodata.json}, its compressed forms, {@code current_repodata.json}) is streamed fresh and needs no rewrite,
- * locations being bare filenames. Conda has no canonical upstream, so {@link #defaultUpstream()} is empty, and an empty
+ * locations being bare filenames - except that while the repository holds versions for review the list is rewritten
+ * without them, and its compressed forms answer {@code 404} so a client reads the rewritten one. Conda has no canonical upstream, so {@link #defaultUpstream()} is empty, and an empty
  * subdir's local {@code repodata.json} is a {@code 404} so pull-through reaches the upstream's.
  *
  * <p>The ecosystem is {@code "conda"}, and {@link #describe} maps a package path to {@code name}/{@code version} from
@@ -75,6 +79,9 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
     private static final String TARBZ2_EXT = ".tar.bz2";
     private static final String REPODATA = "repodata.json";
     private static final String REPODATA_BZ2 = "repodata.json.bz2";
+
+    /** The list of each package's newest version a solver reads first. */
+    private static final String CURRENT_REPODATA = "current_repodata.json";
 
     /** How far the legacy {@code .tar.bz2}'s info scan may inflate, as a multiple of the stored compressed size: its
      *  {@code info/index.json} may follow a large payload, so the flat walk tier would refuse valid packages, while a
@@ -502,8 +509,101 @@ public final class CondaFormat implements RepositoryFormat, ArtifactLayout, Prox
             return true;
         }
         // The index streamed fresh with the upstream's Content-Type. repodata.json is the subdir's package list a
-        // solver reads, an ENUMERATION, so only an upstream 404/410 reaches the client as one.
+        // solver reads, an ENUMERATION, so only an upstream 404/410 reaches the client as one. While the repository
+        // holds versions for review, the list is rewritten without them, and a compressed form - which would list
+        // them - answers 404, so the client reads the rewritten one.
+        if (repodata(file)) {
+            Map<String, Set<String>> held = HeldVersions.all(store, ECOSYSTEM);
+            if (!held.isEmpty()) {
+                if (!file.endsWith(".json")) {
+                    exchange.respond(404);
+                    return true;
+                }
+                return relayWithout(held, target, fetcher, exchange);
+            }
+        }
         return ProxyRelay.streamRemembered(fetcher, target, null, exchange, ProxyRelay.Document.ENUMERATION, store);
+    }
+
+    /** Whether {@code file} is a subdir's package list or a compressed form of one. */
+    private static boolean repodata(String file) {
+        return file.equals(REPODATA) || file.startsWith(REPODATA + ".") || file.equals(CURRENT_REPODATA)
+                || file.startsWith(CURRENT_REPODATA + ".");
+    }
+
+    /**
+     * The upstream's package list at {@code target} without the versions {@code held} names: stream-parsed and
+     * written again to a temporary file - a large channel's list is tens of megabytes, so it is never held in memory -
+     * each entry of {@code packages} and {@code packages.conda} whose file names a held version left out and every other
+     * field copied as it is, then served from the file. A list that does not parse is an unanswered enumeration, never
+     * one served short; the rewrite carries none of the upstream's validators, which describe its own bytes.
+     */
+    private static boolean relayWithout(Map<String, Set<String>> held, URI target, ProxyFormat.Fetcher fetcher,
+                                        FormatExchange exchange) throws IOException {
+        try (ProxyFormat.Download download = fetcher.download(target, Map.of()).orElse(null)) {
+            if (download == null) {
+                return ProxyRelay.unanswered(target, exchange, ProxyRelay.Document.ENUMERATION,
+                        ProxyFormat.Fetcher.NO_ANSWER);
+            }
+            if (ProxyRelay.upstreamMiss(download.status())) {
+                return false;
+            }
+            if (download.status() != 200) {
+                return ProxyRelay.unanswered(target, exchange, ProxyRelay.Document.ENUMERATION,
+                        "the upstream answered " + download.status());
+            }
+            Path rewritten = OwnerOnly.createTempFile("jenrepo-repodata", ".json");
+            try {
+                try (JsonParser parser = MAPPER.createParser(download.body());
+                     OutputStream file = Files.newOutputStream(rewritten);
+                     JsonGenerator generator = MAPPER.createGenerator(file)) {
+                    without(held, parser, generator);
+                } catch (JacksonException | IllegalStateException unreadable) {
+                    return ProxyRelay.unanswered(target, exchange, ProxyRelay.Document.ENUMERATION,
+                            "the upstream answered a repodata.json that does not parse");
+                }
+                exchange.setResponseHeader("Content-Type", "application/json");
+                try (InputStream in = Files.newInputStream(rewritten);
+                     OutputStream out = exchange.respond(200, Files.size(rewritten))) {
+                    in.transferTo(out);
+                }
+                return true;
+            } finally {
+                Files.deleteIfExists(rewritten);
+            }
+        }
+    }
+
+    /** Copy the package list {@code parser} reads to {@code generator}, leaving out of {@code packages} and
+     *  {@code packages.conda} every entry whose file names a version {@code held} names. */
+    private static void without(Map<String, Set<String>> held, JsonParser parser, JsonGenerator generator) {
+        if (parser.nextToken() != JsonToken.START_OBJECT) {
+            throw new IllegalStateException("a repodata.json is an object");
+        }
+        generator.writeStartObject();
+        while (parser.nextToken() == JsonToken.PROPERTY_NAME) {
+            String field = parser.currentName();
+            JsonToken value = parser.nextToken();
+            generator.writeName(field);
+            if ((field.equals("packages") || field.equals("packages.conda")) && value == JsonToken.START_OBJECT) {
+                generator.writeStartObject();
+                while (parser.nextToken() == JsonToken.PROPERTY_NAME) {
+                    String file = parser.currentName();
+                    parser.nextToken();
+                    String[] coordinate = isPackage(file) ? coordinate(file) : null;
+                    if (coordinate != null && held.getOrDefault(coordinate[0], Set.of()).contains(coordinate[1])) {
+                        parser.skipChildren();
+                        continue;
+                    }
+                    generator.writeName(file);
+                    generator.copyCurrentStructure(parser);
+                }
+                generator.writeEndObject();
+            } else {
+                generator.copyCurrentStructure(parser);
+            }
+        }
+        generator.writeEndObject();
     }
 
     /** A package, {@code /conda/<repo>/<subdir>/<file>}, is served from its {@code pkgs} pointer. */
