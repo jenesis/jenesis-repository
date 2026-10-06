@@ -824,7 +824,9 @@ public final class ComplianceGate {
         List<AdvisorySource.Advisory> found = new ArrayList<>();
         if (packaged && subject.version() != null && !subject.version().isBlank()) {
             AdvisorySource.Query asked = subject.asked();
-            found.addAll(advisories.advisories(asked.ecosystem(), asked.coordinate(), asked.version()));
+            // Every feed is asked in turn within one memo, so two feeds reading one upstream ask it once.
+            found.addAll(AdvisoryMemo.during(
+                    () -> advisories.advisories(asked.ecosystem(), asked.coordinate(), asked.version())));
             // What a discovered dimension holds about the subject beyond the feeds - a content scan's report on the
             // stored bytes - joins the feeds' answer here, before VEX and waivers, so it is decided by exactly the
             // threshold, action and statements a feed's advisory is. Only for a claimed subject: the unclaimed

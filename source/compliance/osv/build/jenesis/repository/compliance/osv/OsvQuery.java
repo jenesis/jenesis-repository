@@ -2,6 +2,7 @@ package build.jenesis.repository.compliance.osv;
 
 import module java.base;
 import module tools.jackson.databind;
+import build.jenesis.repository.compliance.AdvisoryMemo;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.Ecosystems;
 import build.jenesis.repository.feed.FeedClient;
@@ -185,85 +186,76 @@ public final class OsvQuery {
     }
 
     /**
-     * Folds a query's pages into advisories, asking for the next page while OSV hands back a token - a fresh instance
-     * per attempt (the client's contract), so a retry never folds a page twice and a capped fetch drops its partial
-     * list. {@code keep} maps one record to the advisory a source keeps of it, or to none.
-     */
-    /** How long OSV's answer to one query is shared with another feed asking the same: long enough for the feeds one
-     *  screen asks in turn, short enough that it is no cache of record - each feed keeps its own. */
-    public static final Duration SHARED_FOR = Duration.ofSeconds(10);
-
-    /**
      * OSV's answers shared between the feeds that ask one endpoint the same question: the vulnerability feed and the
      * malicious-package feed ask OSV the same thing about a copy one screen judges, and each maps the one answer its
-     * own way, so the copy costs OSV one query rather than two. An answer is shared for {@link #SHARED_FOR}; a failure
-     * is the asker's to report and is never shared, and a feed its client skips shares nothing.
-     *
-     * <p>The production feeds share {@link #node()}, the node's; a source built for a test answers through its own
-     * exchange and shares nothing unless the test hands two sources one {@link #between()}.
+     * own way, so the copy costs OSV one query rather than two. The production feeds share {@link #decision()}: an
+     * answer is remembered in the {@link AdvisoryMemo} of the gate's decision in progress and nowhere else, so it is
+     * shared by the feeds that decision asks in turn and gone when it returns, and a query outside a decision reaches
+     * OSV. A failure is the asker's to report and is never shared, and a feed its client skips shares nothing. A source
+     * built for a test answers through its own exchange and shares nothing unless the test hands two sources one
+     * {@link #between()}.
      */
     public static final class Shared {
 
-        private static final Shared NODE = new Shared(true);
+        private static final Shared DECISION = new Shared(Kind.DECISION);
 
-        /** The most answers remembered at once; the oldest go first. */
-        private static final int REMEMBERED = 10_000;
+        /** The {@link AdvisoryMemo} slot the feeds asking OSV share. */
+        private static final String SLOT = "osv-query";
 
-        private final boolean remembers;
-        private final Map<String, Remembered> answers = Collections.synchronizedMap(
-                new LinkedHashMap<>(16, 0.75f, false) {
-                    @Override
-                    protected boolean removeEldestEntry(Map.Entry<String, Remembered> eldest) {
-                        return size() > REMEMBERED;
-                    }
-                });
+        private enum Kind { NONE, DECISION, OWN }
 
-        private Shared(boolean remembers) {
-            this.remembers = remembers;
+        private final Kind kind;
+        private final Map<String, List<JsonNode>> own = new ConcurrentHashMap<>();
+
+        private Shared(Kind kind) {
+            this.kind = kind;
         }
 
-        /** The node's: what the production feeds share. */
-        public static Shared node() {
-            return NODE;
+        /** The decision's: what the production feeds share, within the gate's decision in progress. */
+        public static Shared decision() {
+            return DECISION;
         }
 
         /** One remembering nothing, so every ask reaches the feed. */
         public static Shared none() {
-            return new Shared(false);
+            return new Shared(Kind.NONE);
         }
 
         /** A fresh one, for the sources a test builds to share. */
         public static Shared between() {
-            return new Shared(true);
+            return new Shared(Kind.OWN);
         }
 
         /** Every vulnerability record OSV answers at {@code query} for {@code coordinate} at {@code version}, every
-         *  page drawn through {@code client} - or the answer another feed sharing this drew within
-         *  {@link #SHARED_FOR}. */
+         *  page drawn through {@code client} - or the answer another feed sharing this drew. */
         public List<JsonNode> answered(FeedClient client, URI query, String ecosystem, String coordinate,
                                        String version) throws FeedException {
             String key = query + " " + ecosystem + " " + coordinate + " " + version;
-            Instant now = Instant.now();
-            Remembered held = remembers ? answers.get(key) : null;
-            if (held != null && held.until().isAfter(now)) {
-                return held.vulns();
+            Map<String, List<JsonNode>> memory = switch (kind) {
+                case NONE -> null;
+                case OWN -> own;
+                case DECISION -> AdvisoryMemo.current().map(memo -> memo.<List<JsonNode>>slot(SLOT)).orElse(null);
+            };
+            List<JsonNode> held = memory == null ? null : memory.get(key);
+            if (held != null) {
+                return held;
             }
             FeedClient.Answer<List<JsonNode>> answer = client.fetch(
                     request(query, ecosystem, coordinate, version, null),
                     () -> new Records(query, ecosystem, coordinate, version));
             List<JsonNode> vulns = answer.orElse(List.of());
-            if (remembers && answer.fetched()) {
-                answers.put(key, new Remembered(vulns, now.plus(SHARED_FOR)));
+            if (memory != null && answer.fetched()) {
+                memory.put(key, vulns);
             }
             return vulns;
         }
     }
 
-    /** One answer and the instant it stops being shared. */
-    private record Remembered(List<JsonNode> vulns, Instant until) {
-    }
-
-    /** Every page's records of one query, raw. */
+    /**
+     * Every page's records of one query, raw: the next page is asked for while OSV hands back a token, and a fresh
+     * instance folds each attempt (the client's contract), so a retry never folds a page twice and a capped fetch drops
+     * its partial list.
+     */
     private static final class Records implements FeedClient.Reader<List<JsonNode>> {
 
         private final URI query;

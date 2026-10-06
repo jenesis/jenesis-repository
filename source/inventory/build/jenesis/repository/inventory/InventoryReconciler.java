@@ -402,6 +402,8 @@ final class InventoryReconciler {
                 NewestFirst.CACHED.forget(store, ecosystem, coordinate, version,
                         CachedSection.facts(document.section(CachedSection.TAG)).map(CachedSection.Facts::at)
                                 .orElse(null));
+                AdvisedSection.forget(store, AdvisedSection.advised(document.section(AdvisedSection.TAG)), ecosystem,
+                        coordinate, version);
                 return true;
             }
             if (live && facts.isPresent()) {

@@ -38,9 +38,8 @@ import build.jenesis.repository.store.ArtifactStore;
  *
  * <p>The network operation sits behind an {@link Endpoint} seam, so recorded payloads travel through the same client,
  * caps and pagination as a live answer. A failed query throws, so the gate fails closed. This source holds no
- * {@code FeedCache} of answers; a query the vulnerability feed asked the same endpoint within
- * {@link OsvQuery#SHARED_FOR} is answered from its answer ({@link OsvQuery.Shared}), so a copy screened by both
- * costs OSV one query.
+ * {@code FeedCache} of answers; a query the vulnerability feed asked the same endpoint within the gate's decision in
+ * progress is answered from its answer ({@link OsvQuery.Shared}), so a copy screened by both costs OSV one query.
  *
  * <p>Asked about many versions at once ({@link AdvisorySource.Batched}), it posts {@code /v1/querybatch}, a thousand to
  * a request, and fetches in full only the {@code MAL-} records the answers name - each once per batch, keyed by its
@@ -133,7 +132,7 @@ public final class OpenSsfMaliciousSource implements AdvisorySource.Batched, Adv
     /** The production form, drawing OSV's change lists at {@code export} into the log kept in {@code space}. */
     public static OpenSsfMaliciousSource over(URI base, URI export, Supplier<ArtifactStore> space, Clock clock) {
         return new OpenSsfMaliciousSource(FeedClient.of(FEED, FeedTransport.jdk(CONNECT_TIMEOUT), POLICY), base, export,
-                space, clock, OsvQuery.Shared.node());
+                space, clock, OsvQuery.Shared.decision());
     }
 
     /** As {@link #exchanging(Exchange)}, keeping its change log in {@code space} on {@code clock}. */
