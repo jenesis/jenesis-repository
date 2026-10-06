@@ -1,6 +1,7 @@
 package build.jenesis.repository.dependents.requirements;
 
 import module java.base;
+import build.jenesis.repository.closure.RequirementGrammar;
 
 /**
  * Cargo's requirement grammar, translated into the node-semver range it means and evaluated as npm's is.
@@ -8,17 +9,17 @@ import module java.base;
  * <p>The two differ in spelling rather than meaning: Cargo separates comparators with commas where npm uses spaces,
  * and a bare {@code 1.2.3} in a {@code Cargo.toml} is a caret requirement where npm reads it as exactly that version.
  * Caret, tilde, wildcard and comparison operators mean the same in both. Cargo has no {@code ||} union and no hyphen
- * range, so a requirement carrying either is not one Cargo wrote and answers {@link Requirements.Verdict#UNKNOWN}, as
+ * range, so a requirement carrying either is not one Cargo wrote and answers {@link RequirementGrammar.Admission#UNKNOWN}, as
  * does a comparator that is not an operator and a version.
  */
-final class CargoRequirement implements Requirements.Grammar {
+final class CargoRequirement implements ClosureGrammar.Reader {
 
     private static final Pattern COMPARATOR = Pattern.compile("(\\^|~|>=|<=|>|<|=)?\\s*([0-9*][0-9A-Za-z.*+\\-]*)");
 
     @Override
-    public Requirements.Verdict admits(String requirement, String version) {
+    public RequirementGrammar.Admission admits(String requirement, String version) {
         String range = translate(requirement);
-        return range == null ? Requirements.Verdict.UNKNOWN : NpmRequirement.evaluate(range, version);
+        return range == null ? RequirementGrammar.Admission.UNKNOWN : NpmRequirement.evaluate(range, version);
     }
 
     /** The node-semver range a Cargo requirement means, or {@code null} for one this cannot read. */

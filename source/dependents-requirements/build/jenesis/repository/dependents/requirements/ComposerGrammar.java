@@ -8,7 +8,7 @@ import org.semver4j.Semver;
 public final class ComposerGrammar extends ClosureGrammar {
 
     public ComposerGrammar() {
-        super("Packagist");
+        super("Packagist", new ComposerRequirement());
     }
 
     @Override

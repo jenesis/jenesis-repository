@@ -1,6 +1,7 @@
 package build.jenesis.repository.dependents.requirements;
 
 import module java.base;
+import build.jenesis.repository.closure.RequirementGrammar;
 
 /**
  * Composer's constraint grammar, translated into the node-semver range it means and evaluated as npm's is.
@@ -11,22 +12,22 @@ import module java.base;
  * major - {@code ~1.2} is {@code >=1.2.0 <2.0.0}, where npm's stops below {@code 1.3.0}. And a single {@code |}, or a
  * comma between comparators, is Composer's own spelling of the union and the intersection.
  *
- * <p>What has no node-semver meaning answers {@link Requirements.Verdict#UNKNOWN} rather than something near it: a
+ * <p>What has no node-semver meaning answers {@link RequirementGrammar.Admission#UNKNOWN} rather than something near it: a
  * stability flag ({@code @dev}), a branch ({@code dev-main}), a not-equal ({@code !=}), a version of four parts, and a
  * platform requirement's name is never asked about. A {@code v} before a version is dropped on both sides, as
  * Composer's own normalisation does.
  */
-final class ComposerRequirement implements Requirements.Grammar {
+final class ComposerRequirement implements ClosureGrammar.Reader {
 
     private static final Pattern COMPARATOR = Pattern.compile("(\\^|~|>=|<=|>|<|==|=)?v?([0-9][0-9.*xX]*)");
 
     private static final Pattern HYPHEN = Pattern.compile("v?([0-9][0-9.]*)\\s+-\\s+v?([0-9][0-9.]*)");
 
     @Override
-    public Requirements.Verdict admits(String requirement, String version) {
+    public RequirementGrammar.Admission admits(String requirement, String version) {
         String range = translate(requirement);
         String asked = version.startsWith("v") ? version.substring(1) : version;
-        return range == null ? Requirements.Verdict.UNKNOWN : NpmRequirement.evaluate(range, asked);
+        return range == null ? RequirementGrammar.Admission.UNKNOWN : NpmRequirement.evaluate(range, asked);
     }
 
     /** The node-semver range a Composer constraint means, or {@code null} for one this cannot read. */

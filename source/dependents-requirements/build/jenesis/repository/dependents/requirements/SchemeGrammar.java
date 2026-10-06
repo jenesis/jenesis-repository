@@ -8,8 +8,8 @@ abstract class SchemeGrammar extends ClosureGrammar {
 
     private final String scheme;
 
-    SchemeGrammar(String ecosystem, String scheme) {
-        super(ecosystem);
+    SchemeGrammar(String ecosystem, String scheme, Reader reader) {
+        super(ecosystem, reader);
         this.scheme = scheme;
     }
 

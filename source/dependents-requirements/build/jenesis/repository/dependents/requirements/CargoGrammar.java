@@ -7,7 +7,7 @@ import org.semver4j.Semver;
 public final class CargoGrammar extends ClosureGrammar {
 
     public CargoGrammar() {
-        super("crates.io");
+        super("crates.io", new CargoRequirement());
     }
 
     @Override

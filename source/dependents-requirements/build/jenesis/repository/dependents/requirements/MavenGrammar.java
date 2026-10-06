@@ -10,7 +10,7 @@ public final class MavenGrammar extends ClosureGrammar {
     private final GenericVersionScheme scheme = new GenericVersionScheme();
 
     public MavenGrammar() {
-        super("Maven");
+        super("Maven", new MavenRequirement());
     }
 
     @Override

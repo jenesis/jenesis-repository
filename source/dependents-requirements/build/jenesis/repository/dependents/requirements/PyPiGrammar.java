@@ -4,6 +4,6 @@ package build.jenesis.repository.dependents.requirements;
 public final class PyPiGrammar extends SchemeGrammar {
 
     public PyPiGrammar() {
-        super("PyPI", "pypi");
+        super("PyPI", "pypi", new PyPiRequirement());
     }
 }

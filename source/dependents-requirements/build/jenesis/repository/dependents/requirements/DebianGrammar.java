@@ -4,6 +4,6 @@ package build.jenesis.repository.dependents.requirements;
 public final class DebianGrammar extends SchemeGrammar {
 
     public DebianGrammar() {
-        super("Debian", "deb");
+        super("Debian", "deb", new DebianRequirement());
     }
 }

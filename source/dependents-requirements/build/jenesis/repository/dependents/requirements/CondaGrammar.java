@@ -4,6 +4,6 @@ package build.jenesis.repository.dependents.requirements;
 public final class CondaGrammar extends SchemeGrammar {
 
     public CondaGrammar() {
-        super("conda", "generic");
+        super("conda", "generic", new CondaRequirement());
     }
 }
