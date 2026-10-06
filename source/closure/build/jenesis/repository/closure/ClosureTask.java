@@ -26,6 +26,10 @@ import build.jenesis.repository.metadata.MetadataStore;
  * release - every full pass - so a release inherits a later finding or hold on a copy it relies on, and loses one
  * withdrawn or released, without any lookup of its own. It is written only where it changed.
  *
+ * <p>Each closure is indexed the other way round too ({@link ReliedOn}): the pass writes a row, in the repository of
+ * the walk holding it, for each version the closure reaches, and on a full pass of its own removes the rows of this
+ * repository whose dependent no longer relies on what they name.
+ *
  * <p>Lease-owned, since it writes the version documents; idempotent, since a crash leaves the versions it had not
  * reached without a section, which the next pass reaches. A version whose resolution fails is contained, reported, and
  * left without a section so the next pass tries again; the full-pass stamp then does not advance.
@@ -42,6 +46,9 @@ public final class ClosureTask implements MaintenanceTask {
 
     /** On, in the form the setting catalogue publishes: a version published here is screened through its closure. */
     public static final String DEFAULT = "true";
+
+    /** The space of the relied-on reconcile's own cadence, beside the resolution's {@code closure/resolve}. */
+    private static final String RECONCILE = "closure/reconcile";
 
     private final Duration interval;
     private final List<ClosureSource> sources;
@@ -104,6 +111,7 @@ public final class ClosureTask implements MaintenanceTask {
 
     @Override
     public void repository(RepositoryContext context) throws IOException {
+        reconcile(context);
         if (!enabled(context.config())) {
             return;
         }
@@ -117,26 +125,37 @@ public final class ClosureTask implements MaintenanceTask {
                 context.config());
         long[] resolved = {0};
         long[] exposed = {0};
+        long[] indexed = {0};
         cadence.coordinates(inventory, release -> {
             try {
                 Optional<MetadataDocument> document = metadata.read(release.ecosystem(), release.coordinate(),
                         release.version());
                 Optional<ClosureSection.Closure> closure = document.flatMap(read -> ClosureSection.closure(
                         read.section(ClosureSection.TAG)));
-                if (closure.isEmpty()) {
+                boolean fresh = closure.isEmpty();
+                if (fresh) {
                     closure = resolve(through, release, context.now());
                     if (closure.isEmpty()) {
                         return;     // nothing installed serves the ecosystem; a source installed later resolves it
                     }
-                    metadata.mutate(release.ecosystem(), release.coordinate(), release.version(), ClosureSection.TAG,
-                            ClosureSection.record(closure.get()));
-                    resolved[0]++;
                 }
                 ExposureSection.Exposure derived = Exposures.derive(through, release.ecosystem(), closure.get(), risk,
                         context.now());
                 Optional<ExposureSection.Exposure> was = document.flatMap(read -> ExposureSection.exposure(
                         read.section(ExposureSection.TAG)));
-                if (was.isEmpty() || !was.get().sameAs(derived)) {
+                boolean changed = was.isEmpty() || !was.get().sameAs(derived);
+                // The rows go before the closure they index, and a pass that finds the closure recorded makes sure of
+                // them where they could be missing: a full pass, or an exposure naming a held version anew.
+                if (fresh || changed || cadence.full()) {
+                    indexed[0] += ReliedOn.index(through, release.ecosystem(), new ReliedOn.Row(context.repository(),
+                            release.coordinate(), release.version()), closure.get(), derived, fresh);
+                }
+                if (fresh) {
+                    metadata.mutate(release.ecosystem(), release.coordinate(), release.version(), ClosureSection.TAG,
+                            ClosureSection.record(closure.get()));
+                    resolved[0]++;
+                }
+                if (changed) {
                     metadata.mutate(release.ecosystem(), release.coordinate(), release.version(),
                             ExposureSection.TAG, ExposureSection.record(derived));
                     exposed[0]++;
@@ -148,9 +167,37 @@ public final class ClosureTask implements MaintenanceTask {
             }
         });
         cadence.completed(context.now(), !failed.any());
-        if (resolved[0] > 0 || exposed[0] > 0) {
-            LOGGER.info("Resolved {} closure(s) and re-derived {} exposure(s) in {}/{}", resolved[0], exposed[0],
-                    context.tenant(), context.repository());
+        if (resolved[0] > 0 || exposed[0] > 0 || indexed[0] > 0) {
+            LOGGER.info("Resolved {} closure(s), re-derived {} exposure(s) and indexed {} relied-on row(s) in {}/{}",
+                    resolved[0], exposed[0], indexed[0], context.tenant(), context.repository());
         }
+    }
+
+    /** On the reconcile's own full pass, which runs whether or not this repository resolves closures - what it holds
+     *  may be relied on by another's - remove the {@link ReliedOn} rows whose dependent no longer relies on what it
+     *  names. */
+    private static void reconcile(RepositoryContext context) throws IOException {
+        IncrementalPasses cadence = IncrementalPasses.over(context.store(), NAME, RECONCILE, context.config());
+        if (!cadence.full()) {
+            cadence.completed(context.now(), true);
+            return;
+        }
+        boolean clean = true;
+        try {
+            long removed = ReliedOn.reconcile(context.store(), context.repository(), named -> named.equals(
+                    context.repository()) ? Optional.of(context.store())
+                    : context.repository(named).map(RepositoryContext::store));
+            if (removed > 0) {
+                LOGGER.info("Removed {} relied-on row(s) no closure names any more in {}/{}", removed,
+                        context.tenant(), context.repository());
+            }
+        } catch (IOException | RuntimeException e) {
+            clean = false;
+            LOGGER.warn("Could not reconcile the relied-on rows of {}/{}", context.tenant(), context.repository(), e);
+            context.failures("The relied-on reconcile of " + context.tenant() + "/" + context.repository(),
+                    "Rows no closure names stay until the next full pass; the reader passes over them.")
+                    .record("relied-on", e);
+        }
+        cadence.completed(context.now(), clean);
     }
 }

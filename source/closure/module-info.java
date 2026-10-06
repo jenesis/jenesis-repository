@@ -16,7 +16,9 @@
  * answer winning; this module provides the first and the last. Evaluating a requirement in the walk is a discovered
  * {@link build.jenesis.repository.closure.RequirementGrammar}. Beside the closure the pass keeps what it reaches that
  * is held for review or carries findings ({@link build.jenesis.repository.closure.ExposureSection}), re-derived on each
- * full pass, which is the state a published version inherits from the copies it relies on.
+ * full pass, which is the state a published version inherits from the copies it relies on. The other way round, the
+ * pass indexes which published versions rely on each version a repository holds
+ * ({@link build.jenesis.repository.closure.ReliedOn}), read a page at a time from the copy's side.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -41,6 +43,8 @@ module build.jenesis.repository.closure {
             with build.jenesis.repository.closure.CarriedBill, build.jenesis.repository.closure.DeclaredClosure;
     provides build.jenesis.repository.maintenance.MaintenanceTaskProvider
             with build.jenesis.repository.closure.ClosureTaskProvider;
+    provides build.jenesis.repository.maintenance.StorageNamespace
+            with build.jenesis.repository.closure.ClosureStorageNamespace;
     provides build.jenesis.repository.settings.SettingsContributor
             with build.jenesis.repository.closure.ClosureSettingsContributor;
 }
