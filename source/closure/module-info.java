@@ -34,6 +34,7 @@
 module build.jenesis.repository.closure {
     requires transitive build.jenesis.repository.store;
     requires transitive build.jenesis.repository.closure.spi;
+    requires build.jenesis.repository.blobs;
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.definitions;
     requires build.jenesis.repository.dependents.spi;
