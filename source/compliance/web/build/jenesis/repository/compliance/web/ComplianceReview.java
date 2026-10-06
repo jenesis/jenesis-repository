@@ -17,6 +17,7 @@ import build.jenesis.repository.cleanup.StoredReport;
 import build.jenesis.repository.compliance.AdvisoryReport;
 import build.jenesis.repository.compliance.AdvisorySignal;
 import build.jenesis.repository.compliance.AdvisorySource;
+import build.jenesis.repository.compliance.ComplianceSources;
 import build.jenesis.repository.compliance.FeedRefresh;
 import build.jenesis.repository.compliance.HealthSource.Health;
 import build.jenesis.repository.compliance.HealthSource;
@@ -57,7 +58,7 @@ import io.micrometer.observation.ObservationRegistry;
  * signed-in tenant: the quarantine hold queue and its release/discard, the vulnerability panel and its rescan, the
  * persisted findings screen and its AI review decisions, and the license retro blast radius.
  */
-public class ComplianceReview extends TenantScope {
+public class ComplianceReview extends TenantScope implements AutoCloseable {
 
     /** How many weakest-scored coordinates one maintainer-health page carries; the rank index pages the rest. */
     private static final int HEALTH_PAGE_SIZE = 500;
@@ -79,6 +80,13 @@ public class ComplianceReview extends TenantScope {
     /** The deployment's effective configuration by bare key, or {@code null} to read the stored settings alone. */
     private final UnaryOperator<String> configuration;
 
+    /** The feeds and signals the panels read and the rescan asks, held for the review's life and resolved again only
+     *  when a setting they read moves - never once per page. */
+    private final ComplianceSources sources;
+
+    /** Whether {@link #sources} is this review's own, which it closes, rather than the deployment's. */
+    private final boolean ownsSources;
+
     /** A review over the stored settings alone, for a caller with no environment to read. */
     public ComplianceReview(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations,
                             AuditTrail audit, ConsoleActor actor) {
@@ -86,13 +94,40 @@ public class ComplianceReview extends TenantScope {
     }
 
     /**
-     * A review that resolves the feeds, signals and policies from {@code configuration}, the node's effective value of a
-     * bare key, as the node's own gate does, so a feed switched on by an environment variable reads as on.
+     * A review that resolves the policies from {@code configuration}, the node's effective value of a bare key, as the
+     * node's own gate does, and the feeds and signals over the same lookup, held for its life - so a feed switched on
+     * by an environment variable reads as on.
      */
     public ComplianceReview(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations,
                             AuditTrail audit, ConsoleActor actor, UnaryOperator<String> configuration) {
+        this(repositoryStore, current, observations, audit, actor, configuration, null);
+    }
+
+    /**
+     * A review reading the feeds and signals of {@code sources}, the deployment's own - the ones its gate screens with -
+     * or, where it is {@code null}, ones it resolves over {@code configuration} and holds for its life.
+     */
+    public ComplianceReview(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations,
+                            AuditTrail audit, ConsoleActor actor, UnaryOperator<String> configuration,
+                            ComplianceSources sources) {
         super(repositoryStore, current, observations, audit, actor);
         this.configuration = configuration;
+        this.ownsSources = sources == null;
+        this.sources = sources != null ? sources : new ComplianceSources(key -> {
+            try {
+                return effective(settings()).apply(key);
+            } catch (IOException unread) {
+                throw new UncheckedIOException(unread);
+            }
+        });
+    }
+
+    /** Close the feeds and signals this review resolved itself; the deployment's own close with the deployment. */
+    @Override
+    public void close() {
+        if (ownsSources) {
+            sources.close();
+        }
     }
 
     /** A key's value as the node applies it: the effective configuration's where it names one, else the stored
@@ -503,7 +538,7 @@ public class ComplianceReview extends TenantScope {
         Properties settings = settings();
         ArtifactStore store = scope(repository);
         return VulnerabilityReports.read(store, new StoreRepositoryInventory(store),
-                AdvisorySource.resolve(effective(settings)), AdvisorySignal.resolve(effective(settings)),
+                sources.advisories(), sources.advisorySignals(),
                 findingsLedger.map(provider -> provider.over(store)),
                 Reliance.over(store, repository, Optional.of(root.scope(tenant())),
                         name -> validRepository(name) ? Optional.of(scope(name)) : Optional.empty()),
@@ -548,8 +583,8 @@ public class ComplianceReview extends TenantScope {
 
     private StoredReport.Rows rescanNow(String repository) throws IOException {
         Properties settings = settings();
-        SequencedMap<String, AdvisorySource> feeds = AdvisorySource.named(effective(settings));
-        List<AdvisorySignal> signals = AdvisorySignal.resolve(effective(settings));
+        SequencedMap<String, AdvisorySource> feeds = sources.advisoryFeeds();
+        List<AdvisorySignal> signals = sources.advisorySignals();
         List<String> unrefreshed = FeedRefresh.refreshAll(signals);
         ArtifactStore store = scope(repository);
         Optional<Findings> ledger = findingsLedger.map(provider -> provider.over(store));
