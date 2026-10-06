@@ -171,7 +171,7 @@ class OsvMirrorSourceTest {
     }
 
     @Test
-    void a_rebuild_replaces_the_copy_whole_and_deletes_the_one_before() throws IOException {
+    void a_rebuild_replaces_the_copy_whole_and_deletes_the_one_before_the_copy_it_replaced() throws IOException {
         OsvMirrorSource mirror = source();
         mirror.mirror(Set.of("npm"));
         mirror.refresh();
@@ -188,8 +188,33 @@ class OsvMirrorSourceTest {
 
         assertThat(mirror.snapshot()).isNotEqualTo(first);
         assertThat(mirror.advisories("npm", "evil", "1.0.0")).as("what the new archive no longer holds").isEmpty();
-        assertThat(generations()).as("one generation serving, the one before deleted").hasSize(1)
+        Set<String> second = generations();
+        assertThat(second).as("the new generation serving, the one it replaced kept for a node still reading it")
+                .hasSize(2).containsAll(generations);
+
+        now.set(START.plus(Duration.ofDays(16)));
+        mirror.refresh();
+
+        assertThat(generations()).as("the next build deletes the generation two builds back").hasSize(2)
                 .doesNotContainAnyElementsOf(generations);
+    }
+
+    @Test
+    void a_node_holding_the_copy_it_read_still_finds_its_records_after_another_node_rebuilds() throws IOException {
+        OsvMirrorSource reader = source();
+        reader.mirror(Set.of("npm"));
+        reader.refresh();
+        assertThat(reader.advisories("npm", "evil", "1.0.0")).as("read once, so its state is held").hasSize(1);
+
+        // Another node rebuilds inside the window the reader holds the state it read for.
+        now.set(START.plus(Duration.ofSeconds(10)));
+        OsvMirrorSource rebuilder = source(Duration.ofSeconds(5));
+        rebuilder.mirror(Set.of("npm"));
+        rebuilder.refresh();
+
+        assertThat(reader.advisories("npm", "evil", "1.0.0"))
+                .as("the generation the reader still names has not been deleted under it - a missing package "
+                        + "document would read as clean").hasSize(1);
     }
 
     @Test
@@ -206,6 +231,10 @@ class OsvMirrorSourceTest {
     }
 
     private OsvMirrorSource source() {
+        return source(Duration.ofDays(7));
+    }
+
+    private OsvMirrorSource source(Duration rebuild) {
         return OsvMirrorSource.responding(request -> {
             String path = request.uri().getPath();
             asked.add(path);
@@ -222,7 +251,7 @@ class OsvMirrorSourceTest {
                     yield held.containsKey(id) ? FeedResponse.of(200, held.get(id)) : FeedResponse.of(404, "");
                 }
             };
-        }, () -> space, clock, Duration.ofDays(7));
+        }, () -> space, clock, rebuild);
     }
 
     /** Add {@code json} as record {@code id} of {@code ecosystem}'s export, modified at {@code modified}, at the head of

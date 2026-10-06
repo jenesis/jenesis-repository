@@ -56,16 +56,17 @@ final class OsvMirror {
         this.clock = clock;
     }
 
-    /** What an ecosystem's copy is: the generation a lookup reads, when it was built, when it was last drawn, and the
-     *  position in the change list it was drawn to. */
-    record State(String generation, Instant built, Instant drawn, Instant position) {
+    /** What an ecosystem's copy is: the generation a lookup reads, when it was built, when it was last drawn, the
+     *  position in the change list it was drawn to, and the generation it replaced - kept until the next build, since
+     *  a node may still read it through a state it holds - or {@code null} for the first. */
+    record State(String generation, Instant built, Instant drawn, Instant position, String previous) {
     }
 
     /** The ecosystem's current copy, OSV's name of it, or empty before its first build lands. */
     Optional<State> state(String osvName) throws IOException {
         return readJson(current(osvName)).map(node -> new State(node.path("generation").asString(),
                 Instant.parse(node.path("built").asString()), Instant.parse(node.path("drawn").asString()),
-                Instant.parse(node.path("position").asString())));
+                Instant.parse(node.path("position").asString()), node.path("previous").asString(null)));
     }
 
     /** The ecosystems, the product's names, the mirror is asked to keep. */
@@ -96,8 +97,10 @@ final class OsvMirror {
     }
 
     /**
-     * Build a new copy of {@code osvName}, the product's {@code product}, from its whole export, name it current and
-     * delete the one it replaces.
+     * Build a new copy of {@code osvName}, the product's {@code product}, from its whole export, name it current, and
+     * delete the one before the copy it replaces. The copy it replaces stays one build longer: a node holds the state
+     * it read for {@link OsvMirrorSource#STATE_TTL}, and deleting what that state names would answer its lookups from
+     * missing package documents - no records, which reads as clean.
      *
      * @throws FeedException the export could not be drawn; nothing is named current and the copy before keeps serving
      * @throws IOException   the mirror's own space could not be read or written
@@ -127,9 +130,11 @@ final class OsvMirror {
             throw e;
         }
         Instant now = clock.instant();
-        writeState(osvName, new State(generation, now, now, position));
-        if (before.isPresent() && !before.get().generation().equals(generation)) {
-            delete(osvName + "/" + before.get().generation());
+        String replaced = before.map(State::generation).filter(named -> !named.equals(generation)).orElse(null);
+        writeState(osvName, new State(generation, now, now, position, replaced));
+        String retired = before.map(State::previous).orElse(null);
+        if (retired != null && !retired.equals(generation) && !retired.equals(replaced)) {
+            delete(osvName + "/" + retired);
         }
     }
 
@@ -150,7 +155,8 @@ final class OsvMirror {
         Optional<OsvChangeList.Listed> answered = OsvChangeList.read(client, export, osvName, state.position());
         Set<AdvisorySource.Package> changed = new LinkedHashSet<>();
         if (answered.isEmpty()) {
-            writeState(osvName, new State(state.generation(), state.built(), clock.instant(), state.position()));
+            writeState(osvName, new State(state.generation(), state.built(), clock.instant(), state.position(),
+                    state.previous()));
             return Optional.of(new Update(changed, 0));
         }
         if (answered.get().exhausted()) {
@@ -167,13 +173,14 @@ final class OsvMirror {
             left--;
             reached = line.modified();
         }
-        writeState(osvName, new State(state.generation(), state.built(), clock.instant(), reached));
+        writeState(osvName, new State(state.generation(), state.built(), clock.instant(), reached, state.previous()));
         return Optional.of(new Update(changed, budget - left));
     }
 
     /** Have the next refresh build {@code osvName} again, its copy {@code state} serving until it does. */
     void markForRebuild(String osvName, State state) throws IOException {
-        writeState(osvName, new State(state.generation(), Instant.EPOCH, state.drawn(), state.position()));
+        writeState(osvName, new State(state.generation(), Instant.EPOCH, state.drawn(), state.position(),
+                state.previous()));
     }
 
     /** File every record of the archive {@code body} into {@code generation}, a batch at a time. */
@@ -357,6 +364,9 @@ final class OsvMirror {
         node.put("built", state.built().toString());
         node.put("drawn", state.drawn().toString());
         node.put("position", state.position().toString());
+        if (state.previous() != null) {
+            node.put("previous", state.previous());
+        }
         writeJson(current(osvName), node);
     }
 
@@ -374,14 +384,10 @@ final class OsvMirror {
         }
     }
 
+    /** The JSON document at {@code key}, empty where none is: one read, so a document deleted between a probe and
+     *  an open cannot fail the read. */
     private Optional<JsonNode> readJson(String key) throws IOException {
-        ArtifactStore store = space.get();
-        if (!store.exists(key)) {
-            return Optional.empty();
-        }
-        try (InputStream in = store.open(key)) {
-            return Optional.of(JSON.readTree(in));
-        }
+        return space.get().readVersioned(key).map(stored -> JSON.readTree(stored.content()));
     }
 
     private void writeJson(String key, JsonNode node) throws IOException {
