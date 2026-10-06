@@ -90,6 +90,14 @@ public final class IncrementalPasses {
 
     public static final int DEFAULT_FULL_EVERY = 24;
 
+    /** A cadence dial: the setting naming every how many passes one is full, and what it is when unset. A pass that
+     *  is driven by what changed between its full passes keeps a dial of its own with a longer default. */
+    public record Every(String setting, int fallback) {
+    }
+
+    /** The shared dial, {@value #FULL_EVERY}, at {@value #DEFAULT_FULL_EVERY}. */
+    public static final Every SCANS = new Every(FULL_EVERY, DEFAULT_FULL_EVERY);
+
     /** The lookback dial, shared the same way: {@code jenrepo.scan-lookback}. How far BEFORE the last full pass's
      *  stamp an incremental pass still looks - see the gap described above, which it closes. */
     public static final String LOOKBACK = "scan-lookback";
@@ -129,6 +137,12 @@ public final class IncrementalPasses {
      */
     public static IncrementalPasses over(ArtifactStore store, String task, String passesKey, Stamp lastFull,
                                          UnaryOperator<String> config) throws IOException {
+        return over(store, task, passesKey, lastFull, config, SCANS);
+    }
+
+    /** {@link #over(ArtifactStore, String, String, Stamp, UnaryOperator)}, full every {@code every} passes. */
+    public static IncrementalPasses over(ArtifactStore store, String task, String passesKey, Stamp lastFull,
+                                         UnaryOperator<String> config, Every every) throws IOException {
         StoredCounter passes = new StoredCounter(store, passesKey);
         Optional<Instant> since = lastFull.read();
         Duration lookback = lookback(config);
@@ -136,10 +150,10 @@ public final class IncrementalPasses {
             return new IncrementalPasses(passes, lastFull, since, lookback, true, "no full pass has landed yet");
         }
         long count = passes.read();
-        int every = fullEvery(config);
-        if (count + 1 >= every) {
+        int full = fullEvery(config, every);
+        if (count + 1 >= full) {
             return new IncrementalPasses(passes, lastFull, since, lookback, true,
-                    "the " + (count + 1) + "th pass since the last full one, at " + FULL_EVERY + "=" + every);
+                    "the " + (count + 1) + "th pass since the last full one, at " + every.setting() + "=" + full);
         }
         Optional<ArtifactStore> root = Requests.root();
         if (root.isPresent()) {
@@ -156,7 +170,13 @@ public final class IncrementalPasses {
     /** {@link #over(ArtifactStore, String, String, Stamp, UnaryOperator)} with the pass's own stamp under {@code space}. */
     public static IncrementalPasses over(ArtifactStore store, String task, String space, UnaryOperator<String> config)
             throws IOException {
-        return over(store, task, space + "-passes", new Stamp(store, space + "-full"), config);
+        return over(store, task, space, config, SCANS);
+    }
+
+    /** {@link #over(ArtifactStore, String, String, UnaryOperator)}, full every {@code every} passes. */
+    public static IncrementalPasses over(ArtifactStore store, String task, String space, UnaryOperator<String> config,
+                                         Every every) throws IOException {
+        return over(store, task, space + "-passes", new Stamp(store, space + "-full"), config, every);
     }
 
     /** Whether this pass visits every published version. */
@@ -281,14 +301,20 @@ public final class IncrementalPasses {
     }
 
     public static int fullEvery(UnaryOperator<String> config) {
-        String value = config == null ? null : config.apply(FULL_EVERY);
+        return fullEvery(config, SCANS);
+    }
+
+    /** Every how many passes one is full, as {@code config} sets {@code every}'s dial - its fallback where it is
+     *  unset or no number. */
+    public static int fullEvery(UnaryOperator<String> config, Every every) {
+        String value = config == null ? null : config.apply(every.setting());
         if (value == null || value.isBlank()) {
-            return DEFAULT_FULL_EVERY;
+            return every.fallback();
         }
         try {
             return Math.max(1, Integer.parseInt(value.trim()));
         } catch (NumberFormatException _) {
-            return DEFAULT_FULL_EVERY;
+            return every.fallback();
         }
     }
 

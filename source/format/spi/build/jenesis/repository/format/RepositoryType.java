@@ -24,6 +24,17 @@ public record RepositoryType(String name, List<RepositoryFormat> formats, String
         publishers = Set.copyOf(publishers);
     }
 
+    /** The ecosystems this type's formats declare ({@link EcosystemLayout}): what a repository of it can hold. */
+    public Set<String> ecosystems() {
+        Set<String> ecosystems = new TreeSet<>();
+        for (RepositoryFormat format : formats) {
+            if (format instanceof EcosystemLayout layout) {
+                ecosystems.add(layout.ecosystem());
+            }
+        }
+        return Collections.unmodifiableSet(ecosystems);
+    }
+
     /** Whether a write {@code format} claims is one the repository takes. */
     public boolean publishes(RepositoryFormat format) {
         return publishers.contains(format.name());
