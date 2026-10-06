@@ -9,7 +9,9 @@ import build.jenesis.repository.closure.spi.ClosureWalk;
 import build.jenesis.repository.closure.spi.VersionBills;
 import build.jenesis.repository.closure.spi.ExposureSection;
 import build.jenesis.repository.closure.spi.Reliance;
+import build.jenesis.repository.closure.spi.RetiredClosures;
 import build.jenesis.repository.closure.ReliedOn;
+import build.jenesis.repository.cleanup.Release;
 import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.dependents.spi.DependentsQuery;
 import build.jenesis.repository.dependents.spi.DependentsQueryProvider;
@@ -901,6 +903,62 @@ class ClosureTaskTest {
 
         assertThat(declarations("org.dep:missing")).isEmpty();
         assertThat(declaredQuery().declarationsBuiltAt()).isEmpty();
+    }
+
+    @Test
+    void a_closure_cleared_for_an_attached_bill_takes_its_rows_back_before_it_is_resolved_again()
+            throws IOException {
+        metadata.mutate("Maven", "org.acme:app", "1.0", DependencySection.TAG, DependencySection.record(APP,
+                List.of(new DependencySection.Declared("org.dep:lib", "1.0")), NOW));
+        cached("lib", "1.0");
+        cached("other", "1.0");
+        pass(null, NOW.plus(Duration.ofHours(1)));
+        assertThat(rows()).as("app relies on lib").singleElement().asString().contains("lib");
+
+        VersionBills.attach(store, "Maven", "org.acme:app", "1.0", """
+                {"bomFormat":"CycloneDX","specVersion":"1.5",
+                 "metadata":{"component":{"bom-ref":"root","name":"app","version":"1.0"}},
+                 "components":[{"bom-ref":"o","purl":"pkg:maven/org.dep/other@1.0","name":"other",
+                   "version":"1.0"}]}""".getBytes(StandardCharsets.UTF_8));
+        pass(null, NOW.plus(Duration.ofHours(2)));
+
+        assertThat(rows()).as("an incremental pass, whose reconcile does not run: the bill's row, and lib's taken back")
+                .singleElement().asString().contains("other");
+    }
+
+    @Test
+    void an_evicted_dependent_takes_its_rows_back_its_declared_ones_at_once() throws IOException {
+        metadata.mutate("Maven", "org.acme:app", "1.0", DependencySection.TAG, DependencySection.record(APP,
+                List.of(new DependencySection.Declared("org.dep:lib", "1.0")), NOW));
+        cached("lib", "1.0");
+        pass(null, NOW.plus(Duration.ofHours(1)));
+        assertThat(rows()).hasSize(1);
+        assertThat(declaredRows()).hasSize(1);
+
+        new StoreRepositoryInventory(store).evict(new Release("Maven", "org.acme:app", "1.0", NOW, NOW, false,
+                false));
+        assertThat(declaredRows()).as("held here, so taken with the version").isEmpty();
+        pass(null, NOW.plus(Duration.ofHours(2)));
+
+        assertThat(rows()).as("the next pass, whose reconcile does not run, takes back what it relied on").isEmpty();
+    }
+
+    @Test
+    void a_retired_closure_leaves_the_rows_the_versions_closure_writes_now() throws IOException {
+        metadata.mutate("Maven", "org.acme:app", "1.0", DependencySection.TAG, DependencySection.record(APP,
+                List.of(new DependencySection.Declared("org.dep:lib", "1.0")), NOW));
+        cached("lib", "1.0");
+        pass(null, NOW.plus(Duration.ofHours(1)));
+        // Retired while the closure stands - an eviction and a re-publish resolved before this repository's pass.
+        RetiredClosures.retire(store, "Maven", "org.acme:app", "1.0",
+                metadata.read("Maven", "org.acme:app", "1.0").orElseThrow());
+
+        pass(null, NOW.plus(Duration.ofHours(2)));
+
+        assertThat(rows()).as("the closure that stands still relies on lib").hasSize(1);
+        List<String> retired = new ArrayList<>();
+        store.scan(RetiredClosures.ROOT, "", 10, listed -> retired.add(listed.key()));
+        assertThat(retired).as("the record is done with").isEmpty();
     }
 
     private DependentsQuery declaredQuery() {

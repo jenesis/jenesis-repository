@@ -4,6 +4,7 @@ import module java.base;
 import build.jenesis.repository.closure.spi.ClosureSection;
 import build.jenesis.repository.closure.spi.ClosureSource;
 import build.jenesis.repository.closure.spi.ClosureWalk;
+import build.jenesis.repository.closure.spi.RetiredClosures;
 import build.jenesis.repository.closure.spi.ExposureSection;
 import build.jenesis.repository.closure.spi.VersionBills;
 import module org.slf4j;
@@ -50,7 +51,11 @@ import build.jenesis.repository.store.RepositoryDocument;
  * re-derives their exposure first - so a release follows a new finding or hold on a copy it relies on within a pass of
  * each repository, with no feed asked and without waiting for its full pass. A package a carried bill names in another
  * ecosystem is indexed by coordinate for the whole tenant, its copies looked up in every repository of the tenant and
- * a change to any of them followed the same way; the tenant hook reconciles those rows.
+ * a change to any of them followed the same way; the tenant hook reconciles those rows. A closure a version here gave
+ * up - evicted, or cleared to be resolved again - has its rows taken back from its side first
+ * ({@link RetiredClosures}), so the reconcile is the backstop for what a pass could not reach rather than the way rows
+ * go. The reconcile lists the rows alone, never the store, which is why it keeps its own cadence rather than riding the
+ * repository walk: a walk sees one repository, and a row here names a dependent whose document lies in another.
  *
  * <p>Lease-owned, since it writes the version documents; idempotent, since a crash leaves the versions it had not
  * reached without a section, which the next pass reaches. A version whose resolution fails is contained, reported, and
@@ -168,6 +173,7 @@ public final class ClosureTask implements MaintenanceTask {
     @Override
     public void repository(RepositoryContext context) throws IOException {
         reconcile(context);
+        retire(context);
         propagate(context);
         if (!enabled(context.config())) {
             ReliedOn.STALE.drain(context.store(), DRAIN, _ -> {
@@ -313,6 +319,46 @@ public final class ClosureTask implements MaintenanceTask {
                 failed.record(release.ecosystem() + ' ' + release.coordinate() + ':' + release.version(), e);
             }
         }
+    }
+
+    /** Take back the rows the closures this repository's versions gave up ({@link RetiredClosures}) wrote in the
+     *  repositories they reached, less those each version's closure now writes - before anything here is resolved
+     *  again, so a closure resolved anew keeps its rows. Runs whether or not this repository resolves closures; a
+     *  failure is contained and reported, and the reconcile removes what it missed. */
+    private static void retire(RepositoryContext context) {
+        try {
+            ClosureWalk walk = ClosureWalk.of(context);
+            MetadataStore metadata = MetadataProvider.installed().over(context.store());
+            Optional<ArtifactStore> tenant = context.tenantView().store();
+            Map<Object, ArtifactStore> touched = new HashMap<>();
+            RetiredClosures.drain(context.store(), DRAIN, retired -> {
+                Optional<ClosureSection.Closure> closure = ClosureSection.closure(retired.closure());
+                if (closure.isEmpty()) {
+                    return;
+                }
+                Optional<MetadataDocument> now = metadata.read(retired.ecosystem(), retired.coordinate(),
+                        retired.version());
+                ReliedOn.retire(walk, retired.ecosystem(), new ReliedOn.Row(context.repository(),
+                                retired.coordinate(), retired.version()), closure.get(),
+                        reached(ExposureSection.exposure(retired.exposure())),
+                        now.flatMap(document -> ClosureSection.closure(document.section(ClosureSection.TAG))),
+                        reached(now.flatMap(document -> ExposureSection.exposure(
+                                document.section(ExposureSection.TAG)))), tenant, touched);
+            });
+            for (ArtifactStore holder : touched.values()) {
+                ReliedOn.epoch(holder).bump();
+            }
+        } catch (IOException | RuntimeException e) {
+            LOGGER.warn("Could not take back the rows of the closures {}/{} gave up", context.tenant(),
+                    context.repository(), e);
+            context.failures("The closure retirement of " + context.tenant() + "/" + context.repository(),
+                    "Rows a retired closure wrote stay until their reconcile; the reader passes over them.")
+                    .record("retired", e);
+        }
+    }
+
+    private static List<ExposureSection.Reached> reached(Optional<ExposureSection.Exposure> exposure) {
+        return exposure.map(ExposureSection.Exposure::reached).orElse(List.of());
     }
 
     /** Tell the repositories relying on what this one holds that it changed: each version whose findings or holds

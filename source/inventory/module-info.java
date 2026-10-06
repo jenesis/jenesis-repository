@@ -35,6 +35,7 @@ module build.jenesis.repository.inventory {
     requires build.jenesis.repository.settings;
     exports build.jenesis.repository.inventory;
     uses build.jenesis.repository.inventory.DownloadTrackerProvider;
+    uses build.jenesis.repository.inventory.EvictionObserver;
     provides build.jenesis.repository.walk.WalkConsumer
             with build.jenesis.repository.inventory.InventoryReconcileConsumer,
                     build.jenesis.repository.inventory.InventoryBackfillConsumer,

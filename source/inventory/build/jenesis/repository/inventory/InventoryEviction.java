@@ -6,6 +6,8 @@ import build.jenesis.repository.cleanup.Release;
 import build.jenesis.repository.findings.Findings;
 import build.jenesis.repository.health.HealthLedger;
 import build.jenesis.repository.metadata.MetadataKey;
+import build.jenesis.repository.metadata.MetadataProvider;
+import build.jenesis.repository.metadata.MetadataDocument;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Retries;
@@ -26,6 +28,8 @@ import build.jenesis.repository.format.ArtifactLayout;
  * membership check, last-version query and its store-key/codec helpers rather than duplicating them.
  */
 final class InventoryEviction {
+
+    private static final System.Logger LOGGER = System.getLogger(InventoryEviction.class.getName());
 
     private final StoreRepositoryInventory inventory;
     private final ArtifactStore store;
@@ -187,6 +191,9 @@ final class InventoryEviction {
         // worse, silently auto-pin a later republish of the same version with no human decision behind it.
         deleteIfPresent(StoreRepositoryInventory.pinnedKey(
                 release.ecosystem(), release.coordinate(), release.version()));
+        // What a plug-in keeps outside the document, naming the version, is its to take back while the document can
+        // still say what it named.
+        tellObservers(release);
         // The version's consolidated metadata document goes with the artifact it describes: it carries the
         // publish facts, the downloads and the licenses, so evicting the version removes the whole per-version
         // document.
@@ -392,6 +399,30 @@ final class InventoryEviction {
     /** Delete a small sidecar if it exists - an eviction tolerates a sidecar that was never written. Returns whether it
      *  actually deleted something, so a caller can bump a derived-index eviction epoch only when a home really went (and
      *  never for a version/coordinate that never had one). */
+    /** Tell every installed {@link EvictionObserver} that {@code release} is being evicted, with its document as it
+     *  stands; a version with no document tells nothing, and an observer's failure is logged, never raised. */
+    private void tellObservers(Release release) throws IOException {
+        List<EvictionObserver> observers = EvictionObserver.installed();
+        if (observers.isEmpty()) {
+            return;
+        }
+        Optional<MetadataDocument> document = MetadataProvider.installed().over(store).read(release.ecosystem(),
+                release.coordinate(), release.version());
+        if (document.isEmpty()) {
+            return;
+        }
+        for (EvictionObserver observer : observers) {
+            try {
+                observer.evicting(store, release.ecosystem(), release.coordinate(), release.version(),
+                        document.get());
+            } catch (IOException | RuntimeException e) {
+                LOGGER.log(System.Logger.Level.WARNING, "An eviction observer could not take back what it kept for "
+                        + release.ecosystem() + " " + release.coordinate() + ":" + release.version()
+                        + "; its reconcile removes it", e);
+            }
+        }
+    }
+
     private boolean deleteIfPresent(String key) throws IOException {
         if (store.readVersioned(key).isPresent()) {
             store.delete(key);
