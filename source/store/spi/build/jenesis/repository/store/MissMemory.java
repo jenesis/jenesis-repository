@@ -141,18 +141,27 @@ public final class MissMemory {
 
     /** Remember that {@code key} in {@code store} was read and found absent by a read begun at {@code mark} - unless
      *  the key was forgotten since, since a write that landed between the read and this call would otherwise be
-     *  answered absent for the whole ttl. */
+     *  answered absent for the whole ttl. A forget racing the remembering itself is caught by asking again once the
+     *  entry is in. */
     public void remember(ArtifactStore store, String key, long mark) {
         if (ttl.isZero()) {
             return;
         }
         String entry = key(store, key);
-        Long forgot = forgotten.getIfPresent(entry);
-        if (forgot != null && forgot > mark) {
+        if (forgottenSince(entry, mark)) {
             return;
         }
         misses.put(entry, clock.instant());
+        if (forgottenSince(entry, mark)) {
+            misses.invalidate(entry);
+            return;
+        }
         recorded.incrementAndGet();
+    }
+
+    private boolean forgottenSince(String entry, long mark) {
+        Long forgot = forgotten.getIfPresent(entry);
+        return forgot != null && forgot > mark;
     }
 
     /** Forget {@code key} in {@code store} - what every write and delete through a {@link NodeMemoStore} does, so
