@@ -32,15 +32,19 @@ class AdvisoryFeedSelectionTest {
 
     @Test
     void a_repository_naming_no_feed_is_screened_by_every_one_switched_on() {
-        assertThat(AdvisorySource.selected(enabled, _ -> null)).isSameAs(enabled);
-        assertThat(AdvisorySource.selected(enabled, repository(""))).isSameAs(enabled);
+        assertThat(AdvisorySource.selected(enabled, _ -> null).sequencedKeySet())
+                .as("every feed switched on, in the deployment's order").containsExactlyElementsOf(enabled.keySet());
+        assertThat(AdvisorySource.selected(enabled, repository("")).sequencedKeySet())
+                .containsExactlyElementsOf(enabled.keySet());
     }
 
     @Test
     void a_repository_names_its_feeds_and_none_names_none() {
         assertThat(AdvisorySource.selected(enabled, repository(" osv "))).containsOnlyKeys("osv");
         assertThat(AdvisorySource.selected(enabled, repository("osv,github")).sequencedKeySet())
-                .as("in the deployment's order").containsExactly("github", "osv");
+                .as("in the order the setting names them").containsExactly("osv", "github");
+        assertThat(AdvisorySource.selected(enabled, repository("github,osv,github")).sequencedKeySet())
+                .as("a name given twice counted once").containsExactly("github", "osv");
         assertThat(AdvisorySource.selected(enabled, repository("NONE"))).isEmpty();
     }
 
