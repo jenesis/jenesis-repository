@@ -231,7 +231,8 @@ public final class ProxyScreen {
                 // assessed exactly as the UNCLAIMED download leg assesses them without reading a body. A withheld
                 // metadata answer is the same empty miss the other two legs return; a denied coordinate must not be
                 // answerable as "exists, N bytes" just because the client asked without a body.
-                Screening screening = assessUnclaimed(path, released(path, head.get().header("last-modified")));
+                Screening screening = withVersion(path,
+                        assessUnclaimed(path, released(path, head.get().header("last-modified"))));
                 return screening.verdict() == Verdict.ALLOW ? head : Optional.empty();
             }
 
@@ -248,8 +249,8 @@ public final class ProxyScreen {
                         return pulled;   // an upstream miss - nothing to screen or withhold
                     }
                     ProxyFormat.Download rawResponse = pulled.get();
-                    Screening screening = unversioned(path,
-                            assessUnclaimed(path, released(path, rawResponse.header("last-modified"))));
+                    Screening screening = unversioned(path, withVersion(path,
+                            assessUnclaimed(path, released(path, rawResponse.header("last-modified")))));
                     if (screening.verdict() == Verdict.ALLOW) {
                         log(path, screening);
                         return pulled;
@@ -282,8 +283,8 @@ public final class ProxyScreen {
                 InputStream continued = truncated
                         ? new SequenceInputStream(new ByteArrayInputStream(new byte[]{(byte) next}), body)
                         : body;
-                Screening screening = unversioned(path,
-                        assess(path, prefix, released(path, response.header("last-modified")), truncated, url));
+                Screening screening = unversioned(path, withVersion(path,
+                        assess(path, prefix, released(path, response.header("last-modified")), truncated, url)));
                 if (screening.verdict() == Verdict.ALLOW) {
                     log(path, screening);
                     return Optional.of(new ProxyFormat.Download(response.status(),
@@ -317,8 +318,8 @@ public final class ProxyScreen {
 
     Verdict screen(String path, byte[] body, Instant lastModified, String upstream) throws IOException {
         // The buffered fetch body is the COMPLETE document, never a bounded prefix, so it is never truncated.
-        Screening screening = unversioned(path, assess(path, body, versioned(path) ? lastModified : null, false,
-                upstream == null ? null : URI.create(upstream)));
+        Screening screening = unversioned(path, withVersion(path, assess(path, body,
+                versioned(path) ? lastModified : null, false, upstream == null ? null : URI.create(upstream))));
         if (screening.verdict() == Verdict.QUARANTINE) {
             quarantine(path, new ByteArrayInputStream(body), upstream);
         }
@@ -352,6 +353,32 @@ public final class ProxyScreen {
         List<String> reasons = new ArrayList<>(screening.reasons());
         reasons.add(UNVERSIONED_REASON);
         return new Screening(Verdict.REJECT, screening.coordinate(), reasons, screening.rules(), screening.complete());
+    }
+
+    /**
+     * {@code screening} with a file whose version has another file held for review held with it: a version is reviewed
+     * whole, as the publish chain holds a file arriving for a held version, and a sibling fetched after the hold - a
+     * sources jar, another wheel, another platform's archive - would otherwise serve beside files a reviewer has not
+     * cleared. Held whatever the repository's screening mode, since the version itself is. A refusal stays a refusal,
+     * and a path no installed layout maps to a version is judged alone. One bounded listing of the version's held
+     * paths, on a fill only.
+     */
+    private Screening withVersion(String path, Screening screening) throws IOException {
+        if (screening.verdict() != Verdict.ALLOW) {
+            return screening;
+        }
+        ComplianceGate.Subject subject = pathDerivedSubject(path);
+        if (subject.ecosystem().isEmpty() || subject.version().isEmpty() || !HeldSubjects.heldBesides(store,
+                subject.ecosystem(), subject.coordinate(), subject.version(), path)) {
+            return screening;
+        }
+        List<String> reasons = new ArrayList<>(screening.reasons());
+        reasons.add(subject.coordinate() + ":" + subject.version()
+                + " is held for review, so a file fetched for it is held with it");
+        List<String> rules = new ArrayList<>(screening.rules());
+        rules.add(ComplianceGate.VERSION_HELD_RULE);
+        return new Screening(Verdict.QUARANTINE, screening.coordinate(), reasons, rules, screening.complete(),
+                Verdict.QUARANTINE, false, screening.pending());
     }
 
     /** Why a withheld document naming no version was refused rather than held for review. */
