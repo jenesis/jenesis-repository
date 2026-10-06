@@ -1,4 +1,0 @@
-build.jenesis.repository.gate.store.InspectionSettingsContributor
-build.jenesis.repository.gate.store.QuarantineSettingsContributor
-build.jenesis.repository.gate.store.WithheldReconcileSettingsContributor
-build.jenesis.repository.gate.store.ListingRebuildSettingsContributor

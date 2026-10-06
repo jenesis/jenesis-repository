@@ -1,3 +1,0 @@
-build.jenesis.repository.inventory.InventoryReconcileConsumer
-build.jenesis.repository.inventory.InventoryBackfillConsumer
-build.jenesis.repository.inventory.TornWriteConsumer
