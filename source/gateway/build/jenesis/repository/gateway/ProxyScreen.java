@@ -133,7 +133,9 @@ public final class ProxyScreen {
 
     private ProxyScreen(ComplianceGate gate, ArtifactStore store, int holdDays, boolean withholdIncomplete,
                         ScreeningMode mode, Runnable pendingNotice) {
-        this.gate = gate;
+        // The feeds the repository selects among the deployment's, read through the effective settings the request,
+        // or the pass, binds for it.
+        this.gate = gate == null ? null : gate.screening(store);
         this.store = store;
         this.publication = new Publication(store);
         this.holdDays = holdDays;

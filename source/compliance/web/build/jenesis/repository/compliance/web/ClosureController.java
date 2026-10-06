@@ -39,14 +39,24 @@ public class ClosureController {
     private final Repositories repositories;
     private final RepositoryRouting routing;
     private final Supplier<SequencedMap<String, AdvisorySource>> feeds;
+    private final BiFunction<String, String, UnaryOperator<String>> settings;
 
     /** The endpoint over {@code feeds}, the advisory feeds switched on, asked at each answer so a feed switched on is
-     *  the one it names. */
+     *  the one it names, and the deployment's settings alone. */
     public ClosureController(Repositories repositories, RepositoryRouting routing,
                              Supplier<SequencedMap<String, AdvisorySource>> feeds) {
+        this(repositories, routing, feeds, (_, _) -> null);
+    }
+
+    /** As above, with {@code settings} answering a repository's effective settings by tenant and repository, so a
+     *  cached copy names the feeds its repository selects. */
+    public ClosureController(Repositories repositories, RepositoryRouting routing,
+                             Supplier<SequencedMap<String, AdvisorySource>> feeds,
+                             BiFunction<String, String, UnaryOperator<String>> settings) {
         this.repositories = repositories;
         this.routing = routing;
         this.feeds = feeds;
+        this.settings = settings;
     }
 
     /** One version's closure: {@code resolved} is when the pass resolved it, {@code kind} which kind of source
@@ -147,7 +157,8 @@ public class ClosureController {
                 closure == null ? List.of() : closure.components(), closure == null ? List.of() : closure.cuts(),
                 exposure.map(found -> new ExposureView(found.derived().toString(), found.examined(), found.held(),
                         found.vulnerable(), found.reached())).orElse(null),
-                answer.get().state() == ClosureSection.State.CACHED ? ScreenedThrough.cached(ecosystem, feeds.get())
+                answer.get().state() == ClosureSection.State.CACHED ? ScreenedThrough.cached(ecosystem, feeds.get(),
+                        settings.apply(tenant, repo))
                         : ScreenedThrough.published(closure != null));
     }
 }

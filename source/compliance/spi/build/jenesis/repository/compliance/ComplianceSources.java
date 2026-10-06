@@ -37,13 +37,13 @@ public final class ComplianceSources implements AutoCloseable {
         return feeds.get();
     }
 
-    /** The advisory feeds switched on, merged into the one source the gate screens with; {@link AdvisorySource#none()}
-     *  when none is. */
+    /** The advisory feeds switched on, merged into the one source the gate screens with - which a repository's
+     *  {@value AdvisorySource#SELECTION} narrows - and {@link AdvisorySource#none()} when none is. */
     public AdvisorySource advisories() {
         SequencedMap<String, AdvisorySource> current = advisoryFeeds();
         Merged last = merged;
         if (last == null || last.feeds() != current) {
-            last = new Merged(current, AdvisorySource.resolve(current.values()));
+            last = new Merged(current, AdvisorySource.resolve(current));
             merged = last;
         }
         return last.source();

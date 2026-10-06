@@ -119,13 +119,14 @@ public final class ReanalysisTask implements MaintenanceTask {
         // by name, since a delisting clears holds on old copies the incremental leg cannot see. A version published
         // here is asked of no feed, so the copies an upstream served are what this pass re-analyses.
         IncrementalPasses cadence = IncrementalPasses.over(store, name(), "findings/reanalysis", context.config());
+        AdvisorySource asking = AdvisorySource.forRepository(advisories, config);
         cadence.cached(inventory, copy -> {
             String eco = copy.ecosystem();
             String coordinate = copy.coordinate();
             String version = copy.version();
             AdvisorySource.Query asked = copy.asked();
             List<String> kevCves = knownExploited.listed(
-                    advisories.advisories(asked.ecosystem(), asked.coordinate(), asked.version()));
+                    asking.advisories(asked.ecosystem(), asked.coordinate(), asked.version()));
             if (!kevCves.isEmpty()) {
                 // still actively exploited: keep the finding current
                 raiseActive(ledger, context, copy, kevCves, failed);

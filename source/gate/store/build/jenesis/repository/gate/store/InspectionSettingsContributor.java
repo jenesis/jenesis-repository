@@ -1,6 +1,7 @@
 package build.jenesis.repository.gate.store;
 
 import module java.base;
+import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.QualityInspector;
 import build.jenesis.repository.compliance.ScreeningMode;
 import build.jenesis.repository.settings.Setting;
@@ -17,7 +18,8 @@ import build.jenesis.repository.settings.SettingsContributor;
  *
  * <p>Beside it is what a screen does when a feed cannot answer, and whether what it finds holds at all
  * ({@link ScreeningMode}): a repository's dial, since a repository being rolled out under screening and one already
- * enforced sit side by side.
+ * enforced sit side by side; and which of the deployment's feeds screen the repository at all
+ * ({@value AdvisorySource#SELECTION}).
  */
 public final class InspectionSettingsContributor implements SettingsContributor {
 
@@ -46,6 +48,14 @@ public final class InspectionSettingsContributor implements SettingsContributor 
                                         "an outage leaves the artifact to the checks that could answer"),
                                 new Setting.Choice("RECORD", "Record only",
                                         "nothing the screen found or could not find is held; all of it is recorded")),
-                        ScreeningMode.DEFAULT, true, Setting.Scope.REPOSITORY).standard());
+                        ScreeningMode.DEFAULT, true, Setting.Scope.REPOSITORY).standard(),
+                new Setting(AdvisorySource.SELECTION, "Compliance", "Advisory feeds",
+                        "The advisory feeds that screen this repository's cached copies, by name and "
+                                + "comma-separated, among those this deployment switches on; empty for every one, and '"
+                                + AdvisorySource.NONE_SELECTED + "' for none. A feed's switch and its credential stay "
+                                + "the deployment's. A name that is not on is an outage of every screen of the "
+                                + "repository, decided by its screening mode, and fails its scans, rather than "
+                                + "screening with fewer feeds than it names.",
+                        Setting.Kind.STRING, "", true, Setting.Scope.REPOSITORY).advanced());
     }
 }
