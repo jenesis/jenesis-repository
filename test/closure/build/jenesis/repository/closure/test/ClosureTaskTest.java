@@ -6,6 +6,7 @@ import build.jenesis.repository.closure.spi.ClosureSection;
 import build.jenesis.repository.closure.spi.ClosureSource;
 import build.jenesis.repository.closure.ClosureTask;
 import build.jenesis.repository.closure.spi.ClosureWalk;
+import build.jenesis.repository.closure.spi.VersionBills;
 import build.jenesis.repository.closure.spi.ExposureSection;
 import build.jenesis.repository.closure.spi.Reliance;
 import build.jenesis.repository.closure.ReliedOn;
@@ -75,6 +76,36 @@ class ClosureTaskTest {
 
         pass(null, NOW.plus(Duration.ofHours(1)));
         assertThat(closure().orElseThrow().resolved()).as("a version is resolved once").isEqualTo(NOW);
+    }
+
+    @Test
+    void a_bill_attached_after_the_closure_was_resolved_is_the_closure_on_the_next_pass_and_detaching_it_is_not()
+            throws IOException {
+        // A full pass an hour after app was published, so the passes after it visit app only when asked to.
+        pass(null, NOW.plus(Duration.ofHours(1)));
+        assertThat(closure().orElseThrow().kind()).as("resolved from what it declares")
+                .isEqualTo(ClosureSource.Kind.DECLARATIONS);
+        new StoreRepositoryInventory(store).record("Maven", "org.dep:a", "1.1", NOW);
+
+        VersionBills.attach(store, "Maven", "org.acme:app", "1.0", """
+                {"bomFormat":"CycloneDX","specVersion":"1.5",
+                 "metadata":{"component":{"bom-ref":"root","name":"app","version":"1.0"}},
+                 "components":[{"bom-ref":"a","purl":"pkg:maven/org.dep/a@1.1","name":"a","version":"1.1"}]}"""
+                .getBytes(StandardCharsets.UTF_8));
+        assertThat(closure()).as("the closure resolved before the bill was there is cleared").isEmpty();
+        pass(null, NOW.plus(Duration.ofHours(2)));
+
+        assertThat(closure().orElseThrow()).satisfies(closure -> {
+            assertThat(closure.kind()).as("the attached bill answers before the declarations")
+                    .isEqualTo(ClosureSource.Kind.BILL);
+            assertThat(closure.components()).extracting(ClosureSection.Component::coordinate)
+                    .containsExactly("org.dep:a");
+        });
+
+        VersionBills.detach(store, "Maven", "org.acme:app", "1.0");
+        pass(null, NOW.plus(Duration.ofHours(3)));
+        assertThat(closure().orElseThrow().kind()).as("without the bill, what it declares again")
+                .isEqualTo(ClosureSource.Kind.DECLARATIONS);
     }
 
     @Test

@@ -5,6 +5,7 @@ import build.jenesis.repository.closure.spi.ClosureSection;
 import build.jenesis.repository.closure.spi.ClosureSource;
 import build.jenesis.repository.closure.spi.ClosureWalk;
 import build.jenesis.repository.closure.spi.ExposureSection;
+import build.jenesis.repository.closure.spi.VersionBills;
 import module org.slf4j;
 import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.inventory.Mailbox;
@@ -29,7 +30,9 @@ import build.jenesis.repository.store.ArtifactStore;
  * release - which is how a version published before the setting was on is resolved. A closure resolves through the
  * repository and the repositories its fallbacks name ({@link ClosureWalk}), by the first {@link ClosureSource} serving
  * the release's ecosystem that answers. A version is resolved once: its
- * closure is a section of its document ({@link ClosureSection}), and a version that has one is not resolved again.
+ * closure is a section of its document ({@link ClosureSection}), and a version that has one is not resolved again -
+ * unless a bill is attached to it or detached from it ({@link VersionBills}), which clears the section and asks this
+ * pass to resolve it on its next visit of the repository.
  *
  * <p>What the closure reaches is followed beside it: the {@link ExposureSection} records each version it reaches that
  * is held for review or carries findings, derived when the closure is resolved and again on every pass that visits the
@@ -151,6 +154,8 @@ public final class ClosureTask implements MaintenanceTask {
         if (!enabled(context.config())) {
             ReliedOn.STALE.drain(context.store(), DRAIN, _ -> {
             });   // nothing here re-derives, so what was asked of it is dropped rather than kept
+            VersionBills.ATTACHED.drain(context.store(), DRAIN, _ -> {
+            });   // a full pass resolves what has no closure once the pass is on again
             return;
         }
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(context.store());
@@ -163,6 +168,8 @@ public final class ClosureTask implements MaintenanceTask {
         // What another repository's pass found changed among what these releases reach, re-derived first and with
         // nothing resolved: a release still waiting for its closure is the cadence's below.
         ReliedOn.STALE.drain(context.store(), DRAIN, release -> visit.release(release, false, false));
+        // A version whose bill was attached or detached has had its closure cleared, and is resolved again now.
+        VersionBills.ATTACHED.drain(context.store(), DRAIN, release -> visit.release(release, true, false));
         cadence.coordinates(inventory, release -> visit.release(release, true, cadence.full()));
         for (ArtifactStore holder : visit.touched.values()) {
             ReliedOn.epoch(holder).bump();

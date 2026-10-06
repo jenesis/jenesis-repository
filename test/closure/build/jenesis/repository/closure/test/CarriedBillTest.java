@@ -7,6 +7,7 @@ import build.jenesis.repository.closure.CarriedClosure;
 import build.jenesis.repository.closure.spi.ClosureSection;
 import build.jenesis.repository.closure.spi.ClosureSource;
 import build.jenesis.repository.closure.spi.ClosureWalk;
+import build.jenesis.repository.closure.spi.VersionBills;
 import build.jenesis.repository.inventory.HeldSubjects;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
@@ -93,6 +94,31 @@ class CarriedBillTest {
         assertThat(CarriedClosure.resolve(new CarriedBill(), ClosureWalk.of(store),
                 "Maven", "org.acme:app", "1.0", NOW))
                 .as("the resolvers fill in what it does not name").isEmpty();
+    }
+
+    @Test
+    void a_bill_attached_to_a_version_is_read_after_the_bill_its_build_published() throws IOException {
+        String scanned = """
+                {"bomFormat":"CycloneDX","specVersion":"1.5",
+                 "metadata":{"component":{"bom-ref":"root","name":"app","version":"1.0"}},
+                 "components":[
+                   {"bom-ref":"s","purl":"pkg:maven/org.dep/scanned@1.0","name":"scanned","version":"1.0"}]}""";
+        release("/maven/org/acme/app/1.0/app-1.0.pom", "<project/>".getBytes(StandardCharsets.UTF_8));
+        VersionBills.attach(store, "Maven", "org.acme:app", "1.0", scanned.getBytes(StandardCharsets.UTF_8));
+
+        assertThat(CarriedClosure.resolve(new CarriedBill(), ClosureWalk.of(store), "Maven", "org.acme:app", "1.0",
+                NOW).orElseThrow().cuts()).as("a version carrying no bill of its own takes the one attached")
+                .extracting(ClosureSection.Cut::coordinate).containsExactly("org.dep:scanned");
+
+        release("/maven/org/acme/app/1.0/app-1.0-cyclonedx.json", """
+                {"bomFormat":"CycloneDX","specVersion":"1.5",
+                 "metadata":{"component":{"bom-ref":"root","name":"app","version":"1.0"}},
+                 "components":[{"bom-ref":"b","purl":"pkg:maven/org.dep/built@1.0","name":"built","version":"1.0"}]}"""
+                .getBytes(StandardCharsets.UTF_8));
+
+        assertThat(CarriedClosure.resolve(new CarriedBill(), ClosureWalk.of(store), "Maven", "org.acme:app", "1.0",
+                NOW).orElseThrow().cuts()).as("what its build published stands before what a scanner made")
+                .extracting(ClosureSection.Cut::coordinate).containsExactly("org.dep:built");
     }
 
     private void release(String path, byte[] body) throws IOException {
