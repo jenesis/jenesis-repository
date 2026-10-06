@@ -158,4 +158,22 @@ class OciScreenTest {
         assertThat(store.exists("withheld/" + hex)).as("a rejected proxied manifest is withheld").isTrue();
         assertThat(pull.status()).as("a rejected proxied manifest 404s to the puller").isEqualTo(404);
     }
+
+    @Test
+    void the_screen_tells_a_relayed_manifest_from_a_pushed_one() throws IOException {
+        byte[] pushed = ("{\"mediaType\":\"" + TYPE + "\",\"annotations\":{\"a\":\"pushed\"}}")
+                .getBytes(StandardCharsets.UTF_8);
+        byte[] relayed = ("{\"mediaType\":\"" + TYPE + "\",\"annotations\":{\"a\":\"relayed\"}}")
+                .getBytes(StandardCharsets.UTF_8);
+        var fetcher = (build.jenesis.repository.format.ProxyFormat.Fetcher.Buffered) (url, headers) ->
+                java.util.Optional.of(new build.jenesis.repository.format.ProxyFormat.Fetched(
+                        200, relayed, Map.of("Content-Type", TYPE)));
+
+        assertThat(pushManifest("gate-relayed/app", "1.0", pushed)).as("a push is published here").isEqualTo(201);
+
+        FakeExchange pull = new FakeExchange("GET", "/v2/gate-relayed/app/manifests/2.0");
+        assertThat(format.proxy(pull, store, java.net.URI.create("http://upstream.local"), fetcher)).isTrue();
+        assertThat(pull.status()).as("a pull-through is a relayed copy, which the screen held").isEqualTo(404);
+        assertThat(store.exists("withheld/" + sha256(relayed))).isTrue();
+    }
 }

@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.oci.test;
 
 import build.jenesis.repository.store.ArtifactDescriptor;
+import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublishInterceptor;
 
 /**
@@ -8,7 +9,8 @@ import build.jenesis.repository.store.PublishInterceptor;
  * verdict range without a compliance module on the path - the OCI mirror of the server suite's {@code MarkerInterceptor}.
  * It is inert for every ordinary coordinate ({@code ACCEPT}, so every existing OCI test pushes, serves and imports
  * exactly as before) and reacts only to two distinctive markers a test puts in an image name: a coordinate containing
- * {@code gate-reject} is {@code REJECT}ed, one containing {@code gate-quarantine} is {@code QUARANTINE}d. Because only
+ * {@code gate-reject} is {@code REJECT}ed, one containing {@code gate-quarantine} is {@code QUARANTINE}d, and one
+ * containing {@code gate-relayed} is {@code QUARANTINE}d only where the commit relays an upstream's copy. Because only
  * a manifest write runs {@link build.jenesis.repository.store.Publication#screen} (a layer blob upload never does), this
  * proves a screened-out manifest is withheld from serving while its layer blobs stay served raw.
  */
@@ -16,6 +18,7 @@ public final class OciScreenInterceptor implements PublishInterceptor {
 
     static final String QUARANTINE_MARKER = "gate-quarantine";
     static final String REJECT_MARKER = "gate-reject";
+    static final String RELAYED_MARKER = "gate-relayed";
 
     @Override
     public Disposition assess(ArtifactDescriptor artifact, Content content) {
@@ -27,6 +30,9 @@ public final class OciScreenInterceptor implements PublishInterceptor {
             return Disposition.REJECT;
         }
         if (path.contains(QUARANTINE_MARKER)) {
+            return Disposition.QUARANTINE;
+        }
+        if (path.contains(RELAYED_MARKER) && Publication.relayed()) {
             return Disposition.QUARANTINE;
         }
         return Disposition.ACCEPT;
