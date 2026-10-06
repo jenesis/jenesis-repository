@@ -41,7 +41,7 @@ final class Exposures {
             boolean held = !new StoreRepositoryInventory(holder.store()).disclosable(ecosystem,
                     component.coordinate(), component.version(), ServableNames.Policy.HIDE_WITHHELD);
             add(reached, holder, ecosystem, component.coordinate(), component.version(), component.repository(), held,
-                    risk);
+                    risk, ClosureSection.path(closure, component.coordinate(), component.version()));
         }
         for (ClosureSection.Cut cut : closure.cuts()) {
             for (int i = 0; i < members.size(); i++) {
@@ -49,7 +49,7 @@ final class Exposures {
                 if (heldForReview(member, ecosystem, cut.coordinate(), cut.requirement())) {
                     examined++;
                     add(reached, member, ecosystem, cut.coordinate(), cut.requirement(),
-                            i == 0 ? "" : member.repository(), true, risk);
+                            i == 0 ? "" : member.repository(), true, risk, List.of());
                     break;
                 }
             }
@@ -72,10 +72,11 @@ final class Exposures {
         return HeldVersions.held(member.store(), ecosystem, coordinate, version);
     }
 
-    /** Add the version to {@code reached} where it is held or carries findings at or above {@code risk}. */
+    /** Add the version, reached along {@code path}, to {@code reached} where it is held or carries findings at or
+     *  above {@code risk}. */
     private static void add(List<ExposureSection.Reached> reached, ClosureWalk.Member holder, String ecosystem,
-                            String coordinate, String version, String repository, boolean held, Severity risk)
-            throws IOException {
+                            String coordinate, String version, String repository, boolean held, Severity risk,
+                            List<ClosureSection.Hop> path) throws IOException {
         int count = 0;
         Severity worst = null;
         Optional<Findings> ledger = FindingsProvider.installed().map(provider -> provider.over(holder.store()));
@@ -91,7 +92,7 @@ final class Exposures {
         }
         if (held || count > 0) {
             reached.add(new ExposureSection.Reached(coordinate, version, repository, held, count,
-                    worst == null ? "" : worst.name()));
+                    worst == null ? "" : worst.name(), path));
         }
     }
 }

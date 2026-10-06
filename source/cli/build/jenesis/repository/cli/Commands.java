@@ -145,6 +145,10 @@ public final class Commands {
                             act("closure <repo> <ecosystem> <coordinate> <version>",
                                     "the transitive closure, each component with the repository holding it, and "
                                             + "every dependency that did not resolve")),
+                    noun("relied-on", "which published versions rely on a version, through their closures",
+                            ComplianceCommands::reliedOn,
+                            act("relied-on <repo> <ecosystem> <coordinate> <version> [--cursor T]",
+                                    "every published version of the tenant whose closure reaches it, with the path")),
                     noun("provenance", "the signed build attestation",
                             ComplianceCommands::provenance,
                             act("provenance <repo> <path> [--material]",

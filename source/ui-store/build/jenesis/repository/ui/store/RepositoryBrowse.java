@@ -4,6 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.closure.ClosureSection;
 import build.jenesis.repository.closure.ExposureSection;
+import build.jenesis.repository.closure.ReliedOn;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ScreenedThrough;
 import build.jenesis.repository.compliance.ScreeningMode;
@@ -391,6 +392,21 @@ public class RepositoryBrowse extends TenantScope implements AutoCloseable {
 
     /** The most dependencies a version's page lists; past it the page says how many more there are. */
     public static final int DEPENDENCIES_SHOWN = 200;
+
+    /** How many of the versions relying on one a version's page shows at a time. */
+    public static final int RELIED_ON_SHOWN = 50;
+
+    /**
+     * One page of the published versions of the signed-in tenant relying on {@code version} of {@code coordinate}
+     * held by {@code repository}, after {@code after}: each confirmed by its own closure, with the path it is reached
+     * along ({@link ReliedOn#page}). The console is the tenant's, so it names a dependent in any of its repositories.
+     */
+    public ReliedOn.Page reliedOn(String repository, String ecosystem, String coordinate, String version, String after)
+            throws IOException {
+        return ReliedOn.page(scope(repository), repository, name -> validRepository(name)
+                ? Optional.of(scope(name)) : Optional.empty(), _ -> true, ecosystem, coordinate, version, after,
+                RELIED_ON_SHOWN);
+    }
 
     /**
      * Everything this repository records about one version, for its own page, from one read of its document and served

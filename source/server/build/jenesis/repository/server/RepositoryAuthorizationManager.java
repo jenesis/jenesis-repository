@@ -74,6 +74,14 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
      */
     public static final String ADMINISTERS = "jenrepo.administers";
 
+    /**
+     * The request attribute an allowed read carries a {@link Predicate} of repository names under: whether the
+     * presented key may read each - what an answer naming versions of other repositories of the tenant asks before it
+     * names one. Asked per repository, and only by such an answer; an anonymous deployment answers yes to every
+     * repository, and a request reaching a controller without it may name none but its own.
+     */
+    public static final String READS_REPOSITORY = "jenrepo.reads-repository";
+
     private final Authorization authorization;
     private final KeyUsageTracker usage;
     private final List<String> trustedProxies;
@@ -108,6 +116,7 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
                                          RequestAuthorizationContext context) {
         if (!authorization.enforced()) {
             context.getRequest().setAttribute(ADMINISTERS, (BooleanSupplier) () -> true);
+            context.getRequest().setAttribute(READS_REPOSITORY, (Predicate<String>) _ -> true);
             return new AuthorizationDecision(true);
         }
         HttpServletRequest request = context.getRequest();
@@ -155,6 +164,16 @@ public class RepositoryAuthorizationManager implements AuthorizationManager<Requ
                 try {
                     return authorization.authorize(key, target.scope(), target.subPath(),
                             Authorization.QUARANTINE_READ) == Authorization.Decision.ALLOWED;
+                } catch (IOException _) {
+                    return false;    // an unreadable store proves no authority, as above
+                }
+            });
+        }
+        if (decision == Authorization.Decision.ALLOWED && read && !target.probe()) {
+            request.setAttribute(READS_REPOSITORY, (Predicate<String>) repository -> {
+                try {
+                    return authorization.authorize(key, repository, null, Authorization.REPOSITORY_READ)
+                            == Authorization.Decision.ALLOWED && authorization.addressAllowed(key, client);
                 } catch (IOException _) {
                     return false;    // an unreadable store proves no authority, as above
                 }

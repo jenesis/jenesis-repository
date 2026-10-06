@@ -15,8 +15,9 @@ import tools.jackson.databind.node.ObjectNode;
  * state the version inherits from the cached copies and releases it relies on, without any lookup of its own. Absent
  * for a version with no closure. The {@code data} payload is
  * {@code {"examined":<components and held cuts looked at>,
- * "reached":[{"coordinate","version","repository","held":<bool>,"findings":<count>,"worst":<severity or "">}]}},
- * a component's {@code repository} present only where a fallback's repository holds it.
+ * "reached":[{"coordinate","version","repository","held":<bool>,"findings":<count>,"worst":<severity or "">,
+ * "path":[{"coordinate","version"}]}]}}, a component's {@code repository} present only where a fallback's repository
+ * holds it and its {@code path} only where the closure reaches it through another dependency.
  *
  * <p>The signal is neutral: a published version is held for no vulnerability, and what it inherits is shown on its
  * surfaces rather than scored by the gate.
@@ -35,13 +36,23 @@ public final class ExposureSection {
     }
 
     /** One version the closure reaches that is held for review, carries findings at or above the risk band, or both;
-     *  held by the version's own repository where {@code repository} is empty. */
+     *  held by the version's own repository where {@code repository} is empty, and reached along {@code path} - from
+     *  the dependency the version names itself down to this one, both included, which is this one alone where the
+     *  version names it or where the closure stopped at it. */
     public record Reached(String coordinate, String version, String repository, boolean held, int findings,
-                          String worst) {
+                          String worst, List<ClosureSection.Hop> path) {
 
         public Reached {
             repository = repository == null ? "" : repository;
             worst = worst == null ? "" : worst;
+            path = path == null || path.isEmpty() ? List.of(new ClosureSection.Hop(coordinate, version))
+                    : List.copyOf(path);
+        }
+
+        /** A version the closure reaches directly, or stopped at. */
+        public Reached(String coordinate, String version, String repository, boolean held, int findings,
+                       String worst) {
+            this(coordinate, version, repository, held, findings, worst, List.of());
         }
     }
 
@@ -77,9 +88,14 @@ public final class ExposureSection {
         return section.get().payload().map(data -> {
             List<Reached> reached = new ArrayList<>();
             for (JsonNode entry : data.path("reached")) {
+                List<ClosureSection.Hop> path = new ArrayList<>();
+                for (JsonNode hop : entry.path("path")) {
+                    path.add(new ClosureSection.Hop(hop.path("coordinate").asString(""),
+                            hop.path("version").asString("")));
+                }
                 reached.add(new Reached(entry.path("coordinate").asString(""), entry.path("version").asString(""),
                         entry.path("repository").asString(""), entry.path("held").asBoolean(false),
-                        entry.path("findings").asInt(0), entry.path("worst").asString("")));
+                        entry.path("findings").asInt(0), entry.path("worst").asString(""), path));
             }
             return new Exposure(reached, data.path("examined").asInt(0), derived);
         });
@@ -97,6 +113,12 @@ public final class ExposureSection {
                         .put("findings", entry.findings()).put("worst", entry.worst());
                 if (!entry.repository().isEmpty()) {
                     row.put("repository", entry.repository());
+                }
+                if (entry.path().size() > 1) {
+                    ArrayNode path = row.putArray("path");
+                    for (ClosureSection.Hop hop : entry.path()) {
+                        path.addObject().put("coordinate", hop.coordinate()).put("version", hop.version());
+                    }
                 }
             }
             return Section.derived(TAG, SCHEMA, exposure.derived(), Signal.NEUTRAL, data);
