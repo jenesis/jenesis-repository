@@ -1,6 +1,9 @@
 package build.jenesis.repository.closure;
 
 import module java.base;
+import build.jenesis.repository.closure.spi.ClosureSection;
+import build.jenesis.repository.closure.spi.ClosureSource;
+import build.jenesis.repository.closure.spi.ClosureWalk;
 import build.jenesis.repository.compliance.Ecosystems;
 import build.jenesis.repository.compliance.PackageUrls;
 import build.jenesis.repository.dependency.ArtifactSbom;
@@ -19,7 +22,7 @@ import build.jenesis.repository.store.Publication;
  *
  * <p>A component's depth is its distance from the root along the bill's dependency edges, and {@code 1} where the bill
  * records none - a flat component list is the resolved closure CycloneDX records. Bounded at
- * {@link ClosureResolver#MAX_COMPONENTS} components, a closure stopped there saying so; an archive is read only as far
+ * {@link ClosureSource#MAX_COMPONENTS} components, a closure stopped there saying so; an archive is read only as far
  * as its bill, within the dependency module's own budget. Nothing is fetched.
  */
 public final class CarriedBill implements ClosureSource {

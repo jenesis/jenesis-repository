@@ -2,9 +2,9 @@ package build.jenesis.repository.closure.maven;
 
 import module java.base;
 import module org.slf4j;
-import build.jenesis.repository.closure.ClosureSection;
-import build.jenesis.repository.closure.ClosureWalk;
-import build.jenesis.repository.closure.ClosureSource;
+import build.jenesis.repository.closure.spi.ClosureSection;
+import build.jenesis.repository.closure.spi.ClosureWalk;
+import build.jenesis.repository.closure.spi.ClosureSource;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Publication;
@@ -68,11 +68,8 @@ public final class MavenClosure implements ClosureSource {
     /** The scopes a consumer of the release pulls in. */
     private static final Set<String> SHIPPED = Set.of("compile", "runtime", "");
 
-    /** The most components a closure records, as the walk by declarations bounds it. */
-    static final int MAX_COMPONENTS = 2_000;
-
     /** The most POMs one resolution reads, so a pathological parent chain or BOM fan-out ends. */
-    static final int MAX_DOCUMENTS = 4 * MAX_COMPONENTS;
+    static final int MAX_DOCUMENTS = 4 * ClosureSource.MAX_COMPONENTS;
 
     /** The largest POM read. */
     static final int LARGEST_POM = 4 * 1024 * 1024;
@@ -184,7 +181,7 @@ public final class MavenClosure implements ClosureSource {
                         : "not held by this repository or a repository its fallbacks name"));
                 continue;
             }
-            if (components.size() >= MAX_COMPONENTS) {
+            if (components.size() >= ClosureSource.MAX_COMPONENTS) {
                 truncated = true;
                 break;
             }
@@ -448,7 +445,7 @@ public final class MavenClosure implements ClosureSource {
                                 }
                                 examined += page.holdings().size();
                                 after = page.next();
-                            } while (after != null && examined < MAX_COMPONENTS);
+                            } while (after != null && examined < ClosureSource.MAX_COMPONENTS);
                         } catch (IOException unreadable) {
                             // a repository that cannot be read offers no version
                         }

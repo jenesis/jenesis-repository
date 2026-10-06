@@ -1,6 +1,9 @@
 package build.jenesis.repository.closure;
 
 import module java.base;
+import build.jenesis.repository.closure.spi.ClosureSection;
+import build.jenesis.repository.closure.spi.ClosureSource;
+import build.jenesis.repository.closure.spi.ClosureWalk;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.HeldVersions;
@@ -14,7 +17,7 @@ import build.jenesis.repository.store.ServableNames;
  * {@link ClosureSection.Foreign} entry, indexed by its coordinate across the tenant. What the sources that read such a
  * document share, so a bill and a lock file read the same.
  *
- * <p>Bounded at {@link ClosureResolver#MAX_COMPONENTS} entries, components and foreign entries together, a closure
+ * <p>Bounded at {@link ClosureSource#MAX_COMPONENTS} entries, components and foreign entries together, a closure
  * stopped there saying so. Nothing is fetched: a lookup is a point read of each repository's inventory, in the walk's
  * order.
  */
@@ -75,7 +78,7 @@ public final class CarriedClosure {
             if (!seen.add(entry.ecosystem() + "@" + entry.coordinate() + "@" + entry.version())) {
                 continue;
             }
-            if (components.size() + foreign.size() >= ClosureResolver.MAX_COMPONENTS) {
+            if (components.size() + foreign.size() >= ClosureSource.MAX_COMPONENTS) {
                 truncated = true;
                 break;
             }

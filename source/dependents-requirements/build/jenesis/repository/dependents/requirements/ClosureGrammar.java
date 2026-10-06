@@ -1,7 +1,7 @@
 package build.jenesis.repository.dependents.requirements;
 
 import module java.base;
-import build.jenesis.repository.closure.RequirementGrammar;
+import build.jenesis.repository.closure.spi.RequirementGrammar;
 
 /**
  * A {@link RequirementGrammar} for one ecosystem over its {@link Reader}: what a requirement admits is the reader's -

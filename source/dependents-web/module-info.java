@@ -17,7 +17,7 @@ open module build.jenesis.repository.dependents.web {
     requires build.jenesis.repository.server.kernel;
     requires build.jenesis.repository.server;
     requires build.jenesis.repository.dependents.spi;
-    requires build.jenesis.repository.closure;
+    requires build.jenesis.repository.closure.spi;
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.store;
     requires jakarta.servlet;

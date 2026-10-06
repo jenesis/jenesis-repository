@@ -17,6 +17,6 @@ module build.jenesis.repository.closure.lock {
     requires tools.jackson.databind;
     requires tools.jackson.dataformat.toml;
     exports build.jenesis.repository.closure.lock;
-    provides build.jenesis.repository.closure.ClosureSource
+    provides build.jenesis.repository.closure.spi.ClosureSource
             with build.jenesis.repository.closure.lock.NpmShrinkwrap, build.jenesis.repository.closure.lock.CargoLock;
 }

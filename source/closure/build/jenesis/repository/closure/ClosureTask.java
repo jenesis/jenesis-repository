@@ -1,6 +1,10 @@
 package build.jenesis.repository.closure;
 
 import module java.base;
+import build.jenesis.repository.closure.spi.ClosureSection;
+import build.jenesis.repository.closure.spi.ClosureSource;
+import build.jenesis.repository.closure.spi.ClosureWalk;
+import build.jenesis.repository.closure.spi.ExposureSection;
 import module org.slf4j;
 import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.inventory.Mailbox;

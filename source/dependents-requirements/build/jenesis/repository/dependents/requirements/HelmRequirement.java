@@ -1,7 +1,7 @@
 package build.jenesis.repository.dependents.requirements;
 
 import module java.base;
-import build.jenesis.repository.closure.RequirementGrammar;
+import build.jenesis.repository.closure.spi.RequirementGrammar;
 
 /**
  * Helm's dependency constraint, as a {@code Chart.yaml} writes it: the Masterminds semantic-version constraints, which
