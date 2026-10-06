@@ -25,8 +25,10 @@ import build.jenesis.repository.store.ServableNames;
  * declaration of a coordinate wins, as the build tools that mediate do, and a coordinate is visited once.
  *
  * <p>A held version's declarations are the ones its document records where its publish recorded them, and otherwise
- * the ones an installed inspector reads off its smallest claimed file - a cached copy records none, so its manifest is
- * read. A file past {@link #MANIFEST_LIMIT} is not read: a manifest is small, and an archive that large is not one.
+ * the ones an installed inspector reads off a file it claims, a descriptor first - a cached copy records none, so its
+ * manifest is read. A file past {@link #MANIFEST_LIMIT} is not read: a manifest is small, and an archive that large is
+ * not one. A manifest an inspector fails on, or reads only in part, is a cut on the version that carries it rather than
+ * a leaf declaring nothing.
  *
  * <p>Bounded: at most {@link ClosureSource#MAX_COMPONENTS} components, and {@link #MAX_VERSIONS} versions of one coordinate
  * examined; a closure stopped by either says so ({@link ClosureSection.Closure#truncated}). Nothing is fetched.
@@ -80,15 +82,15 @@ public final class ClosureResolver {
         // What named each dependency: the component whose declarations queued it, or none for the version's own.
         record Pending(ComplianceGate.Dependency dependency, int depth, String viaCoordinate, String viaVersion) {
         }
-        Optional<List<ComplianceGate.Dependency>> roots = declarations(readers.getFirst(), ecosystem, coordinate,
-                version);
+        Optional<Declared> roots = declarations(readers.getFirst(), ecosystem, coordinate, version);
         if (roots.isEmpty()) {
             return new ClosureSection.Closure(ClosureSection.Status.UNDECLARED, List.of(), List.of(), false, now,
                     ClosureSource.Kind.DECLARATIONS,
                 DeclaredClosure.NAME);
         }
+        roots.get().unread().ifPresent(reason -> cuts.add(new ClosureSection.Cut(coordinate, version, reason)));
         Deque<Pending> queue = new ArrayDeque<>();
-        for (ComplianceGate.Dependency dependency : roots.get()) {
+        for (ComplianceGate.Dependency dependency : roots.get().dependencies()) {
             queue.add(new Pending(dependency, 1, "", ""));
         }
         boolean truncated = false;
@@ -111,8 +113,11 @@ public final class ClosureResolver {
             StoreRepositoryInventory.Holding held = choice.holding();
             components.add(new ClosureSection.Component(held.coordinate(), held.version(), held.cached(),
                     next.depth(), choice.reader().repository(), next.viaCoordinate(), next.viaVersion()));
-            for (ComplianceGate.Dependency transitive : declared(choice.reader(), ecosystem, held.coordinate(),
-                    held.version())) {
+            Declared declared = declarations(choice.reader(), ecosystem, held.coordinate(), held.version())
+                    .orElse(Declared.NOTHING);
+            declared.unread().ifPresent(reason ->
+                    cuts.add(new ClosureSection.Cut(held.coordinate(), held.version(), reason)));
+            for (ComplianceGate.Dependency transitive : declared.dependencies()) {
                 queue.add(new Pending(transitive, next.depth() + 1, held.coordinate(), held.version()));
             }
         }
@@ -207,57 +212,70 @@ public final class ClosureResolver {
                 : "no held version satisfies the requirement", unexamined);
     }
 
-    /** What a held version declares, empty where it declares nothing readable - see {@link #declarations}. */
-    private List<ComplianceGate.Dependency> declared(Reader reader, String ecosystem, String coordinate,
-                                                     String version) throws IOException {
-        return declarations(reader, ecosystem, coordinate, version).orElse(List.of());
+    /** What a held version declares, and why what it declares was not all read - empty where it was: a manifest an
+     *  inspector failed on, or read only in part. The walk records that as a cut on the version, so a subtree
+     *  nobody read is never taken for a leaf that depends on nothing. */
+    private record Declared(List<ComplianceGate.Dependency> dependencies, Optional<String> unread) {
+
+        static final Declared NOTHING = new Declared(List.of(), Optional.empty());
     }
 
-    /** What a held version declares: its document's record where the publish made one, its manifest otherwise, and
-     *  empty where neither says anything - no record, and no file an inspector reads a dependency from. */
-    private Optional<List<ComplianceGate.Dependency>> declarations(Reader reader, String ecosystem, String coordinate,
-                                                                   String version) throws IOException {
+    /** What a held version declares: its document's record where the publish made one, its manifest otherwise - the
+     *  first file whose inspectors read a dependency from it, else the first one they failed on - and empty where
+     *  neither says anything: no record, and no file an inspector reads a dependency from. */
+    private Optional<Declared> declarations(Reader reader, String ecosystem, String coordinate, String version)
+            throws IOException {
         Optional<List<DependencySection.Declared>> recorded = reader.inventory().dependencies(ecosystem, coordinate,
                 version);
         if (recorded.isPresent()) {
-            return Optional.of(recorded.get().stream()
+            return Optional.of(new Declared(recorded.get().stream()
                     .map(declared -> new ComplianceGate.Dependency(declared.coordinate(), declared.requirement()))
-                    .toList());
+                    .toList(), Optional.empty()));
         }
-        for (String path : bySize(reader.inventory().paths(ecosystem, coordinate, version))) {
-            List<ComplianceGate.Dependency> read = manifest(reader, path);
-            if (!read.isEmpty()) {
+        Optional<Declared> failed = Optional.empty();
+        for (String path : manifestsFirst(reader.inventory().paths(ecosystem, coordinate, version))) {
+            Declared read = manifest(reader, path);
+            if (!read.dependencies().isEmpty()) {
                 return Optional.of(read);
             }
+            if (failed.isEmpty() && read.unread().isPresent()) {
+                failed = Optional.of(read);
+            }
         }
-        return Optional.empty();
+        return failed;
     }
 
-    /** The dependencies the inspectors claiming {@code path} read off its stored bytes, empty where none claims it or
-     *  it is too large to be a manifest. */
-    private List<ComplianceGate.Dependency> manifest(Reader reader, String path) throws IOException {
+    /** What the inspectors claiming {@code path} read off its stored bytes, and why not all of it where an inspector
+     *  failed on it or read its dependencies only in part; nothing where none claims it or it is too large to be a
+     *  manifest. */
+    private Declared manifest(Reader reader, String path) throws IOException {
         List<QualityInspector> claiming = inspectors.stream()
                 .filter(inspector -> inspector.claims(path, QualityInspector.Lookup.NONE)).toList();
         if (claiming.isEmpty()) {
-            return List.of();
+            return Declared.NOTHING;
         }
         Optional<byte[]> read = served(reader, path);
         if (read.isEmpty()) {
-            return List.of();
+            return Declared.NOTHING;
         }
         byte[] body = read.get();
-        List<ComplianceGate.Dependency> dependencies = new ArrayList<>();
+        Set<ComplianceGate.Dependency> dependencies = new LinkedHashSet<>();
+        Optional<String> unread = Optional.empty();
         for (QualityInspector inspector : claiming) {
             try {
                 for (ComplianceGate.Subject subject : inspector.inspect(path, body, QualityInspector.Lookup.NONE)) {
-                    dependencies.addAll(subject.dependencies());
+                    if (subject.dependencies() == null) {
+                        unread = unread.or(() -> Optional.of("its manifest could not be read in full"));
+                    } else {
+                        dependencies.addAll(subject.dependencies());
+                    }
                 }
-            } catch (IOException | RuntimeException unreadable) {
-                // A manifest an inspector cannot read declares nothing it can report; the closure records the
-                // dependency it reached and what it could read past it.
+            } catch (IOException | RuntimeException failure) {
+                unread = Optional.of("its manifest could not be read: " + Objects.requireNonNullElse(
+                        failure.getMessage(), failure.getClass().getSimpleName()));
             }
         }
-        return List.copyOf(new LinkedHashSet<>(dependencies));
+        return new Declared(List.copyOf(dependencies), unread);
     }
 
     /**
@@ -297,8 +315,9 @@ public final class ClosureResolver {
         return Optional.empty();
     }
 
-    /** {@code paths} ordered so a manifest, the smallest file of a version by its name, is read first. */
-    private static List<String> bySize(List<String> paths) {
+    /** {@code paths} ordered so a manifest is read first: a descriptor by its extension, then any other file, a jar
+     *  last. */
+    private static List<String> manifestsFirst(List<String> paths) {
         return paths.stream().sorted(Comparator.comparingInt(ClosureResolver::rank).thenComparing(path -> path))
                 .toList();
     }

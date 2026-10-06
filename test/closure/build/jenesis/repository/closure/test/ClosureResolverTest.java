@@ -242,6 +242,49 @@ class ClosureResolverTest {
                         tuple("acme-transitive", "not held by this repository"));
     }
 
+    @Test
+    void a_copy_whose_manifest_cannot_be_read_is_placed_and_cut_rather_than_read_as_declaring_nothing()
+            throws IOException {
+        // Two copies the walk reaches: one whose inspector fails on its manifest, one whose inspector reads the
+        // manifest only in part. Neither is a leaf with no dependencies - each is a subtree nobody read.
+        URI registry = URI.create("https://registry.example/");
+        RepositoryFormat npm = RepositoryFormat.installed().stream().filter(format -> format.name().equals("npm"))
+                .findFirst().orElseThrow();
+        for (String name : List.of("broken", "partial")) {
+            String tarball = "/npm/" + name + "/-/" + name + "-1.0.0.tgz";
+            ProxyFormat.Fetcher.Buffered upstream = (url, _) -> Optional.of(
+                    url.equals(registry.resolve(name + "/-/" + name + "-1.0.0.tgz"))
+                            ? new ProxyFormat.Fetched(200, name.getBytes(StandardCharsets.UTF_8), Map.of())
+                            : new ProxyFormat.Fetched(404, new byte[0], Map.of()));
+            assertThat(((ProxyFormat) npm).proxy(new Fill(tarball), store, registry, upstream)).isTrue();
+            inventory.cache("npm", name, "1.0.0", registry.toString(), NOW);
+        }
+        MetadataProvider.installed().over(store).mutate("npm", "acme-app", "1.0.0", DependencySection.TAG,
+                DependencySection.record("/npm/acme-app", List.of(new DependencySection.Declared("broken", "^1.0.0"),
+                        new DependencySection.Declared("partial", "^1.0.0")), NOW));
+        QualityInspector unreadable = new LineInspector() {
+            @Override
+            public List<ComplianceGate.Subject> inspect(String path, byte[] content, Lookup lookup) {
+                if (path.contains("broken")) {
+                    throw new IllegalStateException("the tarball ends inside its first entry");
+                }
+                return ManifestSubjectBuilder.of("npm").subject("partial", "1.0.0");
+            }
+        };
+
+        ClosureSection.Closure closure = new ClosureResolver(store, List.of(unreadable))
+                .resolve("npm", "acme-app", "1.0.0", NOW);
+
+        assertThat(closure.components()).extracting(ClosureSection.Component::coordinate)
+                .as("each copy is held, so each is placed").containsExactly("broken", "partial");
+        assertThat(closure.cuts()).extracting(ClosureSection.Cut::coordinate, ClosureSection.Cut::reason)
+                .containsExactlyInAnyOrder(
+                        tuple("broken", "its manifest could not be read: the tarball ends inside its first entry"),
+                        tuple("partial", "its manifest could not be read in full"));
+        assertThat(closure.status()).as("a subtree nobody read is not a resolved one")
+                .isEqualTo(ClosureSection.Status.PARTIAL);
+    }
+
     private Section roundTrip(ClosureSection.Closure closure) {
         return ClosureSection.record(closure).apply(Optional.empty());
     }
@@ -287,7 +330,7 @@ class ClosureResolverTest {
     }
 
     /** An inspector reading an npm tarball as lines of a dependency and its requirement, for the copy above. */
-    private static final class LineInspector implements QualityInspector {
+    private static class LineInspector implements QualityInspector {
 
         @Override
         public boolean handles(String path) {
