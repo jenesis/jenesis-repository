@@ -86,6 +86,32 @@ class ScreeningModeTest {
     }
 
     @Test
+    void an_outage_the_feed_gives_no_message_for_is_named_by_what_failed() throws IOException {
+        AdvisorySource silent = new AdvisorySource() {
+            @Override
+            public Set<String> ecosystems() {
+                return Ecosystems.canonical();
+            }
+
+            @Override
+            public List<Advisory> advisories(String ecosystem, String coordinate, String version) {
+                throw new IllegalStateException();
+            }
+
+            @Override
+            public Freshness freshness() {
+                return Freshness.NEVER;
+            }
+        };
+
+        assertThat(fetch(ScreeningMode.ADMIT, gate(silent, List.of()))).isPresent();
+        assertThat(new QuarantineLog(store).events()).singleElement().satisfies(event ->
+                assertThat(event.reasons()).as("an outage named by what failed, never by a missing message")
+                        .anySatisfy(reason -> assertThat(reason).endsWith(": IllegalStateException"))
+                        .noneSatisfy(reason -> assertThat(reason).endsWith("null")));
+    }
+
+    @Test
     void admit_still_refuses_a_deny_listed_copy_while_the_feed_is_down() throws IOException {
         assertThat(fetch(ScreeningMode.ADMIT, gate(UNREACHABLE, List.of(COORDINATE))))
                 .as("the checks that answer still decide, and the deny-list refuses").isEmpty();

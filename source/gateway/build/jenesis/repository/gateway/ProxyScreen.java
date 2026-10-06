@@ -86,20 +86,12 @@ public final class ProxyScreen {
         return INCOMPLETE_SCREENS.get();
     }
 
-    /** The reason an artifact served while a feed could not answer carries, beside the outage itself. */
-    static final String ADMITTED_REASON = "Admitted on the checks that could answer, as the repository's screening "
-            + "mode says, while an advisory feed cannot";
-
     /** The response header a fill served while a feed could not answer carries, valued {@value #SCREEN_PENDING}: the
      *  client is told the copy it was handed has not been asked of every feed yet. */
     public static final String SCREEN_HEADER = "Jenesis-Screen";
 
     /** The {@link #SCREEN_HEADER} value of a fill served while a feed could not answer. */
     public static final String SCREEN_PENDING = "pending";
-
-    /** The reason a finding the screen did not act on carries, under {@link ScreeningMode#RECORD}. */
-    static final String RECORDED_REASON = "Recorded, not held: the repository's screening mode records what the "
-            + "screen finds and holds none of it";
 
     private final ComplianceGate gate;
     private final ArtifactStore store;
@@ -500,11 +492,10 @@ public final class ProxyScreen {
             failure.addSuppressed(again);
             return feedFailed(path, subjects, failure);
         }
-        Throwable cause = failure.getCause() != null ? failure.getCause() : failure;
         LOGGER.warn("Screening the proxied " + path + " without the advisory feeds, one of which cannot answer ("
-                + cause.getMessage() + "); the repository's screening mode is " + mode, failure);
+                + ScreeningMode.outage(failure) + "); the repository's screening mode is " + mode, failure);
         List<String> reasons = new ArrayList<>(decided.reasons());
-        reasons.add(ADMITTED_REASON + ": " + cause.getMessage());
+        reasons.add(ScreeningMode.admitted(failure));
         return new Screening(decided.verdict(), decided.coordinate(), reasons, decided.rules(), decided.complete(),
                 decided.floor(), true, true);
     }
@@ -519,7 +510,7 @@ public final class ProxyScreen {
         LOGGER.warn("Serving the proxied " + path + " the screen would have answered " + screening.verdict()
                 + ": the repository's screening mode is RECORD - " + String.join("; ", screening.reasons()));
         List<String> reasons = new ArrayList<>(screening.reasons());
-        reasons.add(RECORDED_REASON);
+        reasons.add(ScreeningMode.RECORDED_REASON);
         return new Screening(screening.floor(), screening.coordinate(), reasons, screening.rules(),
                 screening.complete(), screening.floor(), true, screening.pending());
     }
@@ -532,8 +523,7 @@ public final class ProxyScreen {
      * parsed, the path's otherwise.
      */
     private Screening feedFailed(String path, List<ComplianceGate.Subject> subjects, RuntimeException failure) {
-        Throwable cause = failure.getCause() != null ? failure.getCause() : failure;
-        String message = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
+        String message = ScreeningMode.outage(failure);
         LOGGER.warn("Could not fully screen the proxied " + path + "; an advisory feed failed closed - holding the copy "
                 + "in quarantine rather than serving unscreened bytes or answering an error", failure);
         String coordinate = coordinate(subjects.isEmpty() ? List.of(pathDerivedSubject(path)) : subjects);

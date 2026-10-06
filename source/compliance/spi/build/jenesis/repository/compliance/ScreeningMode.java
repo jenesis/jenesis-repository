@@ -67,4 +67,25 @@ public enum ScreeningMode {
     public boolean admitsOutage() {
         return this != HOLD;
     }
+
+    /** The reason an artifact screened while a feed could not answer carries, beside the outage itself - one wording
+     *  for a publish and a proxied fill alike. */
+    public static final String ADMITTED_REASON = "Admitted on the checks that could answer, as the repository's "
+            + "screening mode says, while an advisory feed cannot";
+
+    /** The reason an artifact the screen would have withheld carries under {@link #RECORD}. */
+    public static final String RECORDED_REASON = "Recorded, not held: the repository's screening mode records what the "
+            + "screen finds and holds none of it";
+
+    /** {@link #ADMITTED_REASON} for the outage {@code failure} reports - see {@link #outage}. */
+    public static String admitted(RuntimeException failure) {
+        return ADMITTED_REASON + ": " + outage(failure);
+    }
+
+    /** What a feed's {@code failure} says went wrong: the message of what it wraps, or its own, or - for a failure
+     *  that carries none - the name of what failed, so a reason never reads as {@code null}. */
+    public static String outage(RuntimeException failure) {
+        Throwable cause = failure.getCause() != null ? failure.getCause() : failure;
+        return cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
+    }
 }
