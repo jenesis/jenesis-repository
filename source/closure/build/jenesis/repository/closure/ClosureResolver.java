@@ -71,7 +71,8 @@ public final class ClosureResolver {
         List<ClosureSection.Cut> cuts = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         seen.add(coordinate);
-        record Pending(ComplianceGate.Dependency dependency, int depth) {
+        // What named each dependency: the component whose declarations queued it, or none for the version's own.
+        record Pending(ComplianceGate.Dependency dependency, int depth, String viaCoordinate, String viaVersion) {
         }
         Optional<List<ComplianceGate.Dependency>> roots = declarations(readers.getFirst(), ecosystem, coordinate,
                 version);
@@ -82,7 +83,7 @@ public final class ClosureResolver {
         }
         Deque<Pending> queue = new ArrayDeque<>();
         for (ComplianceGate.Dependency dependency : roots.get()) {
-            queue.add(new Pending(dependency, 1));
+            queue.add(new Pending(dependency, 1, "", ""));
         }
         boolean truncated = false;
         while (!queue.isEmpty()) {
@@ -103,10 +104,10 @@ public final class ClosureResolver {
             }
             StoreRepositoryInventory.Holding held = choice.holding();
             components.add(new ClosureSection.Component(held.coordinate(), held.version(), held.cached(),
-                    next.depth(), choice.reader().repository()));
+                    next.depth(), choice.reader().repository(), next.viaCoordinate(), next.viaVersion()));
             for (ComplianceGate.Dependency transitive : declared(choice.reader(), ecosystem, held.coordinate(),
                     held.version())) {
-                queue.add(new Pending(transitive, next.depth() + 1));
+                queue.add(new Pending(transitive, next.depth() + 1, held.coordinate(), held.version()));
             }
         }
         return new ClosureSection.Closure(cuts.isEmpty() && !truncated ? ClosureSection.Status.RESOLVED

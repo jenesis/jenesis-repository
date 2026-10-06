@@ -93,9 +93,11 @@ public final class NpmShrinkwrap implements ClosureSource {
         }
         List<CarriedClosure.Entry> entries = new ArrayList<>();
         Map<String, Integer> depths = new HashMap<>();
+        // The install path whose dependencies first named each one reached, "" for the root's own.
+        Map<String, String> parents = new HashMap<>();
         Deque<String> queue = new ArrayDeque<>();
         for (String name : roots) {
-            reach(installed, "", name, 1, depths, queue);
+            reach(installed, "", name, 1, depths, parents, queue);
         }
         while (!queue.isEmpty()) {
             String path = queue.poll();
@@ -112,9 +114,13 @@ public final class NpmShrinkwrap implements ClosureSource {
                         "named by the version's npm-shrinkwrap.json with no version"));
                 continue;
             }
-            entries.add(CarriedClosure.Entry.placed(Ecosystems.NPM, at.name(), at.version(), depth));
+            Installed via = installed.get(parents.getOrDefault(path, ""));
+            entries.add(via == null
+                    ? CarriedClosure.Entry.placed(Ecosystems.NPM, at.name(), at.version(), depth)
+                    : CarriedClosure.Entry.placed(Ecosystems.NPM, at.name(), at.version(), depth, via.name(),
+                            via.version()));
             for (String need : at.needs()) {
-                reach(installed, path, need, depth + 1, depths, queue);
+                reach(installed, path, need, depth + 1, depths, parents, queue);
             }
         }
         return Optional.of(entries);
@@ -123,7 +129,7 @@ public final class NpmShrinkwrap implements ClosureSource {
     /** Queue the package {@code name} as the one installed at {@code from} resolves it, where it is installed, not yet
      *  reached, and installed for a consumer. */
     private static void reach(Map<String, Installed> installed, String from, String name, int depth,
-                              Map<String, Integer> depths, Deque<String> queue) {
+                              Map<String, Integer> depths, Map<String, String> parents, Deque<String> queue) {
         String path = resolve(installed, from, name);
         if (path == null || depths.containsKey(path)) {
             return;
@@ -133,6 +139,7 @@ public final class NpmShrinkwrap implements ClosureSource {
             return;
         }
         depths.put(path, depth);
+        parents.put(path, from);
         queue.add(path);
     }
 

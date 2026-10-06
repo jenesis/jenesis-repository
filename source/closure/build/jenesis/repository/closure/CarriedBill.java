@@ -55,12 +55,23 @@ public final class CarriedBill implements ClosureSource {
             return Optional.empty();
         }
         DependencyGraph graph = bill.get();
-        Map<String, Integer> depths = depths(graph);
+        Map<String, Integer> depths = new HashMap<>();
+        Map<String, String> parents = new HashMap<>();
+        walk(graph, depths, parents);
+        Map<String, PackageUrls.Named> names = new HashMap<>();
+        for (DependencyComponent component : graph.dependencies()) {
+            named(component, ecosystem).ifPresent(at -> names.put(component.ref(), at));
+        }
         List<CarriedClosure.Entry> entries = new ArrayList<>();
         for (DependencyComponent component : graph.dependencies()) {
+            // The component whose dependencies name this one, where the bill's graph says so and it is not the root.
+            PackageUrls.Named via = names.get(parents.get(component.ref()));
             entries.add(named(component, ecosystem)
-                    .map(at -> CarriedClosure.Entry.placed(at.ecosystem(), at.coordinate(), at.version(),
-                            depths.getOrDefault(component.ref(), 1)))
+                    .map(at -> via == null
+                            ? CarriedClosure.Entry.placed(at.ecosystem(), at.coordinate(), at.version(),
+                                    depths.getOrDefault(component.ref(), 1))
+                            : CarriedClosure.Entry.placed(at.ecosystem(), at.coordinate(), at.version(),
+                                    depths.getOrDefault(component.ref(), 1), via.coordinate(), via.version()))
                     .orElseGet(() -> CarriedClosure.Entry.unplaced(component.coordinate(), versionOf(component),
                             "named by the version's bill in a form this repository cannot place")));
         }
@@ -128,11 +139,11 @@ public final class CarriedBill implements ClosureSource {
         return lower.endsWith(".jar") || lower.endsWith(".war") || lower.endsWith(".ear");
     }
 
-    /** Each component's distance from the root along the bill's edges. */
-    private static Map<String, Integer> depths(DependencyGraph graph) {
-        Map<String, Integer> depths = new HashMap<>();
+    /** Each component's distance from the root along the bill's graph, into {@code depths}, and the component whose
+     *  edge reached it first, into {@code parents}; nothing where the bill names no root. */
+    private static void walk(DependencyGraph graph, Map<String, Integer> depths, Map<String, String> parents) {
         if (graph.rootRef() == null) {
-            return depths;
+            return;
         }
         Map<String, List<String>> edges = new HashMap<>();
         for (DependencyEdge edge : graph.edges()) {
@@ -145,11 +156,11 @@ public final class CarriedBill implements ClosureSource {
             for (String next : edges.getOrDefault(at, List.of())) {
                 if (!depths.containsKey(next)) {
                     depths.put(next, depths.get(at) + 1);
+                    parents.put(next, at);
                     queue.add(next);
                 }
             }
         }
-        return depths;
     }
 
     /** The coordinate a component names: its package URL's where it carries one, its group and name in the

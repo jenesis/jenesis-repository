@@ -69,7 +69,7 @@ class CarriedLockTest {
         assertThat(closure.components()).containsExactly(
                 new ClosureSection.Component("a", "1.0.0", true, 1, ""),
                 new ClosureSection.Component("b", "1.2.0", true, 1, ""),
-                new ClosureSection.Component("a", "2.0.0", true, 2, ""));
+                new ClosureSection.Component("a", "2.0.0", true, 2, "", "b", "1.2.0"));
         assertThat(closure.cuts()).extracting(ClosureSection.Cut::coordinate, ClosureSection.Cut::reason)
                 .containsExactlyInAnyOrder(
                         tuple("local", "linked by the version's npm-shrinkwrap.json to a folder, which names nothing "
@@ -93,9 +93,11 @@ class CarriedLockTest {
 
         assertThat(new NpmShrinkwrap().resolve(ClosureWalk.of(store), "npm", "acme-app", "1.0.0", NOW)
                 .orElseThrow().components()).extracting(ClosureSection.Component::coordinate,
-                        ClosureSection.Component::version, ClosureSection.Component::depth)
-                .containsExactly(tuple("b", "1.0.0", 1), tuple("e", "4.0.0", 1), tuple("d", "1.0.0", 2),
-                        tuple("e", "5.0.0", 3));
+                        ClosureSection.Component::version, ClosureSection.Component::depth,
+                        ClosureSection.Component::viaCoordinate, ClosureSection.Component::viaVersion)
+                .as("each reached through the package whose dependencies named it")
+                .containsExactly(tuple("b", "1.0.0", 1, "", ""), tuple("e", "4.0.0", 1, "", ""),
+                        tuple("d", "1.0.0", 2, "b", "1.0.0"), tuple("e", "5.0.0", 3, "d", "1.0.0"));
     }
 
     @Test
@@ -178,6 +180,11 @@ class CarriedLockTest {
                 .containsExactly(tuple("serde", "1.0.210", 1), tuple("syn", "2.0.79", 1),
                         tuple("syn", "1.0.109", 2), tuple("serde_derive", "1.0.210", 2));
         assertThat(closure.cuts()).extracting(ClosureSection.Cut::coordinate).containsExactly("acme-core");
+        assertThat(ClosureSection.path(closure, "serde_derive", "1.0.210"))
+                .containsExactly(new ClosureSection.Hop("serde", "1.0.210"),
+                        new ClosureSection.Hop("serde_derive", "1.0.210"));
+        assertThat(ClosureSection.path(closure, "syn", "1.0.109")).as("a path through a cut ends at it, named")
+                .containsExactly(new ClosureSection.Hop("acme-core", "0.3.0"), new ClosureSection.Hop("syn", "1.0.109"));
         assertThat(closure.status()).isEqualTo(ClosureSection.Status.PARTIAL);
     }
 

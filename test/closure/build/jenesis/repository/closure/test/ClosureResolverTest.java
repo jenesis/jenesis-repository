@@ -129,6 +129,32 @@ class ClosureResolverTest {
     }
 
     @Test
+    void a_transitive_dependency_records_what_named_it_and_its_path_reads_back_from_the_section() throws IOException {
+        release("org.acme", "app", "1.0", List.of(new DependencySection.Declared("org.dep:a", "1.0")));
+        release("org.dep", "a", "1.0", List.of(new DependencySection.Declared("org.dep:b", "2.0")));
+        release("org.dep", "b", "2.0", List.of(new DependencySection.Declared("org.dep:c", "3.0")));
+        cached("org.dep", "c", "3.0", pom("org.dep", "c", "3.0", ""));
+
+        ClosureSection.Closure closure = new ClosureResolver(store, QualityInspector.all())
+                .resolve("Maven", "org.acme:app", "1.0", NOW);
+
+        assertThat(closure.components()).containsExactly(
+                new ClosureSection.Component("org.dep:a", "1.0", false, 1, ""),
+                new ClosureSection.Component("org.dep:b", "2.0", false, 2, "", "org.dep:a", "1.0"),
+                new ClosureSection.Component("org.dep:c", "3.0", true, 3, "", "org.dep:b", "2.0"));
+        assertThat(ClosureSection.path(closure, "org.dep:c", "3.0")).as("from the version's own dependency down")
+                .containsExactly(new ClosureSection.Hop("org.dep:a", "1.0"), new ClosureSection.Hop("org.dep:b", "2.0"),
+                        new ClosureSection.Hop("org.dep:c", "3.0"));
+        assertThat(ClosureSection.path(closure, "org.dep:other", "1.0")).as("what it does not reach").isEmpty();
+
+        MetadataProvider.installed().over(store).mutate("Maven", "org.acme:app", "1.0", ClosureSection.TAG,
+                ClosureSection.record(closure));
+        assertThat(ClosureSection.closure(MetadataProvider.installed().over(store).section("Maven", "org.acme:app",
+                "1.0", ClosureSection.TAG))).as("the parents survive the section's encoding")
+                .hasValueSatisfying(stored -> assertThat(stored.components()).isEqualTo(closure.components()));
+    }
+
+    @Test
     void a_range_takes_the_newest_held_version_it_admits() throws IOException {
         release("org.acme", "app", "1.0", List.of(new DependencySection.Declared("org.dep:a", "[1.0,2.0)")));
         release("org.dep", "a", "1.2", List.of());
