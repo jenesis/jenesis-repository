@@ -106,10 +106,12 @@ listed here with the reason. A refresh that moves one of these is reverted by ha
 - **`commons-fileupload` 1.5.** 1.6.0's module descriptor requires `servlet.api` and `portlet.api` without
   `static`, which its own POM marks provided, so a module-path boot layer fails on a module nothing carries.
 - **The Maven 3 libraries 3.9.16**, `maven-artifact` and the `maven-model`, `maven-model-builder`,
-  `maven-repository-metadata`, `maven-builder-support` and `maven-resolver-provider` Maven Resolver reaches. 3.10.0's
-  jars name themselves in their manifests, and the packages they split between them - `org.apache.maven.model.merge`,
-  `org.apache.maven.artifact.repository.metadata` - then refuse a module-path layer that holds two of them. 3.9.16's
-  name nothing; versatile requires `maven-artifact` as `org.apache.maven.v3.artifact`, which an alias gives it.
+  `maven-builder-support` and `maven-resolver-provider` Maven Resolver reaches. `maven-model` and
+  `maven-model-builder` split `org.apache.maven.model.merge` (`ModelMerger` and `MavenModelMerger`) in every release;
+  3.10.0's jars name themselves in their manifests, so they go on the module path, where a package two modules hold
+  refuses the layer. 3.9.16's name nothing; versatile requires `maven-artifact` as `org.apache.maven.v3.artifact`,
+  which an alias gives it. `maven-repository-metadata`, which splits `org.apache.maven.artifact.repository.metadata`
+  with `maven-artifact`, is excluded: the closure resolver reads and writes no `maven-metadata.xml`.
 - **WireMock 4.0.0-beta.38**, the whole `org.wiremock` family. The 4.x beta is used by decision; the stable line
   is 3.x, so a stable refresh would move back to it.
 
