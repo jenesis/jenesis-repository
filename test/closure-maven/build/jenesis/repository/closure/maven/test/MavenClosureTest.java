@@ -122,6 +122,44 @@ class MavenClosureTest {
     }
 
     @Test
+    void a_range_no_held_version_satisfies_is_a_cut_naming_the_range() throws IOException {
+        release("org.acme", "app", "1.0", """
+                <dependencies>
+                  <dependency><groupId>org.dep</groupId><artifactId>old</artifactId><version>[5.0,6.0)</version></dependency>
+                  <dependency><groupId>org.dep</groupId><artifactId>kept</artifactId><version>1.0</version></dependency>
+                </dependencies>""");
+        cached("org.dep", "old", "1.0", "");
+        cached("org.dep", "kept", "1.0", "");
+
+        ClosureSection.Closure closure = resolve("org.acme:app", "1.0");
+
+        assertThat(closure.cuts()).singleElement().satisfies(cut -> {
+            assertThat(cut.coordinate()).isEqualTo("org.dep:old");
+            assertThat(cut.requirement()).isEqualTo("[5.0,6.0)");
+            assertThat(cut.reason()).isEqualTo("no held version satisfies the range");
+        });
+        assertThat(closure.components()).as("and what else was collected is kept")
+                .extracting(ClosureSection.Component::coordinate).containsExactly("org.dep:kept");
+    }
+
+    @Test
+    void a_snapshot_dependency_is_read_at_the_version_it_names() throws IOException {
+        release("org.acme", "app", "1.0", """
+                <dependencies>
+                  <dependency><groupId>org.dep</groupId><artifactId>moving</artifactId><version>2.0-SNAPSHOT</version></dependency>
+                </dependencies>""");
+        cached("org.dep", "moving", "2.0-SNAPSHOT", """
+                <dependencies>
+                  <dependency><groupId>org.dep</groupId><artifactId>under</artifactId><version>1.0</version></dependency>
+                </dependencies>""");
+        cached("org.dep", "under", "1.0", "");
+
+        assertThat(resolve("org.acme:app", "1.0").components()).extracting(ClosureSection.Component::coordinate,
+                        ClosureSection.Component::version)
+                .containsExactly(tuple("org.dep:moving", "2.0-SNAPSHOT"), tuple("org.dep:under", "1.0"));
+    }
+
+    @Test
     void a_repository_a_pom_declares_is_never_asked() throws IOException {
         release("org.acme", "app", "1.0", """
                 <repositories><repository><id>elsewhere</id><url>http://127.0.0.1:9/never</url></repository></repositories>
