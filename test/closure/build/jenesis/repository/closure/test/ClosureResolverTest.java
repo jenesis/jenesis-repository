@@ -5,7 +5,12 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.closure.ClosureResolver;
 import build.jenesis.repository.closure.spi.ClosureSection;
 import build.jenesis.repository.closure.spi.ClosureWalk;
+import build.jenesis.repository.compliance.ComplianceGate;
+import build.jenesis.repository.compliance.ManifestSubjectBuilder;
 import build.jenesis.repository.compliance.QualityInspector;
+import build.jenesis.repository.format.DetachedExchange;
+import build.jenesis.repository.format.ProxyFormat;
+import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.inventory.DependencySection;
 import build.jenesis.repository.inventory.HeldSubjects;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
@@ -205,6 +210,38 @@ class ClosureResolverTest {
                 .as("the holding repository survives the document").isEqualTo(closure.components());
     }
 
+    @Test
+    void a_cached_copy_a_format_keeps_in_its_own_key_space_declares_through_its_manifest() throws IOException {
+        // An npm copy is kept in the shared Blobs namespace rather than under a publish/ pointer, as every format but
+        // the publish/ layouts keeps its files - read only through the pointer, it would declare nothing and the
+        // closure would stop at it.
+        String tarball = "/npm/ms/-/ms-2.1.3.tgz";
+        URI registry = URI.create("https://registry.example/");
+        byte[] manifest = "acme-transitive ^2.0.0".getBytes(StandardCharsets.UTF_8);
+        RepositoryFormat npm = RepositoryFormat.installed().stream().filter(format -> format.name().equals("npm"))
+                .findFirst().orElseThrow();
+        Fill fill = new Fill(tarball);
+        ProxyFormat.Fetcher.Buffered upstream = (url, _) -> Optional.of(
+                url.equals(registry.resolve("ms/-/ms-2.1.3.tgz")) ? new ProxyFormat.Fetched(200, manifest, Map.of())
+                        : new ProxyFormat.Fetched(404, new byte[0], Map.of()));
+        assertThat(((ProxyFormat) npm).proxy(fill, store, registry, upstream)).isTrue();
+        assertThat(publication.locate(tarball)).as("nothing under a publish/ pointer").isEmpty();
+        inventory.cache("npm", "ms", "2.1.3", registry.toString(), NOW);
+        MetadataProvider.installed().over(store).mutate("npm", "acme-app", "1.0.0", DependencySection.TAG,
+                DependencySection.record("/npm/acme-app", List.of(new DependencySection.Declared("ms", "^2.1.0")),
+                        NOW));
+
+        ClosureSection.Closure closure = new ClosureResolver(store, List.of(new LineInspector()))
+                .resolve("npm", "acme-app", "1.0.0", NOW);
+
+        assertThat(closure.components()).extracting(ClosureSection.Component::coordinate,
+                ClosureSection.Component::version, ClosureSection.Component::cached)
+                .containsExactly(tuple("ms", "2.1.3", true));
+        assertThat(closure.cuts()).extracting(ClosureSection.Cut::coordinate, ClosureSection.Cut::reason)
+                .as("what the copy's manifest declares").containsExactly(
+                        tuple("acme-transitive", "not held by this repository"));
+    }
+
     private Section roundTrip(ClosureSection.Closure closure) {
         return ClosureSection.record(closure).apply(Optional.empty());
     }
@@ -247,5 +284,73 @@ class ClosureResolverTest {
         return ("<project><modelVersion>4.0.0</modelVersion><groupId>" + group + "</groupId><artifactId>" + artifact
                 + "</artifactId><version>" + version + "</version><dependencies>" + dependencies
                 + "</dependencies></project>").getBytes(StandardCharsets.UTF_8);
+    }
+
+    /** An inspector reading an npm tarball as lines of a dependency and its requirement, for the copy above. */
+    private static final class LineInspector implements QualityInspector {
+
+        @Override
+        public boolean handles(String path) {
+            return path.startsWith("/npm/") && path.endsWith(".tgz");
+        }
+
+        @Override
+        public List<ComplianceGate.Subject> inspect(String path, byte[] content, Lookup lookup) {
+            ManifestSubjectBuilder subject = ManifestSubjectBuilder.of("npm").readsDependencies();
+            for (String line : new String(content, StandardCharsets.UTF_8).split("\n")) {
+                String[] parts = line.split(" ", 2);
+                subject = subject.dependency(parts[0], parts[1]);
+            }
+            return subject.subject("ms", "2.1.3");
+        }
+
+        @Override
+        public List<ComplianceGate.Subject> inspectArtifact(String path, byte[] content, Lookup lookup) {
+            return inspect(path, content, lookup);
+        }
+    }
+
+    /** A proxied {@code GET} with nothing to send and a response nobody reads but its status. */
+    private static final class Fill implements DetachedExchange {
+
+        private final String path;
+
+        private Fill(String path) {
+            this.path = path;
+        }
+
+        @Override
+        public String method() {
+            return "GET";
+        }
+
+        @Override
+        public String path() {
+            return path;
+        }
+
+        @Override
+        public String queryParameter(String name) {
+            return null;
+        }
+
+        @Override
+        public String requestHeader(String name) {
+            return null;
+        }
+
+        @Override
+        public InputStream requestStream() {
+            return InputStream.nullInputStream();
+        }
+
+        @Override
+        public void setResponseHeader(String name, String value) {
+        }
+
+        @Override
+        public OutputStream respond(int status, long contentLength) {
+            return OutputStream.nullOutputStream();
+        }
     }
 }

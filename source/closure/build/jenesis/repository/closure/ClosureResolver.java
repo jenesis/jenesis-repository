@@ -1,12 +1,15 @@
 package build.jenesis.repository.closure;
 
 import module java.base;
+import build.jenesis.repository.blobs.BlobLayout;
+import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.closure.spi.ClosureSection;
 import build.jenesis.repository.closure.spi.ClosureSource;
 import build.jenesis.repository.closure.spi.ClosureWalk;
 import build.jenesis.repository.closure.spi.RequirementGrammar;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.QualityInspector;
+import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.inventory.DependencySection;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
@@ -238,14 +241,11 @@ public final class ClosureResolver {
         if (claiming.isEmpty()) {
             return List.of();
         }
-        Optional<Publication.Located> located = reader.publication().locate(path);
-        if (located.isEmpty() || located.get().size() > MANIFEST_LIMIT) {
+        Optional<byte[]> read = served(reader, path);
+        if (read.isEmpty()) {
             return List.of();
         }
-        byte[] body;
-        try (InputStream in = reader.store().open(located.get().key())) {
-            body = in.readNBytes(MANIFEST_LIMIT);
-        }
+        byte[] body = read.get();
         List<ComplianceGate.Dependency> dependencies = new ArrayList<>();
         for (QualityInspector inspector : claiming) {
             try {
@@ -258,6 +258,43 @@ public final class ClosureResolver {
             }
         }
         return List.copyOf(new LinkedHashSet<>(dependencies));
+    }
+
+    /**
+     * The bytes {@code path} serves, empty where nothing serves it, a hold withholds it or it is past
+     * {@link #MANIFEST_LIMIT}: the blob its {@code publish/} pointer names, or, for a format that keeps its files in
+     * the shared {@code Blobs} namespace - every format but the {@code publish/} layouts - the blob its layout serves
+     * the path from. Without the second, a cached copy of such a format would declare nothing and its closure would
+     * stop at it.
+     */
+    private static Optional<byte[]> served(Reader reader, String path) throws IOException {
+        Optional<Publication.Located> published = reader.publication().locate(path);
+        if (published.isPresent()) {
+            if (published.get().size() > MANIFEST_LIMIT) {
+                return Optional.empty();
+            }
+            try (InputStream in = reader.store().open(published.get().key())) {
+                return Optional.of(in.readNBytes(MANIFEST_LIMIT));
+            }
+        }
+        Blobs blobs = new Blobs(reader.store());
+        for (RepositoryFormat format : RepositoryFormat.installed()) {
+            if (!(format instanceof BlobLayout layout) || !format.handles(path)) {
+                continue;
+            }
+            Optional<String> key = layout.servingKey(path, reader.store());
+            Optional<Blobs.Located> located = key.isEmpty() ? Optional.empty() : blobs.locate(key.get());
+            if (located.isPresent()) {
+                if (located.get().size() > MANIFEST_LIMIT) {
+                    return Optional.empty();
+                }
+                try (InputStream in = blobs.open(located.get().hash())) {
+                    byte[] body = in.readNBytes(MANIFEST_LIMIT + 1);
+                    return body.length > MANIFEST_LIMIT ? Optional.empty() : Optional.of(body);
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     /** {@code paths} ordered so a manifest, the smallest file of a version by its name, is read first. */
