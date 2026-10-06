@@ -3,7 +3,8 @@
  * a release's declared dependencies walked through the repository's releases and cached copies and those of the
  * repositories its fallbacks name, a cached copy's own
  * declarations read off its stored POM, a requirement taking the newest held version it admits, and every subtree
- * that cannot resolve recorded as a cut. The pass's setting and its default are asked of the catalogue.
+ * that cannot resolve recorded as a cut. The declared dependents the pass keeps are read through the query the module
+ * provides. The pass's setting and its default are asked of the catalogue.
  *
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.closure
@@ -17,6 +18,7 @@ open module build.jenesis.repository.closure.test {
     requires build.jenesis.repository.compliance.scan;
     requires build.jenesis.repository.definitions;
     requires build.jenesis.repository.dependents.requirements;
+    requires build.jenesis.repository.dependents.spi;
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.format.maven;
     requires build.jenesis.repository.findings;

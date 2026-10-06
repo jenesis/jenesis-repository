@@ -12,9 +12,9 @@ import build.jenesis.repository.store.ServableNames;
 /**
  * The declared tier's rows as a surface shows them, on the API and the console alike.
  *
- * <p>A row names a version of this repository, so it is listed only while that version is still published and not
- * withheld - two point reads a row, over a page already bounded. The index catches up with a deletion on its next
- * full pass; until then this is what keeps a deleted or held version's name off both surfaces.
+ * <p>A row names a version of this repository the query confirmed still published, so it is listed only while that
+ * version is not withheld - a point read a row, over a page already bounded. That is what keeps a held version's name
+ * off both surfaces.
  *
  * <p>Asked about a version of the package, each row also says whether its requirement admits that version -
  * {@code admits}, {@code excludes} or {@code unknown} - as the declaring ecosystem's {@link RequirementGrammar} reads
@@ -38,8 +38,7 @@ public final class Declarations {
                                  String asked) throws IOException {
         List<Row> shown = new ArrayList<>();
         for (DependentsQuery.Declaration row : page) {
-            if (inventory.publishedAt(row.ecosystem(), row.coordinate(), row.version()).isPresent()
-                    && inventory.disclosable(row.ecosystem(), row.coordinate(), row.version(),
+            if (inventory.disclosable(row.ecosystem(), row.coordinate(), row.version(),
                     ServableNames.Policy.HIDE_WITHHELD)) {
                 shown.add(new Row(row.ecosystem(), row.coordinate(), row.version(), row.requirement(),
                         asked == null || asked.isBlank() ? null : admits(row, asked)));

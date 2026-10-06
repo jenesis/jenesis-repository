@@ -21,7 +21,9 @@
  * is held for review or carries findings ({@link build.jenesis.repository.closure.spi.ExposureSection}), re-derived on each
  * full pass, which is the state a published version inherits from the copies it relies on. The other way round, the
  * pass indexes which published versions rely on each version a repository holds
- * ({@link build.jenesis.repository.closure.ReliedOn}), read a page at a time from the copy's side.
+ * ({@link build.jenesis.repository.closure.ReliedOn}), read a page at a time from the copy's side, and which versions
+ * declare a dependency on each package ({@link build.jenesis.repository.closure.DeclaredRows}) - a version's resolved
+ * and declared dependents.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -32,6 +34,7 @@ module build.jenesis.repository.closure {
     requires transitive build.jenesis.repository.closure.spi;
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.definitions;
+    requires build.jenesis.repository.dependents.spi;
     requires build.jenesis.repository.dependency;
     requires build.jenesis.repository.findings;
     requires build.jenesis.repository.format;
@@ -47,6 +50,8 @@ module build.jenesis.repository.closure {
             with build.jenesis.repository.closure.CarriedBill, build.jenesis.repository.closure.DeclaredClosure;
     provides build.jenesis.repository.closure.spi.RelianceProvider
             with build.jenesis.repository.closure.ReliedOnReliance;
+    provides build.jenesis.repository.dependents.spi.DependentsQueryProvider
+            with build.jenesis.repository.closure.DeclaredRowsProvider;
     provides build.jenesis.repository.maintenance.MaintenanceTaskProvider
             with build.jenesis.repository.closure.ClosureTaskProvider;
     provides build.jenesis.repository.maintenance.StorageNamespace
