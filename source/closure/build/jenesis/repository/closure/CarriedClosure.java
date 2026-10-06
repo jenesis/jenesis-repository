@@ -4,10 +4,6 @@ import module java.base;
 import build.jenesis.repository.closure.spi.ClosureSection;
 import build.jenesis.repository.closure.spi.ClosureSource;
 import build.jenesis.repository.closure.spi.ClosureWalk;
-import build.jenesis.repository.inventory.StoreRepositoryInventory;
-import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.HeldVersions;
-import build.jenesis.repository.store.ServableNames;
 
 /**
  * A closure a release carries written out - a bill of materials, a lock file - placed in the repositories of a walk:
@@ -64,7 +60,8 @@ public final class CarriedClosure {
                                                List<Entry> entries, String document, ClosureSource source,
                                                Instant now)
             throws IOException {
-        List<Holder> holders = walk.members().stream().map(Holder::new).toList();
+        List<ClosureWalk.Member> members = walk.members();
+        List<Holdings> holdings = members.stream().map(member -> Holdings.of(member.store())).toList();
         List<ClosureSection.Component> components = new ArrayList<>();
         List<ClosureSection.Cut> cuts = new ArrayList<>();
         List<ClosureSection.Foreign> foreign = new ArrayList<>();
@@ -88,61 +85,25 @@ public final class CarriedClosure {
                         entry.depth(), entry.viaCoordinate(), entry.viaVersion()));
                 continue;
             }
-            Optional<Held> held = held(holders, ecosystem, entry.coordinate(), entry.version());
-            if (held.isEmpty()) {
-                cuts.add(new ClosureSection.Cut(entry.coordinate(), entry.version(), holders.size() == 1
+            Optional<Holdings.Placed> placed = Holdings.place(holdings, ecosystem, entry.coordinate(),
+                    entry.version());
+            if (placed.isEmpty()) {
+                cuts.add(new ClosureSection.Cut(entry.coordinate(), entry.version(), members.size() == 1
                         ? "named by " + document + ", not held by this repository"
                         : "named by " + document + ", not held by this repository or a repository its fallbacks "
                                 + "name"));
-            } else if (!held.get().served()) {
+            } else if (!placed.get().standing().served()) {
                 cuts.add(new ClosureSection.Cut(entry.coordinate(), entry.version(), "held for review"));
             } else {
-                components.add(new ClosureSection.Component(entry.coordinate(), entry.version(), held.get().cached(),
-                        entry.depth(), held.get().repository(), entry.viaCoordinate(), entry.viaVersion()));
+                int member = placed.get().member();
+                components.add(new ClosureSection.Component(entry.coordinate(), entry.version(),
+                        placed.get().standing().cached(), entry.depth(),
+                        member == 0 ? "" : members.get(member).repository(), entry.viaCoordinate(),
+                        entry.viaVersion()));
             }
         }
         return new ClosureSection.Closure(cuts.isEmpty() && !truncated ? ClosureSection.Status.RESOLVED
                 : ClosureSection.Status.PARTIAL, components, cuts, truncated, now, source.kind(), source.name(),
                 foreign);
-    }
-
-    /** One repository of the walk, as a carried document's packages are looked up in it. */
-    private record Holder(String repository, ArtifactStore store, StoreRepositoryInventory inventory) {
-
-        Holder(ClosureWalk.Member member) {
-            this(member.repository(), member.store(), new StoreRepositoryInventory(member.store()));
-        }
-
-        /** Whether this repository holds {@code version} of {@code coordinate} for review as no holding yet: a
-         *  proxied copy the screen held at its fill, found through its hold's subject and live review pointer. */
-        boolean heldAtFill(String ecosystem, String coordinate, String version) throws IOException {
-            return HeldVersions.held(store, ecosystem, coordinate, version);
-        }
-    }
-
-    /** Where a package is held: the repository, as a release or a cached copy, and whether it is served. */
-    private record Held(String repository, boolean cached, boolean served) {
-    }
-
-    /** The first repository of the walk holding {@code coordinate} at {@code version}, as a release or a cached copy,
-     *  else the first holding it for review since its fill. */
-    private static Optional<Held> held(List<Holder> holders, String ecosystem, String coordinate, String version)
-            throws IOException {
-        for (int i = 0; i < holders.size(); i++) {
-            Holder holder = holders.get(i);
-            boolean released = holder.inventory().publishedAt(ecosystem, coordinate, version).isPresent();
-            boolean cached = !released && holder.inventory().cachedAt(ecosystem, coordinate, version).isPresent();
-            if (released || cached) {
-                return Optional.of(new Held(i == 0 ? "" : holder.repository(), cached,
-                        holder.inventory().disclosable(ecosystem, coordinate, version,
-                                ServableNames.Policy.HIDE_WITHHELD)));
-            }
-        }
-        for (int i = 0; i < holders.size(); i++) {
-            if (holders.get(i).heldAtFill(ecosystem, coordinate, version)) {
-                return Optional.of(new Held(i == 0 ? "" : holders.get(i).repository(), true, false));
-            }
-        }
-        return Optional.empty();
     }
 }
