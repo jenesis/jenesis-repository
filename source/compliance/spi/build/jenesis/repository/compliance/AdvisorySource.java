@@ -326,12 +326,12 @@ public interface AdvisorySource extends SignalSource {
     String SELECTION = "advisory-feeds";
 
     /** The {@value #SELECTION} value of a repository screened by no feed. */
-    String NONE_SELECTED = "none";
+    String NONE_SELECTED = RepositorySelection.NONE;
 
     /**
      * The feeds of {@code enabled} - the deployment's, by name - that screen a repository whose effective lookup is
-     * {@code repository}: those its {@value #SELECTION} names, in {@code enabled}'s order, every one where it names
-     * none, none for {@value #NONE_SELECTED}. A feed's credential and its switch stay the deployment's; a repository
+     * {@code repository}, as {@link RepositorySelection} reads its {@value #SELECTION}: those it names, in the order it
+     * names them, every one where it names none, none for {@value #NONE_SELECTED}. A feed's credential and its switch stay the deployment's; a repository
      * selects among what is on.
      *
      * @throws IllegalStateException for a name no installed feed answers to, or one the deployment has switched off
@@ -341,31 +341,18 @@ public interface AdvisorySource extends SignalSource {
     static SequencedMap<String, AdvisorySource> selected(SequencedMap<String, AdvisorySource> enabled,
                                                          UnaryOperator<String> repository) {
         String value = repository == null ? null : repository.apply(SELECTION);
-        if (value == null || value.isBlank()) {
-            return enabled;
-        }
-        if (value.strip().equalsIgnoreCase(NONE_SELECTED)) {
-            return new LinkedHashMap<>();
-        }
-        Set<String> named = new LinkedHashSet<>();
-        for (String name : value.split(",")) {
-            if (!name.isBlank()) {
-                named.add(name.strip());
-            }
-        }
-        for (String name : named) {
-            if (!enabled.containsKey(name)) {
-                throw new IllegalStateException(SELECTION + " names the advisory feed '" + name + "', which is "
-                        + (installed().contains(name) ? "switched off, or missing the configuration it needs, on this "
-                        + "deployment" : "not installed; installed: " + installed()));
+        List<String> names = new ArrayList<>(enabled.keySet());
+        for (String other : installed()) {
+            if (!enabled.containsKey(other)) {
+                names.add(other);
             }
         }
         SequencedMap<String, AdvisorySource> chosen = new LinkedHashMap<>();
-        enabled.forEach((name, feed) -> {
-            if (named.contains(name)) {
-                chosen.put(name, feed);
-            }
-        });
+        for (String name : RepositorySelection.select(SELECTION, "advisory feed", value, names, n -> n,
+                n -> enabled.containsKey(n) ? Optional.empty()
+                        : Optional.of("switched off, or missing the configuration it needs, on this deployment"))) {
+            chosen.put(name, enabled.get(name));
+        }
         return chosen;
     }
 
