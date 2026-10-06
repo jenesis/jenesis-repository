@@ -1,6 +1,10 @@
 package build.jenesis.repository.closure;
 
 import module java.base;
+import build.jenesis.repository.closure.spi.ClosureSection;
+import build.jenesis.repository.closure.spi.ClosureSource;
+import build.jenesis.repository.closure.spi.ClosureWalk;
+import build.jenesis.repository.closure.spi.RequirementGrammar;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.QualityInspector;
 import build.jenesis.repository.inventory.DependencySection;
@@ -21,13 +25,12 @@ import build.jenesis.repository.store.ServableNames;
  * the ones an installed inspector reads off its smallest claimed file - a cached copy records none, so its manifest is
  * read. A file past {@link #MANIFEST_LIMIT} is not read: a manifest is small, and an archive that large is not one.
  *
- * <p>Bounded: at most {@link #MAX_COMPONENTS} components, and {@link #MAX_VERSIONS} versions of one coordinate
+ * <p>Bounded: at most {@link ClosureSource#MAX_COMPONENTS} components, and {@link #MAX_VERSIONS} versions of one coordinate
  * examined; a closure stopped by either says so ({@link ClosureSection.Closure#truncated}). Nothing is fetched.
  */
 public final class ClosureResolver {
 
     /** The most components one closure records before it stops and says so. */
-    static final int MAX_COMPONENTS = 2_000;
 
     /** The most versions of one coordinate examined for the newest a requirement admits. */
     static final int MAX_VERSIONS = 2_000;
@@ -92,7 +95,7 @@ public final class ClosureResolver {
             if (!seen.add(dependency.coordinate())) {
                 continue;
             }
-            if (components.size() >= MAX_COMPONENTS) {
+            if (components.size() >= ClosureSource.MAX_COMPONENTS) {
                 truncated = true;
                 break;
             }

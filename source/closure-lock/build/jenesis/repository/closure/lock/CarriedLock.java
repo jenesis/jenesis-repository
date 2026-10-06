@@ -2,7 +2,7 @@ package build.jenesis.repository.closure.lock;
 
 import module java.base;
 import module org.apache.commons.compress;
-import build.jenesis.repository.closure.ClosureWalk;
+import build.jenesis.repository.closure.spi.ClosureWalk;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;

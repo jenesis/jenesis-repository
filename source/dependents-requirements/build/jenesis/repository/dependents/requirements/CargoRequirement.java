@@ -1,7 +1,7 @@
 package build.jenesis.repository.dependents.requirements;
 
 import module java.base;
-import build.jenesis.repository.closure.RequirementGrammar;
+import build.jenesis.repository.closure.spi.RequirementGrammar;
 
 /**
  * Cargo's requirement grammar, translated into the node-semver range it means and evaluated as npm's is.

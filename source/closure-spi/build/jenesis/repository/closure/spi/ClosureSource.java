@@ -1,4 +1,4 @@
-package build.jenesis.repository.closure;
+package build.jenesis.repository.closure.spi;
 
 import module java.base;
 
@@ -20,7 +20,7 @@ import module java.base;
  *   <li><b>Read purity.</b> It reads only the stores of the walk it is handed - the release's repository, then the
  *       repositories its fallbacks name - and makes no network request; what none holds is a cut. A scanner that runs
  *       beside the deployment is reached through the deployment's own configuration, never a feed's.</li>
- *   <li><b>Bounded work.</b> It stops at {@link ClosureResolver#MAX_COMPONENTS} components and says so in
+ *   <li><b>Bounded work.</b> It stops at {@link #MAX_COMPONENTS} components and says so in
  *       {@link ClosureSection.Closure#truncated}; an archive is read only as far as it must be.</li>
  *   <li><b>Error visibility.</b> A store read that fails raises, and the pass leaves the release unresolved for the
  *       next pass rather than recording a closure a failed read shortened.</li>
@@ -58,6 +58,10 @@ public interface ClosureSource {
      *  it, as of {@code now}; empty where this source has nothing to say about the release. */
     Optional<ClosureSection.Closure> resolve(ClosureWalk walk, String ecosystem, String coordinate, String version,
                                              Instant now) throws IOException;
+
+    /** The most components one closure records, whichever source produced it: one past it, the closure stops and
+     *  says so. */
+    int MAX_COMPONENTS = 2_000;
 
     /** Every installed source, in the order the pass asks them. */
     static List<ClosureSource> installed() {

@@ -2,14 +2,14 @@ package build.jenesis.repository.dependents.requirements.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
-import build.jenesis.repository.closure.RequirementGrammar;
+import build.jenesis.repository.closure.spi.RequirementGrammar;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import static build.jenesis.repository.closure.RequirementGrammar.Admission.ADMITS;
-import static build.jenesis.repository.closure.RequirementGrammar.Admission.EXCLUDES;
-import static build.jenesis.repository.closure.RequirementGrammar.Admission.UNKNOWN;
+import static build.jenesis.repository.closure.spi.RequirementGrammar.Admission.ADMITS;
+import static build.jenesis.repository.closure.spi.RequirementGrammar.Admission.EXCLUDES;
+import static build.jenesis.repository.closure.spi.RequirementGrammar.Admission.UNKNOWN;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

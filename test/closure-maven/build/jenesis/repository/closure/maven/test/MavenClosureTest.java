@@ -2,9 +2,9 @@ package build.jenesis.repository.closure.maven.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
-import build.jenesis.repository.closure.ClosureSection;
-import build.jenesis.repository.closure.ClosureWalk;
-import build.jenesis.repository.closure.ClosureSource;
+import build.jenesis.repository.closure.spi.ClosureSection;
+import build.jenesis.repository.closure.spi.ClosureWalk;
+import build.jenesis.repository.closure.spi.ClosureSource;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;

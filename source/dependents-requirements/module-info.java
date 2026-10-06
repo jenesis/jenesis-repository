@@ -4,7 +4,7 @@
  * through semver4j after translating each into the node-semver range it means. What the dependents index's
  * declared tier shows beside each row when a caller names a version - a marker, never an input to a blast radius - and
  * the grammar a closure takes the newest held version a requirement admits by, each ecosystem's versions ordered by
- * the same library ({@link build.jenesis.repository.closure.RequirementGrammar}). An ecosystem this module does not
+ * the same library ({@link build.jenesis.repository.closure.spi.RequirementGrammar}). An ecosystem this module does not
  * evaluate answers unknown rather than a guess.
  *
  * <p>The ecosystems whose versions are not semantic versions - PyPI, NuGet, RubyGems, Go, Debian, RPM, Alpine and
@@ -25,12 +25,12 @@
  * @jenesis.alias org.apache.maven.v3.artifact org.apache.maven/maven-artifact
  */
 module build.jenesis.repository.dependents.requirements {
-    requires build.jenesis.repository.closure;
+    requires build.jenesis.repository.closure.spi;
     requires org.apache.maven.resolver.util;
     requires org.semver4j;
     requires io.github.nscuro.versatile.core;
     exports build.jenesis.repository.dependents.requirements;
-    provides build.jenesis.repository.closure.RequirementGrammar
+    provides build.jenesis.repository.closure.spi.RequirementGrammar
             with build.jenesis.repository.dependents.requirements.MavenGrammar,
                     build.jenesis.repository.dependents.requirements.NpmGrammar,
                     build.jenesis.repository.dependents.requirements.CargoGrammar,

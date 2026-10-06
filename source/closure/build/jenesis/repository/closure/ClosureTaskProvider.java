@@ -1,6 +1,7 @@
 package build.jenesis.repository.closure;
 
 import module java.base;
+import build.jenesis.repository.closure.spi.ClosureSource;
 import build.jenesis.repository.maintenance.IntervalSetting;
 import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.MaintenanceTaskProvider;

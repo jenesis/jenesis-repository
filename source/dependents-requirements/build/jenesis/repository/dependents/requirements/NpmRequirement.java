@@ -1,7 +1,7 @@
 package build.jenesis.repository.dependents.requirements;
 
 import module java.base;
-import build.jenesis.repository.closure.RequirementGrammar;
+import build.jenesis.repository.closure.spi.RequirementGrammar;
 import org.semver4j.Semver;
 
 /**
