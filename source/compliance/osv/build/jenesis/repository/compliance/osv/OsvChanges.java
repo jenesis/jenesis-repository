@@ -23,7 +23,9 @@ import java.time.format.DateTimeParseException;
  *
  * <p>Bounded: a draw reads at most {@link #WINDOW} bytes of each list and fetches at most {@link #RECORDS} records,
  * oldest first, resuming where it stopped; a list whose position lies past the window is recorded as a gap, never as a
- * shorter list. The first draw of an ecosystem only records where its list stands.
+ * shorter list. The first draw of an ecosystem only records where its list stands. An ecosystem the export holds no
+ * list for has no record in OSV yet, which is not a failure: its position stands at the epoch, so every line of the list
+ * it gains is drawn as a change.
  */
 public final class OsvChanges {
 
@@ -75,7 +77,16 @@ public final class OsvChanges {
         int budget = RECORDS;
         for (String ecosystem : OsvQuery.osvEcosystems()) {
             Optional<Instant> position = Optional.ofNullable(positions.get(ecosystem)).map(Instant::parse);
-            Listed listed = list(ecosystem, position.orElse(null));
+            Optional<Listed> answered = list(ecosystem, position.orElse(null));
+            if (answered.isEmpty()) {
+                // The export holds no list for an ecosystem OSV has no record of yet. Every record it later lists is
+                // a change, so the list stands at the start of time until it appears.
+                if (position.isEmpty()) {
+                    positions.put(ecosystem, Instant.EPOCH.toString());
+                }
+                continue;
+            }
+            Listed listed = answered.get();
             if (listed.lines().isEmpty()) {
                 continue;
             }
@@ -114,11 +125,12 @@ public final class OsvChanges {
     private record Listed(List<Line> lines, boolean exhausted) {
     }
 
-    private Listed list(String ecosystem, Instant position) throws IOException {
+    /** What one list says since {@code position}, or empty where the export holds no list for {@code ecosystem}. */
+    private Optional<Listed> list(String ecosystem, Instant position) throws IOException {
         FeedRequest request = FeedRequest.get(export.resolve(URLEncoder.encode(ecosystem, StandardCharsets.UTF_8)
                 .replace("+", "%20") + "/modified_id.csv"));
         try {
-            return client.fetch(request, FeedClient.Reader.document(body -> {
+            return Optional.of(client.fetch(request, FeedClient.Reader.document(body -> {
                 List<Line> lines = new ArrayList<>();
                 BoundedInput window = new BoundedInput(body, WINDOW);
                 BufferedReader reader = new BufferedReader(new InputStreamReader(window, StandardCharsets.UTF_8));
@@ -147,8 +159,11 @@ public final class OsvChanges {
                 }
                 // The list ended, or the window did: only a window that ran out leaves the position unreached.
                 return new Listed(List.copyOf(lines), window.exhausted());
-            })).value().orElseThrow();
+            })).value().orElseThrow());
         } catch (FeedException e) {
+            if (e.reason() == FeedException.Reason.STATUS && e.status() == 404) {
+                return Optional.empty();
+            }
             throw new IOException("Could not read OSV's " + ecosystem + " change list (" + OsvQuery.reason(e) + ")",
                     e);
         }
