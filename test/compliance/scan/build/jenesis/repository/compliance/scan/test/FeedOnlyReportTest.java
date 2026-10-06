@@ -6,6 +6,7 @@ import build.jenesis.repository.compliance.Ecosystems;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.Freshness;
 import build.jenesis.repository.compliance.Severity;
+import build.jenesis.repository.compliance.scan.Reached;
 import build.jenesis.repository.compliance.scan.VulnerabilityReports;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.store.ArtifactStore;
@@ -51,7 +52,7 @@ class FeedOnlyReportTest {
         };
 
         VulnerabilityReports.VulnerabilityReport report = VulnerabilityReports.read(store, inventory, feed, List.of(),
-                Optional.empty(), Optional.empty(), "", "", null, 50, "vulnerabilities-refresh", List.of());
+                Optional.empty(), Reached.NONE, "", "", null, 50, "vulnerabilities-refresh", List.of());
 
         assertThat(asked).as("a version published here is asked of no feed").containsExactly("org.public:fetched");
         assertThat(report.vulnerable()).extracting(VulnerabilityReports.VulnerableArtifact::coordinate)

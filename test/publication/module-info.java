@@ -58,7 +58,6 @@ open module build.jenesis.repository.publication.contract.test {
     // Every other core module providing a publication hook, so the census's two legs read them too.
     requires build.jenesis.repository.compliance.signatures;
     requires build.jenesis.repository.compliance.web;
-    requires build.jenesis.repository.dependents;
     requires build.jenesis.repository.events;
     requires build.jenesis.repository.gate;
     requires build.jenesis.repository.index;

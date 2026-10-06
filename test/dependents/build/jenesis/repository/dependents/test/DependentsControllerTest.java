@@ -19,19 +19,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
 /**
- * The reverse-dependency endpoint's refusals.
+ * The declared-dependencies endpoint's answers and refusals.
  *
- * <p>This endpoint answers "what breaks if this coordinate turns out to be vulnerable", so the interesting cases
- * are the ones where it cannot answer. It distinguishes <em>not installed</em> (501 - this deployment does not
- * carry the module) from <em>not built yet</em> (503 - it does, and the index sweep has not run), which is the same
- * distinction the CLI's exit code 3 exists for: both are a missing answer and only one of them is worth waiting
- * for. Collapsing them, or answering either as an empty list, would report "nothing depends on this" for a
- * coordinate half the estate depends on - a wrong answer that reads exactly like a right one.
- *
- * <p>The coordinate's traversal guard is deliberately not asserted here: it sits behind the built-index check, so
- * reaching it needs an index this suite would have to build, and a test that drove the sweep to get there would be
- * testing the sweep. What is covered is the mapping the guard relies on - the handler's own exception handler
- * answering a bad request rather than letting the raise become a 500.
+ * <p>It distinguishes <em>not installed</em> (501 - this deployment does not carry the module) from <em>not built
+ * yet</em> (503 - it does, and the pass has not run), which is the same distinction the CLI's exit code 3 exists for:
+ * both are a missing answer and only one of them is worth waiting for. Answering either as an empty list would report
+ * "nothing declares this" for a package half the estate names - a wrong answer that reads exactly like a right one.
  */
 public class DependentsControllerTest {
 
@@ -44,31 +37,29 @@ public class DependentsControllerTest {
     }
 
     @Test
-    void an_index_that_has_not_been_built_says_so_rather_than_reporting_no_dependents() throws Exception {
+    void a_request_naming_no_package_is_refused() throws Exception {
         Servlets.Response response = Servlets.response();
 
-        Object view = controller().dependents("releases", null, null, null, "", 500,
+        Object view = controller().dependents("releases", null, null, "", 500,
                 Servlets.request("GET", "/ui/dependents"), response.servlet());
 
-        // 503, not an empty page: "not computed yet" and "nothing depends on it" are opposite answers to the
-        // question an operator is asking when they open this.
+        assertThat(response.status()).isEqualTo(400);
+        assertThat(view).isNull();
+    }
+
+    @Test
+    void the_index_says_it_is_not_built_until_its_first_full_pass() throws Exception {
+        Servlets.Response response = Servlets.response();
+
+        Object view = controller().dependents("releases", "lodash", null, "", 500,
+                Servlets.request("GET", "/ui/dependents"), response.servlet());
+
         assertThat(response.status()).isEqualTo(503);
         assertThat(view).isNull();
     }
 
     @Test
-    void the_declared_tier_says_it_is_not_built_until_its_first_full_pass() throws Exception {
-        Servlets.Response response = Servlets.response();
-
-        Object view = controller().dependents("releases", null, "lodash", null, "", 500,
-                Servlets.request("GET", "/ui/dependents"), response.servlet());
-
-        assertThat(response.status()).isEqualTo(503);
-        assertThat(view).isNull();
-    }
-
-    @Test
-    void the_declared_tier_names_only_versions_still_published_and_apart_from_the_dependents() throws Exception {
+    void the_index_names_only_versions_still_published() throws Exception {
         Repositories repositories = Web.repositories(root);
         ArtifactStore store = repositories.store(Scopes.DEFAULT_TENANT, "releases");
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
@@ -85,14 +76,13 @@ public class DependentsControllerTest {
 
         DependentsController.DependentsView view = new DependentsController(repositories, Web.routing(repositories,
                 Scopes.DEFAULT_TENANT))
-                .dependents("releases", null, "lodash", null, "", 500, Servlets.request("GET", "/ui/dependents"),
+                .dependents("releases", "lodash", null, "", 500, Servlets.request("GET", "/ui/dependents"),
                         response.servlet());
 
         assertThat(response.status()).isEqualTo(200);
         assertThat(view.declared()).containsExactly(new Declarations.Row("npm", "lib", "2.0.0", "4.17.21", null));
         assertThat(view.dependency()).isEqualTo("lodash");
         assertThat(view.declaredLastBuilt()).isNotNull();
-        assertThat(view.dependents()).as("a requirement is not a resolved dependent").isNull();
     }
 
     @Test
@@ -113,7 +103,7 @@ public class DependentsControllerTest {
 
         DependentsController.DependentsView view = new DependentsController(repositories, Web.routing(repositories,
                 Scopes.DEFAULT_TENANT))
-                .dependents("releases", null, "lodash", "4.17.21", "", 500, Servlets.request("GET", "/ui/dependents"),
+                .dependents("releases", "lodash", "4.17.21", "", 500, Servlets.request("GET", "/ui/dependents"),
                         Servlets.response().servlet());
 
         assertThat(view.declared()).extracting(Declarations.Row::coordinate, Declarations.Row::admits)
@@ -126,7 +116,7 @@ public class DependentsControllerTest {
     void an_invalid_repository_name_is_refused_before_any_store_read() throws Exception {
         Servlets.Response response = Servlets.response();
 
-        Object view = controller().dependents("../etc", null, null, null, "", 500,
+        Object view = controller().dependents("../etc", "lodash", null, "", 500,
                 Servlets.request("GET", "/ui/dependents"), response.servlet());
 
         assertThat(response.status()).isEqualTo(400);

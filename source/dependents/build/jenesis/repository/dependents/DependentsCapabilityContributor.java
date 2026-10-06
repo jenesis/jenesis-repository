@@ -5,7 +5,7 @@ import build.jenesis.repository.dependents.spi.DependentsQueryProvider;
 import build.jenesis.repository.server.spi.CapabilityContributor;
 
 /**
- * Contributes the {@code dependents} capability flag to {@code /api/capabilities}: whether the reverse-dependency
+ * Contributes the {@code dependents} capability flag to {@code /api/capabilities}: whether the declared-dependencies
  * index resolves. Absent, {@code /api/dependents} answers {@code 501} and the console hides the panel.
  */
 public final class DependentsCapabilityContributor implements CapabilityContributor {

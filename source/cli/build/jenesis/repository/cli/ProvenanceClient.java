@@ -49,26 +49,9 @@ public final class ProvenanceClient extends ClientCalls {
         return JSON.readValue(response.body(), SignedView.class).coordinates();
     }
 
-    /** The reverse-dependency ("who depends on X") + CVE blast-radius query. With a {@code coordinate}, the
-     *  artifacts whose recorded dependency tree names it; without one, the coordinates the index holds. Returns
-     *  {@code null} when the reverse-dependency index is not installed on this deployment (HTTP 501). */
-    public DependentsReport dependents(String repo, String coordinate) throws IOException, InterruptedException {
-        String path = "/api/dependents?repo=" + enc(repo);
-        if (coordinate != null && !coordinate.isBlank()) {
-            path += "&coordinate=" + enc(coordinate);
-        }
-        HttpResponse<String> response = send("GET", path, null, null);
-        if (response.statusCode() == 501) {
-            return null;
-        }
-        require(response, 200, "query dependents in " + repo);
-        return JSON.readValue(response.body(), DependentsReport.class);
-    }
-
-    /** The declared tier of the reverse-dependency index: one page of the versions whose manifest declares a
-     *  dependency on the package {@code dependency}, resumed after {@code cursor} - and, given a {@code version} of
-     *  that package, whether each requirement admits it. Returns {@code null} when the index is not installed on this
-     *  deployment (HTTP 501). */
+    /** One page of the versions whose manifest declares a dependency on the package {@code dependency}, resumed after
+     *  {@code cursor} - and, given a {@code version} of that package, whether each requirement admits it. Returns
+     *  {@code null} when the declared-dependencies index is not installed on this deployment (HTTP 501). */
     public DependentsReport declarations(String repo, String dependency, String version, String cursor)
             throws IOException, InterruptedException {
         String path = "/api/dependents?repo=" + enc(repo) + "&package=" + enc(dependency);
@@ -308,11 +291,9 @@ public final class ProvenanceClient extends ClientCalls {
         return response.body();
     }
 
-    /** A reverse-dependency answer: with a {@code coordinate}, the {@code dependents} pulling it in; without one,
-     *  the {@code coordinates} the index holds; with a package, the versions that {@code declared} a dependency on
-     *  it and the {@code nextDeclaredCursor} past them. The unanswered parts are {@code null}. */
-    public record DependentsReport(String coordinate, List<String> dependents, List<String> coordinates,
-                                   List<Declaration> declared, String nextDeclaredCursor) {
+    /** The versions that {@code declared} a dependency on a package, and the {@code nextDeclaredCursor} past
+     *  them. */
+    public record DependentsReport(String dependency, List<Declaration> declared, String nextDeclaredCursor) {
     }
 
     /** One version declaring a dependency, with the requirement its manifest states - empty where it states none -

@@ -190,16 +190,6 @@ public class CliDispatcherTest {
     }
 
     @Test
-    public void dependents_prints_who_depends_on_a_coordinate() throws Exception {
-        dependentsStatus = 200;
-        dependentsBody = "{\"coordinate\":\"pkg:maven/x/core@1\","
-                + "\"dependents\":[\"pkg:maven/x/app@1\",\"pkg:maven/x/lib@1\"],\"coordinates\":null}";
-        String out = capture(() -> assertThat(
-                Cli.run(new String[] {"dependents", "releases", "pkg:maven/x/core@1"})).isZero());
-        assertThat(out).contains("pkg:maven/x/app@1").contains("pkg:maven/x/lib@1");
-    }
-
-    @Test
     public void dependents_prints_the_versions_declaring_a_package_apart_with_their_requirement() throws Exception {
         dependentsStatus = 200;
         dependentsBody = "{\"dependency\":\"lodash\",\"declared\":["
@@ -208,7 +198,7 @@ public class CliDispatcherTest {
                 + "{\"ecosystem\":\"npm\",\"coordinate\":\"lib\",\"version\":\"2.0.0\",\"requirement\":\"\"}],"
                 + "\"nextDeclaredCursor\":\"tok\"}";
         String out = capture(() -> assertThat(
-                Cli.run(new String[] {"dependents", "releases", "--package", "lodash", "--version", "4.17.21",
+                Cli.run(new String[] {"dependents", "releases", "lodash", "--version", "4.17.21",
                         "--cursor", "c1"})).isZero());
         assertThat(dependentsQuery).as("the package and the cursor reach the declared answer")
                 .contains("package=lodash").contains("version=4.17.21").contains("after=c1");
@@ -222,7 +212,7 @@ public class CliDispatcherTest {
     public void dependents_reports_when_the_index_is_not_installed() throws Exception {
         dependentsStatus = 501;
         String out = capture(() -> assertThat(
-                Cli.run(new String[] {"dependents", "releases", "pkg:maven/x/core@1"})).isZero());
+                Cli.run(new String[] {"dependents", "releases", "lodash"})).isZero());
         assertThat(out).contains("not installed");
     }
 

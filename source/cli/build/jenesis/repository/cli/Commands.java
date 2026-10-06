@@ -155,10 +155,9 @@ public final class Commands {
                                     "the attestation, with verification material"),
                             act("provenance key", "the signer's public key (PEM)"),
                             act("provenance cert", "the signer's certificate chain (PEM)")),
-                    noun("dependents", "who depends on a coordinate", 
+                    noun("dependents", "who declares a dependency on a package",
                             DiscoveryCommands::dependents,
-                            act("dependents <repo> [coordinate]", "the blast radius of a coordinate"),
-                            act("dependents <repo> --package NAME [--version V] [--cursor T]",
+                            act("dependents <repo> <package> [--version V] [--cursor T]",
                                     "the versions whose manifest declares a dependency on a package, and whether "
                                             + "each requirement admits a version")),
                     noun("sbom", "a CycloneDX / SPDX bill of materials", 

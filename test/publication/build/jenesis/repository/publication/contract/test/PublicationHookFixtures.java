@@ -35,7 +35,6 @@ final class PublicationHookFixtures {
                 new SubtreeSizeFixture(), new IndexRetractionFixture(), new IndexPublicationFixture(),
                 new PublicationEventFixture(), new ProvenanceReaperFixture(), new AttestationLookupObserverFixture(),
                 new SignatureCompletionObserverFixture(), new CachedHoldingFixture(), new SearchFixture(),
-                new DependentsFixture(),
                 // ... the pre-commit screens ...
                 new ComplianceScreenFixture(), new StagingWithholdFixture(), new OciHoldRecorderFixture(),
                 // ... and the hold-release hooks, which are not PublicationObservers at all.

@@ -4,7 +4,7 @@ import module java.base;
 
 /**
  * The read-only discovery verbs: {@code browse} and {@code search} walk a repository's layout, {@code assets}
- * exports the published-asset enumeration, {@code dependents} answers the reverse-dependency index, and {@code sbom}
+ * exports the published-asset enumeration, {@code dependents} answers who declares a dependency on a package, and {@code sbom}
  * emits a CycloneDX / SPDX bill of materials - the outbound mirror of the import connectors.
  */
 final class DiscoveryCommands {
@@ -111,62 +111,31 @@ final class DiscoveryCommands {
     }
 
     static int dependents(String[] args, Path home) throws Exception {
-        if (args.length < 2) {
-            throw new IllegalArgumentException(
-                    "Usage: dependents <repo> [coordinate] | dependents <repo> --package NAME [--version V] [--cursor T]");
+        String usage = "Usage: dependents <repo> <package> [--version V] [--cursor T]";
+        if (args.length < 3 || args[2].startsWith("--")) {
+            throw new IllegalArgumentException(usage);
         }
-        String coordinate = null;
-        String dependency = null;
         String cursor = null;
         String version = null;
-        for (int i = 2; i < args.length; i++) {
+        for (int i = 3; i < args.length; i++) {
             switch (args[i]) {
-                case "--package" -> dependency = CliSupport.flag(args, ++i);
                 case "--version" -> version = CliSupport.flag(args, ++i);
                 case "--cursor" -> cursor = CliSupport.flag(args, ++i);
-                default -> {
-                    if (args[i].startsWith("--") || coordinate != null) {
-                        throw new IllegalArgumentException("Unknown dependents argument '" + args[i] + "'");
-                    }
-                    coordinate = args[i];
-                }
+                default -> throw new IllegalArgumentException(usage);
             }
         }
-        if (dependency != null) {
-            return declarations(args[1], dependency, version, cursor, home);
-        }
-        ProvenanceClient.DependentsReport report = CliSupport.client(home).provenance().dependents(args[1], coordinate);
-        if (report == null) {
-            System.out.println("The reverse-dependency index is not installed on this deployment.");
-            return 0;
-        }
-        if (coordinate == null) {
-            List<String> coordinates = report.coordinates();
-            if (coordinates == null || coordinates.isEmpty()) {
-                System.out.println("The reverse-dependency index is empty (enable 'dependents-index' and let the sweep run).");
-                return 0;
-            }
-            coordinates.forEach(System.out::println);
-            return 0;
-        }
-        List<String> dependents = report.dependents();
-        if (dependents == null || dependents.isEmpty()) {
-            System.out.println("Nothing recorded depends on " + coordinate + ".");
-            return 0;
-        }
-        dependents.forEach(System.out::println);
-        return 0;
+        return declarations(args[1], args[2], version, cursor, home);
     }
 
-    /** The declared tier for one package: one page of the versions declaring it, each with its requirement - and,
-     *  given a version, whether the requirement admits it - and the cursor to ask for the next. Printed apart from the
-     *  resolved dependents, because a requirement is not a version anything was built against. */
+    /** One package's declarations: one page of the versions declaring it, each with its requirement - and, given a
+     *  version, whether the requirement admits it - and the cursor to ask for the next. A requirement is not a version
+     *  anything was built against; what relies on a version as built is {@code relied-on}. */
     private static int declarations(String repo, String dependency, String version, String cursor, Path home)
             throws Exception {
         ProvenanceClient.DependentsReport report = CliSupport.client(home)
                 .provenance().declarations(repo, dependency, version, cursor);
         if (report == null) {
-            System.out.println("The reverse-dependency index is not installed on this deployment.");
+            System.out.println("The declared-dependencies index is not installed on this deployment.");
             return 0;
         }
         List<ProvenanceClient.Declaration> declared = report.declared();
@@ -187,8 +156,8 @@ final class DiscoveryCommands {
 
     /**
      * Generate and download an SBOM for a hosted coordinate (a repository path) or a whole repository, in CycloneDX
-     * (default), CycloneDX XML or SPDX. Written to a {@code --output} file, or printed - the outbound counterpart of
-     * the reverse-dependency read, so the tenant's contents leave in a standard interchange format.
+     * (default), CycloneDX XML or SPDX. Written to a {@code --output} file, or printed, so the tenant's contents
+     * leave in a standard interchange format.
      */
     static int sbom(String[] args, Path home) throws Exception {
         if (args.length < 2) {

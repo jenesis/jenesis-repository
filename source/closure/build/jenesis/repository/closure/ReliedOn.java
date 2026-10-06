@@ -292,6 +292,18 @@ public final class ReliedOn {
     }
 
     /**
+     * Whether a published version relies on {@code version} of {@code coordinate} of {@code ecosystem} held by
+     * {@code holder}: a row of its own index, or one of the tenant's naming it by coordinate. At most two listings, and
+     * unconfirmed - a row whose dependent no longer relies on it counts until the reconcile removes it - which is what a
+     * ranking ordering vulnerable versions by their reach wants, never what a page listing dependents may show.
+     */
+    public static boolean relied(ArtifactStore holder, Optional<ArtifactStore> tenant, String ecosystem,
+                                 String coordinate, String version) throws IOException {
+        String level = level(ecosystem, coordinate, version);
+        return !holder.isEmpty(level) || tenant.isPresent() && !tenant.get().scope(SPACE).isEmpty(level);
+    }
+
+    /**
      * One page of the published versions relying on a version {@code holder} holds, its own rows first and then the
      * tenant's - the versions naming it by coordinate in another ecosystem - as {@link #page} answers each. A page
      * ending the repository's own rows fills the rest of its bound from the tenant's, so the two together read no more

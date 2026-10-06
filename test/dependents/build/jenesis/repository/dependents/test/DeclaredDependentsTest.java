@@ -59,10 +59,6 @@ class DeclaredDependentsTest {
         assertThat(reader.declarations("left-pad", null, 10).declarations())
                 .containsExactly(new Declaration("npm", "app", "1.0.0", "~1.3.0"));
         assertThat(reader.declarationsBuiltAt()).as("a full pass stamps the tier built").isPresent();
-        // The resolved tier is what a vulnerability's count of affected artifacts is made from, and a requirement is
-        // not a version anything was built against.
-        assertThat(reader.reachable(List.of("lodash:4.17.21", "lodash:4.17.0"))).isEmpty();
-        assertThat(reader.dependents("lodash")).isEmpty();
     }
 
     @Test
