@@ -104,7 +104,8 @@ final class OciManifests {
                 new ArtifactDescriptor("oci", name, reference, path, mediaTypeOrNull, false, null, -1L);
         // No publish/ pointer is linked: OCI's layout is the commit's Visibility, so the sidecar exists before the
         // manifest serves and the observers fire once it does.
-        Publication.Commit commit = new Publication(store).commit(descriptor, new ByteArrayInputStream(content),
+        ScopedValue.CallableOp<Publication.Commit, IOException> committing = () -> new Publication(store).commit(
+                descriptor, new ByteArrayInputStream(content),
                 // Last-writer-wins: an OCI tag is mutable by protocol and a by-digest re-push is the same bytes.
                 Publication.Republish.overwrite(),
                 accepted -> {
@@ -125,6 +126,8 @@ final class OciManifests {
                             .andThrough((hex, _, target) -> new OciReferrers(target)
                                     .record(name, hex, content, manifest, servedType, true));
                 });
+        // A relayed manifest is a cached copy, which the screen judges as one; a pushed one is published here.
+        Publication.Commit commit = origin == Origin.RELAYED ? Publication.relaying(committing) : committing.call();
         String hex = commit.hash();
         if (commit.disposition() != PublishInterceptor.Disposition.ACCEPT) {
             // The bytes are already at blobs/<hex>; the marker keeps them from serving by digest.

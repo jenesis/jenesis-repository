@@ -383,6 +383,25 @@ public final class Publication {
         return REDEPLOY.isBound() && REDEPLOY.get();
     }
 
+    /** Whether the publish a layout in progress belongs to relays an upstream's copy - see {@link #relaying}. */
+    private static final ScopedValue<Boolean> RELAYING = ScopedValue.newInstance();
+
+    /**
+     * Run {@code layout} as the commit of a copy relayed from an upstream rather than a publish to this repository:
+     * a format whose cache fill is laid out through {@link #commit} - an OCI manifest pulled through - runs it here,
+     * so an interceptor judging the commit can tell a cached copy from a published version without the format
+     * naming either to it.
+     */
+    public static <T> T relaying(ScopedValue.CallableOp<T, IOException> layout) throws IOException {
+        return ScopedValue.where(RELAYING, Boolean.TRUE).call(layout);
+    }
+
+    /** Whether the commit in progress relays an upstream's copy. {@code false} outside {@link #relaying} - a client's
+     *  publish, an import, a promotion - since those are versions published here. */
+    public static boolean relayed() {
+        return RELAYING.isBound() && RELAYING.get();
+    }
+
     /**
      * The one decision a released file's pointer is written under, taken over the pointer the write would replace: a
      * pointer naming other bytes raises {@link RepublishConflict}, and one standing empty or already naming these
