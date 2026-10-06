@@ -28,6 +28,7 @@ import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.HeldVersions;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.Withheld;
@@ -614,7 +615,8 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
 
     /**
      * Proxy a RubyGems miss to the upstream compact index. A {@code .gem} is immutable, so it is fetched, cached and
-     * served; an info, versions or quick-spec document is streamed through, needing no rewrite.
+     * served; an info, versions or quick-spec document is streamed through, needing no rewrite - except that while the
+     * repository holds versions for review, the compact index is rewritten without them.
      *
      * <p><b>Streamed, from the first byte.</b> {@code /versions} is tens of megabytes, and bundler waits for its first
      * byte only {@code BUNDLE_TIMEOUT}, ten seconds by default; buffered whole, the first byte could arrive later than
@@ -661,6 +663,25 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
             handle(exchange, store);
             return true;
         }
+        if (rest.startsWith("info/") || rest.equals("versions")) {
+            // While the repository holds versions for review, they are left out of the compact index: a gem's info
+            // without their lines, and /versions without them, each such gem's line naming its rewritten info.
+            Map<String, Set<String>> held = HeldVersions.all(store, ecosystem());
+            if (rest.equals("versions") && !held.isEmpty()) {
+                return versionsWithout(held, root, fetcher, exchange);
+            }
+            Set<String> gem = rest.startsWith("info/") ? held.get(rest.substring("info/".length())) : null;
+            if (gem != null && !gem.isEmpty()) {
+                ProxyRelay.Answer answer = ProxyRelay.fetchFresh(fetcher, URI.create(root + rest), Map.of(),
+                        exchange, ProxyRelay.Document.ENUMERATION);
+                if (!answer.answered()) {
+                    return answer.served();
+                }
+                exchange.setResponseHeader("Content-Type", "text/plain; charset=utf-8");
+                exchange.respond(200, infoWithout(gem, answer.document().body()));
+                return true;
+            }
+        }
         if (rest.startsWith("info/") || rest.equals("versions")
                 || (rest.startsWith(QUICK) && rest.endsWith(".gemspec.rz"))) {
             // /versions and /info/<gem> are what bundler resolves against, an ENUMERATION; a quick spec is PINNED, the
@@ -673,6 +694,101 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
                     document);
         }
         return false;
+    }
+
+    /** {@code info}, an {@code /info/<gem>} document, without the line of any version {@code held} names: a line is
+     *  {@code <version> <deps>|<requirements>}, and the header above {@code ---} is kept as it is. */
+    static byte[] infoWithout(Set<String> held, byte[] info) {
+        StringBuilder kept = new StringBuilder();
+        boolean body = false;
+        for (String line : new String(info, StandardCharsets.UTF_8).split("\n", -1)) {
+            if (body && !line.isEmpty()) {
+                int space = line.indexOf(' ');
+                if (held.contains(space < 0 ? line : line.substring(0, space))) {
+                    continue;
+                }
+            }
+            body |= line.equals("---");
+            kept.append(line).append('\n');
+        }
+        // split keeps the empty string after a final newline, which the loop wrote back as one more.
+        kept.setLength(Math.max(0, kept.length() - 1));
+        return kept.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    /**
+     * The upstream's {@code /versions} without the versions {@code held} names: streamed through line by line - it is
+     * tens of megabytes - each line of a gem with a held version, {@code <name> <versions> <md5>}, written without them
+     * and with the MD5 of that gem's rewritten {@code /info}, which bundler holds the file it fetches to; a line left
+     * with no version is left out. Each such gem's {@code /info} is read first, so the answer begins once they are in.
+     * The whole document is answered, whatever range or validator the client sent, since those describe the upstream's
+     * bytes; bundler replaces its copy on a whole answer.
+     */
+    private static boolean versionsWithout(Map<String, Set<String>> held, String root, ProxyFormat.Fetcher fetcher,
+                                           FormatExchange exchange) throws IOException {
+        Map<String, String> digests = new HashMap<>();
+        for (Map.Entry<String, Set<String>> gem : held.entrySet()) {
+            Optional<ProxyFormat.Fetched> info = fetcher.fetch(URI.create(root + "info/" + gem.getKey()), Map.of());
+            if (info.isPresent() && info.get().status() == 200 && info.get().body().length <= MAX_INFO) {
+                digests.put(gem.getKey(), md5(infoWithout(gem.getValue(), info.get().body())));
+            }
+        }
+        URI target = URI.create(root + "versions");
+        try (ProxyFormat.Download download = fetcher.download(target, Map.of()).orElse(null)) {
+            if (download == null) {
+                return ProxyRelay.unanswered(target, exchange, ProxyRelay.Document.ENUMERATION,
+                        ProxyFormat.Fetcher.NO_ANSWER);
+            }
+            if (ProxyRelay.upstreamMiss(download.status())) {
+                return false;
+            }
+            if (download.status() != 200) {
+                return ProxyRelay.unanswered(target, exchange, ProxyRelay.Document.ENUMERATION,
+                        "the upstream answered " + download.status());
+            }
+            exchange.setResponseHeader("Content-Type", "text/plain; charset=utf-8");
+            try (BufferedReader lines = new BufferedReader(new InputStreamReader(download.body(),
+                    StandardCharsets.UTF_8));
+                 Writer out = new OutputStreamWriter(exchange.respond(200, -1), StandardCharsets.UTF_8)) {
+                boolean body = false;
+                for (String line = lines.readLine(); line != null; line = lines.readLine()) {
+                    String written = body ? versionsLine(line, held, digests) : line;
+                    body |= line.equals("---");
+                    if (written != null) {
+                        out.write(written);
+                        out.write('\n');
+                    }
+                }
+            }
+            return true;
+        }
+    }
+
+    /** One {@code /versions} line without the versions {@code held} names for its gem, naming {@code digests}' MD5 of
+     *  the gem's rewritten info where it has one; {@code null} where no version is left. A line of a gem with nothing
+     *  held is returned as it is. */
+    static String versionsLine(String line, Map<String, Set<String>> held, Map<String, String> digests) {
+        String[] fields = line.split(" ");
+        Set<String> gem = fields.length == 3 ? held.get(fields[0]) : null;
+        if (gem == null || gem.isEmpty()) {
+            return line;
+        }
+        List<String> kept = new ArrayList<>();
+        for (String version : fields[1].split(",")) {
+            if (!gem.contains(version.startsWith("-") ? version.substring(1) : version)) {
+                kept.add(version);
+            }
+        }
+        return kept.isEmpty() ? null
+                : fields[0] + " " + String.join(",", kept) + " " + digests.getOrDefault(fields[0], fields[2]);
+    }
+
+    private static String md5(byte[] bytes) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("MD5").digest(bytes));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("MD5 is a required JDK algorithm", impossible);
+        }
     }
 
     /** The largest {@code /info/<gem>} read to resolve a proxied gem's checksum, far past a gem of thousands of
