@@ -11,6 +11,8 @@ import build.jenesis.repository.closure.spi.ExposureSection;
 import build.jenesis.repository.closure.spi.Reliance;
 import build.jenesis.repository.closure.ReliedOn;
 import build.jenesis.repository.compliance.Severity;
+import build.jenesis.repository.dependents.spi.DependentsQuery;
+import build.jenesis.repository.dependents.spi.DependentsQueryProvider;
 import build.jenesis.repository.compliance.scan.VulnerabilityRankIndex;
 import build.jenesis.repository.compliance.scan.VulnerabilityRankIndexTask;
 import build.jenesis.repository.compliance.scan.VulnerabilityRanking;
@@ -27,6 +29,7 @@ import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.maintenance.RepositoryContext;
 import build.jenesis.repository.maintenance.TenantContext;
 import build.jenesis.repository.maintenance.UnitFailures;
+import build.jenesis.repository.metadata.MetadataKey;
 import build.jenesis.repository.metadata.MetadataProvider;
 import build.jenesis.repository.metadata.MetadataStore;
 import build.jenesis.repository.store.ArtifactStore;
@@ -788,5 +791,142 @@ class ClosureTaskTest {
             public void gauge(String name, String description, Map<String, String> tags, double value) {
             }
         };
+    }
+
+    @Test
+    void a_release_s_declarations_are_its_declared_dependents_with_their_requirements() throws IOException {
+        assertThat(declaredQuery().declarationsBuiltAt()).as("no full pass has visited the repository").isEmpty();
+        release("lib", "2.0", NOW, new DependencySection.Declared("org.dep:missing", "[1.0,2.0)"),
+                new DependencySection.Declared("org.dep:other", "3.0"));
+        release("plain", "1.0", NOW);
+
+        pass(null, NOW.plus(Duration.ofHours(1)));
+
+        assertThat(declarations("org.dep:missing")).containsExactlyInAnyOrder(
+                new DependentsQuery.Declaration("Maven", "org.acme:app", "1.0", "1.0"),
+                new DependentsQuery.Declaration("Maven", "org.acme:lib", "2.0", "[1.0,2.0)"));
+        assertThat(declarations("org.dep:other")).extracting(DependentsQuery.Declaration::coordinate)
+                .containsExactly("org.acme:lib");
+        assertThat(declaredQuery().declarationsBuiltAt()).as("the first pass is full, and stamps them built")
+                .contains(NOW.plus(Duration.ofHours(1)));
+    }
+
+    @Test
+    void a_release_published_since_the_last_full_pass_is_declared_by_an_incremental_one() throws IOException {
+        pass(null, NOW.plus(Duration.ofHours(1)));
+        release("lib", "2.0", NOW.plus(Duration.ofHours(2)),
+                new DependencySection.Declared("org.dep:missing", "2.0"));
+
+        pass(null, NOW.plus(Duration.ofHours(3)));
+
+        assertThat(declarations("org.dep:missing")).extracting(DependentsQuery.Declaration::coordinate)
+                .containsExactlyInAnyOrder("org.acme:app", "org.acme:lib");
+    }
+
+    @Test
+    void a_version_no_longer_published_is_not_named_and_its_rows_go_on_the_reconcile_s_full_pass()
+            throws IOException {
+        release("lib", "2.0", NOW, new DependencySection.Declared("org.dep:missing", "2.0"));
+        pass(null, NOW.plus(Duration.ofHours(1)));
+        store.delete(MetadataKey.version("Maven", "org.acme:lib", "2.0"));
+
+        assertThat(declarations("org.dep:missing")).as("the reader confirms a row against the inventory")
+                .extracting(DependentsQuery.Declaration::coordinate).containsExactly("org.acme:app");
+        assertThat(declaredRows()).hasSize(2);
+
+        pass("releases", Map.of(ClosureTask.FULL_EVERY, "1"), null, NOW.plus(Duration.ofHours(2)));
+
+        assertThat(declaredRows()).as("the full reconcile removes the row nothing confirms").hasSize(1);
+    }
+
+    @Test
+    void a_changed_declaration_answers_its_current_requirement_and_a_full_pass_adds_what_it_names_anew()
+            throws IOException {
+        pass(null, NOW.plus(Duration.ofHours(1)));
+        metadata.mutate("Maven", "org.acme:app", "1.0", DependencySection.TAG, DependencySection.record(APP,
+                List.of(new DependencySection.Declared("org.dep:missing", "1.1"),
+                        new DependencySection.Declared("org.dep:added", "1.0")), NOW));
+
+        assertThat(declarations("org.dep:missing")).extracting(DependentsQuery.Declaration::requirement)
+                .as("a row names the declaring version, and its requirement is read as recorded now")
+                .containsExactly("1.1");
+
+        pass("releases", Map.of(ClosureTask.FULL_EVERY, "1"), null, NOW.plus(Duration.ofHours(2)));
+
+        assertThat(declarations("org.dep:added")).extracting(DependentsQuery.Declaration::coordinate)
+                .containsExactly("org.acme:app");
+    }
+
+    @Test
+    void a_row_a_lost_write_left_out_is_written_again_by_the_next_full_pass() throws IOException {
+        pass(null, NOW.plus(Duration.ofHours(1)));
+        for (String key : declaredRows()) {
+            store.delete(key);
+        }
+        assertThat(declarations("org.dep:missing")).isEmpty();
+
+        pass("releases", Map.of(ClosureTask.FULL_EVERY, "1"), null, NOW.plus(Duration.ofHours(2)));
+
+        assertThat(declarations("org.dep:missing")).extracting(DependentsQuery.Declaration::coordinate)
+                .containsExactly("org.acme:app");
+    }
+
+    @Test
+    void the_declared_dependents_of_a_package_page_by_cursor() throws IOException {
+        for (int minor = 0; minor < 4; minor++) {
+            release("lib", "2." + minor, NOW, new DependencySection.Declared("org.dep:missing", "1.0"));
+        }
+        pass(null, NOW.plus(Duration.ofHours(1)));
+
+        List<String> versions = new ArrayList<>();
+        String cursor = null;
+        int pages = 0;
+        do {
+            DependentsQuery.DeclarationPage page = declaredQuery().declarations("Maven", "org.dep:missing", cursor, 2);
+            page.declarations().forEach(declaration -> versions.add(declaration.coordinate() + " "
+                    + declaration.version()));
+            cursor = page.nextCursor();
+            pages++;
+        } while (cursor != null);
+
+        assertThat(versions).containsExactlyInAnyOrder("org.acme:app 1.0", "org.acme:lib 2.0", "org.acme:lib 2.1",
+                "org.acme:lib 2.2", "org.acme:lib 2.3");
+        assertThat(pages).as("five rows at two a page, the last saying it is the last").isEqualTo(3);
+    }
+
+    @Test
+    void a_repository_resolving_no_closures_keeps_no_declared_dependents_and_says_they_are_not_built()
+            throws IOException {
+        pass("false", NOW.plus(Duration.ofHours(1)));
+
+        assertThat(declarations("org.dep:missing")).isEmpty();
+        assertThat(declaredQuery().declarationsBuiltAt()).isEmpty();
+    }
+
+    private DependentsQuery declaredQuery() {
+        return DependentsQueryProvider.installed().orElseThrow().over(store);
+    }
+
+    private List<DependentsQuery.Declaration> declarations(String dependency) throws IOException {
+        return declaredQuery().declarations("Maven", dependency, null, 50).declarations();
+    }
+
+    private List<String> declaredRows() throws IOException {
+        List<String> keys = new ArrayList<>();
+        store.scan("closure/declared", "", 100, listed -> keys.add(listed.key()));
+        return keys;
+    }
+
+    /** {@code org.acme:<artifact>} at {@code version}, published to the releases at {@code at}, declaring
+     *  {@code declared}. */
+    private void release(String artifact, String version, Instant at, DependencySection.Declared... declared)
+            throws IOException {
+        String path = "/maven/org/acme/" + artifact + "/" + version + "/" + artifact + "-" + version + ".pom";
+        Publication publication = new Publication(store);
+        publication.link(path, publication.storeBlob(new ByteArrayInputStream(
+                "<project/>".getBytes(StandardCharsets.UTF_8))));
+        new StoreRepositoryInventory(store).record(path, at);
+        metadata.mutate("Maven", "org.acme:" + artifact, version, DependencySection.TAG,
+                DependencySection.record(path, List.of(declared), at));
     }
 }
