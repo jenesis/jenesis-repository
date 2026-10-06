@@ -49,24 +49,24 @@ public final class ProvenanceClient extends ClientCalls {
         return JSON.readValue(response.body(), SignedView.class).coordinates();
     }
 
-    /** One page of the versions whose manifest declares a dependency on the package {@code dependency}, resumed after
-     *  {@code cursor} - and, given a {@code version} of that package, whether each requirement admits it. Returns
-     *  {@code null} when the declared-dependencies index is not installed on this deployment (HTTP 501). */
-    public DependentsReport declarations(String repo, String dependency, String version, String cursor)
-            throws IOException, InterruptedException {
-        String path = "/api/dependents?repo=" + enc(repo) + "&package=" + enc(dependency);
+    /** What depends on {@code coordinate} of {@code ecosystem} in {@code repo} - given a {@code version}, the
+     *  published versions built against it - each half one page resumed after its own cursor where one is given. */
+    public Dependents dependents(String repo, String ecosystem, String coordinate, String version, String cursor,
+                                 String declaredCursor) throws IOException, InterruptedException {
+        String path = "/api/repository/dependents?repo=" + enc(repo) + "&ecosystem=" + enc(ecosystem)
+                + "&coordinate=" + enc(coordinate);
         if (version != null && !version.isBlank()) {
             path += "&version=" + enc(version);
         }
         if (cursor != null && !cursor.isBlank()) {
             path += "&after=" + enc(cursor);
         }
-        HttpResponse<String> response = send("GET", path, null, null);
-        if (response.statusCode() == 501) {
-            return null;
+        if (declaredCursor != null && !declaredCursor.isBlank()) {
+            path += "&declaredAfter=" + enc(declaredCursor);
         }
-        require(response, 200, "query the declarations of " + dependency + " in " + repo);
-        return JSON.readValue(response.body(), DependentsReport.class);
+        HttpResponse<String> response = send("GET", path, null, null);
+        require(response, 200, "read what depends on " + ecosystem + " " + coordinate + " in " + repo);
+        return JSON.readValue(response.body(), Dependents.class);
     }
 
     /**
@@ -114,7 +114,7 @@ public final class ProvenanceClient extends ClientCalls {
     public record ClosureCut(String coordinate, String requirement, String reason) {
     }
 
-    /** A package the version's bill names in another ecosystem, relied on by coordinate across the tenant. */
+    /** A package the version's bill names in another ecosystem, followed by coordinate across the tenant. */
     public record ClosureForeign(String ecosystem, String coordinate, String version, int depth) {
     }
 
@@ -155,24 +155,6 @@ public final class ProvenanceClient extends ClientCalls {
      *  another ecosystem, relying on whichever copy its build installed. */
     public record Dependent(String repository, String ecosystem, String coordinate, String version,
                             List<ClosureHop> path, boolean cut, boolean byCoordinate) {
-    }
-
-    /** One page of the published versions relying on a version; {@code next} is the cursor of the next page,
-     *  {@code null} once there is none. */
-    public record ReliedOn(String repository, String ecosystem, String coordinate, String version,
-                           List<Dependent> dependents, int examined, String next) {
-    }
-
-    /** One page of the published versions of the tenant relying on a version {@code repo} holds, after
-     *  {@code cursor} where one is given. */
-    public ReliedOn reliedOn(String repo, String ecosystem, String coordinate, String version, String cursor)
-            throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET", "/api/repository/relied-on?repo=" + enc(repo) + "&ecosystem="
-                + enc(ecosystem) + "&coordinate=" + enc(coordinate) + "&version=" + enc(version)
-                + (cursor == null || cursor.isBlank() ? "" : "&after=" + enc(cursor)), null, null);
-        require(response, 200, "read what relies on " + ecosystem + " " + coordinate + " " + version + " in "
-                + repo);
-        return JSON.readValue(response.body(), ReliedOn.class);
     }
 
     /** What a closure reaches that is held or carries findings, as the closure pass derived it at {@code derived};
@@ -291,9 +273,20 @@ public final class ProvenanceClient extends ClientCalls {
         return response.body();
     }
 
-    /** The versions that {@code declared} a dependency on a package, and the {@code nextDeclaredCursor} past
-     *  them. */
-    public record DependentsReport(String dependency, List<Declaration> declared, String nextDeclaredCursor) {
+    /** What depends on a version: its {@code resolved} dependents - {@code null} when no version was asked about -
+     *  and its {@code declared} ones. */
+    public record Dependents(String repository, String ecosystem, String coordinate, String version,
+                             Resolved resolved, Declared declared) {
+    }
+
+    /** One page of the published versions built against a version; {@code next} is the cursor of the next page,
+     *  {@code null} once there is none. */
+    public record Resolved(List<Dependent> dependents, int examined, String next) {
+    }
+
+    /** Whether the declared index is {@code installed}, when its last full pass started - {@code null} before the
+     *  first - one page of the versions declaring the package, and the cursor of the next page. */
+    public record Declared(boolean installed, String built, List<Declaration> declarations, String next) {
     }
 
     /** One version declaring a dependency, with the requirement its manifest states - empty where it states none -

@@ -8,7 +8,7 @@ import build.jenesis.repository.maintenance.MaintenanceTaskProvider;
 
 /**
  * Discovers the declared-dependencies pass: enabled by the {@code dependents-index} setting, its cadence from
- * {@code dependents-interval} (default an hour), off unless enabled. The cadence is an {@link IntervalSetting}
+ * {@code dependents-interval} (default an hour), on unless switched off. The cadence is an {@link IntervalSetting}
  * constant {@link DependentsSettingsContributor} renders, so the catalogue default cannot drift from the code.
  */
 public final class DependentsIndexTaskProvider implements MaintenanceTaskProvider {

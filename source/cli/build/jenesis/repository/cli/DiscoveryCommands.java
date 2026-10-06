@@ -4,8 +4,9 @@ import module java.base;
 
 /**
  * The read-only discovery verbs: {@code browse} and {@code search} walk a repository's layout, {@code assets}
- * exports the published-asset enumeration, {@code dependents} answers who declares a dependency on a package, and {@code sbom}
- * emits a CycloneDX / SPDX bill of materials - the outbound mirror of the import connectors.
+ * exports the published-asset enumeration, {@code dependents} answers what depends on a package or a version of it -
+ * built against it, or declaring it - and {@code sbom} emits a CycloneDX / SPDX bill of materials - the outbound mirror
+ * of the import connectors.
  */
 final class DiscoveryCommands {
 
@@ -111,47 +112,81 @@ final class DiscoveryCommands {
     }
 
     static int dependents(String[] args, Path home) throws Exception {
-        String usage = "Usage: dependents <repo> <package> [--version V] [--cursor T]";
-        if (args.length < 3 || args[2].startsWith("--")) {
+        String usage = "Usage: dependents <repo> <ecosystem> <coordinate> [--version V] [--cursor T] "
+                + "[--declared-cursor T]";
+        if (args.length < 4 || args[2].startsWith("--") || args[3].startsWith("--")) {
             throw new IllegalArgumentException(usage);
         }
-        String cursor = null;
         String version = null;
-        for (int i = 3; i < args.length; i++) {
+        String cursor = null;
+        String declaredCursor = null;
+        for (int i = 4; i < args.length; i++) {
             switch (args[i]) {
                 case "--version" -> version = CliSupport.flag(args, ++i);
                 case "--cursor" -> cursor = CliSupport.flag(args, ++i);
+                case "--declared-cursor" -> declaredCursor = CliSupport.flag(args, ++i);
                 default -> throw new IllegalArgumentException(usage);
             }
         }
-        return declarations(args[1], args[2], version, cursor, home);
+        ProvenanceClient.Dependents answer = CliSupport.client(home).provenance()
+                .dependents(args[1], args[2], args[3], version, cursor, declaredCursor);
+        String subject = answer.coordinate() + (answer.version() == null ? "" : " " + answer.version());
+        resolved(answer.resolved(), subject);
+        declared(answer.declared(), answer.coordinate());
+        return 0;
     }
 
-    /** One package's declarations: one page of the versions declaring it, each with its requirement - and, given a
-     *  version, whether the requirement admits it - and the cursor to ask for the next. A requirement is not a version
-     *  anything was built against; what relies on a version as built is {@code relied-on}. */
-    private static int declarations(String repo, String dependency, String version, String cursor, Path home)
-            throws Exception {
-        ProvenanceClient.DependentsReport report = CliSupport.client(home)
-                .provenance().declarations(repo, dependency, version, cursor);
-        if (report == null) {
-            System.out.println("The declared-dependencies index is not installed on this deployment.");
-            return 0;
+    /** The published versions built against the version asked about, each with the path its closure reaches it
+     *  along, and the cursor of the next page. */
+    private static void resolved(ProvenanceClient.Resolved resolved, String subject) {
+        System.out.println("Resolved dependents:");
+        if (resolved == null) {
+            System.out.println("  Name a version (--version) to list the published versions built against it.");
+            return;
         }
-        List<ProvenanceClient.Declaration> declared = report.declared();
-        if (declared == null || declared.isEmpty()) {
-            System.out.println("No version declares a dependency on " + dependency + ".");
-        } else {
-            for (ProvenanceClient.Declaration row : declared) {
-                System.out.println(row.ecosystem() + "  " + row.coordinate() + "  " + row.version() + "  "
-                        + (row.requirement() == null || row.requirement().isEmpty() ? "-" : row.requirement())
-                        + (row.admits() == null ? "" : "  " + row.admits()));
-            }
+        List<ProvenanceClient.Dependent> dependents = resolved.dependents() == null ? List.of()
+                : resolved.dependents();
+        if (dependents.isEmpty() && resolved.next() == null) {
+            System.out.println("  No resolved closure of a published version reaches " + subject + ".");
         }
-        if (report.nextDeclaredCursor() != null) {
-            System.out.println("next cursor: " + report.nextDeclaredCursor());
+        for (ProvenanceClient.Dependent dependent : dependents) {
+            System.out.println("  " + dependent.coordinate() + " " + dependent.version() + " of "
+                    + dependent.repository() + (dependent.cut() ? "  its closure stops here, held for review" : "")
+                    + (dependent.byCoordinate() ? "  its " + dependent.ecosystem() + " bill names it by coordinate"
+                    : ""));
+            ComplianceCommands.through(dependent.path());
         }
-        return 0;
+        if (resolved.next() != null) {
+            System.out.println("  more: --cursor " + resolved.next());
+        }
+    }
+
+    /** The versions whose manifest declares the package, each with its requirement - and, given a version, whether
+     *  the requirement admits it - and the cursor of the next page. A requirement is not a version anything was
+     *  built against. */
+    private static void declared(ProvenanceClient.Declared declared, String dependency) {
+        System.out.println("Declared dependents:");
+        if (declared == null || !declared.installed()) {
+            System.out.println("  The declared-dependencies index is not installed on this deployment.");
+            return;
+        }
+        if (declared.built() == null) {
+            System.out.println("  The declared dependencies have not been indexed in full yet.");
+            return;
+        }
+        List<ProvenanceClient.Declaration> rows = declared.declarations() == null ? List.of()
+                : declared.declarations();
+        if (rows.isEmpty() && declared.next() == null) {
+            System.out.println("  No version declares a dependency on " + dependency + ".");
+        }
+        for (ProvenanceClient.Declaration row : rows) {
+            System.out.println("  " + row.ecosystem() + "  " + row.coordinate() + "  " + row.version() + "  "
+                    + (row.requirement() == null || row.requirement().isEmpty() ? "-" : row.requirement())
+                    + (row.admits() == null ? "" : "  " + row.admits()));
+        }
+        if (declared.next() != null) {
+            System.out.println("  more: --declared-cursor " + declared.next());
+        }
     }
 
     /**

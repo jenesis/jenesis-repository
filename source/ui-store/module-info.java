@@ -44,7 +44,6 @@ open module build.jenesis.repository.ui.store {
     // Transitive: a setting's view carries its kind, form and choices.
     requires transitive build.jenesis.repository.settings;
     requires build.jenesis.repository.upstream;
-    requires build.jenesis.repository.dependents.spi;
     requires build.jenesis.repository.findings;
     requires build.jenesis.repository.health;
 }

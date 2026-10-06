@@ -1,12 +1,11 @@
 /**
- * The declared-dependencies query surface, contributed through
- * {@link build.jenesis.repository.server.kernel.ServerModuleProvider}: a thin adapter over the {@code Repositories}
- * resolver and the discovered
- * {@link build.jenesis.repository.dependents.spi.DependentsQueryProvider} (the sharded declared-dependencies index): a
- * client asks who declares a dependency on a package and reads a single small-object shard, never a scan. With no index module
- * installed the {@code /api/dependents} route answers {@code 501}, with the index not yet built it answers {@code 503},
- * and with this module absent the server carries no dependents route. Open so Spring can reflect over the controller
- * and its configuration.
+ * The dependents surface - {@code /api/repository/dependents} and the console's Dependents screen - contributed through
+ * {@link build.jenesis.repository.server.kernel.ServerModuleProvider} and the console seam: what depends on a version,
+ * as its resolved dependents (the closure's {@link build.jenesis.repository.closure.spi.Reliance}) and its declared
+ * ones (the discovered {@link build.jenesis.repository.dependents.spi.DependentsQueryProvider}), each a bounded page,
+ * never a scan. A half that cannot answer says so in the answer - the declared index not installed, or not built yet -
+ * and with this module absent the server carries no dependents route. Open so Spring can reflect over the controllers
+ * and their configuration.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -27,6 +26,9 @@ open module build.jenesis.repository.dependents.web {
     requires spring.web;
     provides build.jenesis.repository.server.kernel.ServerModuleProvider
             with build.jenesis.repository.dependents.web.DependentsWebModule;
+    requires build.jenesis.repository.server.spi;
+    provides build.jenesis.repository.server.spi.CapabilityContributor
+            with build.jenesis.repository.dependents.web.DependentsCapabilityContributor;
     // The console seam this module contributes its screen through, and the read service it renders.
     requires build.jenesis.repository.ui;
     requires build.jenesis.repository.ui.store;

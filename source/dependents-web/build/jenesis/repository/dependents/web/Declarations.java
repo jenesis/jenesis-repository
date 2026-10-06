@@ -18,8 +18,8 @@ import build.jenesis.repository.store.ServableNames;
  *
  * <p>Asked about a version of the package, each row also says whether its requirement admits that version -
  * {@code admits}, {@code excludes} or {@code unknown} - as the declaring ecosystem's {@link RequirementGrammar} reads
- * it, the one a closure takes its versions by. It is a marker on a declaration, never a resolved dependency, and
- * nothing counts it.
+ * it, the one a closure takes its versions by - a requirement stating no version admits every one. It is a marker on a
+ * declaration, never a resolved dependency, and nothing counts it.
  */
 public final class Declarations {
 
@@ -42,11 +42,14 @@ public final class Declarations {
                     && inventory.disclosable(row.ecosystem(), row.coordinate(), row.version(),
                     ServableNames.Policy.HIDE_WITHHELD)) {
                 shown.add(new Row(row.ecosystem(), row.coordinate(), row.version(), row.requirement(),
-                        asked == null || asked.isBlank() ? null
-                                : RequirementGrammar.of(row.ecosystem()).admits(row.requirement(), asked).name()
-                                .toLowerCase(Locale.ROOT)));
+                        asked == null || asked.isBlank() ? null : admits(row, asked)));
             }
         }
         return shown;
+    }
+
+    /** Whether {@code row}'s requirement admits {@code asked}, as the declaring ecosystem's grammar reads it. */
+    private static String admits(DependentsQuery.Declaration row, String asked) {
+        return RequirementGrammar.of(row.ecosystem()).admits(row.requirement(), asked).name().toLowerCase(Locale.ROOT);
     }
 }

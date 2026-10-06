@@ -116,7 +116,7 @@ public final class ClosureSection {
      * A package the version's carried bill names in another ecosystem than the version's own - a jar or a distribution
      * package inside an image - at {@code depth}, reached through {@code viaCoordinate} at {@code viaVersion} as a
      * {@link Component} is. No repository of the walk is asked to hold it, since the build that installed it resolved
-     * it elsewhere: it is indexed by its coordinate across the tenant by the relied-on index, so a finding or a hold on any
+     * it elsewhere: its dependents are indexed by its coordinate across the tenant, so a finding or a hold on any
      * copy of it the tenant holds reaches the version.
      */
     public record Foreign(String ecosystem, String coordinate, String version, int depth, String viaCoordinate,

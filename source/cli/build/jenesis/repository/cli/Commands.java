@@ -145,21 +145,19 @@ public final class Commands {
                             act("closure <repo> <ecosystem> <coordinate> <version>",
                                     "the transitive closure, each component with the repository holding it, and "
                                             + "every dependency that did not resolve")),
-                    noun("relied-on", "which published versions rely on a version, through their closures",
-                            ComplianceCommands::reliedOn,
-                            act("relied-on <repo> <ecosystem> <coordinate> <version> [--cursor T]",
-                                    "every published version of the tenant whose closure reaches it, with the path")),
                     noun("provenance", "the signed build attestation",
                             ComplianceCommands::provenance,
                             act("provenance <repo> <path> [--material]",
                                     "the attestation, with verification material"),
                             act("provenance key", "the signer's public key (PEM)"),
                             act("provenance cert", "the signer's certificate chain (PEM)")),
-                    noun("dependents", "who declares a dependency on a package",
+                    noun("dependents", "what depends on a package or one version of it",
                             DiscoveryCommands::dependents,
-                            act("dependents <repo> <package> [--version V] [--cursor T]",
-                                    "the versions whose manifest declares a dependency on a package, and whether "
-                                            + "each requirement admits a version")),
+                            act("dependents <repo> <ecosystem> <coordinate> [--version V] [--cursor T] "
+                                            + "[--declared-cursor T]",
+                                    "the published versions of the tenant built against the version, each with the "
+                                            + "path its closure reaches it along, and the versions whose manifest "
+                                            + "declares the package, with whether each requirement admits it")),
                     noun("sbom", "a CycloneDX / SPDX bill of materials", 
                             DiscoveryCommands::sbom,
                             act("sbom <repo> [path] [--format cyclonedx|cyclonedx-xml|spdx] [--output F]",

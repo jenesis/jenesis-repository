@@ -89,7 +89,7 @@ public interface HealthLedger extends HealthSource {
      *   <li><b>Served only from a committed ranking</b> a lease-guarded pass built - never derived on the request
      *       thread. A ledger that keeps no ranking inherits this default and reports {@link Ranking.NotBuilt}, never a
      *       sort of {@link #all()}.</li>
-     *   <li><b>"Built" means a pass left a stamp</b>, as {@code DependentsQuery.built()} does: it is read from the
+     *   <li><b>"Built" means a pass left a stamp</b>, as {@code DependentsQuery.declarationsBuiltAt()} does: it is read from the
      *       pass's marker, never inferred from the records, since an empty ranking and an unbuilt one are different
      *       facts.</li>
      *   <li><b>The states are separate types.</b> {@link Ranking} is sealed and only {@link Ranking.Ranked} carries
