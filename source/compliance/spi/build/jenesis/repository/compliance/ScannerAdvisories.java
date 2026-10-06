@@ -86,18 +86,11 @@ public final class ScannerAdvisories {
                 cves, description);
     }
 
-    /** One row's severity: the scanner's own word, which is its assessment of the package as installed; a CVSS
-     *  score where the word says nothing - {@code Unknown}, an unrecognised word, none - and
-     *  {@link Severity#UNKNOWN} where neither does. */
+    /** One row's severity: the scanner's own word, which is its assessment of the package as installed, read as
+     *  every feed's is ({@link Severity#ofWord}); a CVSS score where the word says nothing - {@code Unknown}, an
+     *  unrecognised word, none - and {@link Severity#UNKNOWN} where neither does. */
     public static Severity severity(Row row) {
-        String word = row.severity() == null ? "" : row.severity().strip().toLowerCase(Locale.ROOT);
-        Severity rated = switch (word) {
-            case "critical" -> Severity.CRITICAL;
-            case "high" -> Severity.HIGH;
-            case "medium" -> Severity.MEDIUM;
-            case "low", "negligible" -> Severity.LOW;
-            default -> null;
-        };
+        Severity rated = Severity.ofWord(row.severity(), null);
         if (rated != null) {
             return rated;
         }

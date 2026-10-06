@@ -40,6 +40,15 @@ class ScannerAdvisoriesTest {
     }
 
     @Test
+    void a_scanners_word_reads_as_every_feeds_does() {
+        assertThat(ScannerAdvisories.severity(row("a", null, null, null, "Moderate", 9.8, null)))
+                .as("moderate is the medium band whoever says it, not a word to fall through to the score")
+                .isEqualTo(Severity.MEDIUM);
+        assertThat(Severity.ofWord("negligible", Severity.UNKNOWN)).as("one vocabulary for feeds and scanners")
+                .isEqualTo(Severity.LOW);
+    }
+
+    @Test
     void an_empty_list_is_a_clean_image_and_a_missing_one_is_a_failed_scan() throws IOException {
         assertThat(ScannerAdvisories.advisories(List.of())).isEmpty();
         assertThatThrownBy(() -> ScannerAdvisories.advisories(null)).isInstanceOf(IOException.class)
