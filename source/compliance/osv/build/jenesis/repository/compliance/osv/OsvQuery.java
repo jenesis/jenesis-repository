@@ -72,7 +72,7 @@ public final class OsvQuery {
 
     /** The name OSV knows the product's {@code ecosystem} by, which is the one a query carries: a release-qualified
      *  one keeps its release. */
-    private static String name(String ecosystem) {
+    static String osvName(String ecosystem) {
         if (!covers(ecosystem)) {
             throw new IllegalArgumentException("OSV publishes no ecosystem named " + ecosystem);
         }
@@ -87,7 +87,7 @@ public final class OsvQuery {
                                       String pageToken) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("version", version);
-        body.put("package", Map.of("ecosystem", name(ecosystem), "name", coordinate));
+        body.put("package", Map.of("ecosystem", osvName(ecosystem), "name", coordinate));
         if (pageToken != null) {
             body.put("page_token", pageToken);
         }
@@ -107,7 +107,7 @@ public final class OsvQuery {
         List<Map<String, Object>> bodies = new ArrayList<>();
         for (AdvisorySource.Query query : queries) {
             bodies.add(Map.of("version", query.version(),
-                    "package", Map.of("ecosystem", name(query.ecosystem()), "name", query.coordinate())));
+                    "package", Map.of("ecosystem", osvName(query.ecosystem()), "name", query.coordinate())));
         }
         return FeedRequest.post(querybatch, JSON.writeValueAsString(Map.of("queries", bodies)), "application/json");
     }

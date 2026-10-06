@@ -18,6 +18,21 @@ public final class RepositorySelection {
     private RepositorySelection() {
     }
 
+    /** The names {@code value} gives, in its order and each once: none for a blank value or {@value #NONE}, which name
+     *  no provider. Nothing is checked against what is installed. */
+    public static SequencedSet<String> named(String value) {
+        SequencedSet<String> named = new LinkedHashSet<>();
+        if (value == null || value.isBlank() || value.strip().equalsIgnoreCase(NONE)) {
+            return named;
+        }
+        for (String entry : value.split(",")) {
+            if (!entry.isBlank()) {
+                named.add(entry.strip());
+            }
+        }
+        return named;
+    }
+
     /**
      * The providers of {@code installed} that {@code value}, the repository's {@code setting}, selects.
      *
@@ -40,12 +55,7 @@ public final class RepositorySelection {
         for (T provider : installed) {
             byName.putIfAbsent(name.apply(provider), provider);
         }
-        SequencedSet<String> named = new LinkedHashSet<>();
-        for (String entry : value.split(",")) {
-            if (!entry.isBlank()) {
-                named.add(entry.strip());
-            }
-        }
+        SequencedSet<String> named = named(value);
         List<T> selected = new ArrayList<>(named.size());
         for (String entry : named) {
             T provider = byName.get(entry);

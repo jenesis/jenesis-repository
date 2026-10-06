@@ -243,6 +243,35 @@ public interface AdvisorySource extends SignalSource {
         void forget(Set<Package> packages);
     }
 
+    /**
+     * The role of a feed that answers from a local copy of its vendor's records rather than asking the vendor about
+     * each version: the copy is drawn by {@link #refresh}, off the request path, for the ecosystems the repositories
+     * selecting it hold, and a lookup reads it. It is selected only by name: a repository whose
+     * {@value #SELECTION} is blank is screened by every other feed the deployment has on and never by a mirror, so
+     * keeping a copy of a whole ecosystem is a choice an operator makes for the deployment or for a repository.
+     *
+     * <h2>Contract</h2>
+     * <ol>
+     * <li><b>Ordering / concurrency.</b> {@link #mirror} and {@link #refresh} are called by one node at a time, under
+     *     the refresh pass's lease, the first just before the second; a lookup by any node, concurrently with
+     *     both.</li>
+     * <li><b>Error visibility.</b> A lookup of an ecosystem the copy does not hold yet raises, so the screen decides it
+     *     as the outage of a feed that cannot answer and never reads it as clean. A refresh that could not reach the
+     *     vendor keeps the copy it had serving and says so in its freshness.</li>
+     * <li><b>Read purity.</b> A lookup reads the stored copy and never reaches the vendor.</li>
+     * <li><b>Durability.</b> An ecosystem's copy is replaced whole: a lookup reads the last copy that was completely
+     *     drawn, never one being drawn.</li>
+     * <li><b>Bounded work.</b> A lookup is a bounded number of point reads of the copy, however many records the
+     *     ecosystem holds.</li>
+     * </ol>
+     */
+    interface Mirror extends AdvisorySource, RefreshableSource {
+
+        /** Keep a copy of the ecosystems in {@code ecosystems}, the product's names - those the repositories selecting
+         *  this feed hold - from the next {@link #refresh} on. An ecosystem left out is no longer drawn. */
+        void mirror(Set<String> ecosystems) throws IOException;
+    }
+
     /** The shared source that reports nothing, for deployments that gate on licenses only. It is a singleton so a
      *  caller can tell "no advisory feed is active" by identity ({@code source == AdvisorySource.none()}). Its
      *  freshness is {@link Freshness#NEVER}: no feed was consulted, so the empty list confirms nothing. */
@@ -318,11 +347,13 @@ public interface AdvisorySource extends SignalSource {
      *  repository's {@value #SELECTION} can narrow it ({@link #forRepository}); the {@link AdvisorySource#none() none}
      *  source when there are none. */
     static AdvisorySource resolve(SequencedMap<String, AdvisorySource> named) {
-        return named.isEmpty() ? AdvisorySource.none() : new NamedFeeds(named, resolve(named.values()));
+        return named.isEmpty() ? AdvisorySource.none()
+                : new NamedFeeds(named, resolve(named.values().stream().filter(feed -> !(feed instanceof Mirror))
+                        .toList()));
     }
 
     /** The repository setting naming the advisory feeds that screen it, comma-separated: empty for every feed the
-     *  deployment enables, {@value #NONE_SELECTED} for none. */
+     *  deployment enables but a {@link Mirror}, {@value #NONE_SELECTED} for none. */
     String SELECTION = "advisory-feeds";
 
     /** The {@value #SELECTION} value of a repository screened by no feed. */
@@ -331,7 +362,7 @@ public interface AdvisorySource extends SignalSource {
     /**
      * The feeds of {@code enabled} - the deployment's, by name - that screen a repository whose effective lookup is
      * {@code repository}, as {@link RepositorySelection} reads its {@value #SELECTION}: those it names, in the order it
-     * names them, every one where it names none, none for {@value #NONE_SELECTED}. A feed's credential and its switch stay the deployment's; a repository
+     * names them, every one but a {@link Mirror} where it names none, none for {@value #NONE_SELECTED}. A feed's credential and its switch stay the deployment's; a repository
      * selects among what is on.
      *
      * @throws IllegalStateException for a name no installed feed answers to, or one the deployment has switched off
@@ -353,6 +384,9 @@ public interface AdvisorySource extends SignalSource {
                         : Optional.of("switched off, or missing the configuration it needs, on this deployment"))) {
             chosen.put(name, enabled.get(name));
         }
+        if (value == null || value.isBlank()) {
+            chosen.values().removeIf(feed -> feed instanceof Mirror);
+        }
         return chosen;
     }
 
@@ -369,7 +403,9 @@ public interface AdvisorySource extends SignalSource {
             return source;
         }
         try {
-            return resolve(selected(feeds.feeds(), repository));
+            SequencedMap<String, AdvisorySource> chosen = selected(feeds.feeds(), repository);
+            // The feeds the repository named, a mirror among them, rather than the deployment's merge of them.
+            return chosen.isEmpty() ? AdvisorySource.none() : new NamedFeeds(chosen, resolve(chosen.values()));
         } catch (IllegalStateException misnamed) {
             return new AdvisorySource() {
 

@@ -6,9 +6,7 @@ import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.FeedChanges;
 import build.jenesis.repository.feed.FeedClient;
 import build.jenesis.repository.feed.FeedException;
-import build.jenesis.repository.feed.FeedRequest;
 import build.jenesis.repository.store.ArtifactStore;
-import java.time.format.DateTimeParseException;
 
 /**
  * OSV's change lists drawn into a log: each ecosystem's export publishes {@code <ecosystem>/modified_id.csv}, every
@@ -21,16 +19,13 @@ import java.time.format.DateTimeParseException;
  * lists into a log of its own, keeping only the ids it {@linkplain #of keeps}: a line it does not keep moves the
  * position and fetches nothing.
  *
- * <p>Bounded: a draw reads at most {@link #WINDOW} bytes of each list and fetches at most {@link #RECORDS} records,
- * oldest first, resuming where it stopped; a list whose position lies past the window is recorded as a gap, never as a
- * shorter list. The first draw of an ecosystem only records where its list stands. An ecosystem the export holds no
+ * <p>Bounded: a draw reads at most {@link OsvChangeList#WINDOW} bytes of each list and fetches at most
+ * {@link #RECORDS} records, oldest first, resuming where it stopped; a list whose position lies past the window is
+ * recorded as a gap, never as a shorter list. The first draw of an ecosystem only records where its list stands. An ecosystem the export holds no
  * list for has no record in OSV yet, which is not a failure: its position stands at the epoch, so every line of the list
  * it gains is drawn as a change.
  */
 public final class OsvChanges {
-
-    /** The most of one change list a draw reads. */
-    static final int WINDOW = 1 << 20;
 
     /** The most records one draw fetches. */
     static final int RECORDS = 500;
@@ -63,10 +58,6 @@ public final class OsvChanges {
         return new OsvChanges(client, export, vulns, space, clock, kept);
     }
 
-    /** One line of a change list. */
-    private record Line(Instant modified, String id) {
-    }
-
     /** Draw what changed since the last draw into the log, answering how many packages it named. */
     public int draw() throws IOException {
         ArtifactStore store = space.get();
@@ -77,7 +68,8 @@ public final class OsvChanges {
         int budget = RECORDS;
         for (String ecosystem : OsvQuery.osvEcosystems()) {
             Optional<Instant> position = Optional.ofNullable(positions.get(ecosystem)).map(Instant::parse);
-            Optional<Listed> answered = list(ecosystem, position.orElse(null));
+            Optional<OsvChangeList.Listed> answered = OsvChangeList.read(client, export, ecosystem,
+                    position.orElse(null));
             if (answered.isEmpty()) {
                 // The export holds no list for an ecosystem OSV has no record of yet. Every record it later lists is
                 // a change, so the list stands at the start of time until it appears.
@@ -86,7 +78,7 @@ public final class OsvChanges {
                 }
                 continue;
             }
-            Listed listed = answered.get();
+            OsvChangeList.Listed listed = answered.get();
             if (listed.lines().isEmpty()) {
                 continue;
             }
@@ -100,7 +92,7 @@ public final class OsvChanges {
             // Oldest first, so a draw that runs out of budget resumes after what it named; a boundary instant is
             // named whole, since the position is exclusive.
             Instant reached = position.get();
-            for (Line line : listed.lines().reversed()) {
+            for (OsvChangeList.Line line : listed.lines().reversed()) {
                 if (budget <= 0 && !line.modified().equals(reached)) {
                     break;
                 }
@@ -118,55 +110,6 @@ public final class OsvChanges {
     /** What the log holds after sequence {@code after}. */
     public AdvisorySource.ChangeLog changes(long after) throws IOException {
         return FeedChanges.read(space.get(), after);
-    }
-
-    /** What one list says since {@code position} - every line after it, newest first - and whether the window ran out
-     *  before reaching it. Without a position, its head alone. */
-    private record Listed(List<Line> lines, boolean exhausted) {
-    }
-
-    /** What one list says since {@code position}, or empty where the export holds no list for {@code ecosystem}. */
-    private Optional<Listed> list(String ecosystem, Instant position) throws IOException {
-        FeedRequest request = FeedRequest.get(export.resolve(URLEncoder.encode(ecosystem, StandardCharsets.UTF_8)
-                .replace("+", "%20") + "/modified_id.csv"));
-        try {
-            return Optional.of(client.fetch(request, FeedClient.Reader.document(body -> {
-                List<Line> lines = new ArrayList<>();
-                BoundedInput window = new BoundedInput(body, WINDOW);
-                BufferedReader reader = new BufferedReader(new InputStreamReader(window, StandardCharsets.UTF_8));
-                String text;
-                while ((text = reader.readLine()) != null) {
-                    int comma = text.indexOf(',');
-                    if (comma < 0) {
-                        continue;
-                    }
-                    Instant modified;
-                    try {
-                        modified = Instant.parse(text.substring(0, comma).strip());
-                    } catch (DateTimeParseException unreadable) {
-                        continue;
-                    }
-                    String id = text.substring(comma + 1).strip();
-                    int slash = id.lastIndexOf('/');
-                    id = slash < 0 ? id : id.substring(slash + 1);
-                    if (position == null) {
-                        return new Listed(List.of(new Line(modified, id)), false);
-                    }
-                    if (!modified.isAfter(position)) {
-                        return new Listed(List.copyOf(lines), false);
-                    }
-                    lines.add(new Line(modified, id));
-                }
-                // The list ended, or the window did: only a window that ran out leaves the position unreached.
-                return new Listed(List.copyOf(lines), window.exhausted());
-            })).value().orElseThrow());
-        } catch (FeedException e) {
-            if (e.reason() == FeedException.Reason.STATUS && e.status() == 404) {
-                return Optional.empty();
-            }
-            throw new IOException("Could not read OSV's " + ecosystem + " change list (" + OsvQuery.reason(e) + ")",
-                    e);
-        }
     }
 
     /** The packages a record affects, in the product's ecosystem names; none for a record OSV no longer serves. */
@@ -191,47 +134,5 @@ public final class OsvChanges {
                     .ifPresent(product -> packages.add(new AdvisorySource.Package(product, name)));
         }
         return packages;
-    }
-
-    /** At most {@code limit} bytes of {@code in}, remembering whether the limit, not the stream, ended the read. */
-    private static final class BoundedInput extends FilterInputStream {
-
-        private long remaining;
-        private boolean exhausted;
-
-        BoundedInput(InputStream in, long limit) {
-            super(in);
-            this.remaining = limit;
-        }
-
-        boolean exhausted() {
-            return exhausted;
-        }
-
-        @Override
-        public int read() throws IOException {
-            if (remaining <= 0) {
-                exhausted = true;
-                return -1;
-            }
-            int read = super.read();
-            if (read >= 0) {
-                remaining--;
-            }
-            return read;
-        }
-
-        @Override
-        public int read(byte[] buffer, int offset, int length) throws IOException {
-            if (remaining <= 0) {
-                exhausted = true;
-                return -1;
-            }
-            int read = super.read(buffer, offset, (int) Math.min(length, remaining));
-            if (read > 0) {
-                remaining -= read;
-            }
-            return read;
-        }
     }
 }
