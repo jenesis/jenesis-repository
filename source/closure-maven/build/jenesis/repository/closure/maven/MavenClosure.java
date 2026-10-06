@@ -152,11 +152,12 @@ public final class MavenClosure implements ClosureSource {
         boolean truncated = held.exhausted();
         Set<String> seen = new HashSet<>();
         seen.add(root.getGroupId() + ":" + root.getArtifactId());
-        record Visit(DependencyNode node, int depth) {
+        // The node to place, and the dependency whose children it is, or none for the release's own.
+        record Visit(DependencyNode node, int depth, String viaCoordinate, String viaVersion) {
         }
         Deque<Visit> queue = new ArrayDeque<>();
         if (collected != null) {
-            collected.getChildren().forEach(child -> queue.add(new Visit(child, 1)));
+            collected.getChildren().forEach(child -> queue.add(new Visit(child, 1, "", "")));
         }
         while (!queue.isEmpty()) {
             Visit visit = queue.poll();
@@ -179,8 +180,9 @@ public final class MavenClosure implements ClosureSource {
             Optional<Held.Member> holder = held.holder(artifact);
             components.add(new ClosureSection.Component(ga, artifact.getVersion(),
                     holder.map(member -> member.cached(ga, artifact.getVersion())).orElse(false), visit.depth(),
-                    holder.map(Held.Member::repository).orElse("")));
-            visit.node().getChildren().forEach(child -> queue.add(new Visit(child, visit.depth() + 1)));
+                    holder.map(Held.Member::repository).orElse(""), visit.viaCoordinate(), visit.viaVersion()));
+            visit.node().getChildren().forEach(child -> queue.add(new Visit(child, visit.depth() + 1, ga,
+                    artifact.getVersion())));
         }
         return new ClosureSection.Closure(cuts.isEmpty() && !truncated ? ClosureSection.Status.RESOLVED
                 : ClosureSection.Status.PARTIAL, components, cuts, truncated, now,

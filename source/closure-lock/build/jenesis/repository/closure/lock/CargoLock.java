@@ -85,6 +85,8 @@ public final class CargoLock implements ClosureSource {
         }
         List<CarriedClosure.Entry> entries = new ArrayList<>();
         Map<Pinned, Integer> depths = new HashMap<>();
+        // The crate whose dependencies first named each one reached; the crate itself names its direct ones.
+        Map<Pinned, Pinned> parents = new HashMap<>();
         depths.put(crate.get(), 0);
         Deque<Pinned> queue = new ArrayDeque<>(List.of(crate.get()));
         while (!queue.isEmpty()) {
@@ -94,12 +96,16 @@ public final class CargoLock implements ClosureSource {
                 entries.add(at.source() == null
                         ? CarriedClosure.Entry.unplaced(at.name(), at.version(), "built from the crate's own sources, "
                                 + "as the version's Cargo.lock records it, which names nothing a repository holds")
-                        : CarriedClosure.Entry.placed(Ecosystems.CRATES_IO, at.name(), at.version(), depth));
+                        : depth == 1
+                                ? CarriedClosure.Entry.placed(Ecosystems.CRATES_IO, at.name(), at.version(), depth)
+                                : CarriedClosure.Entry.placed(Ecosystems.CRATES_IO, at.name(), at.version(), depth,
+                                        parents.get(at).name(), parents.get(at).version()));
             }
             for (String dependency : at.dependencies()) {
                 Pinned next = pinned(pinned, dependency);
                 if (next != null && !depths.containsKey(next)) {
                     depths.put(next, depth + 1);
+                    parents.put(next, at);
                     queue.add(next);
                 }
             }

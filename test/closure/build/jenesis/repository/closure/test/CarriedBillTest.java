@@ -67,9 +67,10 @@ class CarriedBillTest {
 
         assertThat(closure.kind()).isEqualTo(ClosureSource.Kind.BILL);
         assertThat(closure.source()).isEqualTo(CarriedBill.NAME);
-        assertThat(closure.components()).as("each the holding kept of it, at its distance along the bill's edges")
+        assertThat(closure.components()).as("each the holding kept of it, at its distance along the bill's edges and "
+                        + "reached through the component whose edge names it")
                 .containsExactly(new ClosureSection.Component("org.dep:a", "1.1", true, 1, ""),
-                        new ClosureSection.Component("org.dep:b", "2.0", false, 2, ""));
+                        new ClosureSection.Component("org.dep:b", "2.0", false, 2, "", "org.dep:a", "1.1"));
         assertThat(closure.cuts()).extracting(ClosureSection.Cut::coordinate, ClosureSection.Cut::reason)
                 .containsExactlyInAnyOrder(
                         tuple("org.dep:c", "held for review"),
