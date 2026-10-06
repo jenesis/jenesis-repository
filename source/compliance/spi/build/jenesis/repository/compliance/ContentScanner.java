@@ -51,7 +51,7 @@ public interface ContentScanner {
     String SETTING = "content-scanners";
 
     /** The {@value #SETTING} value a repository scanned by no scanner names. */
-    String NONE = "none";
+    String NONE = RepositorySelection.NONE;
 
     /** The image manifest types a scanner of {@link Input#IMAGE_MANIFEST} is handed. */
     Set<String> IMAGE_MANIFESTS = Set.of("application/vnd.oci.image.manifest.v1+json",
@@ -179,39 +179,16 @@ public interface ContentScanner {
 
     /**
      * The scanners of {@code installed} that screen a repository whose effective lookup is {@code repository}, over the
-     * deployment's {@code deployment} lookup: those its {@value #SETTING} names, in its order, or every configured one
-     * where it names none; none for {@value #NONE}.
+     * deployment's {@code deployment} lookup, as {@link RepositorySelection} reads its {@value #SETTING}: those it
+     * names, in its order, or every configured one where it names none; none for {@value #NONE}.
      *
      * @throws IllegalStateException for a name no installed scanner answers to, or one the deployment has not
      *                               configured, naming it and what is missing
      */
     static List<ContentScanner> selected(List<ContentScanner> installed, UnaryOperator<String> repository,
                                          UnaryOperator<String> deployment) {
-        String value = repository == null ? null : repository.apply(SETTING);
-        if (value == null || value.isBlank()) {
-            return installed.stream().filter(scanner -> scanner.configured(deployment)).toList();
-        }
-        if (value.strip().equalsIgnoreCase(NONE)) {
-            return List.of();
-        }
-        List<ContentScanner> selected = new ArrayList<>();
-        for (String name : value.split(",")) {
-            String named = name.strip();
-            if (named.isEmpty()) {
-                continue;
-            }
-            ContentScanner scanner = installed.stream().filter(candidate -> candidate.name().equals(named))
-                    .findFirst().orElseThrow(() -> new IllegalStateException(SETTING + " names the scanner '" + named
-                            + "', which is not installed; installed: " + installed.stream()
-                            .map(ContentScanner::name).toList()));
-            if (!scanner.configured(deployment)) {
-                throw new IllegalStateException(SETTING + " names the scanner '" + named + "', which is not "
-                        + "configured: set " + String.join(", ", scanner.missing(deployment)));
-            }
-            if (!selected.contains(scanner)) {
-                selected.add(scanner);
-            }
-        }
-        return List.copyOf(selected);
+        return RepositorySelection.select(SETTING, "scanner", repository == null ? null : repository.apply(SETTING),
+                installed, ContentScanner::name, scanner -> scanner.configured(deployment) ? Optional.empty()
+                        : Optional.of("not configured: set " + String.join(", ", scanner.missing(deployment))));
     }
 }
