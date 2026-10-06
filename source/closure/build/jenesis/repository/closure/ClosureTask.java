@@ -3,7 +3,7 @@ package build.jenesis.repository.closure;
 import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.compliance.Severity;
-import build.jenesis.repository.inventory.ChangedVersions;
+import build.jenesis.repository.inventory.Mailbox;
 import build.jenesis.repository.inventory.IncrementalPasses;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.maintenance.MaintenanceTask;
@@ -35,7 +35,7 @@ import build.jenesis.repository.store.ArtifactStore;
  * <p>Each closure is indexed the other way round too ({@link ReliedOn}): the pass writes a row, in the repository of
  * the walk holding it, for each version the closure reaches, and on a full pass of its own removes the rows of this
  * repository whose dependent no longer relies on what they name. A version here whose findings or holds changed
- * ({@link ChangedVersions}) marks the releases relying on it stale in their own repositories, whose next pass
+ * ({@link Mailbox#CHANGED}) marks the releases relying on it stale in their own repositories, whose next pass
  * re-derives their exposure first - so a release follows a new finding or hold on a copy it relies on within a pass of
  * each repository, with no feed asked and without waiting for its full pass. A package a carried bill names in another
  * ecosystem is indexed by coordinate for the whole tenant, its copies looked up in every repository of the tenant and
@@ -128,7 +128,7 @@ public final class ClosureTask implements MaintenanceTask {
         reconcile(context);
         propagate(context);
         if (!enabled(context.config())) {
-            ReliedOn.drainStale(context.store(), DRAIN, _ -> {
+            ReliedOn.STALE.drain(context.store(), DRAIN, _ -> {
             });   // nothing here re-derives, so what was asked of it is dropped rather than kept
             return;
         }
@@ -141,7 +141,7 @@ public final class ClosureTask implements MaintenanceTask {
                 riskBand(context.config()), failed);
         // What another repository's pass found changed among what these releases reach, re-derived first and with
         // nothing resolved: a release still waiting for its closure is the cadence's below.
-        ReliedOn.drainStale(context.store(), DRAIN, release -> visit.release(release, false, false));
+        ReliedOn.STALE.drain(context.store(), DRAIN, release -> visit.release(release, false, false));
         cadence.coordinates(inventory, release -> visit.release(release, true, cadence.full()));
         for (ArtifactStore holder : visit.touched.values()) {
             ReliedOn.epoch(holder).bump();
@@ -248,13 +248,13 @@ public final class ClosureTask implements MaintenanceTask {
     }
 
     /** Tell the repositories relying on what this one holds that it changed: each version whose findings or holds
-     *  moved since the last pass ({@link ChangedVersions}) marks every published version its {@link ReliedOn} rows
+     *  moved since the last pass ({@link Mailbox#CHANGED}) marks every published version its {@link ReliedOn} rows
      *  name as stale in that version's repository, whose own pass re-derives it. Runs whether or not this repository
      *  resolves closures; a failure is contained and reported, and the full passes there re-derive what it missed. */
     private static void propagate(RepositoryContext context) {
         try {
             Optional<ArtifactStore> space = context.tenantStore().map(tenant -> tenant.scope(ReliedOn.SPACE));
-            ChangedVersions.drain(context.store(), DRAIN, changed -> {
+            Mailbox.CHANGED.drain(context.store(), DRAIN, changed -> {
                 ReliedOn.Visitor<ReliedOn.Row> mark = dependent -> {
                     Optional<ArtifactStore> store = dependent.repository().equals(context.repository())
                             ? Optional.of(context.store())

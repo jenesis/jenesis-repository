@@ -185,7 +185,7 @@ public final class HeldSubjects {
             if (placed) {
                 // A hold newly placed changes what every version relying on this one inherits; a re-screen or a
                 // converging sweep recording it again changes nothing.
-                ChangedVersions.mark(store, ecosystem, coordinate, version);
+                Mailbox.CHANGED.post(store, ecosystem, coordinate, version);
             }
         }
     }
@@ -276,13 +276,13 @@ public final class HeldSubjects {
      *  never on a schedule and never because a module is absent. Delete-if-present on both faces, so a retry after a
      *  crash converges; the version face is reached through the row's own recorded coordinate, so a format that has
      *  since been uninstalled cannot strand it. The version's standing changed, which is recorded
-     *  ({@link ChangedVersions}). */
+     *  ({@link Mailbox#CHANGED}). */
     public static void forget(ArtifactStore store, String path) throws IOException {
         Optional<Subject> subject = read(store, path);
         if (subject.isPresent() && subject.get().versioned()) {
             deleteIfPresent(store, versionKey(subject.get().ecosystem(), subject.get().coordinate(),
                     subject.get().version(), path));
-            ChangedVersions.mark(store, subject.get().ecosystem(), subject.get().coordinate(),
+            Mailbox.CHANGED.post(store, subject.get().ecosystem(), subject.get().coordinate(),
                     subject.get().version());
         }
         deleteIfPresent(store, pathKey(path));

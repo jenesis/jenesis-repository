@@ -5,7 +5,7 @@ import build.jenesis.repository.events.EventSink;
 import build.jenesis.repository.events.RepositoryEvent;
 import build.jenesis.repository.findings.Finding;
 import build.jenesis.repository.findings.Findings;
-import build.jenesis.repository.inventory.ChangedVersions;
+import build.jenesis.repository.inventory.Mailbox;
 import build.jenesis.repository.metadata.MetadataDocument;
 import build.jenesis.repository.metadata.MetadataKey;
 import build.jenesis.repository.metadata.MetadataProvider;
@@ -180,7 +180,7 @@ public final class StoreFindings implements Findings {
             return after;
         }, Instant.now()));
         if (moved[0]) {
-            ChangedVersions.mark(store, ecosystem, coordinate, version);
+            Mailbox.CHANGED.post(store, ecosystem, coordinate, version);
         }
     }
 
