@@ -18,7 +18,7 @@ module build.jenesis.repository.compliance.scan {
     requires build.jenesis.repository.blobs;
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.cleanup;
-    requires build.jenesis.repository.closure;
+    requires transitive build.jenesis.repository.closure.spi;
     requires build.jenesis.repository.findings;
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.server.spi;

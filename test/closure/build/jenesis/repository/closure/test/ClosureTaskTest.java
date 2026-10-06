@@ -7,9 +7,9 @@ import build.jenesis.repository.closure.spi.ClosureSource;
 import build.jenesis.repository.closure.ClosureTask;
 import build.jenesis.repository.closure.spi.ClosureWalk;
 import build.jenesis.repository.closure.spi.ExposureSection;
+import build.jenesis.repository.closure.spi.Reliance;
 import build.jenesis.repository.closure.ReliedOn;
 import build.jenesis.repository.compliance.Severity;
-import build.jenesis.repository.compliance.scan.Reached;
 import build.jenesis.repository.compliance.scan.VulnerabilityRankIndex;
 import build.jenesis.repository.compliance.scan.VulnerabilityRankIndexTask;
 import build.jenesis.repository.compliance.scan.VulnerabilityRanking;
@@ -266,14 +266,14 @@ class ClosureTaskTest {
 
         assertThat(reliedOn("org.dep:lib", "1.0", _ -> true).dependents()).as("both, each with its path")
                 .containsExactlyInAnyOrder(
-                        new ReliedOn.Dependent("releases", "Maven", "org.acme:app", "1.0",
+                        new Reliance.Dependent("releases", "Maven", "org.acme:app", "1.0",
                                 List.of(new ClosureSection.Hop("org.dep:lib", "1.0")), false, false),
-                        new ReliedOn.Dependent("group", "Maven", "org.acme:web", "1.0",
+                        new Reliance.Dependent("group", "Maven", "org.acme:web", "1.0",
                                 List.of(new ClosureSection.Hop("org.acme:app", "1.0"),
                                         new ClosureSection.Hop("org.dep:lib", "1.0")), false, false));
         assertThat(reliedOn("org.dep:lib", "1.0", "releases"::equals).dependents())
                 .as("a repository the caller may not read is left out")
-                .extracting(ReliedOn.Dependent::repository).containsExactly("releases");
+                .extracting(Reliance.Dependent::repository).containsExactly("releases");
         assertThat(ExposureSection.exposure(MetadataProvider.installed().over(tenant.scope("group"))
                 .section("Maven", "org.acme:web", "1.0", ExposureSection.TAG)).orElseThrow().reached())
                 .as("nothing it reaches is held or vulnerable").isEmpty();
@@ -291,7 +291,7 @@ class ClosureTaskTest {
         pass(null, NOW);
 
         assertThat(reliedOn("org.dep:held", "1.0", _ -> true).dependents()).singleElement()
-                .isEqualTo(new ReliedOn.Dependent("releases", "Maven", "org.acme:app", "1.0",
+                .isEqualTo(new Reliance.Dependent("releases", "Maven", "org.acme:app", "1.0",
                         List.of(new ClosureSection.Hop("org.dep:held", "1.0")), true, false));
     }
 
@@ -327,10 +327,10 @@ class ClosureTaskTest {
 
         pass(null, NOW);
 
-        assertThat(VulnerabilityRanking.rank(ledger, List.of(), Reached.NONE))
+        assertThat(VulnerabilityRanking.rank(ledger, List.of(), Reliance.NONE))
                 .as("with nothing relied on, the ranking falls through to coordinate order")
                 .extracting(VulnerabilityRanking.RankedLine::coordinate).containsExactly("org.dep:aaa", "org.dep:lib");
-        assertThat(VulnerabilityRanking.rank(ledger, List.of(), Reached.over(store, Optional.of(tenant))))
+        assertThat(VulnerabilityRanking.rank(ledger, List.of(), Reliance.over(store, "releases", Optional.of(tenant), name -> Optional.of(tenant.scope(name)))))
                 .as("read through the relied-on index, the version the release's closure reaches comes first")
                 .extracting(VulnerabilityRanking.RankedLine::coordinate).containsExactly("org.dep:lib", "org.dep:aaa");
     }
@@ -345,7 +345,7 @@ class ClosureTaskTest {
                     Finding.Kind.VULNERABILITY, "advisory", Severity.HIGH, "recorded", NOW));
         }
         pass(null, NOW);
-        Reached reached = Reached.over(store, Optional.of(tenant));
+        Reliance reached = Reliance.over(store, "releases", Optional.of(tenant), name -> Optional.of(tenant.scope(name)));
         VulnerabilityRankIndexTask.reindex(store, ledger, List.of(), reached);
         assertThat(new VulnerabilityRankIndex(store).read(null, 10).lines())
                 .extracting(VulnerabilityRanking.RankedLine::coordinate).containsExactly("org.dep:aaa", "org.dep:lib");
@@ -406,7 +406,7 @@ class ClosureTaskTest {
 
         pass("releases", Map.of(IncrementalPasses.FULL_EVERY, "1"), null, NOW.plus(Duration.ofHours(1)));
         assertThat(reliedOn("org.dep:lib", "1.0", _ -> true).dependents())
-                .extracting(ReliedOn.Dependent::coordinate).containsExactly("org.acme:app");
+                .extracting(Reliance.Dependent::coordinate).containsExactly("org.acme:app");
     }
 
     @Test
@@ -450,11 +450,11 @@ class ClosureTaskTest {
                         List.of(), "npm"));
         assertThat(reliedOnAcross(npm, "npm-proxy", "left-pad").dependents())
                 .as("and the copy's page names the release, which relies on it by coordinate")
-                .containsExactly(new ReliedOn.Dependent("releases", "Maven", "org.acme:app", "1.0",
+                .containsExactly(new Reliance.Dependent("releases", "Maven", "org.acme:app", "1.0",
                         List.of(new ClosureSection.Hop("left-pad", "1.3.0")), false, true));
         assertThat(reliedOnAcross(tenant.scope("group"), "group", "left-pad").dependents())
                 .as("as does the page of any repository's copy: the tenant's rows are the coordinate's")
-                .extracting(ReliedOn.Dependent::coordinate).containsExactly("org.acme:app");
+                .extracting(Reliance.Dependent::coordinate).containsExactly("org.acme:app");
     }
 
     @Test
@@ -519,7 +519,7 @@ class ClosureTaskTest {
         failures.rethrow();
     }
 
-    private ReliedOn.Page reliedOnAcross(ArtifactStore holder, String holderName, String name) throws IOException {
+    private Reliance.Page reliedOnAcross(ArtifactStore holder, String holderName, String name) throws IOException {
         return ReliedOn.pageAcross(holder, holderName, Optional.of(tenant), named -> Optional.of(tenant.scope(named)),
                 _ -> true, "npm", name, "1.3.0", "", 50);
     }
@@ -606,7 +606,7 @@ class ClosureTaskTest {
                 DependencySection.record(path, List.of(new DependencySection.Declared(dependency, "1.0")), NOW));
     }
 
-    private ReliedOn.Page reliedOn(String coordinate, String version, Predicate<String> readable)
+    private Reliance.Page reliedOn(String coordinate, String version, Predicate<String> readable)
             throws IOException {
         return ReliedOn.page(store, "releases", name -> Optional.of(tenant.scope(name)), readable, "Maven",
                 coordinate, version, "", 50);

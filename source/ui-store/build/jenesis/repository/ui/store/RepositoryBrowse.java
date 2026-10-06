@@ -4,7 +4,7 @@ import module java.base;
 
 import build.jenesis.repository.closure.spi.ClosureSection;
 import build.jenesis.repository.closure.spi.ExposureSection;
-import build.jenesis.repository.closure.ReliedOn;
+import build.jenesis.repository.closure.spi.Reliance;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ScreenedThrough;
 import build.jenesis.repository.compliance.ScreeningMode;
@@ -412,13 +412,13 @@ public class RepositoryBrowse extends TenantScope implements AutoCloseable {
      * One page of the published versions of the signed-in tenant relying on {@code version} of {@code coordinate}
      * held by {@code repository}, after {@code after}: each confirmed by its own closure, with the path it is reached
      * along - those reaching this copy, then those whose bills name the version by coordinate in another ecosystem
-     * ({@link ReliedOn#pageAcross}). The console is the tenant's, so it names a dependent in any of its repositories.
+     * ({@link Reliance#dependents}). The console is the tenant's, so it names a dependent in any of its repositories.
      */
-    public ReliedOn.Page reliedOn(String repository, String ecosystem, String coordinate, String version, String after)
+    public Reliance.Page reliedOn(String repository, String ecosystem, String coordinate, String version, String after)
             throws IOException {
-        return ReliedOn.pageAcross(scope(repository), repository, Optional.of(root.scope(tenant())),
-                name -> validRepository(name) ? Optional.of(scope(name)) : Optional.empty(), _ -> true, ecosystem,
-                coordinate, version, after, RELIED_ON_SHOWN);
+        return Reliance.over(scope(repository), repository, Optional.of(root.scope(tenant())),
+                        name -> validRepository(name) ? Optional.of(scope(name)) : Optional.empty())
+                .dependents(ecosystem, coordinate, version, after, RELIED_ON_SHOWN, _ -> true);
     }
 
     /**
