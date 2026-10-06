@@ -125,6 +125,19 @@ class StoreCacheTest {
     }
 
     @Test
+    void a_shared_cache_nobody_holds_outlives_a_collection_so_a_caller_asking_for_it_per_read_reads_the_store_once()
+            throws Exception {
+        // What a per-request caller does: ask for the shared cache, read through it, let it go.
+        assertThat(StoreCache.of("unheld", store, Duration.ofMinutes(5)).readVersioned("auth/k/grants")).isPresent();
+        System.gc();
+        assertThat(StoreCache.of("unheld", store, Duration.ofMinutes(5)).readVersioned("auth/k/grants")).isPresent();
+
+        assertThat(store.calls(FaultInjectingStore.Op.READ_VERSIONED))
+                .as("a collection with memory to spare does not drop the cache, so the second read is a hit")
+                .isEqualTo(1);
+    }
+
+    @Test
     void a_cache_name_that_is_not_a_signal_segment_is_refused_when_the_cache_is_made() {
         // Its counters are named jenrepo.cache.<name>.*, and a name the signal grammar refuses would drop every
         // cache's counters from the report at render time; it is refused here instead, where the boot fails loudly.
