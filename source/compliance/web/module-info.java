@@ -12,7 +12,7 @@ open module build.jenesis.repository.compliance.web {
     exports build.jenesis.repository.compliance.web;
     requires build.jenesis.repository.server.kernel;
     requires build.jenesis.repository.server;
-    requires build.jenesis.repository.closure;
+    requires build.jenesis.repository.closure.spi;
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.compliance.scan;
     requires build.jenesis.repository.compliance.signatures;

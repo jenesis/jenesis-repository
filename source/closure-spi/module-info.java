@@ -24,4 +24,5 @@ module build.jenesis.repository.closure.spi {
     exports build.jenesis.repository.closure.spi;
     uses build.jenesis.repository.closure.spi.RequirementGrammar;
     uses build.jenesis.repository.closure.spi.ClosureSource;
+    uses build.jenesis.repository.closure.spi.RelianceProvider;
 }

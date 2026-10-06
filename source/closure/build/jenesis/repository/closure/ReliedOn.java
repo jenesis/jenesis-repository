@@ -2,6 +2,7 @@ package build.jenesis.repository.closure;
 
 import module java.base;
 import build.jenesis.repository.closure.spi.ClosureSection;
+import build.jenesis.repository.closure.spi.Reliance;
 import build.jenesis.repository.closure.spi.ClosureWalk;
 import build.jenesis.repository.closure.spi.ExposureSection;
 import build.jenesis.repository.inventory.Mailbox;
@@ -64,8 +65,6 @@ public final class ReliedOn {
     /** The cursor prefix of a page continuing from a repository's own rows into the tenant's. */
     private static final String ACROSS = "tenant-";
 
-    /** The most rows one page answers. */
-    public static final int MAX_PAGE = 200;
 
     /** The rows one reconcile step lists. */
     private static final int SWEEP_PAGE = 1_000;
@@ -94,30 +93,6 @@ public final class ReliedOn {
         /** The dependent's ecosystem, {@code subject} being that of what the row says it relies on. */
         public String ecosystemOr(String subject) {
             return ecosystem.isEmpty() ? subject : ecosystem;
-        }
-    }
-
-    /**
-     * A published version relying on the version asked about: its repository, ecosystem, coordinate and version, how
-     * its closure reaches it - from the dependency it names itself down to the version, both included - whether the
-     * closure stopped there, a version held for review being a cut rather than a component, and whether it names the
-     * version by coordinate alone, in another ecosystem than its own, and so relies on whichever copy its build
-     * installed.
-     */
-    public record Dependent(String repository, String ecosystem, String coordinate, String version,
-                            List<ClosureSection.Hop> path, boolean cut, boolean byCoordinate) {
-
-        public Dependent {
-            path = List.copyOf(path);
-        }
-    }
-
-    /** One page of dependents: those the rows of the page named and their closures confirm, how many rows were read,
-     *  and the cursor resuming after the last of them, empty once the rows are exhausted. */
-    public record Page(List<Dependent> dependents, int examined, Optional<String> next) {
-
-        public Page {
-            dependents = List.copyOf(dependents);
         }
     }
 
@@ -236,21 +211,21 @@ public final class ReliedOn {
 
     /**
      * One page of the published versions relying on {@code coordinate} at {@code version} of {@code ecosystem}, held by
-     * {@code holder}, the repository named {@code holderName}: up to {@code limit} rows (at most {@link #MAX_PAGE})
-     * after {@code after}, each believed only where the dependent's document, read from {@code repositories} by its
+     * {@code holder}, the repository named {@code holderName}: up to {@code limit} rows (at most
+     * {@link Reliance#MAX_PAGE}) after {@code after}, each believed only where the dependent's document, read from {@code repositories} by its
      * repository's name, records a closure reaching the version through this repository. A dependent in a repository
      * {@code readable} refuses is left out unread. A row and a document read per row, so a page costs the same whatever
      * the repositories hold.
      */
-    public static Page page(ArtifactStore holder, String holderName,
+    public static Reliance.Page page(ArtifactStore holder, String holderName,
                             Function<String, Optional<ArtifactStore>> repositories, Predicate<String> readable,
                             String ecosystem, String coordinate, String version, String after, int limit)
             throws IOException {
-        int bound = Math.max(1, Math.min(limit, MAX_PAGE));
+        int bound = Math.max(1, Math.min(limit, Reliance.MAX_PAGE));
         List<String> names = new ArrayList<>();
         String level = level(ecosystem, coordinate, version);
         holder.page(level, after == null ? "" : after, bound, names::add);
-        List<Dependent> dependents = new ArrayList<>();
+        List<Reliance.Dependent> dependents = new ArrayList<>();
         MetadataProvider metadata = MetadataProvider.installed();      // once per page, never per row
         for (String name : names) {
             Optional<Row> row = row(holder, level + "/" + name);
@@ -268,7 +243,7 @@ public final class ReliedOn {
                             version))
                     .ifPresent(dependents::add);
         }
-        return new Page(dependents, names.size(),
+        return new Reliance.Page(dependents, names.size(),
                 names.size() < bound ? Optional.empty() : Optional.of(names.getLast()));
     }
 
@@ -290,22 +265,22 @@ public final class ReliedOn {
      * ending the repository's own rows fills the rest of its bound from the tenant's, so the two together read no more
      * rows than one page does; the cursor of a page within the tenant's rows is marked so.
      */
-    public static Page pageAcross(ArtifactStore holder, String holderName, Optional<ArtifactStore> tenant,
+    public static Reliance.Page pageAcross(ArtifactStore holder, String holderName, Optional<ArtifactStore> tenant,
                                   Function<String, Optional<ArtifactStore>> repositories, Predicate<String> readable,
                                   String ecosystem, String coordinate, String version, String after, int limit)
             throws IOException {
         Optional<ArtifactStore> space = tenant.map(store -> store.scope(SPACE));
         String resume = after == null ? "" : after;
-        int bound = Math.max(1, Math.min(limit, MAX_PAGE));
+        int bound = Math.max(1, Math.min(limit, Reliance.MAX_PAGE));
         if (space.isEmpty()) {
             return page(holder, holderName, repositories, readable, ecosystem, coordinate, version,
                     resume.startsWith(ACROSS) ? "" : resume, bound);
         }
-        List<Dependent> dependents = new ArrayList<>();
+        List<Reliance.Dependent> dependents = new ArrayList<>();
         int examined = 0;
         if (!resume.startsWith(ACROSS)) {
-            Page own = page(holder, holderName, repositories, readable, ecosystem, coordinate, version, resume,
-                    bound);
+            Reliance.Page own = page(holder, holderName, repositories, readable, ecosystem, coordinate, version,
+                    resume, bound);
             if (own.next().isPresent()) {
                 return own;
             }
@@ -313,29 +288,29 @@ public final class ReliedOn {
             examined = own.examined();
             resume = ACROSS;
         }
-        Page across = page(space.get(), SPACE, repositories, readable, ecosystem, coordinate, version,
+        Reliance.Page across = page(space.get(), SPACE, repositories, readable, ecosystem, coordinate, version,
                 resume.substring(ACROSS.length()), Math.max(1, bound - examined));
         dependents.addAll(across.dependents());
-        return new Page(dependents, examined + across.examined(), across.next().map(next -> ACROSS + next));
+        return new Reliance.Page(dependents, examined + across.examined(), across.next().map(next -> ACROSS + next));
     }
 
     /** How {@code closure}, of the dependent {@code row} names, reaches {@code coordinate} at {@code version} of
      *  {@code ecosystem} held by {@code holderName}: as a component held there, or as a cut its exposure names as held
      *  there - or, held by the tenant's {@value #SPACE} space, as a package its bill names in that ecosystem. */
-    private static Optional<Dependent> reached(ClosureSection.Closure closure, MetadataDocument document, Row row,
-                                               String holderName, String ecosystem, String coordinate,
-                                               String version) {
+    private static Optional<Reliance.Dependent> reached(ClosureSection.Closure closure, MetadataDocument document,
+                                                        Row row, String holderName, String ecosystem,
+                                                        String coordinate, String version) {
         String own = row.ecosystemOr(ecosystem);
         if (SPACE.equals(holderName)) {
             List<ClosureSection.Hop> path = ClosureSection.foreignPath(closure, ecosystem, coordinate, version);
-            return path.isEmpty() ? Optional.empty() : Optional.of(new Dependent(row.repository(), own,
+            return path.isEmpty() ? Optional.empty() : Optional.of(new Reliance.Dependent(row.repository(), own,
                     row.coordinate(), row.version(), path, false, true));
         }
         String through = holderName.equals(row.repository()) ? "" : holderName;
         for (ClosureSection.Component component : closure.components()) {
             if (component.coordinate().equals(coordinate) && component.version().equals(version)
                     && component.repository().equals(through)) {
-                return Optional.of(new Dependent(row.repository(), own, row.coordinate(), row.version(),
+                return Optional.of(new Reliance.Dependent(row.repository(), own, row.coordinate(), row.version(),
                         ClosureSection.path(closure, coordinate, version), false, false));
             }
         }
@@ -344,7 +319,7 @@ public final class ReliedOn {
             for (ExposureSection.Reached reached : exposure.get().reached()) {
                 if (reached.held() && reached.ecosystem().isEmpty() && reached.coordinate().equals(coordinate)
                         && reached.version().equals(version) && reached.repository().equals(through)) {
-                    return Optional.of(new Dependent(row.repository(), own, row.coordinate(), row.version(),
+                    return Optional.of(new Reliance.Dependent(row.repository(), own, row.coordinate(), row.version(),
                             List.of(new ClosureSection.Hop(coordinate, version)), true, false));
                 }
             }

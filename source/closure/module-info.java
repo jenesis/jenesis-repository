@@ -41,6 +41,8 @@ module build.jenesis.repository.closure {
     exports build.jenesis.repository.closure;
     provides build.jenesis.repository.closure.spi.ClosureSource
             with build.jenesis.repository.closure.CarriedBill, build.jenesis.repository.closure.DeclaredClosure;
+    provides build.jenesis.repository.closure.spi.RelianceProvider
+            with build.jenesis.repository.closure.ReliedOnReliance;
     provides build.jenesis.repository.maintenance.MaintenanceTaskProvider
             with build.jenesis.repository.closure.ClosureTaskProvider;
     provides build.jenesis.repository.maintenance.StorageNamespace
