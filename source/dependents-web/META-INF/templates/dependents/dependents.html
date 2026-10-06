@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Dependents')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main">
+    <div th:replace="~{fragments :: messages}"></div>
+    <th:block th:replace="~{base :: repositoryHeader('Dependents', 'of', null, null)}"></th:block>
+
+    <p th:unless="${available}">
+        No reverse-dependency index module is installed on this deployment, so "who depends on X" and CVE
+        blast-radius queries are unavailable.
+    </p>
+
+    <div th:if="${available}">
+        <p>
+            Enter a package coordinate (a purl such as
+            <code>pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1</code>) to see every stored artifact whose
+            recorded dependency tree pulls it in - the blast radius of a coordinate when a CVE lands on it. The
+            index is built by the background sweep; enable <code>dependents-index</code> in the
+            <a th:href="@{/ui/settings}">settings</a> if it is empty.
+        </p>
+        <!--/* Principle 10: this panel renders the durable index only - the rebuild is the background sweep's job (a
+             single-writer, lease-guarded pass), never done on this read - so it shows how fresh that index is. A
+             never-built index reads as exactly that, so an empty list is not mistaken for "nothing depends on
+             anything". There is no on-demand rebuild button: an index rebuild belongs to the scheduled sweep. */-->
+        <p><small th:if="${lastBuilt != null}">Index last rebuilt by the background sweep:
+            <span th:text="${lastBuilt}">-</span></small>
+            <small th:if="${lastBuilt == null}">The reverse-dependency index has not been built yet - the background
+            sweep builds it; any coordinate list below is not yet authoritative until it has run.</small></p>
+        <form method="get" th:action="@{/ui/repositories/{repo}/dependents(repo=${repo})}">
+            <input type="text" name="coordinate" th:value="${coordinate}"
+                   placeholder="pkg:maven/group/name@version" aria-label="Coordinate"/>
+            <button th:replace="~{base :: primaryButton('Show dependents')}">Show dependents</button>
+        </form>
+
+        <article th:if="${!coordinate.isBlank()}">
+            <h2>Dependents of <code th:text="${coordinate}">coordinate</code></h2>
+            <th:block th:if="${dependents.isEmpty()}">
+                <div th:replace="~{base :: empty('Nothing recorded depends on this coordinate.')}"></div>
+            </th:block>
+            <ul th:unless="${dependents.isEmpty()}">
+                <li th:each="dependent : ${dependents}"><code th:text="${dependent}">dependent</code></li>
+            </ul>
+        </article>
+
+        <article th:unless="${coordinates.isEmpty()}">
+            <h2>Indexed coordinates</h2>
+            <p><small>Coordinates the index holds a dependent for - pick one to see what depends on it.</small></p>
+            <ul>
+                <li th:each="entry : ${coordinates}">
+                    <a th:href="@{/ui/repositories/{repo}/dependents(repo=${repo},coordinate=${entry})}"
+                       th:text="${entry}">coordinate</a>
+                </li>
+            </ul>
+        </article>
+        <th:block th:if="${coordinates.isEmpty()}">
+            <div th:replace="~{base :: empty('The reverse-dependency index is empty. The background sweep fills it as builds publish their SBOMs.')}"></div>
+        </th:block>
+
+        <!--/* A second question, asked of the declared requirements rather than of the resolved graph: set apart so
+             the list above is read as the one that fills the first. */-->
+        <section class="app-divide" aria-labelledby="declared-by">
+            <h2 id="declared-by">Declared by</h2>
+            <p>
+                Enter a package name as its ecosystem spells it, without a version - <code>lodash</code>,
+                <code>org.apache.logging.log4j:log4j-core</code> - to see every version here whose manifest declares a
+                dependency on it, with the requirement it states. Add a version of that package to see whether each
+                requirement admits it, as the declaring ecosystem's own grammar reads it (Maven, npm, Cargo and
+                Composer; any other ecosystem says unknown). A requirement is not a resolved version: which
+                version a client installs for it is decided when the client runs, so these are listed apart from the
+                dependents above and are not counted in a vulnerability's blast radius.
+            </p>
+            <p><small th:if="${declaredBuilt != null}">Declared dependencies last indexed in full:
+                <span th:text="${declaredBuilt}">-</span></small>
+                <small th:if="${declaredBuilt == null}">The declared dependencies have not been indexed in full yet -
+                the background sweep does it; until then the list below may be incomplete.</small></p>
+            <form method="get" th:action="@{/ui/repositories/{repo}/dependents(repo=${repo})}">
+                <input type="text" name="package" th:value="${dependency}"
+                       placeholder="package name" aria-label="Package"/>
+                <input type="text" name="version" th:value="${version}"
+                       placeholder="version (optional)" aria-label="Version"/>
+                <button th:replace="~{base :: primaryButton('Show declarations')}">Show declarations</button>
+            </form>
+            <th:block th:if="${declared != null}">
+                <th:block th:if="${declared.declarations().isEmpty()}">
+                    <div th:replace="~{base :: empty('No version here declares a dependency on this package.')}"></div>
+                </th:block>
+                <table th:unless="${declared.declarations().isEmpty()}">
+                    <caption>Versions declaring a dependency on <code th:text="${dependency}">package</code></caption>
+                    <thead>
+                    <tr><th scope="col">Ecosystem</th><th scope="col">Package</th><th scope="col">Version</th>
+                        <th scope="col">Requirement</th>
+                        <th scope="col" th:if="${!version.isBlank()}" th:text="'Admits ' + ${version}">Admits</th></tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="row : ${declared.declarations()}">
+                        <td th:text="${row.ecosystem()}">npm</td>
+                        <td><code th:text="${row.coordinate()}">app</code></td>
+                        <td th:text="${row.version()}">1.0.0</td>
+                        <td><code th:text="${row.requirement().isEmpty() ? 'none stated' : row.requirement()}">^1</code></td>
+                        <td th:if="${!version.isBlank()}" th:text="${row.admits()}">admits</td>
+                    </tr>
+                    </tbody>
+                </table>
+                <p th:if="${declared.more()}"><small>Showing the first page; more versions declare it - the
+                    <code>/api/dependents</code> answer pages through the rest.</small></p>
+            </th:block>
+        </section>
+
+    </div>
+</main>
+</body>
+</html>
