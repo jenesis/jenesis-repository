@@ -210,6 +210,21 @@ class ClosureTaskTest {
     }
 
     @Test
+    void a_closure_is_recorded_under_the_source_that_answered_whatever_its_answer_names() throws IOException {
+        // A source whose answer names another kind and another source, as a shared helper's answer does.
+        ClosureSection.Closure misnamed = new ClosureSection.Closure(ClosureSection.Status.RESOLVED, List.of(),
+                List.of(), false, NOW, ClosureSource.Kind.BILL, "carried-bill");
+        UnitFailures failures = new UnitFailures("the closure pass", "nothing");
+        new ClosureTask(Duration.ofMinutes(5), List.of(source("carried-lock-test", ClosureSource.Kind.LOCK,
+                Set.of("Maven"), Optional.of(misnamed), new ArrayList<>())))
+                .repository(context("releases", Map.of(), null, NOW, failures));
+        failures.rethrow();
+
+        assertThat(closure().orElseThrow()).extracting(ClosureSection.Closure::kind, ClosureSection.Closure::source)
+                .containsExactly(ClosureSource.Kind.LOCK, "carried-lock-test");
+    }
+
+    @Test
     void a_release_inherits_the_state_of_what_its_closure_reaches_and_follows_it_on_the_next_full_pass()
             throws IOException {
         // app 2.0 asks for a cached copy carrying a critical finding, a copy the screen held at its fill, and a clean

@@ -83,8 +83,8 @@ public final class ClosureTask implements MaintenanceTask {
         return !"false".equalsIgnoreCase((value == null || value.isBlank() ? DEFAULT : value).strip());
     }
 
-    /** The first answer of the sources serving {@code release}'s ecosystem, in their order: a carried bill, then a
-     *  resolver, then a scanner, then the declaration walk. */
+    /** The first answer of the sources serving {@code release}'s ecosystem, in their order - a carried lock file, a
+     *  carried bill, a resolver, a scanner, then the declaration walk - attributed to the source that gave it. */
     private Optional<ClosureSection.Closure> resolve(ClosureWalk through, StoreRepositoryInventory.Coordinate release,
                                                      Instant now) throws IOException {
         for (ClosureSource source : sources) {
@@ -94,7 +94,7 @@ public final class ClosureTask implements MaintenanceTask {
             Optional<ClosureSection.Closure> closure = source.resolve(through, release.ecosystem(),
                     release.coordinate(), release.version(), now);
             if (closure.isPresent()) {
-                return closure;
+                return Optional.of(closure.get().attributed(source));
             }
         }
         return Optional.empty();
