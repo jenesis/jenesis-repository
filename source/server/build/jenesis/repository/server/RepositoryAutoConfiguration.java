@@ -274,7 +274,7 @@ public class RepositoryAutoConfiguration {
         if (properties.isReadOnly()) {
             return KeyUsageTracker.NONE;
         }
-        return KeyUsageTrackerProvider.resolve(authorization, environment::getProperty);
+        return KeyUsageTrackerProvider.resolve(authorization, Features.namespaced(environment::getProperty));
     }
 
     /**
@@ -286,7 +286,7 @@ public class RepositoryAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public TokenExchange tokenExchange(Authorization authorization, Environment environment) {
-        return TokenExchangeProvider.resolve(authorization, environment::getProperty);
+        return TokenExchangeProvider.resolve(authorization, Features.namespaced(environment::getProperty));
     }
 
     @Bean
@@ -307,7 +307,7 @@ public class RepositoryAutoConfiguration {
     public RateLimiter rateLimiter() {
         // The metering strategy is a discovered plugin (the token-bucket module); with none installed nothing is
         // limited.
-        return RateLimiterProvider.resolve(key -> null);
+        return RateLimiterProvider.resolve(Features.settings());
     }
 
     @Bean
