@@ -231,6 +231,11 @@ public class ImportController {
         ImportSourceProvider provider = ImportSourceProvider
                 .installed(source, Features.namespaced(environment::getProperty))
                 .orElse(null);
+        if (provider != null && provider.requiresFormat() && (request.format() == null || request.format().isBlank())) {
+            throw new IllegalArgumentException("A migration from " + provider.label() + " needs the ecosystem it "
+                    + "holds named as 'format' (maven, npm, ...): one of its repositories holds a single package "
+                    + "type, and the request does not say which.");
+        }
         // open(), not create(): the fetcher the connector walks with is screened against the URL submitted, so every
         // per-asset URL a listing hands back - a hostile incumbent's downloadUrl aimed at the metadata service - is
         // judged before it is fetched.
