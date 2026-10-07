@@ -74,6 +74,28 @@ final class ChainedScanner implements ContentScanner {
                 : "joined by no format at all - " + says);
     }
 
+    /**
+     * {@code installed} as a repository naming no scanner is scanned: each cataloguer {@code deployment} configures
+     * replaced by its chains into every configured matcher reading one of its catalogues in full, in the matchers'
+     * order, and left alone where no such matcher is configured; every other scanner as it is.
+     */
+    static List<ContentScanner> joined(List<ContentScanner> installed, UnaryOperator<String> deployment) {
+        List<ContentScanner> matchers = installed.stream().filter(scanner -> !scanner.reads().isEmpty()
+                && scanner.consumes().contains(Input.BILL_OF_MATERIALS) && scanner.configured(deployment)).toList();
+        List<ContentScanner> joined = new ArrayList<>();
+        for (ContentScanner scanner : installed) {
+            List<ContentScanner> chains = scanner.catalogues().isEmpty() || !scanner.configured(deployment) ? List.of()
+                    : matchers.stream().flatMap(matcher -> joined(scanner, matcher, Fidelity.FULL).stream()
+                            .map(format -> (ContentScanner) new ChainedScanner(scanner, matcher, format))).toList();
+            if (chains.isEmpty()) {
+                joined.add(scanner);
+            } else {
+                joined.addAll(chains);
+            }
+        }
+        return joined;
+    }
+
     private static Optional<String> joined(ContentScanner cataloguer, ContentScanner matcher, Fidelity fidelity) {
         return cataloguer.catalogues().stream().filter(made -> matcher.reads().get(made) == fidelity).findFirst();
     }

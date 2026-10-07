@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Which content scanners screen a repository: every one the deployment configured that takes what is scanned where
- * the repository names none, none where it names {@value ContentScanner#NONE}, and exactly those it names otherwise -
+ * the repository names none, each configured cataloguer chained into the configured matchers that read it in full, none where it names {@value ContentScanner#NONE}, and exactly those it names otherwise -
  * a chain of a cataloguer and a matcher as one, joined in a format the matcher reads in full, or lossily where the
  * repository accepts it - and a name no installed scanner answers to, one the deployment has not configured, a
  * matcher alone or a chain nothing joins failing loudly rather than scanning with fewer.
@@ -52,9 +52,16 @@ class ContentScannerSelectionTest {
     }
 
     @Test
-    void a_repository_naming_no_scanner_is_handed_to_no_matcher_alone() {
-        assertThat(selected(_ -> null, EVERYTHING)).as("a matcher is handed nothing an image scan has")
-                .containsExactly(CONFIGURED, UNCONFIGURED, CATALOGUER);
+    void a_repository_naming_no_scanner_has_each_cataloguer_chained_into_the_matchers_reading_it_in_full() {
+        assertThat(selected(_ -> null, EVERYTHING)).as("no matcher alone, and none joined only lossily")
+                .extracting(ContentScanner::name).containsExactly("adapter", "tool", "syft>grype");
+    }
+
+    @Test
+    void a_repository_naming_no_scanner_has_a_cataloguer_no_configured_matcher_reads_stand_alone() {
+        UnaryOperator<String> cataloguer = Map.of("adapter-url", "u", "syft-command", "syft")::get;
+
+        assertThat(selected(_ -> null, cataloguer)).containsExactly(CONFIGURED, CATALOGUER);
     }
 
     @Test

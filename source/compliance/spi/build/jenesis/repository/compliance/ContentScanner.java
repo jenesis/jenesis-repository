@@ -47,8 +47,10 @@ import build.jenesis.repository.store.Providers;
  *       repository selects that no installed provider answers to, one whose configuration is not set, one that cannot
  *       be handed what the host scans, and a chain whose cataloguer makes nothing its matcher reads in full - unless
  *       the repository's {@value #LOSSY} accepts a format the matcher reads lossily. A repository that selects nothing
- *       is scanned by every installed scanner the deployment configured that takes what the host scans, which leaves
- *       every matcher out: a matcher is handed a bill only as a chain's.</li>
+ *       is scanned by every installed scanner the deployment configured that takes what the host scans, a cataloguer
+ *       chained into each configured matcher that reads one of its catalogues in full, in its place - so with Syft,
+ *       Grype and Trivy configured it is {@code syft>grype,trivy} - and standing alone where no matcher does: a
+ *       matcher is handed a bill only as a chain's, and never lossily unless the repository names the chain.</li>
  *   <li><b>Error visibility.</b> A scanner that cannot be reached throws an {@link IOException}, which is an outage
  *       the host retries, never a report. One that will refuse the same request again throws {@link Refused}. A
  *       report that does not parse is an {@link IOException}, never an empty one, because an empty list of
@@ -69,7 +71,8 @@ import build.jenesis.repository.store.Providers;
 public interface ContentScanner {
 
     /** The repository setting naming the scanners that screen it, comma-separated, a chain written
-     *  {@code cataloguer>matcher}; empty for every configured scanner, {@value #NONE} for none. */
+     *  {@code cataloguer>matcher}; empty for every configured scanner, each cataloguer chained into the matchers
+     *  reading it in full, {@value #NONE} for none. */
     String SETTING = "content-scanners";
 
     /** The repository setting that, {@code true}, lets a chain hand its matcher a catalogue the matcher reads only
@@ -277,7 +280,8 @@ public interface ContentScanner {
      * The scanners of {@code installed} that screen what is handed as {@code input} in a repository whose effective
      * lookup is {@code repository}, over the deployment's {@code deployment} lookup, as {@link RepositorySelection}
      * reads its {@value #SETTING}: those it names, in its order, each chain it names as one scanner named as it is
-     * written; or every configured one taking {@code input} where it names none; none for {@value #NONE}.
+     * written; or every configured one taking {@code input} where it names none, each configured cataloguer chained
+     * into every configured matcher that reads one of its catalogues in full in its place; none for {@value #NONE}.
      *
      * @throws IllegalStateException for a name no installed scanner answers to, one the deployment has not configured,
      *                               one that does not take {@code input}, or a chain no format joins in full that
@@ -289,6 +293,9 @@ public interface ContentScanner {
         boolean lossy = repository != null && Boolean.parseBoolean(Objects.requireNonNullElse(
                 repository.apply(LOSSY), "false").strip());
         List<ContentScanner> candidates = new ArrayList<>(installed);
+        if (value == null || value.isBlank()) {
+            candidates = ChainedScanner.joined(installed, deployment);
+        }
         for (String entry : RepositorySelection.named(value)) {
             if (entry.contains(CHAIN)) {
                 candidates.add(ChainedScanner.of(entry, installed, lossy));
