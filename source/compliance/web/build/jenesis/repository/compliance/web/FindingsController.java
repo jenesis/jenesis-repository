@@ -1,6 +1,7 @@
 package build.jenesis.repository.compliance.web;
 
 import module java.base;
+import tools.jackson.databind.JsonNode;
 import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.audit.AuditTrail;
@@ -8,6 +9,7 @@ import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.ContentScanner;
 import build.jenesis.repository.compliance.Severity;
+import build.jenesis.repository.compliance.VulnerabilityRecord;
 import build.jenesis.repository.gate.store.ReportedFindings;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.findings.Finding;
@@ -422,9 +424,12 @@ public class FindingsController {
     }
 
     /** One reported finding: its identifier (an advisory or CVE id), severity, any CVE aliases, the version that
-     *  fixes it, and a description; {@code malicious} marks a malicious-package report rather than a flaw. */
+     *  fixes it, and a description; {@code malicious} marks a malicious-package report rather than a flaw.
+     *  {@code vulnerability} is what the scanner's source said of it, as CycloneDX's {@code vulnerability} object -
+     *  where it was published, its ratings, references, weaknesses and advisories - kept on the finding as it is
+     *  stated, or absent. */
     public record Reported(String id, String severity, List<String> cves, String fixed, String description,
-                           boolean malicious) {
+                           boolean malicious, JsonNode vulnerability) {
 
         AdvisorySource.Advisory advisory() {
             if (id == null || id.isBlank() || severity == null) {
@@ -434,7 +439,8 @@ public class FindingsController {
             return new AdvisorySource.Advisory(id, Severity.valueOf(severity.trim().toUpperCase(Locale.ROOT)),
                     malicious, fixed, cves == null ? List.of() : List.copyOf(cves),
                     text.length() > AdvisorySource.Advisory.DESCRIPTION_LIMIT
-                            ? text.substring(0, AdvisorySource.Advisory.DESCRIPTION_LIMIT) : text);
+                            ? text.substring(0, AdvisorySource.Advisory.DESCRIPTION_LIMIT) : text,
+                    List.of(), VulnerabilityRecord.fromCycloneDx(vulnerability));
         }
     }
 

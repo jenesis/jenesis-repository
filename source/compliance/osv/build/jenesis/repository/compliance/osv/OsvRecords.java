@@ -2,8 +2,10 @@ package build.jenesis.repository.compliance.osv;
 
 import module java.base;
 import module tools.jackson.databind;
+import build.jenesis.repository.compliance.AdvisoryDatabases;
 import build.jenesis.repository.compliance.AdvisorySource.Advisory;
 import build.jenesis.repository.compliance.Severity;
+import build.jenesis.repository.compliance.VulnerabilityRecord;
 import build.jenesis.repository.feed.Osv;
 import us.springett.cvss.Cvss;
 
@@ -12,6 +14,11 @@ import us.springett.cvss.Cvss;
  * from a mirror of its export: the {@link Advisory} it makes. Severity is the CVSS base score computed from the v2, v3
  * or v4 vector, else GitHub's {@code database_specific.severity} word, else {@link Severity#UNKNOWN} (a malicious
  * record without a score is {@link Severity#NONE}).
+ *
+ * <p>What the record says beyond that is its {@link VulnerabilityRecord}: the database that published it, linked to its
+ * record on OSV where the database is not one known to publish its own page; each alias as a reference to where it is
+ * published; each CVSS vector as a rating with its score; its CWE identifiers; the advisories among its references;
+ * and when it was published and last modified.
  */
 final class OsvRecords {
 
@@ -27,7 +34,80 @@ final class OsvRecords {
         boolean malicious = id.startsWith("MAL-");
         return Optional.of(new Advisory(id, severityOf(vuln, malicious), malicious,
                 Osv.fixedVersions(vuln, coordinate), OsvQuery.cvesOf(vuln, id), descriptionOf(vuln),
-                OsvQuery.aliasesOf(vuln)));
+                OsvQuery.aliasesOf(vuln), detailOf(vuln, id)));
+    }
+
+    /** What the record says of the vulnerability beyond its identifier, severity and description. */
+    static VulnerabilityRecord detailOf(JsonNode vuln, String id) {
+        VulnerabilityRecord.Source source = AdvisoryDatabases.source(id)
+                .orElseGet(() -> new VulnerabilityRecord.Source("OSV", AdvisoryDatabases.OSV_RECORD + id));
+        List<VulnerabilityRecord.Reference> references = new ArrayList<>();
+        for (JsonNode alias : vuln.path("aliases")) {
+            String named = alias.asString(null);
+            if (named != null && !named.isBlank() && !named.equals(id)) {
+                references.add(AdvisoryDatabases.reference(named));
+            }
+        }
+        List<VulnerabilityRecord.Rating> ratings = new ArrayList<>();
+        for (JsonNode entry : vuln.path("severity")) {
+            String vector = entry.path("score").asString(null);
+            if (vector != null && !vector.isBlank()) {
+                double score = cvss(vector);
+                ratings.add(new VulnerabilityRecord.Rating(source, score < 0 ? null : score,
+                        score < 0 ? null : Severity.ofScore(score), method(vector), vector.strip()));
+            }
+        }
+        String word = vuln.path("database_specific").path("severity").asString(null);
+        if (ratings.isEmpty() && word != null) {
+            ratings.add(new VulnerabilityRecord.Rating(source, null, Severity.ofWord(word, Severity.UNKNOWN), "other",
+                    null));
+        }
+        List<Integer> cwes = new ArrayList<>();
+        weaknesses(vuln.path("database_specific").path("cwe_ids"), cwes);
+        for (JsonNode affected : vuln.path("affected")) {
+            weaknesses(affected.path("database_specific").path("cwe_ids"), cwes);
+        }
+        List<VulnerabilityRecord.Link> advisories = new ArrayList<>();
+        for (JsonNode reference : vuln.path("references")) {
+            String url = reference.path("url").asString(null);
+            if ("ADVISORY".equalsIgnoreCase(reference.path("type").asString("")) && url != null && !url.isBlank()) {
+                advisories.add(new VulnerabilityRecord.Link(null, url));
+            }
+        }
+        return new VulnerabilityRecord(source, references, ratings, cwes, advisories,
+                instant(vuln.path("published").asString(null)), instant(vuln.path("modified").asString(null)));
+    }
+
+    private static void weaknesses(JsonNode ids, List<Integer> into) {
+        for (JsonNode id : ids) {
+            AdvisoryDatabases.cwe(id.asString(null)).ifPresent(into::add);
+        }
+    }
+
+    // CycloneDX's name for the CVSS version a vector is written in.
+    private static String method(String vector) {
+        String trimmed = vector.strip();
+        if (trimmed.startsWith("CVSS:4.0")) {
+            return "CVSSv4";
+        }
+        if (trimmed.startsWith("CVSS:3.1")) {
+            return "CVSSv31";
+        }
+        if (trimmed.startsWith("CVSS:3.0")) {
+            return "CVSSv3";
+        }
+        return trimmed.startsWith("CVSS:") ? "other" : "CVSSv2";
+    }
+
+    private static Instant instant(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        try {
+            return Instant.parse(text.strip());
+        } catch (DateTimeException notInstant) {
+            return null;
+        }
     }
 
     // The summary, else a bounded prefix of the details, so the findings ledger keeps what the advisory says without

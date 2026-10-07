@@ -24,6 +24,9 @@ open module build.jenesis.repository.compliance.web.test {
     requires build.jenesis.repository.scope;
     requires build.jenesis.repository.store.filesystem;
     requires build.jenesis.repository.web.testkit;
+    // The Maven layout a reported version's published path is read back to its coordinate through.
+    requires build.jenesis.repository.format.maven;
+    requires tools.jackson.databind;
     requires org.junit.jupiter;
     requires org.assertj.core;
 }
