@@ -33,6 +33,7 @@ import org.slf4j.LoggerFactory;
 import io.micrometer.observation.ObservationRegistry;
 import build.jenesis.repository.compliance.ComplianceSources;
 import build.jenesis.repository.search.SearchQueryProvider;
+import build.jenesis.repository.server.kernel.MaintenanceScheduler;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
@@ -218,8 +219,11 @@ public class DomainConfig {
     @Bean
     public RepositoryLifecycle repositoryLifecycle(ArtifactStore repositoryStore, CurrentTenant currentTenant,
                                                    ObservationRegistry observations, AuditTrail audit,
-                                                   ConsoleActor actor, SettingsAdmin settingsAdmin) {
-        return new RepositoryLifecycle(repositoryStore, currentTenant, observations, audit, actor, settingsAdmin);
+                                                   ConsoleActor actor, SettingsAdmin settingsAdmin,
+                                                   ObjectProvider<MaintenanceScheduler> maintenance) {
+        // Resolved at use: the scheduler starts its workers when it is built, and a console booted alone has none.
+        return new RepositoryLifecycle(repositoryStore, currentTenant, observations, audit, actor, settingsAdmin,
+                maintenance::getIfAvailable);
     }
 
     @Bean

@@ -1,20 +1,16 @@
 package build.jenesis.repository.ui.store;
 
 import module java.base;
-import module org.slf4j;
 
 import build.jenesis.repository.server.kernel.RepositoryRequests;
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.audit.AuditTrail;
-import build.jenesis.repository.cleanup.CleanupPlan;
 import build.jenesis.repository.cleanup.RetentionPolicy;
 import build.jenesis.repository.cleanup.RetentionProvider;
-import build.jenesis.repository.cleanup.RetentionSweeper;
 import build.jenesis.repository.cleanup.StoredReport;
-import build.jenesis.repository.gc.GarbageCollector;
-import build.jenesis.repository.gc.GarbageCollectorProvider;
-import build.jenesis.repository.gc.GcPlan;
+import build.jenesis.repository.cleanup.web.RepositoryCleanup;
+import build.jenesis.repository.server.kernel.MaintenanceScheduler;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.staging.Staging;
 import build.jenesis.repository.staging.StagingProvider;
@@ -33,16 +29,27 @@ import io.micrometer.observation.ObservationRegistry;
  */
 public class RepositoryLifecycle extends TenantScope {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(RepositoryLifecycle.class);
-
     private final SettingsAdmin settings;
 
+    /** The sweep and its dry run - the API's own, so a cleanup started here and one started over the API are one run
+     *  under one lease. */
+    private final RepositoryCleanup cleanups;
+
     /** {@code settings} resolves a repository's retention rules, the policy a preview, a cleanup and the scheduled
-     *  sweep all judge by. */
+     *  sweep all judge by; with no scheduler at hand a cleanup runs without the scheduled pass's lease. */
     public RepositoryLifecycle(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations,
                                AuditTrail audit, ConsoleActor actor, SettingsAdmin settings) {
+        this(repositoryStore, current, observations, audit, actor, settings, () -> null);
+    }
+
+    /** @param maintenance the node's scheduler, resolved at use, so a cleanup takes the lease the scheduled pass and
+     *                    the API take; {@code null} where none runs. */
+    public RepositoryLifecycle(ArtifactStore repositoryStore, CurrentTenant current, ObservationRegistry observations,
+                               AuditTrail audit, ConsoleActor actor, SettingsAdmin settings,
+                               Supplier<MaintenanceScheduler> maintenance) {
         super(repositoryStore, current, observations, audit, actor);
         this.settings = settings;
+        this.cleanups = new RepositoryCleanup(RetentionProvider.resolve(_ -> null), maintenance, observations);
     }
 
     /**
@@ -296,76 +303,35 @@ public class RepositoryLifecycle extends TenantScope {
         return RetentionProvider.resolve(_ -> null).isPresent();
     }
 
-    /** The stored cleanup preview, or empty before one ran; {@link #previewCleanup} starts a fresh one. */
-    public Optional<StoredReport.Report> plan(String repository) throws IOException {
-        return StoredReport.read(scope(repository), PREVIEW_REPORT);
+    /** The last cleanup preview, or the one running now; {@link #previewCleanup} starts a fresh one. */
+    public RepositoryCleanup.View plan(String repository) throws IOException {
+        return cleanups.read(scope(repository), true);
     }
 
-    /** The stored result of the last cleanup that ran from the console, or empty when none ran yet. */
-    public Optional<StoredReport.Report> lastCleanup(String repository) throws IOException {
-        return StoredReport.read(scope(repository), CLEANUP_REPORT);
+    /** The last cleanup, whichever surface started it, or the one running now. */
+    public RepositoryCleanup.View lastCleanup(String repository) throws IOException {
+        return cleanups.read(scope(repository), false);
     }
 
-    /** Start computing what retention would evict, in the background; answers whether a run was started (a run
-     *  already under way is left alone). */
+    /** Start computing what retention would evict and the collector reclaim, in the background - the API's dry run,
+     *  under the same stored report; answers whether a run was started (a run already under way is left alone). */
     public boolean previewCleanup(String repository) throws IOException {
-        RetentionSweeper sweeper = sweeper();
-        StoreRepositoryInventory inventory = inventory(repository);
-        RetentionPolicy policy = retention(repository);
-        return StoredReport.compute(scope(repository), PREVIEW_REPORT, () -> {
-            CleanupPlan plan = sweeper.plan(inventory, policy, Instant.now());
-            return StoredReport.Rows.of(lines(plan));
-        });
+        return cleanups.startPlan(scope(repository), retention(repository), settings()::getProperty,
+                this::forThisTenant);
     }
-
-    private static List<String> lines(CleanupPlan plan) {
-        List<String> evicted = new ArrayList<>();
-        for (CleanupPlan.Eviction eviction : plan.evictions()) {
-            evicted.add(eviction.release().coordinate() + ":" + eviction.release().version() + " - " + eviction.reason());
-        }
-        return evicted;
-    }
-
-    private static final String PREVIEW_REPORT = "cleanup-preview";
-    private static final String CLEANUP_REPORT = "cleanup";
 
     /**
-     * Starts the repository's retention sweep and the garbage collection behind it in the background, storing what was
-     * evicted and reclaimed as the last cleanup report; answers whether it started. Without a collector the sweep
-     * evicts but reclaims nothing.
+     * Starts the repository's retention sweep and the garbage collection behind it in the background - the API's sweep,
+     * under the same stored report and lease; answers whether it started. Without a collector the sweep evicts but
+     * reclaims nothing.
      */
     public boolean cleanup(String repository) throws IOException {
-        RetentionSweeper sweeper = sweeper();
-        StoreRepositoryInventory inventory = inventory(repository);
-        ArtifactStore store = scope(repository);
-        Properties deployment = settings();
-        RetentionPolicy policy = retention(repository);
-        boolean started = StoredReport.compute(store, CLEANUP_REPORT, () -> observe("cleanup", repository, observation -> {
-            CleanupPlan plan = sweeper.sweep(inventory, policy, Instant.now());
-            long reclaimed = 0;
-            Optional<GarbageCollector> collector = GarbageCollectorProvider.resolve(deployment::getProperty);
-            if (collector.isPresent()) {
-                GcPlan collected = collector.get().collect(store,
-                        StoreRepositoryInventory.pointerRoots(store), Instant.now());
-                collected.refusal().ifPresent(refusal ->
-                        LOGGER.warn("cleanup {}: {}", repository, refusal.detail()));
-                reclaimed = collected.collected();
-            }
-            observation.highCardinalityKeyValue("reclaimed", Long.toString(reclaimed));
-            List<String> rows = new ArrayList<>();
-            rows.add(reclaimed + " blobs reclaimed");
-            rows.addAll(lines(plan));
-            return StoredReport.Rows.of(rows);
-        }));
+        boolean started = cleanups.start(scope(repository), tenant(), repository, retention(repository),
+                settings()::getProperty, this::forThisTenant);
         if (started) {
             audit(AuditActions.REPOSITORY_CLEANUP, repository + " (started)");
         }
         return started;
-    }
-
-    private RetentionSweeper sweeper() {
-        return RetentionProvider.resolve(_ -> null)
-                .orElseThrow(() -> new IllegalStateException("Retention is not installed on this deployment."));
     }
 
     private Optional<Staging> stagingFor(String repository) {

@@ -191,8 +191,10 @@ public final class Commands {
                                     + " [--not-downloaded-for D]", "set the policy")),
                     noun("cleanup", "run the retention sweep", 
                             LifecycleCommands::cleanup,
-                            act("cleanup <repo>", "run the sweep"),
-                            act("cleanup plan <repo>", "a dry run of what it would evict")),
+                            act("cleanup <repo>", "start the sweep in the background; --refresh watches it finish"),
+                            act("cleanup plan <repo>", "start a dry run of what it would evict and reclaim; "
+                                    + "--refresh watches it finish"),
+                            act("cleanup status <repo>", "the last sweep, or the one running now")),
                     noun("pins", "coordinates the sweep never reclaims", 
                             LifecycleCommands::pins,
                             act("pins <repo>", "the pinned coordinates"),

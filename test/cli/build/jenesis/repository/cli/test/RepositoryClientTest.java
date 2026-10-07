@@ -123,7 +123,9 @@ public class RepositoryClientTest {
     private static final String RETENTION =
             "{\"keepLast\":5,\"maxAge\":\"P30D\",\"prereleaseExpiry\":\"\",\"notDownloadedFor\":\"\"}";
     private static final String PINS = "{\"pinned\":[\"Maven:org.acme:lib:1.0\"]}";
-    private static final String CLEANUP = "{\"blobsReclaimed\":3,\"evicted\":[\"org.acme:lib:0.9 - superseded\"]}";
+    private static final String CLEANUP = "{\"plan\":false,\"state\":\"done\",\"evictedCount\":1,"
+            + "\"evicted\":[\"org.acme:lib:0.9 - superseded\"],\"gc\":{\"installed\":true,\"complete\":true,"
+            + "\"condemned\":3,\"spared\":0,\"collected\":3,\"refusal\":\"\"}}";
     private static final String ORPHANS = "{\"orphans\":[{\"namespace\":\"build.jenesis.repository.phantom\","
             + "\"objects\":3,\"bytes\":42}]}";
     private static final String PURGE = "{\"namespace\":\"build.jenesis.repository.phantom\",\"dryRun\":true,"
@@ -729,10 +731,10 @@ public class RepositoryClientTest {
 
     @Test
     void cleanup_retention_and_pins_are_driven() throws IOException, InterruptedException {
-        LifecycleClient.CleanupReport report = client.lifecycle().cleanup("releases");
+        LifecycleClient.CleanupReport report = client.lifecycle().cleanup("releases").report();
         assertThat(lastMethod).isEqualTo("POST");
         assertThat(lastPath).isEqualTo("/api/repository/cleanup");
-        assertThat(report.blobsReclaimed()).isEqualTo(3);
+        assertThat(report.gc().collected()).isEqualTo(3);
         assertThat(report.evicted()).containsExactly("org.acme:lib:0.9 - superseded");
 
         LifecycleClient.RetentionView view = client.lifecycle().retention("releases");

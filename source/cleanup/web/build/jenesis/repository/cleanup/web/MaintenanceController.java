@@ -3,19 +3,13 @@ package build.jenesis.repository.cleanup.web;
 import module java.base;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.audit.AuditTrail;
-import build.jenesis.repository.cleanup.CleanupPlan;
 import build.jenesis.repository.cleanup.RetentionPolicy;
-import build.jenesis.repository.cleanup.RetentionSweeper;
-import build.jenesis.repository.gc.GarbageCollector;
-import build.jenesis.repository.gc.GarbageCollectorProvider;
-import build.jenesis.repository.gc.GcPlan;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
-import build.jenesis.repository.server.Observations;
 import build.jenesis.repository.server.kernel.MaintenanceScheduler;
 import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.spi.Authorization;
-import build.jenesis.repository.store.ServableNames;
+import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.SettingsEditor;
 import io.micrometer.observation.ObservationRegistry;
@@ -34,11 +28,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 /**
  * The repository-maintenance surface - retention policy, the cleanup sweep and pins - contributed through the
- * {@code ServerModuleProvider} seam. Cleanup and retention run through the {@link RetentionSweeper} resolved by
- * {@link Repositories}; without a retention module those endpoints answer {@code 501}. The sweep's collection leg is
- * the discovered {@link GarbageCollectorProvider} with the pointer roots the inventory derives from the installed
- * formats, and its dry run is {@link GarbageCollector#plan}; with no collector nothing is reclaimed and the report's
- * {@code gc} view says so. Pins run through the repository's {@link StoreRepositoryInventory}.
+ * {@code ServerModuleProvider} seam. Cleanup and retention run through the {@code RetentionSweeper} resolved by
+ * {@link Repositories}; without a retention module those endpoints answer {@code 501}. The sweep and its dry run walk
+ * every release, so they are {@link RepositoryCleanup}'s - runs off the request that every surface reads back, the
+ * console's cleanup panel included - and these endpoints start them and answer their state. Pins run through the repository's {@link StoreRepositoryInventory}.
  *
  * <p>Every mapping operates on one repository, {@code /api/repository/...?repo=<repository>}, gated
  * {@code repository:read}/{@code repository:write} on it by the security chain as its artifacts are
@@ -57,13 +50,11 @@ public class MaintenanceController {
     private final LiveConfig live;
     /** The one place a setting is changed: a repository's retention rules are its settings. */
     private final SettingsEditor editor;
-    private final ObservationRegistry observations;
     private final AuditTrail audit;
     private final MaintenanceScheduler maintenance;
 
-    /** The collector providers, discovered once - which are installed cannot change within a JVM; which is selected is
-     *  still decided per call from the effective configuration. */
-    private final List<GarbageCollectorProvider> collectors = GarbageCollectorProvider.providers();
+    /** The sweep and its dry run, the implementation the console's cleanup panel runs too. */
+    private final RepositoryCleanup cleanup;
 
     public MaintenanceController(Repositories repositories, RepositoryRouting routing, LiveConfig live,
                                  SettingsEditor editor, ObservationRegistry observations, AuditTrail audit,
@@ -72,9 +63,9 @@ public class MaintenanceController {
         this.repositories = repositories;
         this.routing = routing;
         this.live = live;
-        this.observations = observations;
         this.audit = audit;
         this.maintenance = maintenance;
+        this.cleanup = new RepositoryCleanup(repositories.retentionSweeper(), () -> maintenance, observations);
     }
 
     /** The tenant an operation answers for - the routing's, for a request naming none - once the repository name is
@@ -92,55 +83,46 @@ public class MaintenanceController {
         audit.record(tenant, key == null ? "anonymous" : Authorization.hash(key), action, detail);
     }
 
-    /** Run a cleanup sweep over the repository: retention, then collection. */
+    /** Says, on a start, whether this request started the run or found one already running. */
+    public static final String REFRESH_HEADER = "Jenesis-Refresh";
+
+    /**
+     * Start a cleanup sweep over the repository - retention, then collection - off the request, and answer its state:
+     * the sweep walks every release, so the answer is the run as it stands, with a header saying whether this request
+     * started it. {@code GET} on the same path reads it until it lands.
+     */
     @PostMapping("/api/repository/cleanup")
     @ResponseBody
-    public CleanupReport cleanup(@RequestParam("repo") String repo,
-                                 @RequestHeader(value = Repositories.KEY, required = false) String key,
-                                 HttpServletRequest request, HttpServletResponse response) throws IOException {
+    public RepositoryCleanup.View cleanup(@RequestParam("repo") String repo,
+                                          @RequestHeader(value = Repositories.KEY, required = false) String key,
+                                          HttpServletRequest request, HttpServletResponse response)
+            throws IOException {
         String tenant = tenant(repo, request);
-        Optional<RetentionSweeper> sweeper = repositories.retentionSweeper();
-        if (sweeper.isEmpty()) {
+        if (!cleanup.installed()) {
             respondRetentionNotInstalled(response);
             return null;
         }
-        // The on-demand sweep takes the scheduled pass's single-writer lease name, so two triggered runs never sweep
-        // concurrently; a held lease is a 409, not a wait. The lease keeps this endpoint single-shot; the walk-riding
-        // passes and the condemn-then-collect collector are safe under concurrency on their own. The block-with-return
-        // selects the value-returning exclusively overload over the scheduler's void one.
-        Optional<CleanupReport> outcome = maintenance.exclusively("cleanup", Instant.now(), () -> {
-            return Observations.observe(observations, "jenrepo.cleanup", repo, tenant,
-                    observation -> {
-                        StoreRepositoryInventory inventory = new StoreRepositoryInventory(repositories.store(tenant, repo));
-                        CleanupPlan plan = sweeper.get()
-                                .sweep(inventory, retention(tenant, repo), Instant.now());
-                        // Retention evicts, then the collector reclaims, as the scheduled pass orders them; with no
-                        // collector the report says nothing is reclaimed.
-                        Optional<GarbageCollector> collector = GarbageCollectorProvider.resolve(collectors, maintenance.config());
-                        GcView gc = GcView.OFF;
-                        if (collector.isPresent()) {
-                            // An incomplete root set reaches the collector, which refuses the pass itself, so the
-                            // report renders the collector's own refusal and cause.
-                            gc = GcView.of(collector.get().collect(repositories.store(tenant, repo),
-                                    StoreRepositoryInventory.pointerRoots(repositories.store(tenant, repo)),
-                                    Instant.now()));
-                        }
-                        observation.lowCardinalityKeyValue("evicted", Integer.toString(plan.evictions().size()));
-                        return new CleanupReport(gc.collected(), evicted(inventory, plan),
-                                plan.evictions().size(), gc);
-                    });
-        });
-        if (outcome.isEmpty()) {
-            response.setStatus(409);
-            response.setContentType("text/plain;charset=UTF-8");
-            response.getWriter().write("a cleanup sweep is already running on another node");
+        ArtifactStore store = repositories.store(tenant, repo);
+        boolean started = cleanup.start(store, tenant, repo, retention(tenant, repo), maintenance.config(),
+                UnaryOperator.identity());
+        response.setHeader(REFRESH_HEADER, started ? "started" : "running");
+        if (started) {
+            audited(tenant, key, AuditActions.REPOSITORY_CLEANUP, repo + " (started)");
+        }
+        return cleanup.read(store, false);
+    }
+
+    /** The repository's last cleanup sweep, or the one running now. */
+    @GetMapping("/api/repository/cleanup")
+    @ResponseBody
+    public RepositoryCleanup.View lastCleanup(@RequestParam("repo") String repo, HttpServletRequest request,
+                                              HttpServletResponse response) throws IOException {
+        String tenant = tenant(repo, request);
+        if (!cleanup.installed()) {
+            respondRetentionNotInstalled(response);
             return null;
         }
-        CleanupReport report = outcome.get();
-        audited(tenant, key, AuditActions.REPOSITORY_CLEANUP,
-                repo + " (" + report.evictedCount() + " evicted, "
-                        + (report.gc().installed() ? report.blobsReclaimed() + " blobs reclaimed" : "GC off") + ")");
-        return report;
+        return cleanup.read(repositories.store(tenant, repo), false);
     }
 
     /** Forget one ecosystem's durable records in this repository - the operator's retirement of data whose format
@@ -168,32 +150,27 @@ public class MaintenanceController {
         return Map.of("ecosystem", ecosystem, "removed", removed);
     }
 
-    /** Preview a cleanup sweep: what retention would evict and what the collector would reclaim now. */
+    /** The last dry run of a cleanup sweep - what retention would evict and what the collector would reclaim - or
+     *  the one running now; {@code refresh=true} starts one off the request, with a header saying whether this request
+     *  started it. */
     @GetMapping("/api/repository/cleanup/plan")
     @ResponseBody
-    public CleanupReport cleanupPlan(@RequestParam("repo") String repo,
-                                     @RequestHeader(value = Repositories.KEY, required = false) String key,
-                                     HttpServletRequest request, HttpServletResponse response) throws IOException {
+    public RepositoryCleanup.View cleanupPlan(@RequestParam("repo") String repo,
+                                              @RequestParam(value = "refresh", defaultValue = "false") boolean refresh,
+                                              HttpServletRequest request, HttpServletResponse response)
+            throws IOException {
         String tenant = tenant(repo, request);
-        Optional<RetentionSweeper> sweeper = repositories.retentionSweeper();
-        if (sweeper.isEmpty()) {
+        if (!cleanup.installed()) {
             respondRetentionNotInstalled(response);
             return null;
         }
-        StoreRepositoryInventory inventory = new StoreRepositoryInventory(repositories.store(tenant, repo));
-        CleanupPlan plan = sweeper.get()
-                .plan(inventory, retention(tenant, repo), Instant.now());
-        // The dry run previews both legs; GarbageCollector.plan writes nothing. With no collector the view says
-        // collection is off rather than previewing an empty reclaim.
-        Optional<GarbageCollector> collector = GarbageCollectorProvider.resolve(collectors, maintenance.config());
-        GcView gc = GcView.OFF;
-        if (collector.isPresent()) {
-            // The same three-valued root set reaches the same seam, so a refused collection previews as the collector's
-            // own refusal rather than naming bytes the sweep would never touch.
-            gc = GcView.of(collector.get().plan(repositories.store(tenant, repo),
-                    StoreRepositoryInventory.pointerRoots(repositories.store(tenant, repo)), Instant.now()));
+        ArtifactStore store = repositories.store(tenant, repo);
+        if (refresh) {
+            boolean started = cleanup.startPlan(store, retention(tenant, repo), maintenance.config(),
+                    UnaryOperator.identity());
+            response.setHeader(REFRESH_HEADER, started ? "started" : "running");
         }
-        return new CleanupReport(0, evicted(inventory, plan), plan.evictions().size(), gc);
+        return cleanup.read(store, true);
     }
 
     /** The repository's retention policy and where each rule comes from. */
@@ -308,65 +285,11 @@ public class MaintenanceController {
         return new PinsView(new StoreRepositoryInventory(repositories.store(tenant, repo)).pins());
     }
 
-    /** The eviction rows of a report or dry run, screened for served-view parity. Retention judges every published
-     *  release, withheld ones included, and the dry run is served at {@code repository:read}, so each row's coordinate
-     *  goes through the membership seam under {@code HIDE_WITHHELD} (reading only quarantine pointers and
-     *  {@code withheld/<hash>} markers): a held member's name becomes {@code <withheld>} while its reason stays.
-     *  Fail-closed per row: a failing probe hides the name. */
-    private static List<String> evicted(StoreRepositoryInventory inventory, CleanupPlan plan) {
-        List<String> evicted = new ArrayList<>();
-        for (CleanupPlan.Eviction eviction : plan.evictions()) {
-            if (evicted.size() >= EVICTED_SAMPLE) {
-                break;                                      // the report names a sample; evictedCount carries the total
-            }
-            String display = eviction.release().coordinate() + ":" + eviction.release().version();
-            boolean disclosable;
-            try {
-                disclosable = inventory.disclosableDisplay(display, ServableNames.Policy.HIDE_WITHHELD);
-            } catch (IOException e) {
-                disclosable = false;
-            }
-            evicted.add((disclosable ? display : "<withheld>") + " - " + eviction.reason());
-        }
-        return evicted;
-    }
-
     /** Without a retention module the cleanup and retention endpoints answer {@code 501}, after the auth check. */
     private static void respondRetentionNotInstalled(HttpServletResponse response) throws IOException {
         response.setStatus(501);
         response.setContentType("text/plain;charset=UTF-8");
         response.getWriter().write("retention is not installed on this deployment");
-    }
-
-    /** The most evictions a report names; {@code evictedCount} is the whole count, so the body stays bounded. */
-    private static final int EVICTED_SAMPLE = 200;
-
-    /** The sweep's outcome: {@code blobsReclaimed} is what this run deleted (the collector's {@code collected},
-     *  {@code 0} from a dry run), {@code evicted} names the first {@link #EVICTED_SAMPLE} of retention's evictions and
-     *  {@code evictedCount} counts them all, and {@code gc} is the collector's report ({@code installed=false} when
-     *  none is resolved). */
-    public record CleanupReport(long blobsReclaimed, List<String> evicted, int evictedCount, GcView gc) {
-    }
-
-    /**
-     * The collection leg of a sweep or dry run, mirroring {@code GcPlan}: whether a collector is installed, whether the
-     * judgment rests on a completed enumeration, what was condemned, spared and collected, a bounded hash sample, and
-     * {@code refusal} - why the pass declined to judge anything, empty in the ordinary case.
-     *
-     * <p>{@code refusal} tells the two "nothing happened" answers apart: a pass another node holds segments of, and a
-     * pass refused because an ecosystem's roots cannot be named, both report {@code complete=false} with zero counters;
-     * only the second is an action item, naming the module to reinstall.
-     */
-    public record GcView(boolean installed, boolean complete, long condemned, long spared, long collected,
-                         List<String> sample, String refusal) {
-
-        /** No collector resolved - the no-op-by-absence default: garbage collection is off, nothing is reclaimed. */
-        static final GcView OFF = new GcView(false, false, 0, 0, 0, List.of(), "");
-
-        static GcView of(GcPlan plan) {
-            return new GcView(true, plan.complete(), plan.condemned(), plan.spared(), plan.collected(), plan.sample(),
-                    plan.refusal().map(Object::toString).orElse(""));
-        }
     }
 
     public record RetentionView(int keepLast, String maxAge, String prereleaseExpiry, String notDownloadedFor) {
