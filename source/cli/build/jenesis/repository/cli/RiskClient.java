@@ -210,6 +210,20 @@ public final class RiskClient extends ClientCalls {
         return JSON.readValue(response.body(), RetroPlan.class);
     }
 
+    /** Start the plan off the request - it assesses every release - answering whether this request started it or
+     *  found one running, and the plan as it stood. */
+    public RetroStart computeRetroPlan(String repo, boolean unknown) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET",
+                "/api/licenses/retro/plan?repo=" + enc(repo) + "&unknown=" + unknown + "&refresh=true", null, null);
+        require(response, 200, "plan retroactive license enforcement for " + repo);
+        return new RetroStart(!"running".equals(response.headers().firstValue("Jenesis-Refresh").orElse("")),
+                JSON.readValue(response.body(), RetroPlan.class));
+    }
+
+    /** What starting the plan answered: whether this request started it, and the plan as it stood. */
+    public record RetroStart(boolean started, RetroPlan plan) {
+    }
+
     /** What proxy hardening would do with the bytes at a path. */
     public String hardeningVerdict(String repo, String path) throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET", "/api/hardening/verdict?repo=" + enc(repo)
@@ -360,9 +374,12 @@ public final class RiskClient extends ClientCalls {
     public record LicenseCountStart(boolean started, LicensesView inventory) {
     }
 
-    /** The retroactive-license dry-run plan for one repository: the mode previewed, how many releases enabling
-     *  enforcement would newly hold, and the per-coordinate reasons. */
-    public record RetroPlan(String mode, int count, List<RetroHeld> held) {
+    /** The retroactive-license dry-run plan for one repository as its last run left it: the mode previewed, the run's
+     *  state ({@code not-computed}, {@code running}, {@code done} or {@code failed}), how many releases enabling
+     *  enforcement would newly hold and the first of them with their reasons, when it was computed, and why a run
+     *  failed. */
+    public record RetroPlan(String mode, String state, int count, List<RetroHeld> held, String computedAt,
+                            String failure) {
     }
 
     /** One release the enforcement sweep would hold, with the human-readable reasons. */

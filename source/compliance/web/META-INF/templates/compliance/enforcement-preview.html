@@ -44,13 +44,16 @@
             <input type="hidden" name="unknown" th:value="${unknown}">
             <button type="submit" class="secondary outline app-secondary" th:disabled="${blast.running()}">Recompute</button>
         </form>
-        <article th:unless="${blast.computed()}">
+        <article th:unless="${blast.computed() or blast.running()}">
             <div th:replace="~{base :: empty('No preview has been computed yet for this mode.')}"></div>
         </article>
-        <article th:if="${blast.computed() and blast.running()}">
-            <p th:replace="~{base :: running(|A pass is running, started ${blast.computedAt()}.|)}"></p>
+        <!--/* A running pass is said above the last result it will replace, which stays readable meanwhile. */-->
+        <article th:if="${blast.running()}">
+            <p th:replace="~{base :: running('A pass is running; this screen refreshes when it lands.')}"></p>
         </article>
-        <article th:if="${blast.computed() and !blast.running()}">
+        <p th:if="${blast.failure() != null}"
+           th:replace="~{base :: alert(|The last pass stopped: ${blast.failure()}|, 'danger')}"></p>
+        <article th:if="${blast.computed()}">
             <h2>
                 <span th:text="${blast.count()}">0</span> release(s) would be held
                 <small>(<span th:text="${blast.mode()}">denied</span>, as of

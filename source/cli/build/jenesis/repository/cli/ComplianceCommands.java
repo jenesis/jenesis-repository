@@ -718,29 +718,75 @@ final class ComplianceCommands {
         return 0;
     }
 
+    /** How long the plan takes to move: it assesses every release, so seconds on a small repository and minutes on a
+     *  large one - the cadence a bare {@code --refresh} watches it at. */
+    private static final Duration RETRO_PLAN = Duration.ofSeconds(5);
+
     static int enforcementPreview(String[] args, Path home) throws Exception {
+        // A computation is an action, as a health refresh is; --refresh belongs to the whole line and watches it.
+        boolean compute = args.length > 1 && args[1].equals("compute");
         boolean unknown = false;
-        String repo = null;
-        for (int i = 1; i < args.length; i++) {
+        String found = null;
+        for (int i = compute ? 2 : 1; i < args.length; i++) {
             if (args[i].equals("--unknown")) {
                 unknown = true;
-            } else if (repo == null) {
-                repo = args[i];
+            } else if (found == null) {
+                found = args[i];
             }
         }
-        if (repo == null) {
-            throw new IllegalArgumentException("Usage: enforcement-preview <repo> [--unknown]");
+        if (found == null) {
+            throw new IllegalArgumentException("Usage: enforcement-preview [compute] <repo> [--unknown]");
         }
-        RiskClient.RetroPlan plan = CliSupport.client(home).risk().retroPlan(repo, unknown);
-        System.out.println("mode:  " + plan.mode());
-        System.out.println("count: " + plan.count());
-        for (RiskClient.RetroHeld held : plan.held()) {
-            System.out.println("  " + held.coordinate() + ":" + held.version());
-            if (held.reasons() != null) {
-                held.reasons().forEach(reason -> System.out.println("    " + reason));
+        String repo = found;
+        boolean withUnknown = unknown;
+        RiskClient risk = CliSupport.client(home).risk();
+        // The first reading starts the plan when asked to, so a watched computation and a single answer are the same
+        // sequence of requests, and under --json the start call's answer is forgotten like any other poll.
+        AtomicBoolean start = new AtomicBoolean(compute);
+        Refresh.Poll poll = () -> {
+            if (start.getAndSet(false)) {
+                RiskClient.RetroStart started = risk.computeRetroPlan(repo, withUnknown);
+                System.out.println(started.started() ? "Started the enforcement preview of " + repo + "."
+                        : "The enforcement preview of " + repo + " was already running.");
+                return retroState(repo, started.plan());
+            }
+            return retroState(repo, risk.retroPlan(repo, withUnknown));
+        };
+        return Refresh.on() ? Refresh.until(RETRO_PLAN, poll) : poll.once().code();
+    }
+
+    /** Print one reading of the plan, and say whether its run is still going. */
+    private static Refresh.Poll.State retroState(String repo, RiskClient.RetroPlan plan) {
+        switch (plan.state()) {
+            case "not-computed" -> {
+                System.out.println("No enforcement preview of " + repo + " has been computed; enforcement-preview "
+                        + "compute " + repo + " computes one.");
+                return Refresh.Poll.State.done(0);
+            }
+            case "running" -> System.out.println("The enforcement preview of " + repo + " is running"
+                    + (plan.computedAt() == null ? "." : "; the last one, as of " + plan.computedAt() + ", follows."));
+            case "failed" -> System.out.println("The last enforcement preview of " + repo + " stopped: "
+                    + plan.failure());
+            default -> System.out.println("As of " + plan.computedAt() + ".");
+        }
+        if (plan.computedAt() != null) {
+            System.out.println("mode:  " + plan.mode());
+            System.out.println("count: " + plan.count());
+            for (RiskClient.RetroHeld held : plan.held()) {
+                System.out.println("  " + held.coordinate() + ":" + held.version());
+                if (held.reasons() != null) {
+                    held.reasons().forEach(reason -> System.out.println("    " + reason));
+                }
+            }
+            if (plan.count() > plan.held().size()) {
+                System.out.println("The first " + plan.held().size() + " of " + plan.count() + " are listed.");
             }
         }
-        return 0;
+        return switch (plan.state()) {
+            case "running" -> Refresh.Poll.State.running();
+            case "failed" -> Refresh.Poll.State.done(1);
+            default -> Refresh.Poll.State.done(0);
+        };
     }
 
     /** Post a scanner's report - the file is the API's own request document, sent as it is, so the CLI adds
