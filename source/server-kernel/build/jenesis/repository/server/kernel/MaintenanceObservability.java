@@ -39,7 +39,7 @@ public final class MaintenanceObservability implements ObservabilitySource {
         // The worker loop itself, before any pass: a task that has never been due reports UNKNOWN whether the worker
         // is iterating every thirty seconds or died an hour ago, so without this row "maintenance is not running" and
         // "maintenance found nothing to do" read identically on the one surface built to tell them apart.
-        statuses.add(worker(scheduler.worker()));
+        statuses.add(worker(scheduler.worker(), scheduler.running()));
         for (String task : scheduler.tasks()) {
             statuses.add(status(task, runs.get(task)));
         }
@@ -61,12 +61,15 @@ public final class MaintenanceObservability implements ObservabilitySource {
      *       a different statement from a worker that should be running and is not.</li>
      *   <li>Enabled and the thread is alive: {@code IDLE}, stamped with the instant the loop last <em>completed</em> a
      *       scheduling iteration. That stamp advances every idle-poll window whether or not a pass was due, so it
-     *       reads as liveness rather than as work - the property the drain depth gauges lack.</li>
+     *       reads as liveness rather than as work - the property the drain depth gauges lack. Each pass in flight is
+     *       named with when it started, since a pass runs on a thread of its own and one that never returns no longer
+     *       stops the loop.</li>
      *   <li>Enabled and the thread is not alive: {@code FAILED}, naming why it stopped. Every sweep, drain and GC on
      *       this node is stopped, and that is the sentence an operator needs to read.</li>
      * </ul>
      */
-    private static TaskStatus worker(MaintenanceScheduler.Worker worker) {
+    private static TaskStatus worker(MaintenanceScheduler.Worker worker,
+                                     Map<String, MaintenanceScheduler.Running> running) {
         String name = Signals.name(FEATURE, "worker");
         String description = "The one background-maintenance worker loop on this node: it owns the thread every "
                 + "scheduled sweep, drain and garbage collection runs on, so its own liveness is reported here "
@@ -80,10 +83,13 @@ public final class MaintenanceObservability implements ObservabilitySource {
                     "the maintenance worker is NOT running (" + worker.stopped() + ") - no scheduled sweep, drain or "
                             + "garbage collection runs on this node until a settings refresh or a restart");
         }
+        StringBuilder inFlight = new StringBuilder();
+        running.forEach((task, pass) -> inFlight.append(inFlight.isEmpty() ? "; in flight: " : ", ").append(task)
+                .append(" since ").append(pass.since()));
         return TaskStatus.ran(name, description, TaskStatus.State.IDLE, worker.lastIteration(), null,
                 "running; " + worker.iterations() + " scheduling iteration(s) completed. An idle iteration is still "
                         + "an iteration, so this instant advancing is what distinguishes a worker with nothing to do "
-                        + "from one that has stopped");
+                        + "from one that has stopped" + inFlight);
     }
 
     /** The status of a pass that is installed and enabled but could not be built: its provider threw while reading its
