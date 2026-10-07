@@ -91,7 +91,7 @@
                         <small th:if="${job.cursor}">resume cursor <code th:text="${job.cursor}">page2</code></small>
                     </td>
                     <td th:if="${isEditor}" class="app-list__actions"><div class="app-actions">
-                        <details th:if="${job.state != 'running' and job.cursor and job.url}">
+                        <details th:if="${job.state != 'running' and job.cursor != null and !#strings.isEmpty(job.url)}">
                             <summary>Resume</summary>
                             <p><small>Continues <code th:text="${job.source}">nexus</code>
                                 <code th:text="${job.url}">url</code>/<code th:text="${job.sourceRepository}">repo</code>
