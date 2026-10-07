@@ -146,30 +146,42 @@ public final class ReliedOn {
      * as held where the closure stopped - and the rows of its {@linkplain ClosureSection.Foreign packages of other
      * ecosystems} into {@code tenant}'s {@value #SPACE} space, none where there is no tenant store. With {@code blind}
      * every row is written; otherwise only a row not yet present, which is what a pass making sure of an indexed
-     * closure pays: one probe per row. Answers how many were written, and adds every store a row was written into to
-     * {@code touched}, by its identity, for the pass to move its {@link #epoch} once.
+     * closure pays: one probe per row. Answers how many were written and the stores they were written into.
      */
-    public static int index(ClosureWalk walk, String ecosystem, Row dependent, ClosureSection.Closure closure,
-                            ExposureSection.Exposure exposure, boolean blind, Optional<ArtifactStore> tenant,
-                            Map<Object, ArtifactStore> touched) throws IOException {
+    public static Changed index(ClosureWalk walk, String ecosystem, Row dependent, ClosureSection.Closure closure,
+                                ExposureSection.Exposure exposure, boolean blind, Optional<ArtifactStore> tenant)
+            throws IOException {
         int written = 0;
+        Map<Object, ArtifactStore> holders = new LinkedHashMap<>();
         for (Placed placed : placed(walk, ecosystem, dependent, closure, exposure.reached(), tenant)) {
-            written += put(placed.holder(), placed.key(), placed.row(), blind, touched);
+            if (blind || !placed.holder().exists(placed.key())) {
+                placed.holder().write(placed.key(), new ByteArrayInputStream(placed.row()));
+                holders.putIfAbsent(placed.holder().identity(), placed.holder());
+                written++;
+            }
         }
-        return written;
+        return new Changed(written, List.copyOf(holders.values()));
+    }
+
+    /** What one closure's rows changed: how many rows, and the stores holding them, each once - whose
+     *  {@link #epoch} a pass moves once at its end, however many closures changed rows in a store. */
+    public record Changed(int rows, List<ArtifactStore> holders) {
+
+        public Changed {
+            holders = List.copyOf(holders);
+        }
     }
 
     /**
      * Take back the rows {@code retired}, a closure {@code dependent} gave up, wrote - those it and the exposure
      * {@code retiredReached} placed, less those {@code current}, the dependent's closure now, and its exposure
      * {@code currentReached} place - from every holder the walk still reaches; a holder it no longer reaches keeps its
-     * rows for its reconcile. Answers how many were removed, and adds every store a row was removed from to
-     * {@code touched}.
+     * rows for its reconcile. Answers how many were removed and the stores they were removed from.
      */
-    static int retire(ClosureWalk walk, String ecosystem, Row dependent, ClosureSection.Closure retired,
-                      List<ExposureSection.Reached> retiredReached, Optional<ClosureSection.Closure> current,
-                      List<ExposureSection.Reached> currentReached, Optional<ArtifactStore> tenant,
-                      Map<Object, ArtifactStore> touched) throws IOException {
+    static Changed retire(ClosureWalk walk, String ecosystem, Row dependent, ClosureSection.Closure retired,
+                          List<ExposureSection.Reached> retiredReached, Optional<ClosureSection.Closure> current,
+                          List<ExposureSection.Reached> currentReached, Optional<ArtifactStore> tenant)
+            throws IOException {
         Set<Map.Entry<Object, String>> kept = new HashSet<>();
         if (current.isPresent()) {
             for (Placed placed : placed(walk, ecosystem, dependent, current.get(), currentReached, tenant)) {
@@ -177,15 +189,16 @@ public final class ReliedOn {
             }
         }
         int removed = 0;
+        Map<Object, ArtifactStore> holders = new LinkedHashMap<>();
         for (Placed placed : placed(walk, ecosystem, dependent, retired, retiredReached, tenant)) {
             if (!kept.contains(Map.entry(placed.holder().identity(), placed.key()))
                     && placed.holder().exists(placed.key())) {
                 placed.holder().delete(placed.key());
-                touched.putIfAbsent(placed.holder().identity(), placed.holder());
+                holders.putIfAbsent(placed.holder().identity(), placed.holder());
                 removed++;
             }
         }
-        return removed;
+        return new Changed(removed, List.copyOf(holders.values()));
     }
 
     /** A row a closure places: the store holding it, its key, and what it says. */
@@ -227,16 +240,6 @@ public final class ReliedOn {
             }
         }
         return placed;
-    }
-
-    private static int put(ArtifactStore holder, String key, byte[] row, boolean blind,
-                           Map<Object, ArtifactStore> touched) throws IOException {
-        if (!blind && holder.exists(key)) {
-            return 0;
-        }
-        holder.write(key, new ByteArrayInputStream(row));
-        touched.putIfAbsent(holder.identity(), holder);
-        return 1;
     }
 
     /** The epoch {@code holder}'s rows move - a repository's, or the tenant's {@value #SPACE} space's. */
