@@ -2,6 +2,7 @@ package build.jenesis.repository.closure.spi;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Providers;
 
 /**
  * A version's resolved dependents: which published versions are built against a version a repository holds, as the
@@ -96,7 +97,7 @@ public interface Reliance {
      */
     static Reliance over(ArtifactStore holder, String holderName, Optional<ArtifactStore> tenant,
                          Function<String, Optional<ArtifactStore>> repositories) {
-        return InstalledReliance.PROVIDER.map(provider -> provider.over(holder, holderName, tenant, repositories))
-                .orElse(NONE);
+        return Providers.singleton("reliance", InstalledReliance.DISCOVERED)
+                .map(provider -> provider.over(holder, holderName, tenant, repositories)).orElse(NONE);
     }
 }
