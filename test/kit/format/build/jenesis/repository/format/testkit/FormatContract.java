@@ -135,6 +135,11 @@ public final class FormatContract {
         /** A proxied artifact goes from the network into the content-addressed store without being materialised, and
          *  arrives byte-exact ({@code ProxyFormat} clause 3). */
         PROXY_STREAMS_UPSTREAM_BODY,
+        /** A screen over a fill judges the artifact the fill serves and nothing else: the index or metadata document
+         *  that declares its digest or says where it downloads from is read {@code beside} it. A screen judges every
+         *  answer of the fetcher it wraps as that artifact, so a declaring document read through it is held in the
+         *  artifact's place, by its own content and dates, and the fill is refused as unverifiable. */
+        PROXY_SCREEN_JUDGES_ONLY_THE_ARTIFACT,
         /** A generated document carries a content-derived validator, is a pure function of the stored state it
          *  renders, revalidates to {@code 304} against that validator, and stops doing so once the state moves
          *  (clause 12). It may be handed over whole or streamed against a length; a streamed one attaches its own
@@ -214,6 +219,9 @@ public final class FormatContract {
                 new Check(Property.PROXY_STREAMS_UPSTREAM_BODY,
                         "a proxied artifact is never materialised and arrives byte-exact",
                         FormatContract::proxyStreamsUpstreamBody),
+                new Check(Property.PROXY_SCREEN_JUDGES_ONLY_THE_ARTIFACT,
+                        "a screen over a fill judges the artifact, never the document that declares it",
+                        FormatContract::proxyScreenJudgesOnlyTheArtifact),
                 new Check(Property.GENERATED_INDEX_IS_REVALIDATABLE,
                         "a generated document is deterministic and conditionally revalidatable",
                         FormatContract::generatedIndexIsRevalidatable),
@@ -639,6 +647,91 @@ public final class FormatContract {
             fixture.serving().handle(exchange, empty);
             equal(exchange.status(), 404, fixture, probe.path() + " of a repository holding nothing is a miss, so a "
                     + "proxy asks its upstream; an empty document would answer in the upstream's place");
+        }
+    }
+
+    private static void proxyScreenJudgesOnlyTheArtifact(FormatFixture fixture, ArtifactStore store)
+            throws Exception {
+        ProxyFormat proxy = proxying(fixture, Property.PROXY_SCREEN_JUDGES_ONLY_THE_ARTIFACT);
+        GeneratedBody body = GeneratedBody.of(ARTIFACT_BYTES);
+        FormatFixture.Upstream honest = fixture.upstream(body).orElseThrow(() -> failure(fixture,
+                "this fixture supplies no upstream leg. Either supply one, or exclude "
+                        + Property.PROXY_SCREEN_JUDGES_ONLY_THE_ARTIFACT + " with a reason saying the format proxies "
+                        + "nothing."));
+        Judging screen = new Judging(honest.fetcher());
+        ContractExchange served = get(fixture, honest.requestPath());
+        isTrue(proxy.proxy(served, store, honest.root(), screen), fixture,
+                "the upstream body is served through the proxy leg under a screen");
+        equal(served.status(), 200, fixture, "the proxied artifact serves 200 under a screen");
+        // The artifact is the answer that carried its bytes; anything else the screen was handed is a document read
+        // in its place.
+        Set<URI> artifact = screen.carrying(body.sha256());
+        isTrue(!artifact.isEmpty(), fixture, "the screen judges the artifact itself; it was handed only "
+                + screen.judged.keySet());
+        equal(screen.judged.keySet(), artifact, fixture, "the screen judges the artifact alone, and every document "
+                + "declaring it is read beside it");
+    }
+
+    /** A screen as the gate wraps a fill's fetcher: what it fetches is judged as the artifact, which it records, and
+     *  what is read {@linkplain ProxyFormat.Fetcher#beside() beside} the artifact goes to the upstream unjudged. */
+    private static final class Judging implements ProxyFormat.Fetcher {
+
+        /** Every URL the screen was handed, with the digests of what it answered, in order. */
+        private final Map<URI, List<MessageDigest>> judged = new LinkedHashMap<>();
+        private final ProxyFormat.Fetcher upstream;
+
+        private Judging(ProxyFormat.Fetcher upstream) {
+            this.upstream = upstream;
+        }
+
+        /** The URLs whose answer carried the bytes digesting to {@code sha256}. */
+        private Set<URI> carrying(String sha256) {
+            Set<URI> carrying = new LinkedHashSet<>();
+            judged.forEach((url, digests) -> {
+                for (MessageDigest digest : digests) {
+                    if (HexFormat.of().formatHex(digest.digest()).equals(sha256)) {
+                        carrying.add(url);
+                    }
+                }
+            });
+            return carrying;
+        }
+
+        private MessageDigest judge(URI url) {
+            try {
+                MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                judged.computeIfAbsent(url, _ -> new ArrayList<>()).add(digest);
+                return digest;
+            } catch (NoSuchAlgorithmException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+
+        @Override
+        public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) throws IOException {
+            MessageDigest digest = judge(url);
+            Optional<ProxyFormat.Fetched> fetched = upstream.fetch(url, requestHeaders);
+            fetched.ifPresent(answer -> digest.update(answer.body()));
+            return fetched;
+        }
+
+        @Override
+        public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders)
+                throws IOException {
+            MessageDigest digest = judge(url);
+            return upstream.download(url, requestHeaders).map(answer -> new ProxyFormat.Download(answer.status(),
+                    new DigestInputStream(answer.body(), digest), answer.headers()));
+        }
+
+        @Override
+        public Optional<ProxyFormat.Head> head(URI url, Map<String, String> requestHeaders) throws IOException {
+            judge(url);
+            return upstream.head(url, requestHeaders);
+        }
+
+        @Override
+        public ProxyFormat.Fetcher beside() {
+            return upstream;
         }
     }
 

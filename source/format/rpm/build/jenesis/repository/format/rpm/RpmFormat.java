@@ -482,10 +482,11 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
                           ProxyFormat.Fetcher fetcher) throws IOException {
         Blobs blobs = new Blobs(store);
         int slash = rest.indexOf('/');
-        // Every unreadable shape of the declaring index declines the fill rather than caching unverified.
+        // Every unreadable shape of the declaring index declines the fill rather than caching unverified. The index is
+        // read beside the package rather than as it: a screen judging it would hold the index in the package's place.
         ProxyRelay.Declared declared = slash <= 0 || Keys.unsafe(rest.substring(0, slash))
                 ? ProxyRelay.Declared.NONE
-                : RpmPackageDigests.declared(fetcher, upstream, rest.substring(0, slash),
+                : RpmPackageDigests.declared(fetcher.beside(), upstream, rest.substring(0, slash),
                         rest.substring(slash + 1), blobs, ProxyLeg.allowInternalTargets(exchange));
         if (!declared.readable()) {
             return ProxyRelay.unverifiable(target, declared);
