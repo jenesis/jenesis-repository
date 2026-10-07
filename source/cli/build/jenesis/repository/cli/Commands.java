@@ -220,12 +220,14 @@ public final class Commands {
                             act("webhook retry <repo> <id>", "redeliver a failed webhook")),
                     noun("import", "import from another repository manager", AdminCommands::importRepo,
                             act("import <repo> --source S --url U --source-repo R [--format F]"
-                                    + " [--user U --password P] [--resume JOB]", "start an import"),
+                                    + " [--user U --password P] [--resume JOB]",
+                                    "start an import; --refresh watches it finish"),
                             act("import status <repo> <job>", "the state and counts of an import job")),
                     noun("export", "publish a whole repository to another one", 
                             AdminCommands::exportRepo,
                             act("export <repo> --url U [--token T | --user U --password P] [--resume JOB]",
-                                    "start publishing every version to the repository a client would reach at U"),
+                                    "start publishing every version to the repository a client would reach at U; "
+                                            + "--refresh watches it finish"),
                             act("export status <repo> <job>", "the state and counts of an export job")),
                     noun("forget-ecosystem", "drop one ecosystem's records from a repository",
                             LifecycleCommands::forgetEcosystem,
@@ -243,14 +245,17 @@ public final class Commands {
                             act("projects describe <project> [description]",
                                     "replace a project's description, or clear it with none"),
                             act("projects evict <project> <size|ttl|clear>",
-                                    "start a sweep in the background and report whether this call started it"),
-                            act("projects recount <project>", "recount the project's entries and bytes"),
+                                    "start a sweep in the background and report whether this call started it; "
+                                            + "--refresh watches it finish"),
+                            act("projects recount <project>",
+                                    "recount the project's entries and bytes; --refresh watches it finish"),
                             act("projects settings <project>", "a project's own settings, with what each inherits"),
                             act("projects settings <project> set <key> <value>", "set one of a project's settings"),
                             act("projects settings <project> clear <key>",
                                     "clear one of a project's settings, so it inherits again"),
                             act("projects delete <project> [--yes]", "delete a project, its entries and its settings "
-                                    + "in the background, after typing 'delete <project>' - or --yes, for a script")),
+                                    + "in the background, after typing 'delete <project>' - or --yes, for a script; "
+                                    + "--refresh watches it finish")),
                     noun("scans", "build scans: what a build ran, and what the cache saved it",
                             ScanCommands::scans,
                             act("scans [--cursor C]", "the tenant's ingested build scans"),
@@ -388,7 +393,8 @@ public final class Commands {
                             act("repos settings <name> clear <key>",
                                     "clear one of a repository's settings, so it inherits again"),
                             act("repos delete <name> [--yes]", "delete a repository and everything it holds, after "
-                                    + "typing 'delete <name>' - or --yes, for a script"),
+                                    + "typing 'delete <name>' - or --yes, for a script; the deletion runs in the "
+                                    + "background, and --refresh watches it finish"),
                             act("repos set <name> <definition>",
                                     "define a repository name deployment-wide in clauses (writable, fallback <url> "
                                             + "[nocache] [harden], fallback <repository>)"),

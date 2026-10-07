@@ -81,6 +81,33 @@ public final class BuildCacheClient extends ClientCalls {
         return response.body();
     }
 
+    /**
+     * Where a project's passes stand, read from its detail: whether one is running, the last one's action and
+     * outcome, and the figures it left; empty once there is no such project, which is where a deletion ends.
+     */
+    public Optional<ProjectPass> projectPass(String name) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/cache/projects/" + enc(name), null, null);
+        if (response.statusCode() == 404) {
+            return Optional.empty();
+        }
+        require(response, 200, "read the build-cache project");
+        JsonNode stats = JSON.readTree(response.body()).path("stats");
+        return Optional.of(new ProjectPass(name, stats.path("counting").asBoolean(false),
+                stats.path("lastAction").asString(""), stats.path("lastOutcome").asString(""),
+                stats.path("entryCount").asLong(0), stats.path("totalBytes").asLong(0)));
+    }
+
+    /** One reading of a project's passes: {@code running} while one is, else the last one's {@code action} and
+     *  {@code outcome} ({@code failed: ...} when it failed) and the entries and bytes it counted. */
+    public record ProjectPass(String project, boolean running, String action, String outcome, long entries,
+                              long bytes) {
+
+        /** Whether the last pass failed. */
+        public boolean failed() {
+            return outcome.startsWith("failed");
+        }
+    }
+
     /** Start deleting a build-cache project; the answer says whether this call started it. */
     public String deleteCacheProject(String name) throws IOException, InterruptedException {
         HttpResponse<String> response = send("DELETE", "/api/cache/projects/" + enc(name), null, null);

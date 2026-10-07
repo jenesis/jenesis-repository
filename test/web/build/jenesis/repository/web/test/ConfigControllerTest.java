@@ -430,6 +430,38 @@ class ConfigControllerTest {
     }
 
     @Test
+    void a_deletion_reads_present_then_running_then_gone() throws Exception {
+        controller.createRepository("files", "key", new ConfigController.RepositoryRequest("raw", null, null),
+                Servlets.request("PUT", "/repository/default/files"), Servlets.response().servlet());
+        ArtifactStore repository = repositories.store("default", "files");
+        repository.write("raw/a.txt", new ByteArrayInputStream("a".getBytes(StandardCharsets.UTF_8)));
+        assertThat(controller.repositoryDeletion("files", request()).state()).isEqualTo("present");
+
+        // A deletion begun and not yet purged - a node that stopped between the two halves - reads as running.
+        RepositoryRemoval.begin(repository);
+        ConfigController.Deletion running = controller.repositoryDeletion("files", request());
+        assertThat(running.state()).isEqualTo("running");
+        assertThat(running.startedAt()).isNotNull();
+        assertThat(running.failure()).isNull();
+
+        Servlets.Response resumed = Servlets.response();
+        controller.deleteRepository("files", "key", Servlets.request("DELETE", "/repository/default/files"),
+                resumed.servlet());
+        assertThat(resumed.status()).isEqualTo(202);
+        Instant deadline = Instant.now().plusSeconds(30);
+        while (!controller.repositoryDeletion("files", request()).state().equals("gone")) {
+            assertThat(Instant.now()).as("the purge finished within 30 seconds; the scope holds %s",
+                    repository.list("")).isBefore(deadline);
+            Thread.sleep(50);
+        }
+        assertThat(controller.repositoryDeletion("never", request()).state())
+                .as("a name that never held a repository reads the same as one whose deletion finished")
+                .isEqualTo("gone");
+        assertThatThrownBy(() -> controller.repositoryDeletion("../up", request()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void a_repository_created_with_its_settings_holds_them_from_its_first_request() throws IOException {
         Servlets.Response created = Servlets.response();
         controller.createRepository("libs", "key", new ConfigController.RepositoryRequest("raw", "Build outputs",

@@ -502,6 +502,12 @@ final class AdminCommands {
                 client.contents().startImport(repo, source, url, sourceRepo, format, user, password, resume);
         return switch (result.status()) {
             case 202 -> {
+                if (Refresh.on()) {
+                    // Watched from its start, exactly as `import status --refresh` watches it.
+                    System.out.println("Import started; job " + result.job() + ".");
+                    String job = result.job();
+                    yield Refresh.until(IMPORT_PROGRESS, () -> importState(client, repo, job));
+                }
                 System.out.println("Import started; job " + result.job()
                         + ". Poll it with: import status " + repo + " " + result.job());
                 yield 0;
@@ -560,6 +566,11 @@ final class AdminCommands {
         }
         LifecycleClient.ExportResult result = client.lifecycle().startExport(repo, url, token, user, password, resume);
         if (result.status() == 202) {
+            if (Refresh.on()) {
+                // Watched from its start, exactly as `export status --refresh` watches it.
+                System.out.println("Export started; job " + result.job() + ".");
+                return Refresh.until(EXPORT_PROGRESS, () -> exportState(client, repo, result.job()));
+            }
             System.out.println("Export started; job " + result.job()
                     + ". Poll it with: export status " + repo + " " + result.job());
             return 0;
@@ -607,6 +618,35 @@ final class AdminCommands {
     /** How fast a tenant's deletion moves: thousands of objects a second, so seconds for a small tenant and minutes
      *  for a large one - the cadence a bare {@code --refresh} watches it at. */
     private static final Duration TENANT_DELETION = Duration.ofSeconds(5);
+
+    /** How fast a repository's deletion moves: a paged delete of its objects, so seconds for a small repository and
+     *  minutes for a large one - the cadence a bare {@code --refresh} watches it at. */
+    private static final Duration REPOSITORY_DELETION = Duration.ofSeconds(5);
+
+    /** Print one reading of a repository's deletion, and say whether there is any point asking again. */
+    private static Refresh.Poll.State repositoryDeletionState(SettingsClient.RepositoryDeletion deletion) {
+        String name = deletion.repository();
+        return switch (deletion.state()) {
+            case "running" -> {
+                System.out.println("Repository " + name + " is being deleted, started " + deletion.startedAt()
+                        + "; --refresh watches it finish.");
+                yield Refresh.Poll.State.running();
+            }
+            case "gone" -> {
+                System.out.println("Repository " + name + " is gone.");
+                yield Refresh.Poll.State.done(0);
+            }
+            case "failed" -> {
+                System.out.println("Deleting repository " + name + " stopped: " + deletion.failure()
+                        + ". Deleting it again carries on from what is left.");
+                yield Refresh.Poll.State.done(1);
+            }
+            default -> {
+                System.out.println("Repository " + name + " has not been deleted.");
+                yield Refresh.Poll.State.done(1);
+            }
+        };
+    }
 
     /** Print one reading of a tenant's deletion, and say whether there is any point asking again. */
     private static Refresh.Poll.State deletionState(SettingsClient.TenantDeletion deletion) {
@@ -781,7 +821,17 @@ final class AdminCommands {
                     System.out.println("Nothing was deleted.");
                     return 1;
                 }
-                System.out.println(client.settings().deleteRepository(name));
+                // The first reading starts the deletion, so a watched deletion and a single answer are the same
+                // sequence of requests.
+                AtomicBoolean start = new AtomicBoolean(true);
+                Refresh.Poll poll = () -> {
+                    if (start.getAndSet(false)) {
+                        System.out.println(client.settings().deleteRepository(name));
+                        return Refresh.Poll.State.running();
+                    }
+                    return repositoryDeletionState(client.settings().repositoryDeletion(name));
+                };
+                return Refresh.on() ? Refresh.until(REPOSITORY_DELETION, poll) : poll.once().code();
             }
             case "set" -> {
                 scoped.unscoped("repos set <name> <definition>");

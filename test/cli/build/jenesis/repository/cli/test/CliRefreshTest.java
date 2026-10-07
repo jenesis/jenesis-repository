@@ -12,7 +12,10 @@ import static com.github.tomakehurst.wiremock.client.WireMock.any;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.delete;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -168,9 +171,58 @@ public class CliRefreshTest {
                 .whenScenarioStateIs("planned")
                 .willReturn(aResponse().withStatus(200)
                         .withHeader("Content-Type", "application/json").withBody(PLANNED)));
+        // A repository's deletion: begun by the DELETE, running the first time it is read after, gone the second;
+        // and one whose purge stops.
+        server.stubFor(delete(urlPathMatching("/repository/[^/]+/(libs|stuck)"))
+                .willReturn(aResponse().withStatus(202).withHeader("Content-Type", "text/plain")
+                        .withBody("Deleting repository; it no longer answers.")));
+        steps("deletion", () -> get(urlPathEqualTo("/api/repository/deletion")).withQueryParam("repo", equalTo("libs")),
+                "{\"repository\":\"libs\",\"state\":\"running\",\"startedAt\":\"2026-01-01T00:00:00Z\"}",
+                "{\"repository\":\"libs\",\"state\":\"gone\"}");
+        server.stubFor(get(urlPathEqualTo("/api/repository/deletion")).withQueryParam("repo", equalTo("stuck"))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody("{\"repository\":\"stuck\",\"state\":\"failed\","
+                                + "\"startedAt\":\"2026-01-01T00:00:00Z\",\"failure\":\"the store went away\"}")));
+        // A build-cache project's recount: started by the POST, counting when read once, counted the time after.
+        server.stubFor(post(urlPathEqualTo("/api/cache/projects/agents/recount"))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody("{\"project\":\"agents\",\"started\":true}")));
+        steps("recount", () -> get(urlPathEqualTo("/api/cache/projects/agents")),
+                "{\"name\":\"agents\",\"stats\":{\"entryCount\":0,\"totalBytes\":0,\"counting\":true,"
+                        + "\"lastAction\":\"count\",\"lastOutcome\":\"\"}}",
+                "{\"name\":\"agents\",\"stats\":{\"entryCount\":7,\"totalBytes\":700,\"counting\":false,"
+                        + "\"lastAction\":\"count\",\"lastOutcome\":\"counted\"}}");
+        // A project's deletion: running when read once, and gone - a 404 - the time after.
+        server.stubFor(delete(urlPathEqualTo("/api/cache/projects/old"))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody("{\"project\":\"old\",\"started\":true}")));
+        server.stubFor(get(urlPathEqualTo("/api/cache/projects/old")).inScenario("project-delete")
+                .whenScenarioStateIs(com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED).willSetStateTo("gone")
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody("{\"name\":\"old\",\"stats\":{\"counting\":true,\"lastAction\":\"delete\"}}")));
+        server.stubFor(get(urlPathEqualTo("/api/cache/projects/old")).inScenario("project-delete")
+                .whenScenarioStateIs("gone").willReturn(aResponse().withStatus(404)));
+        // An import's start, which the watch then follows through the job's own status.
+        server.stubFor(post(urlPathEqualTo("/api/repository/import"))
+                .willReturn(aResponse().withStatus(202).withHeader("Content-Type", "application/json")
+                        .withBody("{\"job\":\"job-1\"}")));
         System.setProperty("JENREPO_CLI_HOME", home.toString());
         Cli.run(new String[] {"login", "http://127.0.0.1:" + server.port() + "/", "--key-file",
                 Files.writeString(home.resolve("key"), "test-key").toString()});
+    }
+
+    /** The request {@code request} builds answers each body in turn, the last one for good; a builder each, since a
+     *  WireMock builder is mutable and a scenario state set on one would carry into the next. */
+    private static void steps(String scenario, Supplier<com.github.tomakehurst.wiremock.client.MappingBuilder> request,
+                              String... bodies) {
+        String state = com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED;
+        for (int index = 0; index < bodies.length; index++) {
+            String next = index + 1 < bodies.length ? "step-" + (index + 1) : state;
+            server.stubFor(request.get().inScenario(scenario).whenScenarioStateIs(state).willSetStateTo(next)
+                    .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                            .withBody(bodies[index])));
+            state = next;
+        }
     }
 
     @AfterAll
@@ -199,6 +251,60 @@ public class CliRefreshTest {
         assertThat(out).as("the last reading is the finished one").contains("state:    done");
         assertThat(out).as("and the progress before it was shown, which is the whole point of watching")
                 .contains("state:    running");
+    }
+
+    @Test
+    void a_repository_deletion_is_started_and_watched_until_it_is_gone() throws Exception {
+        server.resetRequests();
+        String out = capture(() -> assertThat(Cli.run(new String[] {
+                "repos", "delete", "libs", "--yes", "--refresh=1s"})).isZero());
+
+        assertThat(out).as("the first answer is the deletion's own").contains("Deleting repository");
+        assertThat(out).contains("Repository libs is being deleted").contains("Repository libs is gone.");
+        server.verify(2, getRequestedFor(urlPathEqualTo("/api/repository/deletion")));
+    }
+
+    @Test
+    void a_repository_deletion_that_stopped_is_a_failure_saying_how_to_finish_it() throws Exception {
+        String out = capture(() -> assertThat(Cli.run(new String[] {
+                "repos", "delete", "stuck", "--yes", "--refresh=1s"})).isEqualTo(1));
+
+        assertThat(out).contains("stopped: the store went away").contains("Deleting it again carries on");
+    }
+
+    @Test
+    void without_a_watch_a_repository_deletion_answers_at_once() throws Exception {
+        server.resetRequests();
+        String out = capture(() -> assertThat(Cli.run(new String[] {"repos", "delete", "libs", "--yes"})).isZero());
+
+        assertThat(out).contains("Deleting repository").doesNotContain("is gone");
+        server.verify(0, getRequestedFor(urlPathEqualTo("/api/repository/deletion")));
+    }
+
+    @Test
+    void a_project_recount_is_started_and_watched_until_it_lands() throws Exception {
+        String out = capture(() -> assertThat(Cli.run(new String[] {
+                "projects", "recount", "agents", "--refresh=1s"})).isZero());
+
+        assertThat(out).contains("\"started\":true").contains("Project agents: count running")
+                .contains("Project agents: count counted; 7 entries, 700 bytes.");
+    }
+
+    @Test
+    void a_project_deletion_is_watched_until_the_project_is_gone() throws Exception {
+        String out = capture(() -> assertThat(Cli.run(new String[] {
+                "projects", "delete", "old", "--yes", "--refresh=1s"})).isZero());
+
+        assertThat(out).contains("Project old: delete running").contains("Project old is gone.");
+    }
+
+    @Test
+    void an_import_is_started_and_watched_until_its_job_finishes() throws Exception {
+        String out = capture(() -> assertThat(Cli.run(new String[] {"import", "releases", "--source", "nexus",
+                "--url", "http://incumbent", "--source-repo", "maven-releases", "--refresh=1s"})).isZero());
+
+        assertThat(out).contains("Import started; job job-1.").contains("state:    running")
+                .contains("state:    done").doesNotContain("Poll it with");
     }
 
     @Test
