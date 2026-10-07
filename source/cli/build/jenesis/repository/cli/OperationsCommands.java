@@ -81,15 +81,22 @@ final class OperationsCommands {
 
     static int logs(String[] args, Path home) throws Exception {
         String level = null;
+        String text = null;
+        Long since = null;
+        String tenant = null;
         Integer limit = null;
         for (int i = 1; i < args.length; i++) {
             switch (args[i]) {
                 case "--level" -> level = CliSupport.flag(args, ++i);
+                case "--q" -> text = CliSupport.flag(args, ++i);
+                case "--since" -> since = Long.valueOf(CliSupport.flag(args, ++i));
+                case "--tenant" -> tenant = CliSupport.flag(args, ++i);
                 case "--limit" -> limit = Integer.valueOf(CliSupport.flag(args, ++i));
-                default -> throw new IllegalArgumentException("Usage: logs [--level <level>] [--limit <n>]");
+                default -> throw new IllegalArgumentException("Usage: logs [--level L] [--q TEXT] [--since SEQ] "
+                        + "[--tenant T] [--limit N]");
             }
         }
-        System.out.println(CliSupport.client(home).operations().logs(level, limit));
+        System.out.println(CliSupport.client(home).operations().logs(level, text, since, tenant, limit));
         return 0;
     }
 
