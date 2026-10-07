@@ -2,8 +2,17 @@ package build.jenesis.repository.compliance.web.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import module tools.jackson.databind;
 import org.junit.jupiter.api.io.TempDir;
 import build.jenesis.repository.audit.AuditTrail;
+import build.jenesis.repository.compliance.AdvisorySource;
+import build.jenesis.repository.compliance.ComplianceGate;
+import build.jenesis.repository.compliance.Verdict;
+import build.jenesis.repository.compliance.VulnerabilityPolicy;
+import build.jenesis.repository.compliance.VulnerabilityRecord;
+import build.jenesis.repository.inventory.StoreRepositoryInventory;
+import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.compliance.web.FindingsController;
 import build.jenesis.repository.findings.Finding;
@@ -20,7 +29,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code next} while more remain, the caller passes it back as {@code after}, and the last page carries none - so a
  * walk of the pages yields every finding exactly once. A cursor the endpoint did not hand out is refused rather than
  * read as the first page. A report saying how much of a version it read in words the endpoint does not know is refused
- * before anything is decided.
+ * before anything is decided, and a reported finding stating its source as CycloneDX's {@code vulnerability} object is
+ * recorded with that structure.
  */
 class FindingsControllerTest {
 
@@ -87,6 +97,43 @@ class FindingsControllerTest {
                     response.servlet())).isNull();
             assertThat(response.status()).as(request.completeness() + " " + request.gaps().size()).isEqualTo(400);
         }
+    }
+
+    @Test
+    void a_reported_findings_cyclonedx_vulnerability_is_recorded_with_it() throws IOException {
+        String path = "/maven/org/example/app/1.0/app-1.0.jar";
+        ArtifactStore releases = repositories.writable(Scopes.DEFAULT_TENANT, "releases");
+        Publication publication = new Publication(releases);
+        publication.link(path, publication.storeBlob(new ByteArrayInputStream(new byte[]{1})));
+        new StoreRepositoryInventory(releases).record(path, SEEN);
+        ComplianceGate gate = new ComplianceGate(new VulnerabilityPolicy(Severity.CRITICAL, Verdict.REJECT),
+                AdvisorySource.none());
+        StoreFindingsProvider findings = new StoreFindingsProvider();
+        FindingsController reporting = new FindingsController(repositories,
+                Web.routing(repositories, Scopes.DEFAULT_TENANT), AuditTrail.none(), Optional.of(findings),
+                _ -> gate);
+        JsonNode vulnerability = JsonMapper.builder().build().readTree("""
+                {"id": "CVE-2026-1",
+                 "source": {"name": "NVD", "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-1"},
+                 "ratings": [{"source": {"name": "NVD"}, "score": 5.3, "severity": "medium", "method": "CVSSv31",
+                              "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"}],
+                 "cwes": [79]}""");
+        Servlets.Response response = Servlets.response();
+
+        reporting.report("releases", null, new FindingsController.ReportRequest("scanner", "Maven",
+                "org.example:app", "1.0", List.of(new FindingsController.Reported("CVE-2026-1", "MEDIUM", List.of(),
+                null, "reflected", false, vulnerability)), null, null),
+                Servlets.request("POST", "/api/findings/report"), response.servlet());
+
+        assertThat(response.status()).isEqualTo(200);
+        assertThat(findings.over(repositories.store(Scopes.DEFAULT_TENANT, "releases"))
+                .of("Maven", "org.example:app", "1.0")).singleElement().satisfies(finding -> {
+                    assertThat(finding.detail().source()).isEqualTo(new VulnerabilityRecord.Source("NVD",
+                            "https://nvd.nist.gov/vuln/detail/CVE-2026-1"));
+                    assertThat(finding.detail().ratings()).singleElement().satisfies(rating ->
+                            assertThat(rating.vector()).isEqualTo("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"));
+                    assertThat(finding.detail().cwes()).containsExactly(79);
+                });
     }
 
     private static FindingsController.ReportRequest report(String completeness, List<String> gaps) {
