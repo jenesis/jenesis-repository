@@ -309,7 +309,7 @@ final class AuthCommands {
                 AccessClient.Minted minted = client.access().rotate(args[2], args.length > 3 ? args[3] : null);
                 System.out.println("Rotated " + args[2] + " -> " + minted.id() + ".");
                 System.out.println("Key (shown once): " + minted.key());
-                if (minted.expires() != null && !minted.expires().isEmpty()) {
+                if (!minted.expires().isEmpty()) {
                     System.out.println("The old key expires: " + minted.expires());
                 }
             }

@@ -309,7 +309,15 @@ public final class AccessClient extends ClientCalls {
         return response.body();
     }
 
+    /** One credential as the API lists it. A key with no label or no expiry carries neither field, so each reads
+     *  back as the empty string rather than as {@code null}: the deployment's own bootstrap key is one, and listing it
+     *  must not fail. */
     public record Credential(String id, String label, String expires, long useCount) {
+
+        public Credential {
+            label = label == null ? "" : label;
+            expires = expires == null ? "" : expires;
+        }
     }
 
     /** One group as the API reports it: its name, its label and the rights it grants per scope. */
@@ -321,7 +329,12 @@ public final class AccessClient extends ClientCalls {
     public record Principal(String id, String label, Map<String, String> grants) {
     }
 
+    /** A key as minted or rotated; {@code expires} is the empty string when it does not expire. */
     public record Minted(String id, String key, String expires) {
+
+        public Minted {
+            expires = expires == null ? "" : expires;
+        }
     }
 
     /** The tenant's credential-lifetime policy: the default stamped on a blank-expiry mint and the optional ceiling
