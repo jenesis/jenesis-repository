@@ -88,7 +88,8 @@ final class OciFormatFixture implements FormatFixture {
         String hex = sha256(held);
         return Optional.of(new Enumerated("/v2/contract/held/manifests/latest",
                 List.of(new Probe("/v2/contract/held/tags/list", "latest"),
-                        new Probe("/v2/_catalog", "contract/held")),
+                        // The catalogue lists what this registry holds, which no proxy asks an upstream for.
+                        new Probe("/v2/_catalog", "contract/held", false)),
                 target -> Withheld.mark(target, hex)));
     }
 

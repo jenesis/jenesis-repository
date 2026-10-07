@@ -104,12 +104,22 @@ public interface FormatFixture {
         }
     }
 
-    /** One enumeration surface and the token that names the holdable version in its rendered body. */
-    record Probe(String path, String token) {
+    /**
+     * One enumeration surface and the token that names the holdable version in its rendered body.
+     *
+     * @param relayed whether a proxy asks its upstream for this surface on a miss. A listing of what this deployment
+     *                itself holds - a registry's catalogue - is never relayed, and its empty answer is the right one.
+     */
+    record Probe(String path, String token, boolean relayed) {
 
         public Probe {
             Objects.requireNonNull(path, "path");
             Objects.requireNonNull(token, "token");
+        }
+
+        /** A surface a proxy relays from its upstream on a miss, which is what almost every enumeration is. */
+        public Probe(String path, String token) {
+            this(path, token, true);
         }
     }
 
