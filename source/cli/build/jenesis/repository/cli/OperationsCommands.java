@@ -251,4 +251,39 @@ final class OperationsCommands {
         return 0;
     }
 
+    /** How long a check takes to answer: a few small files and a HEAD, so seconds - the cadence a bare
+     *  {@code --refresh} watches it at. */
+    private static final Duration DISCOVERY_CHECK = Duration.ofSeconds(2);
+
+    /**
+     * {@code discovery check <name> [--path P]}: starts asking the domains a module name or Maven groupId reverses
+     * into for their {@code /.well-known/java-repository.properties}, and where a repository request path would go
+     * through a {@code discovered} leg, and prints the check's state as the server answers it; {@code --refresh}
+     * watches it until it is done.
+     */
+    static int discovery(String[] args, Path home) throws Exception {
+        if (args.length < 3 || !args[1].equals("check")) {
+            throw new IllegalArgumentException("Usage: discovery check <name> [--path <request path>]");
+        }
+        String path = null;
+        for (int i = 3; i < args.length; i++) {
+            if (args[i].equals("--path")) {
+                path = CliSupport.flag(args, ++i);
+            } else {
+                throw new IllegalArgumentException("Unknown discovery flag '" + args[i] + "'");
+            }
+        }
+        OperationsClient operations = CliSupport.client(home).operations();
+        String asked = path;
+        OperationsClient.DiscoveryCheck started = operations.discoveryCheck(args[2], asked);
+        if (Refresh.on()) {
+            return Refresh.until(DISCOVERY_CHECK, () -> {
+                OperationsClient.DiscoveryCheck state = operations.discoveryChecking(args[2], asked);
+                System.out.println(state.body());
+                return state.state().equals("running") ? Refresh.Poll.State.running() : Refresh.Poll.State.done(0);
+            });
+        }
+        System.out.println(started.body());
+        return 0;
+    }
 }

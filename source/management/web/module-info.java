@@ -25,6 +25,8 @@ open module build.jenesis.repository.management.web {
     requires build.jenesis.repository.posture;
     requires build.jenesis.repository.settings;
     requires build.jenesis.repository.walk.task;
+    // The discovery check an operator asks of a name's domains.
+    requires build.jenesis.repository.discovery;
     requires jakarta.servlet;
     requires spring.beans;
     requires spring.context;

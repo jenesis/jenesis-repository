@@ -244,6 +244,7 @@ public class GlobalControllerAdvice {
         entries.add(new NavEntry("Metrics", "/ui/metrics", Access.SUPERADMIN, Group.OPERATIONS));
         entries.add(new NavEntry("Security posture", "/ui/posture", Access.SUPERADMIN, Group.OPERATIONS));
         entries.add(new NavEntry("Caches", "/ui/caches", Access.SUPERADMIN, Group.OPERATIONS));
+        entries.add(new NavEntry("Discovery", "/ui/discovery", Access.SUPERADMIN, Group.OPERATIONS));
         // The group's header link opens its first entry, so the first-run guide comes last.
         entries.add(new NavEntry("Settings", "/ui/settings", Access.SUPERADMIN, Group.SETTINGS));
         entries.add(new NavEntry("Upstreams", "/ui/settings/upstreams", Access.SUPERADMIN, Group.SETTINGS));

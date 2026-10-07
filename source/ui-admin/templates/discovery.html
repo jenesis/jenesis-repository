@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Discovery')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Discovery')}"></header>
+    <p><small>A module name or a Maven groupId is a reversed domain, and the domain's owner says in
+        <code>https://&lt;domain&gt;/.well-known/java-repository.properties</code> where its modules and artifacts
+        are. A repository with a <code>fallback discovered</code> leg serves what those files name. Ask a name's
+        domains here what they say now, and where a request path would go.</small></p>
+    <th:block th:unless="${installed}">
+        <div th:replace="~{base :: empty('This node carries no discovery reader, so no discovered leg is served here.')}"></div>
+    </th:block>
+    <form th:if="${installed}" method="post" th:action="@{/ui/discovery/check}">
+        <div class="app-filter-bar">
+            <label>Module name or groupId
+                <input type="text" name="name" th:value="${name}" placeholder="build.jenesis" required>
+            </label>
+            <label>Request path (optional)
+                <input type="text" name="path" th:value="${path}"
+                       placeholder="/maven/build/jenesis/build.jenesis/0.15.4/build.jenesis-0.15.4.jar">
+            </label>
+            <button th:replace="~{base :: secondaryButton('Ask the domains')}">Ask the domains</button>
+        </div>
+    </form>
+    <th:block th:if="${checking != null}">
+        <th:block th:if="${checking.state() == 'running'}">
+            <p th:replace="~{base :: running('Asking the domains of ' + ${checking.name()} + '...')}">Asking...</p>
+        </th:block>
+        <th:block th:if="${checking.state() == 'done'}" th:with="check=${checking.check()}">
+            <p><small>Asked <time th:replace="~{base :: time(${checking.finished()})}">when</time>.</small></p>
+            <th:block th:if="${check.domains().isEmpty()}">
+                <div th:replace="~{base :: empty('This name cannot be a domain, so no file is asked for it.')}"></div>
+            </th:block>
+            <figure th:unless="${check.domains().isEmpty()}">
+                <table class="app-list" aria-label="The domains asked">
+                    <thead><tr><th scope="col">Domain</th><th scope="col">File</th><th scope="col">Says</th></tr></thead>
+                    <tbody>
+                    <tr th:each="asked : ${check.domains()}">
+                        <td><code th:text="${asked.domain()}">jenesis.build</code></td>
+                        <td>
+                            <span th:if="${asked.state() == 'found'}" class="app-badge">found</span>
+                            <span th:if="${asked.state() == 'absent'}" class="app-badge app-badge--muted">none</span>
+                            <span th:if="${asked.state() == 'refused'}" class="app-badge app-badge--danger">refused</span>
+                            <span th:if="${asked.state() == 'not-reached'}" class="app-badge app-badge--warn">not reached</span>
+                        </td>
+                        <td>
+                            <small th:if="${asked.refusal() != null}" th:text="${asked.refusal()}">why</small>
+                            <ul th:if="${asked.file() != null}" class="app-reasons">
+                                <li th:each="entry : ${asked.file().entries()}"><small><code
+                                        th:text="${entry.key.spelled()}">maven</code> <code
+                                        th:text="${entry.value.value()}">https://...</code>
+                                    <span th:if="${entry.value.since() != null}"
+                                          th:text="'from ' + ${entry.value.since()}">from 1.0</span>
+                                    <span th:unless="${entry.value.suffixes().isEmpty()}"
+                                          th:text="'qualifiers ' + ${#strings.listJoin(entry.value.suffixes(), ', ')}">none</span>
+                                    <span th:if="${entry.value.latest() != null}">latest <code
+                                            th:text="${entry.value.latest()}">link</code></span></small></li>
+                                <li th:unless="${asked.file().stop()}"><small>its subdomains' files are read too</small></li>
+                            </ul>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </figure>
+            <p th:unless="${check.answering().isEmpty()}"><small>Answering:
+                <th:block th:each="answer, i : ${check.answering()}"><th:block th:if="${i.index > 0}">, </th:block><code
+                        th:text="${answer.key.spelled()}">maven</code> from <code
+                        th:text="${answer.value.domain()}">jenesis.build</code></th:block></small></p>
+            <th:block th:if="${check.path() != null}">
+                <h2>Where the path goes</h2>
+                <p><code th:text="${check.path()}">/maven/...</code></p>
+                <p th:if="${check.refusal() != null}"><span class="app-badge app-badge--danger">refused</span>
+                    <small th:text="${check.refusal()}">why</small></p>
+                <th:block th:if="${check.refusal() == null and check.located() == null}">
+                    <div th:replace="~{base :: empty('No domain names this file, so a discovered leg leaves it to the next one.')}"></div>
+                </th:block>
+                <p th:if="${located != null}" th:switch="${located.kind()}">
+                    <th:block th:case="'fetched'">Fetched from <code th:text="${located.url()}">url</code>
+                        <small th:if="${located.checked()}">- checked against the checksum beside it</small></th:block>
+                    <th:block th:case="'relayed'">Under the root <code th:text="${located.url()}">root</code>
+                        at <code th:text="${located.path()}">path</code></th:block>
+                    <th:block th:case="*">Answered here: the metadata the latest link names</th:block>
+                </p>
+            </th:block>
+        </th:block>
+    </th:block>
+</main>
+</body>
+</html>

@@ -6,7 +6,7 @@ import module tools.jackson.databind;
 
 /**
  * What the deployment is doing: the node's read caches, the walks of the store, the security posture, the agreement
- * between nodes, the recent logs and the observability report.
+ * between nodes, the recent logs, the observability report and the discovery check.
  *
  * <p>Reached through {@link RepositoryClient#operations()}.
  */
@@ -150,5 +150,30 @@ public final class OperationsClient extends ClientCalls {
         HttpResponse<String> response = send("GET", "/api/admin/observability", null, null);
         require(response, 200, "read the observability reference");
         return response.body();
+    }
+
+    /** A discovery check's {@code state} - {@code running}, {@code done} or {@code not-checked} - and the server's
+     *  whole answer. */
+    public record DiscoveryCheck(String state, String body) {
+    }
+
+    /** Starts asking the domains {@code name} reverses into for their discovery files, and where {@code path} - a
+     *  repository request path, or {@code null} - would go through a {@code discovered} leg; answers its state. */
+    public DiscoveryCheck discoveryCheck(String name, String path) throws IOException, InterruptedException {
+        return discovery("POST", name, path);
+    }
+
+    /** The last discovery check of {@code name} and {@code path} the node ran or is running. */
+    public DiscoveryCheck discoveryChecking(String name, String path) throws IOException, InterruptedException {
+        return discovery("GET", name, path);
+    }
+
+    private DiscoveryCheck discovery(String method, String name, String path)
+            throws IOException, InterruptedException {
+        HttpResponse<String> response = send(method, "/api/admin/discovery/check?name=" + enc(name)
+                + (path == null ? "" : "&path=" + enc(path)),
+                method.equals("POST") ? HttpRequest.BodyPublishers.noBody() : null, null);
+        require(response, 200, "check the discovery files of " + name);
+        return new DiscoveryCheck(JSON.readTree(response.body()).path("state").asString(""), response.body());
     }
 }
