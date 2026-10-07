@@ -49,7 +49,13 @@ class OsvChangesTest {
                 case "/v1/vulns/GHSA-aaaa" -> record("GHSA-aaaa", "[\"Maven\",\"org.acme:a\"]");
                 case "/v1/vulns/GHSA-bbbb" -> record("GHSA-bbbb",
                         "[\"Maven\",\"org.acme:b\"],[\"Debian:12\",\"openssl\"],[\"NotOurs\",\"thing\"]");
-                default -> throw new AssertionError("asked " + request.uri());
+                default -> {
+                    if (!path.startsWith("/v1/vulns/GHSA-gen-")) {
+                        throw new AssertionError("asked " + request.uri());
+                    }
+                    String id = path.substring("/v1/vulns/".length());
+                    yield record(id, "[\"Maven\",\"org.acme:" + id + "\"]");
+                }
             });
         }, () -> space, CLOCK);
     }
@@ -65,6 +71,29 @@ class OsvChangesTest {
                     .append("}}");
         }
         return "{\"id\":\"" + id + "\",\"affected\":[" + packages + "]}";
+    }
+
+    @Test
+    void a_draw_stops_at_its_budget_but_names_the_instant_it_stopped_at_whole() throws IOException {
+        lists.put("Maven", "2026-09-01T00:00:00Z,GHSA-old\n");
+        source().drawChanges();
+        // Oldest first: 499 records a minute apart, two more sharing the instant the budget runs out at, and one
+        // after - so the budget is met inside an instant the next draw, whose position is exclusive, would skip.
+        Instant start = Instant.parse("2026-09-02T00:00:00Z");
+        List<String> lines = new ArrayList<>();
+        for (int i = 0; i < 502; i++) {
+            Instant modified = start.plus(Duration.ofMinutes(i < 499 ? i : i < 501 ? 499 : 600));
+            lines.addFirst(modified + ",GHSA-gen-" + i);
+        }
+        lists.put("Maven", String.join("\n", lines) + "\n2026-09-01T00:00:00Z,GHSA-old\n");
+
+        source().drawChanges();
+        assertThat(fetched).as("the budget, and the second record at the instant it ran out at").hasSize(501)
+                .contains("/v1/vulns/GHSA-gen-500").doesNotContain("/v1/vulns/GHSA-gen-501");
+
+        fetched.clear();
+        source().drawChanges();
+        assertThat(fetched).as("the next draw resumes after that instant").containsExactly("/v1/vulns/GHSA-gen-501");
     }
 
     @Test
