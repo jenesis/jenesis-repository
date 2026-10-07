@@ -144,7 +144,7 @@ public class RepositoryImports extends TenantScope {
         }
         // installed(): a connector configured off is as unreachable from a console job as from the API's edge.
         ImportSourceProvider provider = ImportSourceProvider.installed(source, Features.settings()).orElse(null);
-        ProxyFormat.Fetcher fetcher = FetcherProvider.resolve(_ -> null);
+        ProxyFormat.Fetcher fetcher = FetcherProvider.resolve(Features.settings());
         if (fetcher == ProxyFormat.Fetcher.NONE) {
             throw new IllegalStateException("No upstream fetcher module is installed on this deployment.");
         }

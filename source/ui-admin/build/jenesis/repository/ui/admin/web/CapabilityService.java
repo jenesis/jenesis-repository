@@ -68,7 +68,7 @@ public class CapabilityService {
             flag(contributed, "gc"),
             flag(contributed, "scan"),
             flag(contributed, "provenance"),
-            FetcherProvider.resolve(_ -> null) != ProxyFormat.Fetcher.NONE,
+            FetcherProvider.resolve(Features.settings()) != ProxyFormat.Fetcher.NONE,
             UpstreamCredentialSourceProvider.installed(),
             RateLimiterProvider.resolve(_ -> null) != RateLimiter.NONE,
             flag(contributed, "dependents"),
