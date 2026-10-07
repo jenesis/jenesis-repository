@@ -2,6 +2,7 @@ package build.jenesis.repository.gate.store;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.gate.HoldKindObserver;
 import build.jenesis.repository.gate.HoldReleaseObserver;
 import build.jenesis.repository.gate.LicenseHold;
 
@@ -11,7 +12,7 @@ import build.jenesis.repository.gate.LicenseHold;
  * a release for a license reason a human has cleared. A thin adapter over {@link LicenseHold#onReleased} so the review
  * surfaces discover the hook rather than naming {@code LicenseHold} directly.
  */
-public final class LicenseHoldReleaseObserver implements HoldReleaseObserver {
+public final class LicenseHoldReleaseObserver implements HoldKindObserver {
 
     @Override
     public void onReleased(ArtifactStore store, String path) throws IOException {

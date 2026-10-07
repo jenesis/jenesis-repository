@@ -66,7 +66,7 @@ public final class HoldKind {
     }
 
     /** Whether this kind holds a record for the coordinate version {@code path} maps to; {@code false} for a path no
-     *  installed format maps. Serves {@link HoldReleaseObserver#holds}. */
+     *  installed format maps. Serves {@link HoldKindObserver#holds}. */
     public boolean holds(ArtifactStore store, String path) throws IOException {
         ArtifactDescriptor artifact = describe(store, path);
         return artifact != null

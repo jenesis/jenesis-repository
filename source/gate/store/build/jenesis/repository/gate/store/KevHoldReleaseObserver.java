@@ -2,6 +2,7 @@ package build.jenesis.repository.gate.store;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.gate.HoldKindObserver;
 import build.jenesis.repository.gate.HoldReleaseObserver;
 import build.jenesis.repository.gate.KevHold;
 
@@ -11,7 +12,7 @@ import build.jenesis.repository.gate.KevHold;
  * re-holds a release for a CVE a human has cleared. A thin adapter over {@link KevHold#onReleased} so the review
  * surfaces discover the hook rather than naming {@code KevHold} directly.
  */
-public final class KevHoldReleaseObserver implements HoldReleaseObserver {
+public final class KevHoldReleaseObserver implements HoldKindObserver {
 
     @Override
     public void onReleased(ArtifactStore store, String path) throws IOException {
