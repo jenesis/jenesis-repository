@@ -19,6 +19,7 @@ final class FakeExchange implements DetachedExchange {
     private final Map<String, String> query;
     private final Map<String, String> requestHeaders;
     private final byte[] requestBody;
+    private final Map<String, String> settings = new HashMap<>();
     private final Map<String, String> responseHeaders = new LinkedHashMap<>();
     private final ByteArrayOutputStream responseBody = new ByteArrayOutputStream();
     private int status = -1;
@@ -58,6 +59,17 @@ final class FakeExchange implements DetachedExchange {
     @Override
     public String requestHeader(String name) {
         return requestHeaders.get(name);
+    }
+
+    /** Answer {@code value} for the setting {@code key}, as the repository's configuration would. */
+    FakeExchange setting(String key, String value) {
+        settings.put(key, value);
+        return this;
+    }
+
+    @Override
+    public String setting(String key) {
+        return settings.get(key);
     }
 
     @Override
