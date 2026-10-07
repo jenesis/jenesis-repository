@@ -63,10 +63,12 @@ public final class SignatureSettingsContributor implements SettingsContributor {
                                 + "signer names its identity.",
                         Setting.Kind.STRING, "", true, Setting.Scope.TENANT).form(Setting.Form.JSON).advanced(),
                 new Setting(TrustedRootTask.URL, "Compliance", "Sigstore trusted root URL",
-                        "Where the Sigstore trusted root is fetched from when none is pasted above. Empty fetches "
-                                + "nothing, so no outbound call is made; for the public-good instance set it to "
-                                + TrustedRootTask.DEFAULT_URL + " - fetched by the trusted-root "
-                                + "pass on its own cadence and stored, never on a request path. Taking the document "
+                        "Where the Sigstore trusted root is fetched from when none is pasted above. Empty, the "
+                                + "signature checks fetch nothing, so they make no outbound call; for the public-good "
+                                + "instance set it to " + TrustedRootTask.DEFAULT_URL + " - fetched by the "
+                                + "trusted-root pass on its own cadence and stored, never on a request path. A tool "
+                                + "this deployment manages fetches it as it verifies the release it fetches, or the "
+                                + "public-good root where this is empty. Taking the document "
                                 + "over HTTPS trusts the host serving it; the same root is served through Sigstore's "
                                 + "TUF repository with its own signatures, which is the stronger statement and what "
                                 + "an internal mirror should be a mirror of. A root arriving after versions were "
