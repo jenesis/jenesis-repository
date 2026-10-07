@@ -596,11 +596,6 @@ public final class WalkConsumerContract {
         }
 
         @Override
-        public boolean needsEveryKey() {
-            return delegate.needsEveryKey();
-        }
-
-        @Override
         public int order() {
             return delegate.order();
         }

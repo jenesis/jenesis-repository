@@ -40,11 +40,7 @@ class ProvidersTest {
         assertThat(Providers.all(SPI, none, NAME, ENABLED, CREATE)).isEmpty();
         assertThat(Providers.optionalUnique(SPI, none, NAME, Optional.empty(), ENABLED, CREATE)).isEmpty();
         assertThat(Providers.installedNames(SPI, none, NAME, ENABLED)).isEmpty();
-        // The two policies with no unselected outcome cannot degrade: they name what they could not resolve.
-        assertThatThrownBy(() -> Providers.namedUnique(SPI, none, NAME, "alfa", CREATE))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("alfa")
-                .hasMessageContaining("no installed provider answers to it");
+        // The policy with no unselected outcome cannot degrade: it names what it could not resolve.
         assertThatThrownBy(() ->
                 Providers.exclusiveWithDefault(SPI, none, NAME, Optional.empty(), "filesystem", CONFIGURED, Fake::name))
                 .isInstanceOf(IllegalStateException.class)
@@ -130,9 +126,6 @@ class ProvidersTest {
                 .hasMessageContaining("null is never a legal SPI result");
         assertThatThrownBy(() ->
                 Providers.optionalUnique(SPI, providers, NAME, Optional.empty(), ENABLED, nulled))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("null is never a legal SPI result");
-        assertThatThrownBy(() -> Providers.namedUnique(SPI, providers, NAME, "alfa", nulled))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("null is never a legal SPI result");
         assertThatThrownBy(() -> Providers.exclusiveWithDefault(
@@ -268,41 +261,6 @@ class ProvidersTest {
         }
     }
 
-    // --- NAMED_UNIQUE ----------------------------------------------------------------------------------------
-
-    @Test
-    void a_mandatory_selection_resolves_the_named_implementation() {
-        List<Fake> discovered = List.of(alfa("alfa", "a"), beta("bravo", "b"));
-        assertThat(Providers.namedUnique(SPI, discovered, NAME, " BRAVO ", CREATE)).isEqualTo("b");
-    }
-
-    @Test
-    void a_mandatory_selection_may_not_be_absent() {
-        List<Fake> discovered = List.of(alfa("alfa", "a"));
-        for (String missing : new String[] {null, "", "   "}) {
-            assertThatThrownBy(() -> Providers.namedUnique(SPI, discovered, NAME, missing, CREATE))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("no unselected outcome");
-        }
-    }
-
-    @Test
-    void a_mandatory_selection_no_provider_answers_to_throws() {
-        List<Fake> discovered = List.of(alfa("alfa", "a"));
-        assertThatThrownBy(() -> Providers.namedUnique(SPI, discovered, NAME, "charlie", CREATE))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("'charlie'")
-                .hasMessageContaining("[alfa]");
-    }
-
-    @Test
-    void a_mandatory_selection_whose_provider_yields_nothing_throws() {
-        List<Fake> discovered = List.of(alfa("alfa", null));
-        assertThatThrownBy(() -> Providers.namedUnique(SPI, discovered, NAME, "alfa", CREATE))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("yielded no instance");
-    }
-
     // --- EXCLUSIVE_WITH_DEFAULT ------------------------------------------------------------------------------
 
     @Test
@@ -400,12 +358,11 @@ class ProvidersTest {
 
     // --- fixtures --------------------------------------------------------------------------------------------
 
-    /** Every primitive over the same providers - the packaging checks are shared by all five policies. */
+    /** Every primitive over the same providers - the packaging checks are shared by all four. */
     private static List<Runnable> everyPrimitive(List<Fake> discovered) {
         return List.of(
                 () -> Providers.all(SPI, discovered, NAME, ENABLED, CREATE),
                 () -> Providers.optionalUnique(SPI, discovered, NAME, Optional.empty(), ENABLED, CREATE),
-                () -> Providers.namedUnique(SPI, discovered, NAME, "alfa", CREATE),
                 () -> Providers.exclusiveWithDefault(
                         SPI, discovered, NAME, Optional.empty(), "alfa", CONFIGURED, Fake::name),
                 () -> Providers.installedNames(SPI, discovered, NAME, ENABLED));
