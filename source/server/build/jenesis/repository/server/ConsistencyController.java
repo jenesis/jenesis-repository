@@ -2,6 +2,7 @@ package build.jenesis.repository.server;
 
 import module java.base;
 
+import build.jenesis.repository.posture.SecurityAdvisory;
 import tools.jackson.databind.json.JsonMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,12 +12,13 @@ import org.springframework.web.bind.annotation.RestController;
  * The multi-node consistency read - {@code GET /api/consistency}, the console / CLI / API read of the fleet's
  * per-node fingerprints and any divergence between them. It runs the same {@link NodeConsistency#report bounded check}
  * (the node prefix plus one small object per node, never a scan) and returns the per-node numbers, the divergences
- * (each a stuck-cursor / config / pointer split with a value-free reason), and the {@code converged} /
- * {@code singleNode} flags - so a caller sees at a glance whether the nodes agree.
+ * (each a stuck-cursor / config / pointer split with a value-free reason), each divergence's advisory - why it
+ * matters and what fixes it - and the {@code converged} / {@code singleNode} flags, so a caller sees at a glance
+ * whether the nodes agree.
  *
- * <p>Read like every other {@code /api} surface - key-auth'd ({@code repository:read}) by
- * {@link RepositorySecurityAutoConfiguration}, read-only, never an anonymous backdoor and it never blocks a request; it
- * only observes. It <strong>degrades cleanly to single-node</strong>: one live node returns that node and no divergence,
+ * <p>It reads the whole fleet, so {@link RepositoryAuthorizationManager#global} holds it to the operator tenant's
+ * {@code manage:read}: one route, gated once, in both editions. Read-only, never an anonymous backdoor and it never
+ * blocks a request; it only observes. It <strong>degrades cleanly to single-node</strong>: one live node returns that node and no divergence,
  * a false positive impossible. It names the risk (which node, how far behind), never a resolved hash or config value.
  */
 @RestController
@@ -81,6 +83,22 @@ public final class ConsistencyController {
         body.put("truncated", report.truncated());
         body.put("nodes", nodes);
         body.put("divergences", divergences);
+        // Each divergence with its advisory - why it matters and what fixes it - as the posture screen says it.
+        List<Map<String, Object>> advisories = new ArrayList<>();
+        if (!report.converged()) {
+            for (NodeDivergence divergence : report.divergences()) {
+                SecurityAdvisory advisory = NodeDivergenceAdvisor.advisory(divergence);
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("id", advisory.id());
+                row.put("severity", advisory.severity().name());
+                row.put("title", advisory.title());
+                row.put("why", advisory.why());
+                row.put("fix", advisory.fix());
+                row.put("docs", advisory.docs());
+                advisories.add(row);
+            }
+        }
+        body.put("advisories", advisories);
         return body;
     }
 }

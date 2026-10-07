@@ -2,29 +2,26 @@ package build.jenesis.repository.server;
 
 import module java.base;
 
-import tools.jackson.databind.json.JsonMapper;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The recent-logs tail - {@code GET /api/logs}, the console / CLI / API's read of the instance's most recent log
+ * The recent-logs tail - {@code GET /api/logs}, the console / CLI / API's one read of the instance's most recent log
  * entries from the bounded in-memory {@link LogRingBuffer ring} a logback appender feeds (never re-reading a file,
  * never unbounded). Supports a {@code level} filter (entries at that level or higher), a {@code q} case-insensitive
  * text search over the logger name and message, a {@code since} cursor a tailing reader passes back (the response
- * carries the current {@code cursor}) to fetch only what is new, an optional {@code tenant} scope, and a {@code limit}.
+ * carries the current {@code cursor}) to fetch only what is new, an optional {@code tenant} scope - a
+ * deployment-wide entry, one no tenant was threaded for, is returned only when no scope is asked - and a
+ * {@code limit}. Every parameter is optional, and an empty ring answers an empty list rather than an error.
  *
  * <p>Registered as an explicit {@code @Bean} by {@link RepositoryAutoConfiguration} beside {@link RepositoryController}
  * (Spring MVC maps its handler on the bean), reading the same {@link LogRingBuffer} the {@link LogRingAppender} feeds.
- * Read like every other {@code /api} surface - key-auth'd ({@code repository:read}) by
- * {@link RepositorySecurityAutoConfiguration}, so it is not an open backdoor; an empty ring returns an empty list
- * rather than an error.
+ * It reads every tenant's entries, so {@link RepositoryAuthorizationManager#global} holds it to the operator tenant's
+ * {@code manage:read}, as it does the actuator: one route, gated once, in both editions.
  */
 @RestController
 public final class RecentLogsController {
-
-    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /** The default number of entries a read returns when {@code limit} is not supplied. */
     static final int DEFAULT_LIMIT = 200;
@@ -35,12 +32,17 @@ public final class RecentLogsController {
         this.buffer = Objects.requireNonNull(buffer, "buffer");
     }
 
-    @GetMapping("/api/logs")
-    public void logs(HttpServletRequest request, HttpServletResponse response) throws IOException {
-        Integer minLevel = LogRingAppender.levelValue(request.getParameter("level"));
-        List<LogEntry> entries = buffer.recent(minLevel, request.getParameter("q"),
-                longParam(request.getParameter("since")), request.getParameter("tenant"),
-                intParam(request.getParameter("limit")));
+    /** The tail matching the filters, oldest first, as one document: the {@code cursor} (the highest {@code seq} in
+     *  the ring, which a tailing reader passes back as {@code since}), the {@code count} returned, and the
+     *  {@code entries}. */
+    @GetMapping(value = "/api/logs", produces = "application/json")
+    public Map<String, Object> logs(@RequestParam(name = "level", required = false) String level,
+                                    @RequestParam(name = "q", required = false) String q,
+                                    @RequestParam(name = "since", required = false) Long since,
+                                    @RequestParam(name = "tenant", required = false) String tenant,
+                                    @RequestParam(name = "limit", required = false) Integer limit) {
+        List<LogEntry> entries = buffer.recent(LogRingAppender.levelValue(level), q, since, tenant,
+                limit == null ? DEFAULT_LIMIT : limit);
         List<Map<String, Object>> rows = new ArrayList<>();
         for (LogEntry entry : entries) {
             Map<String, Object> row = new LinkedHashMap<>();
@@ -56,36 +58,6 @@ public final class RecentLogsController {
         body.put("cursor", buffer.cursor());
         body.put("count", entries.size());
         body.put("entries", rows);
-        response.setHeader("Content-Type", "application/json");
-        response.setStatus(200);
-        byte[] bytes = JSON.writeValueAsString(body).getBytes(StandardCharsets.UTF_8);
-        try (OutputStream out = response.getOutputStream()) {
-            out.write(bytes);
-        }
-    }
-
-    /** A {@code long} query parameter, or {@code null} when unset or unparseable (the since-cursor is then from the
-     *  start). */
-    private static Long longParam(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return Long.parseLong(value.trim());
-        } catch (NumberFormatException _) {
-            return null;
-        }
-    }
-
-    /** The {@code limit} query parameter, or {@link #DEFAULT_LIMIT} when unset or unparseable. */
-    private static int intParam(String value) {
-        if (value == null || value.isBlank()) {
-            return DEFAULT_LIMIT;
-        }
-        try {
-            return Integer.parseInt(value.trim());
-        } catch (NumberFormatException _) {
-            return DEFAULT_LIMIT;
-        }
+        return body;
     }
 }
