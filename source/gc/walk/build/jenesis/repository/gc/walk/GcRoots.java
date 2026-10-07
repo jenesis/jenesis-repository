@@ -5,6 +5,7 @@ import module java.base;
 import build.jenesis.repository.format.BlobReferences;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Known;
+import build.jenesis.repository.store.Providers;
 
 /**
  * Where a store's serving pointers live, as the collector must be told them: every namespace a live pointer can sit
@@ -31,6 +32,8 @@ import build.jenesis.repository.store.Known;
  * which is a statement that every blob in it is garbage.</li>
  * <li><b>Discovery.</b> Through {@link #installed()} alone, which answers the contributed implementation where a
  * deployment installs one and {@link #declared} otherwise. Nothing else loads the service.</li>
+ * <li><b>Selection failure.</b> Two contributed implementations are refused at {@link #installed()}, naming both:
+ * which one decides what the collector may delete is never a function of module-path order.</li>
  * </ol>
  */
 @FunctionalInterface
@@ -39,10 +42,9 @@ public interface GcRoots {
     /** The pointer roots of this store, or an unknown answer naming why the sweep must not run. */
     Known<List<String>> roots(ArtifactStore store) throws IOException;
 
-    /** The contributed answer where one is installed, else {@link #declared}. */
+    /** The contributed answer where one is installed, else {@link #declared}; two contributed answers throw. */
     static GcRoots installed() {
-        Iterator<GcRoots> discovered = ServiceLoader.load(GcRoots.class).iterator();
-        return discovered.hasNext() ? discovered.next() : GcRoots::declared;
+        return Providers.singleton("gc-roots", ServiceLoader.load(GcRoots.class)).orElse(GcRoots::declared);
     }
 
     /** {@code publish} plus every installed format's lent blob roots, always as a known answer - the one
