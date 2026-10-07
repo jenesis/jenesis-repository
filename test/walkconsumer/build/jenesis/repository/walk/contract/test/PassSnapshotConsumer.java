@@ -56,6 +56,11 @@ public final class PassSnapshotConsumer implements WalkConsumer {
     }
 
     @Override
+    public String description() {
+        return "a consumer a test drives";
+    }
+
+    @Override
     public void onPassStarted(WalkPass pass, ArtifactStore store) {
         // The reset the javadoc names: a snapshot rebuilder starts its accumulation over at every pass.
         accumulated.clear();
