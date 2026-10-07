@@ -1,5 +1,8 @@
 package build.jenesis.repository.ui.admin.security;
 
+import java.util.List;
+
+import build.jenesis.repository.ui.ConsoleModuleProvider;
 import build.jenesis.repository.ui.SuperadminRole;
 import build.jenesis.repository.ui.identity.UserDirectory;
 import build.jenesis.repository.ui.ConsoleAccess;
@@ -26,6 +29,12 @@ final class ConsoleAuthorization {
      */
     static void rules(AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry auth,
                       TenantAuthorization tenants, ConsoleAccess access) {
+        // Every installed module's deployment-wide screens, as its menu entries name them: a screen hidden from a
+        // reader is also refused to one, whichever module contributes it.
+        List<String> moduleScreens = ConsoleUrlSpace.superadmin(ConsoleModuleProvider.installed());
+        if (!moduleScreens.isEmpty()) {
+            auth.requestMatchers(moduleScreens.toArray(String[]::new)).hasRole(SuperadminRole.ROLE);
+        }
         auth
                 .requestMatchers(ConsoleUrlSpace.ANONYMOUS.toArray(String[]::new)).permitAll()
                 .requestMatchers(HttpMethod.POST, "/ui/logout").permitAll()
@@ -41,10 +50,8 @@ final class ConsoleAuthorization {
                         .access(ConsoleAccessRule.holdsSomething(access))
                 .requestMatchers("/ui/setup", "/ui/setup/**").hasRole(SuperadminRole.ROLE)
                 .requestMatchers("/ui/settings", "/ui/settings/**").hasRole(SuperadminRole.ROLE)
-                // Walks are deployment-wide settings reading every tenant's store; the form is gated with them.
-                .requestMatchers("/ui/walks", "/ui/walks/**").hasRole(SuperadminRole.ROLE)
-                // Deployment-wide screens outside /settings/**, named one by one.
-                .requestMatchers("/ui/metrics", "/ui/posture", "/ui/signals").hasRole(SuperadminRole.ROLE)
+                // The console's own deployment-wide screens outside /settings/**; a module's are gated above.
+                .requestMatchers("/ui/metrics", "/ui/posture").hasRole(SuperadminRole.ROLE)
                 // The caches belong to no tenant.
                 .requestMatchers("/ui/caches", "/ui/caches/**").hasRole(SuperadminRole.ROLE)
                 .requestMatchers("/ui/admin/**").access(tenants.require(UserDirectory.Role.ADMIN))

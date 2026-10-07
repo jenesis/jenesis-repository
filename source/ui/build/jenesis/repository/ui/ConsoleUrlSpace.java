@@ -44,6 +44,31 @@ public final class ConsoleUrlSpace {
     private ConsoleUrlSpace() {
     }
 
+    /**
+     * The routes of the deployment-wide screens {@code modules} contribute: each {@link NavEntry.Access#SUPERADMIN}
+     * nav entry's path and everything beneath it - the screen, its forms and its fragments - so a module's screen is
+     * gated as its menu entry says rather than merely hidden from a reader who may not open it. A module whose
+     * {@link ConsoleModuleProvider#navEntries} throws contributes no route, as it contributes no link.
+     */
+    public static List<String> superadmin(List<ConsoleModuleProvider> modules) {
+        SequencedSet<String> routes = new LinkedHashSet<>();
+        for (ConsoleModuleProvider module : modules) {
+            List<NavEntry> entries;
+            try {
+                entries = module.navEntries();
+            } catch (RuntimeException unlisted) {
+                continue;
+            }
+            for (NavEntry entry : entries) {
+                if (entry.access() == NavEntry.Access.SUPERADMIN) {
+                    routes.add(entry.path());
+                    routes.add(entry.path() + "/**");
+                }
+            }
+        }
+        return List.copyOf(routes);
+    }
+
     /** This console's own space - what a console with no edition of its own hands to {@code securityMatcher}. */
     public static List<String> space() {
         return PATTERNS;
