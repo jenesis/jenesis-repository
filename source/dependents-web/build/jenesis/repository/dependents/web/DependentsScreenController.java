@@ -39,17 +39,18 @@ public class DependentsScreenController {
                              @RequestParam(name = "after", defaultValue = "") String after,
                              @RequestParam(name = "declaredAfter", defaultValue = "") String declaredAfter,
                              Model model) throws IOException {
-        if (after.contains("/")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Not a cursor: " + after);
-        }
         model.addAttribute("repo", repo);
         model.addAttribute("ecosystem", ecosystem);
         model.addAttribute("coordinate", coordinate);
         model.addAttribute("version", version);
         model.addAttribute("after", after);
         model.addAttribute("declaredAfter", declaredAfter);
-        model.addAttribute("view", ecosystem.isBlank() || coordinate.isBlank() ? null
-                : dependentsReview.dependents(repo, ecosystem, coordinate, version, after, declaredAfter));
+        try {
+            model.addAttribute("view", ecosystem.isBlank() || coordinate.isBlank() ? null
+                    : dependentsReview.dependents(repo, ecosystem, coordinate, version, after, declaredAfter));
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
         return QUALIFIER + "/dependents";
     }
 }

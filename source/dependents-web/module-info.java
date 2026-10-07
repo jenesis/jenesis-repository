@@ -12,7 +12,7 @@
  * @jenesis.signature signature-repository.properties
  */
 open module build.jenesis.repository.dependents.web {
-    exports build.jenesis.repository.dependents.web to build.jenesis.repository.dependents.test;
+    exports build.jenesis.repository.dependents.web;
     requires build.jenesis.repository.server.kernel;
     requires build.jenesis.repository.server;
     requires build.jenesis.repository.dependents.spi;

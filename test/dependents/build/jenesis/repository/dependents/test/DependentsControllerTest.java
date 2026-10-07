@@ -20,6 +20,7 @@ import org.junit.jupiter.api.io.TempDir;
 import build.jenesis.repository.scope.Scopes;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
 /**
@@ -158,6 +159,18 @@ public class DependentsControllerTest {
 
         assertThat(response.status()).isEqualTo(400);
         assertThat(view).isNull();
+    }
+
+    @Test
+    void a_cursor_that_is_no_row_is_refused_on_either_half() throws Exception {
+        for (String[] cursors : List.of(new String[] {"a/b", ""}, new String[] {"", "a/b"})) {
+            assertThatThrownBy(() -> controller().dependents("releases", "npm", "lodash", "4.17.21", cursors[0],
+                    cursors[1], 50, Servlets.request("GET", "/api/repository/dependents"),
+                    Servlets.response().servlet()))
+                    .as("after=%s declaredAfter=%s, which the exception handler answers 400", cursors[0], cursors[1])
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("a/b");
+        }
     }
 
     @Test
