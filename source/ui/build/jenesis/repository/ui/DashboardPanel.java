@@ -54,11 +54,11 @@ public record DashboardPanel(String title, String href, String figure, String ca
                 refreshing);
     }
 
-    /** Whether the panel has something to say: a figure, a line, or a verdict - all clear, or attention - in its
-     *  caption. A panel with none of them is not drawn. */
+    /** Whether the panel has something to say: a figure, a line, a verdict - all clear, or attention - in its
+     *  caption, or that its count is still running, which its note says. A panel with none of them is not drawn. */
     public boolean says() {
         return !figure.isEmpty() || !lines.isEmpty() || action.isPresent()
-                || (tone != Tone.NEUTRAL && !caption.isEmpty());
+                || (tone != Tone.NEUTRAL && !caption.isEmpty()) || refreshing;
     }
 
     /** What a figure counts, as it reads beside one and beside many - "version waits for a decision", "versions wait

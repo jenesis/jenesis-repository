@@ -6,8 +6,8 @@ import build.jenesis.repository.ui.DashboardPanel;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** A panel's phrase agrees with its count wherever a panel says one, and a counted panel offers where what it counts
- *  begins only while there is none. */
+/** A panel's phrase agrees with its count wherever a panel says one, a counted panel offers where what it counts
+ *  begins only while there is none, and a panel whose first count is still running is drawn, saying so. */
 class DashboardPanelTest {
 
     private static final DashboardPanel.Noun WAITING =
@@ -32,5 +32,15 @@ class DashboardPanelTest {
         DashboardPanel offering = panel.offering(new DashboardPanel.Link("New repository", "/ui/new/repository"));
         assertThat(offering.action()).contains(new DashboardPanel.Link("New repository", "/ui/new/repository"));
         assertThat(offering.says()).isTrue();
+    }
+
+    @Test
+    void a_panel_whose_first_count_runs_is_drawn_and_one_with_nothing_to_say_is_not() {
+        DashboardPanel counting = new DashboardPanel("Held for review", "/ui/repositories", "", "",
+                DashboardPanel.Tone.NEUTRAL, List.of(), Optional.empty(), "Counting…", Optional.empty(), true);
+        assertThat(counting.says()).as("the page polls for it, so it says why").isTrue();
+        DashboardPanel silent = new DashboardPanel("Held for review", "/ui/repositories", "", "",
+                DashboardPanel.Tone.NEUTRAL, List.of(), Optional.empty(), "", Optional.empty(), false);
+        assertThat(silent.says()).isFalse();
     }
 }
