@@ -263,6 +263,13 @@ public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobL
             return;
         }
         try (StoredListing.Served document = served.get()) {
+            // A chart repository with nothing to list answers 404, not an empty index: on a proxy the 404 is what sends
+            // the request on to the upstream's index. Read after opening, which materialises an absent document; the
+            // count covers never-published and everything-withheld alike, and an unknown count is not zero.
+            if (document.header().count().orElse(-1L) == 0L) {
+                exchange.respond(404);
+                return;
+            }
             // Handed over whole rather than streamed: `helm repo update` polls this document, and only a whole response
             // carries the content-derived validator that lets an unchanged index be answered 304.
             Listings.serve(exchange, document, "application/x-yaml");
