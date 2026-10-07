@@ -199,34 +199,22 @@ public final class ReliedOn {
     private static List<Placed> placed(ClosureWalk walk, String ecosystem, Row dependent,
                                        ClosureSection.Closure closure, List<ExposureSection.Reached> reached,
                                        Optional<ArtifactStore> tenant) {
-        Map<String, ArtifactStore> holders = new HashMap<>();
-        List<ClosureWalk.Member> members = walk.members();
-        for (int i = 1; i < members.size(); i++) {
-            holders.putIfAbsent(members.get(i).repository(), members.get(i).store());
-        }
         byte[] row = JSON.writeValueAsBytes(JSON.createObjectNode().put("repository", dependent.repository())
                 .put("coordinate", dependent.coordinate()).put("version", dependent.version()));
         List<Placed> placed = new ArrayList<>();
         Set<String> components = new HashSet<>();
         for (ClosureSection.Component component : closure.components()) {
             components.add(component.coordinate() + "@" + component.version() + "@" + component.repository());
-            ArtifactStore holder = component.elsewhere() ? holders.get(component.repository())
-                    : members.getFirst().store();
-            if (holder != null) {
-                placed.add(new Placed(holder, key(ecosystem, component.coordinate(), component.version(), dependent),
-                        row));
-            }
+            walk.holder(component.repository()).ifPresent(holder -> placed.add(new Placed(holder.store(),
+                    key(ecosystem, component.coordinate(), component.version(), dependent), row)));
         }
         for (ExposureSection.Reached held : reached) {
             if (!held.held() || held.version().isBlank() || !held.ecosystem().isEmpty() || components.contains(
                     held.coordinate() + "@" + held.version() + "@" + held.repository())) {
                 continue;
             }
-            ArtifactStore holder = held.repository().isEmpty() ? members.getFirst().store()
-                    : holders.get(held.repository());
-            if (holder != null) {
-                placed.add(new Placed(holder, key(ecosystem, held.coordinate(), held.version(), dependent), row));
-            }
+            walk.holder(held.repository()).ifPresent(holder -> placed.add(new Placed(holder.store(),
+                    key(ecosystem, held.coordinate(), held.version(), dependent), row)));
         }
         if (!closure.foreign().isEmpty() && tenant.isPresent()) {
             ArtifactStore space = tenant.get().scope(SPACE);
