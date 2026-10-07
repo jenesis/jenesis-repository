@@ -10,10 +10,9 @@ import build.jenesis.repository.store.ArtifactDescriptor;
  * {@code ServiceLoader} at the server's router-construction site, which builds every provider's handler from the
  * deployment's own configuration, chains them (the first that does not {@link RepositoryRouter.Outcome#MISS} answers
  * the leg), injects the chain through {@link RepositoryRouter#redirecting}, and registers the parse-time
- * availability of the tokens the providers serve - {@link RepositoryDefinition#redirectHandlerInstalled(boolean)} for a
- * clause-literal {@code fallback <url> redirect}, {@link RepositoryDefinition#dnsDirectoryInstalled(boolean)} for the
- * {@code fallback dns redirect} source - so a definition parses exactly when a handler exists to serve it, and the two
- * deliberately separate steps (the flag and the instance) are always wired together.
+ * availability of the token the providers serve - {@link RepositoryDefinition#redirectHandlerInstalled(boolean)} for a
+ * clause-literal {@code fallback <url> redirect} - so a definition parses exactly when a handler exists to serve it,
+ * and the two deliberately separate steps (the flag and the instance) are always wired together.
  *
  * <p>The wiring layer owns what a handler must not: the policy floor and the withheld probe come in as the
  * {@link Context#screen()}, the SSRF and credential guards as its predicates, the download recording as its hook.
@@ -33,8 +32,8 @@ import build.jenesis.repository.store.ArtifactDescriptor;
  *       the SSRF and credential guards ({@link Context#privateHost()}, {@link Context#credentialed()}) and the
  *       download recording ({@link Context#downloads()}) are the wiring layer's; a handler consults them and never
  *       decides them.</li>
- *   <li><b>Presence is declared, not inferred.</b> {@link #servesUpstream()} and {@link #servesDnsDirectory()} say
- *       which definition tokens the provider serves, so the router's parse-time availability of a token and the
+ *   <li><b>Presence is declared, not inferred.</b> {@link #servesUpstream()} says
+ *       which definition token the provider serves, so the router's parse-time availability of a token and the
  *       handler behind it are always registered together.</li>
  * </ol>
  */
@@ -43,10 +42,6 @@ public interface RedirectHandlerProvider {
     /** Whether this provider serves a clause-literal {@code fallback <url> redirect} leg - the {@code redirect}
      *  serve token parses when any installed provider does. */
     boolean servesUpstream();
-
-    /** Whether this provider serves a {@code fallback dns redirect} leg - the {@code dns} source keyword parses when
-     *  any installed provider does. */
-    boolean servesDnsDirectory();
 
     /** The handler for this deployment, built from {@code context}; empty when the provider cannot build one at all
      *  (a missing dependency), which is logged by the wiring and leaves the token unserved by this provider. */
@@ -73,8 +68,8 @@ public interface RedirectHandlerProvider {
      * slash on the target with a leading slash on the path, so the fleet member serves the same layout the client
      * asked this repository for.
      *
-     * <p>It lives here because both planes reach it - the static filter and the DNS handler - and two copies would
-     * be two call sites that must resolve the same layout, where fixing one diverges the other in silence.
+     * <p>It lives here because every redirect handler composes its target through it, and two copies would be two
+     * call sites that must resolve the same layout, where fixing one diverges the other in silence.
      */
     static URI compose(URI target, String path) {
         String base = target.toString();

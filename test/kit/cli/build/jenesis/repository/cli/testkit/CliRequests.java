@@ -317,11 +317,6 @@ public final class CliRequests {
             action("logs [--level L] [--q TEXT] [--since SEQ] [--tenant T] [--limit N]",
                     "logs --level WARN --q boom --since 7 --tenant acme --limit 5",
                     get("/api/logs", "level", "q", "since", "tenant", "limit")),
-            action("redirect-dns record <coordinate> <url> [--formats F] [--scope S] [--ttl N]",
-                    "redirect-dns record a:b https://x/ --formats maven --scope exact --ttl 60",
-                    get("/api/admin/redirect-dns/record", "coordinate", "url", "formats", "scope", "ttl")),
-            action("redirect-dns check <coordinate> [--expect U]", "redirect-dns check a:b --expect https://x/",
-                    get("/api/admin/redirect-dns/check", "coordinate", "expect")),
 
             // Settings
             action("settings [--tenant N]", "settings --tenant acme", get("/api/settings", "tenant")),

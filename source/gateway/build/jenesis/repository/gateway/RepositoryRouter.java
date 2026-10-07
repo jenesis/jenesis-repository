@@ -98,19 +98,11 @@ public final class RepositoryRouter {
      * {@link Outcome#REFUSED} to end the walk. A {@code redirect} definition is refused at parse when no module is
      * installed, so a production walk never reaches a REDIRECT leg without a handler; the default
      * {@link #REDIRECT_ABSENT} sentinel is a belt-and-braces fail-loud for a directly-constructed one.
-     *
-     * <p><b>DNS-directory legs.</b> A {@link RepositoryDefinition.Source.DnsDirectory} leg delegates here through the
-     * same seam, but with {@code upstream == null}: the {@code redirect-dns}-provided handler resolves the target per
-     * request by the DNS walk ({@code DnsDirectory.locate}) from the coordinate the {@code format} derives, rather than
-     * from a clause-literal upstream. A handler that serves a DNS leg must therefore read the routing from
-     * {@code fallback.source()} and the {@code exchange} path, not assume a non-null {@code upstream}.
      */
     @FunctionalInterface
     public interface RedirectHandler {
-        /** Serve one REDIRECT leg. {@code upstream} is the clause-literal target for an
-         *  {@link RepositoryDefinition.Source.Upstream} fallback, or {@code null} for a
-         *  {@link RepositoryDefinition.Source.DnsDirectory} fallback whose target is resolved per request by the DNS
-         *  walk. */
+        /** Serve one REDIRECT leg; {@code upstream} is the clause-literal target of its
+         *  {@link RepositoryDefinition.Source.Upstream} fallback. */
         Outcome redirect(String tenant, String repository, RepositoryDefinition.Fallback fallback, URI upstream,
                          RepositoryFormat format, FormatExchange exchange) throws IOException;
     }
@@ -442,13 +434,6 @@ public final class RepositoryRouter {
                 case RepositoryDefinition.Source.Upstream upstream -> fallback.serve() == RepositoryDefinition.Serve.REDIRECT
                         ? redirect.redirect(tenant, repository, fallback, upstream.url(), format, exchange)
                         : fetchScreenServe(tenant, repository, fallbackIndex, fallback, upstream.url(), format, exchange);
-                // A DNS-directory leg delegates to the SAME redirect handler, but with no
-                // clause-literal upstream - the redirect-dns-provided handler resolves the target per request by the
-                // DNS walk (DnsDirectory.locate) and emits the 307 (or MISSes to fall through / REFUSEs to end the
-                // walk). The `dns` source parses only as `redirect` (validated at parse), so the handler is always
-                // consulted.
-                case RepositoryDefinition.Source.DnsDirectory dns ->
-                        redirect.redirect(tenant, repository, fallback, null, format, exchange);
             };
             if (outcome == Outcome.MISS) {
                 continue;                 // genuine 404 from this fallback - try the next

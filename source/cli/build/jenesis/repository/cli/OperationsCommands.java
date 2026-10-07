@@ -5,7 +5,7 @@ import module java.base;
 /**
  * The verbs an operator reaches for when running the deployment rather than curating what is in it: the posture and
  * consistency reads, the log tail, the metrics report and the SPI catalogue, the effective configuration, the outbound
- * webhooks, the DNS redirect records, and the two provenance-adjacent reads that answer
+ * webhooks, and the two provenance-adjacent reads that answer
  * "where did this come from" and "what would hardening do with it".
  *
  * <p>Each is a single read the admin console already had a screen for. They print the server's answer as it comes,
@@ -248,50 +248,6 @@ final class OperationsCommands {
         String deliveries = CliSupport.client(home).lifecycle().webhooks(args[1], CliSupport.cursorOf(args, 2));
         System.out.println(deliveries);
         CliSupport.more(CliSupport.nextOf(deliveries));
-        return 0;
-    }
-
-    static int redirectDns(String[] args, Path home) throws Exception {
-        if (args.length < 2) {
-            throw new IllegalArgumentException("Usage: redirect-dns record <coordinate> <url> [--formats F] "
-                    + "[--scope S] [--ttl N] | redirect-dns check <coordinate> [--expect U]");
-        }
-        switch (args[1]) {
-            case "record" -> {
-                if (args.length < 4) {
-                    throw new IllegalArgumentException(
-                            "Usage: redirect-dns record <coordinate> <url> [--formats F] [--scope S] [--ttl N]");
-                }
-                String formats = null;
-                String scope = null;
-                Long ttl = null;
-                for (int i = 4; i < args.length; i++) {
-                    switch (args[i]) {
-                        case "--formats" -> formats = CliSupport.flag(args, ++i);
-                        case "--scope" -> scope = CliSupport.flag(args, ++i);
-                        case "--ttl" -> ttl = Long.valueOf(CliSupport.flag(args, ++i));
-                        default -> throw new IllegalArgumentException("Unknown record flag '" + args[i] + "'");
-                    }
-                }
-                System.out.println(CliSupport.client(home).operations()
-                        .redirectRecord(args[2], args[3], formats, scope, ttl));
-            }
-            case "check" -> {
-                if (args.length < 3) {
-                    throw new IllegalArgumentException("Usage: redirect-dns check <coordinate> [--expect <url>]");
-                }
-                String expect = null;
-                for (int i = 3; i < args.length; i++) {
-                    if (args[i].equals("--expect")) {
-                        expect = CliSupport.flag(args, ++i);
-                    } else {
-                        throw new IllegalArgumentException("Unknown check flag '" + args[i] + "'");
-                    }
-                }
-                System.out.println(CliSupport.client(home).operations().redirectCheck(args[2], expect));
-            }
-            default -> throw new IllegalArgumentException("Unknown redirect-dns action '" + args[1] + "'");
-        }
         return 0;
     }
 

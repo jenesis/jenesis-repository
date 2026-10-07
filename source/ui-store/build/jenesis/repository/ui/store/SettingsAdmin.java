@@ -440,10 +440,6 @@ public class SettingsAdmin {
                                 screeningLabel(fallback.screening()), null));
                 case RepositoryDefinition.Source.Repository repository ->
                         fallbacks.add(new FallbackBadge(false, repository.name(), false, "", repository.name()));
-                case RepositoryDefinition.Source.DnsDirectory dns ->
-                        // A `fallback dns redirect` resolves its upstream per request and stores nothing.
-                        fallbacks.add(new FallbackBadge(false, "dns", false,
-                                screeningLabel(fallback.screening()), null));
             }
         }
         return new RepositoryShape(true, definition.writable(), List.copyOf(fallbacks),
