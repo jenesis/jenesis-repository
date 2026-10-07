@@ -18,9 +18,12 @@ import build.jenesis.repository.store.ServableNames;
  *
  * <p><b>Blobs first, each asked for before it is sent.</b> A blob already on the target - the base layer every image
  * of a family shares - is found by its digest and not sent again, which is what makes exporting the second image of
- * a family cheap. A blob is sent in one {@code POST} naming its digest, the monolithic upload the specification
- * defines, so no upload session and no {@code Location} to follow. A child manifest of an index goes up by digest
- * after its own blobs, and the tagged manifest last, so a target never holds a manifest naming a blob it lacks.
+ * a family cheap. A blob is offered in one {@code POST} naming its digest, the monolithic upload the specification
+ * defines; a registry that does not take it that way - the specification lets it decline, and {@code registry:2} does
+ * - answers {@code 202} with an upload session in {@code Location} instead, and the blob is then put there, naming
+ * its digest, as a client finishes any session. Taking that {@code 202} for done would leave the blob unsent and the
+ * manifest refused for naming it. Every blob goes up before any manifest; a child manifest of an index goes up by
+ * digest before its index, and the tagged manifest last, so a target never holds a manifest naming a blob it lacks.
  *
  * <p><b>A held part withholds the version.</b> A manifest or blob the store withholds is never sent, and an image
  * with one is not exported at all: sending the rest would publish a manifest the target cannot serve whole.
@@ -49,7 +52,42 @@ final class OciExport {
             return RepositoryExporter.Exported.WITHHELD;
         }
         files.add(manifestFile(store, name, reference, hex.get()));
-        return PublishedExport.send(files, target);
+        boolean sent = false;
+        List<PublishedExport.File> manifests = new ArrayList<>();
+        for (PublishedExport.File file : files) {
+            if ("POST".equals(file.request().method())) {
+                sent |= blob(file, target);
+            } else {
+                manifests.add(file);
+            }
+        }
+        RepositoryExporter.Exported exported = PublishedExport.send(manifests, target);
+        return sent && exported == RepositoryExporter.Exported.ALREADY_PRESENT
+                ? RepositoryExporter.Exported.PUBLISHED
+                : exported;
+    }
+
+    /** Push one blob unless the target already holds it, answering whether it was sent. */
+    private static boolean blob(PublishedExport.File file, ExportTarget target) throws IOException {
+        String served = file.served().orElseThrow();
+        if (target.sha256(served).equals(Optional.of(file.sha256()))) {
+            return false;
+        }
+        ExportTarget.Response offered = target.send(file.request());
+        ExportTarget.Response response = offered;
+        if (offered.status() == 202) {
+            // The registry opened a session rather than taking the blob whole: finish it where it said.
+            String session = offered.location().orElseThrow(() -> new IOException("the target opened an upload "
+                    + "session for " + served + " and named no Location under its URL to put the blob at"));
+            response = target.send(new ExportTarget.Request("PUT",
+                    session + (session.contains("?") ? "&" : "?") + "digest=sha256:" + file.sha256(),
+                    file.request().headers(), file.request().body()));
+        }
+        if (!response.ok() && !target.sha256(served).equals(Optional.of(file.sha256()))) {
+            throw new IOException("the target refused " + served + " with " + response.status()
+                    + (response.body().isBlank() ? "" : ": " + response.body().strip()));
+        }
+        return true;
     }
 
     /** The manifest a tag or a digest names, or empty when it names none. */
