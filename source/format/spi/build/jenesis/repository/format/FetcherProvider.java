@@ -149,4 +149,10 @@ public interface FetcherProvider {
                         provider -> provider.create(config))
                 .orElse(ProxyFormat.Fetcher.NONE);
     }
+
+    /** The names of the installed providers, each the {@code jenrepo.<name>} switch that turns it off - what the
+     *  settings catalogue lists as this upstream fetcher's toggles. */
+    static SortedSet<String> names() {
+        return Providers.installedNames("fetcher", ServiceLoader.load(FetcherProvider.class), FetcherProvider::name, _ -> true);
+    }
 }

@@ -48,6 +48,7 @@ open module build.jenesis.repository.server.kernel {
     requires build.jenesis.repository.scope;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.walk;
+    requires build.jenesis.repository.gc;
     // ProxyLeg.ALLOW_INTERNAL: the one proxy outbound dial, read by its declared constant.
     requires build.jenesis.repository.blobs;
     requires build.jenesis.repository.maintenance;

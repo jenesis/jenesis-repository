@@ -79,4 +79,10 @@ public interface TokenExchangeProvider {
                         provider -> provider.create(authorization, config))
                 .orElse(TokenExchange.NONE);
     }
+
+    /** The names of the installed providers, each the {@code jenrepo.<name>} switch that turns it off - what the
+     *  settings catalogue lists as this token exchange's toggles. */
+    static SortedSet<String> names() {
+        return Providers.installedNames("token-exchange", ServiceLoader.load(TokenExchangeProvider.class), TokenExchangeProvider::name, _ -> true);
+    }
 }

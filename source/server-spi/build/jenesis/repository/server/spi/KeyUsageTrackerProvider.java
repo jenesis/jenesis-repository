@@ -72,16 +72,17 @@ public interface KeyUsageTrackerProvider {
 
     /** The single enabled tracker discovered via {@link ServiceLoader}, resolved through the shared
      *  {@link Providers#optionalUnique} policy: an explicit {@code jenrepo.key-usage=<name>} selects one by
-     *  name and a selection nothing answers to <em>throws</em> rather than degrading, a
-     *  {@code jenrepo.<name>=false} switches one off, more than one enabled tracker is ambiguous rather
-     *  than a discovery-order winner, and only an <em>unselected</em> deployment with no tracker installed resolves to
-     *  {@link KeyUsageTracker#NONE}. */
+     *  name and a selection nothing answers to <em>throws</em> rather than degrading, more than one installed tracker
+     *  is ambiguous rather than a discovery-order winner, and only an <em>unselected</em> deployment with no tracker
+     *  installed resolves to {@link KeyUsageTracker#NONE}. A tracker answers to no {@code jenrepo.<name>} switch:
+     *  recording is turned off by the tracker's own setting, as the download tracker's is, so that one provider name
+     *  shared by the two never switches one off and not the other. */
     static KeyUsageTracker resolve(Authorization authorization, UnaryOperator<String> config) {
         return Providers.<KeyUsageTrackerProvider, KeyUsageTracker>optionalUnique("key-usage",
                         ServiceLoader.load(KeyUsageTrackerProvider.class),
                         KeyUsageTrackerProvider::name,
                         Features.selection("key-usage"),
-                        provider -> Features.active(provider.name(), provider.requiredConfig()),
+                        provider -> Features.missing(provider.requiredConfig(), Features.settings()).isEmpty(),
                         provider -> provider.create(authorization, config))
                 .orElse(KeyUsageTracker.NONE);
     }
