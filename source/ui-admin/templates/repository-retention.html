@@ -29,8 +29,10 @@
         <p th:if="${plan != null and !plan.finished() and !plan.running()}"><small>No cleanup preview has been
             computed yet.</small></p>
         <th:block th:if="${plan != null}">
-            <p th:if="${plan.running()}"
-               th:replace="~{base :: running(|A cleanup preview is running, started ${plan.startedAt()}.|)}"></p>
+            <th:block th:if="${plan.running()}">
+                <p th:replace="~{base :: running('A cleanup preview is running.')}"></p>
+                <p><small>Started <time th:replace="~{base :: time(${plan.startedAt()})}">time</time>.</small></p>
+            </th:block>
             <p th:if="${plan.failure() != null}"><small>The last preview stopped:
                 <span th:text="${plan.failure()}">reason</span></small></p>
             <p th:if="${plan.finished() and plan.evictedCount() == 0}"><small>Nothing would be evicted under the
@@ -49,8 +51,10 @@
                     it declined: <span th:text="${plan.gc().refusal()}">reason</span></span>.</small></p>
         </th:block>
         <th:block th:if="${lastCleanup != null}">
-            <p th:if="${lastCleanup.running()}"
-               th:replace="~{base :: running(|A cleanup is running, started ${lastCleanup.startedAt()}.|)}"></p>
+            <th:block th:if="${lastCleanup.running()}">
+                <p th:replace="~{base :: running('A cleanup is running.')}"></p>
+                <p><small>Started <time th:replace="~{base :: time(${lastCleanup.startedAt()})}">time</time>.</small></p>
+            </th:block>
             <p th:if="${lastCleanup.failure() != null}"><small>The last cleanup stopped:
                 <span th:text="${lastCleanup.failure()}">reason</span></small></p>
             <p th:if="${lastCleanup.finished()}"><small>Last cleanup finished
