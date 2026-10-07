@@ -6,11 +6,13 @@ import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.auth.ldap.Directory;
 import build.jenesis.repository.auth.ldap.LdapProperties;
 import build.jenesis.repository.auth.ldap.LdapSignIn;
+import build.jenesis.repository.auth.ldap.SpringLdapDirectory;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.ui.identity.UserDirectory;
 import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.authentication.AuthenticationServiceException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -48,6 +50,10 @@ class LdapSignInTest {
     }
 
     private AuthenticationProvider signIn(LdapProperties properties) {
+        return signIn(properties, directory);
+    }
+
+    private AuthenticationProvider signIn(LdapProperties properties, Directory directory) {
         AuditTrail trail = new AuditTrail() {
             @Override
             public boolean enabled() {
@@ -127,6 +133,34 @@ class LdapSignInTest {
         assertThatExceptionOfType(BadCredentialsException.class).isThrownBy(() -> signIn(properties())
                 .authenticate(UsernamePasswordAuthenticationToken.unauthenticated("alice", "wonderland")));
         assertThat(audited).containsExactly("login.throttled anonymous");
+    }
+
+    @Test
+    void a_directory_that_cannot_be_asked_fails_the_sign_in_rather_than_the_request() {
+        // An AuthenticationServiceException is what the sign-in filter's failure handler answers with the sign-in
+        // page; anything that is no AuthenticationException passes the handler and is a 500.
+        Directory unreachable = (username, password) -> {
+            throw new Directory.Unreachable("The directory at ldaps://directory.example.com could not be asked",
+                    new IllegalStateException("Connection or outbound has closed"));
+        };
+        assertThatExceptionOfType(AuthenticationServiceException.class).isThrownBy(() -> signIn(properties(),
+                unreachable).authenticate(UsernamePasswordAuthenticationToken.unauthenticated("alice", "wonderland")));
+        assertThat(audited).containsExactly("login.failed ldap/alice");
+    }
+
+    @Test
+    void a_directory_nothing_answers_at_is_reported_unreachable_not_as_a_refused_password() throws IOException {
+        int closed;
+        try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            closed = socket.getLocalPort();
+        }
+        LdapProperties nowhere = properties();
+        nowhere.setUrl("ldap://127.0.0.1:" + closed);
+        nowhere.setAllowPlaintext(true);
+
+        assertThatExceptionOfType(Directory.Unreachable.class)
+                .isThrownBy(() -> new SpringLdapDirectory(nowhere).authenticate("alice", "wonderland"))
+                .withMessageContaining("ldap://127.0.0.1:" + closed);
     }
 
     @Test

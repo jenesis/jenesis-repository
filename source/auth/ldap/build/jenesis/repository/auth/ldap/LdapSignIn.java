@@ -1,6 +1,7 @@
 package build.jenesis.repository.auth.ldap;
 
 import module java.base;
+import module org.slf4j;
 import build.jenesis.repository.ui.SuperadminRole;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.spi.Authorization;
@@ -27,6 +28,8 @@ import org.springframework.security.web.authentication.WebAuthenticationDetails;
  * every outcome is audited as the key sign-in's are, so one query over the trail answers for both.
  */
 public final class LdapSignIn implements AuthenticationProvider {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(LdapSignIn.class);
 
     /** The source a directory's memberships are recorded under, so a reconcile never touches an operator's own. */
     static final String SOURCE = "ldap";
@@ -60,9 +63,20 @@ public final class LdapSignIn implements AuthenticationProvider {
         if (typed.isEmpty() || password.isEmpty()) {
             throw new BadCredentialsException("A name and a password are required");
         }
-        Optional<Directory.Account> account = directory.authenticate(typed, password);
         String username = typed.toLowerCase(Locale.ROOT);
         String id = ProviderPrincipal.qualifiedId(LdapLoginMechanism.NAME, username);
+        Optional<Directory.Account> account;
+        try {
+            account = directory.authenticate(typed, password);
+        } catch (Directory.Unreachable unreachable) {
+            // Not the person's failure, so not a refused password: the sign-in page says the directory could not be
+            // asked, and the log says why in words an operator can act on.
+            LOGGER.warn("{} The sign-in of {} could not be decided. For an ldaps:// directory, check that this node "
+                    + "trusts the directory's certificate (the JVM's javax.net.ssl.trustStore) and that the name in the "
+                    + "URL is the one the certificate is issued to.", unreachable.getMessage(), id);
+            audit.record(tenant, id, "login.failed", LdapLoginMechanism.NAME);
+            throw new AuthenticationServiceException("The directory could not be reached", unreachable);
+        }
         if (account.isEmpty()) {
             audit.record(tenant, id, "login.failed", LdapLoginMechanism.NAME);
             throw new BadCredentialsException("The directory did not accept that name and password");
