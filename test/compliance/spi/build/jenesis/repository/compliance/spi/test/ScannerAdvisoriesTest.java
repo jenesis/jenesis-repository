@@ -5,6 +5,7 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ScannerAdvisories;
 import build.jenesis.repository.compliance.Severity;
+import build.jenesis.repository.compliance.VulnerabilityRecord;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -27,6 +28,27 @@ class ScannerAdvisoriesTest {
         assertThat(merged.description()).contains("openssl 3.0.1").contains("libssl3 3.0.1");
         assertThat(merged.cves()).containsExactly("CVE-2026-1000");
         assertThat(advisories.getLast().cves()).as("an identifier that is no CVE names none").isEmpty();
+    }
+
+    @Test
+    void what_the_scanners_database_says_of_a_vulnerability_reaches_its_advisory_from_every_row() throws IOException {
+        VulnerabilityRecord.Source alpine = new VulnerabilityRecord.Source("Alpine Secdb",
+                "https://secdb.alpinelinux.org/");
+        VulnerabilityRecord.Source nvd = new VulnerabilityRecord.Source("NVD", null);
+        List<ScannerAdvisories.Row> rows = List.of(
+                new ScannerAdvisories.Row("CVE-2019-14697", "musl", "1.1.22-r2", "1.1.22-r3", "Critical", null, 9.8,
+                        null, new VulnerabilityRecord(alpine, List.of(), List.of(new VulnerabilityRecord.Rating(nvd,
+                        9.8, Severity.CRITICAL, "CVSSv31", "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")),
+                        List.of(), List.of(), null, null)),
+                new ScannerAdvisories.Row("CVE-2019-14697", "musl-utils", "1.1.22-r2", "1.1.22-r3", "Critical", null,
+                        9.8, null, new VulnerabilityRecord(alpine, List.of(), List.of(), List.of(787), List.of(), null,
+                        null)));
+
+        VulnerabilityRecord detail = ScannerAdvisories.advisories(rows).getFirst().detail();
+
+        assertThat(detail.source()).isEqualTo(alpine);
+        assertThat(detail.ratings()).singleElement().satisfies(rating -> assertThat(rating.source()).isEqualTo(nvd));
+        assertThat(detail.cwes()).as("from the row naming it").containsExactly(787);
     }
 
     @Test
