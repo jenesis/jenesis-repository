@@ -98,10 +98,13 @@ public interface AdvisorySource extends SignalSource {
      * findings ledger can persist what the advisory says without a display surface re-fetching the feed.
      * {@code aliases} are every other identifier the feed records the flaw under - a {@code GHSA-}, {@code PYSEC-},
      * {@code RUSTSEC-} or {@code GO-} id beside or instead of a CVE - so two feeds' records of one flaw are merged
-     * however they name it ({@link #combined}).
+     * however they name it ({@link #combined}). {@code detail} is what the source said beyond these, structured as
+     * CycloneDX's {@code vulnerability} object - where it was published, each rating with who gave it, its weaknesses
+     * and advisories ({@link VulnerabilityRecord#EMPTY} where it said nothing more) - so the advisory is attributed to
+     * its source wherever it is shown.
      */
     record Advisory(String id, Severity severity, boolean malicious, String fixed, List<String> cves,
-                    String description, List<String> aliases) {
+                    String description, List<String> aliases, VulnerabilityRecord detail) {
 
         /**
          * The bound on the long-form text a feed carries into the findings ledger. Every feed answers with both a
@@ -115,6 +118,18 @@ public interface AdvisorySource extends SignalSource {
             description = description == null ? "" : description;
             cves = cves == null ? List.of() : List.copyOf(cves);
             aliases = aliases == null ? List.of() : List.copyOf(aliases);
+            detail = detail == null ? VulnerabilityRecord.EMPTY : detail;
+        }
+
+        /** An advisory whose source said nothing beyond its identifiers and description. */
+        public Advisory(String id, Severity severity, boolean malicious, String fixed, List<String> cves,
+                        String description, List<String> aliases) {
+            this(id, severity, malicious, fixed, cves, description, aliases, VulnerabilityRecord.EMPTY);
+        }
+
+        /** This advisory, with {@code detail} as what its source said beyond its identifiers. */
+        public Advisory withDetail(VulnerabilityRecord detail) {
+            return new Advisory(id, severity, malicious, fixed, cves, description, aliases, detail);
         }
 
         /** An advisory recording no identifier beyond its id and CVEs. */
@@ -489,7 +504,8 @@ public interface AdvisorySource extends SignalSource {
 
     /** {@code advisories} with every report of one vulnerability - one id, or a shared alias - folded into one
      *  record in first-seen order, each field taking the richer value: the higher severity, a fixed version where the
-     *  first knew none, the fuller description, the union of aliases, the malicious flag if either sets it. */
+     *  first knew none, the fuller description, the union of aliases, the malicious flag if either sets it, and every
+     *  source's attribution, ratings and weaknesses. */
     static List<Advisory> merged(List<Advisory> advisories) {
         List<Advisory> merged = new ArrayList<>();
         Map<String, Integer> known = new HashMap<>();
@@ -530,7 +546,18 @@ public interface AdvisorySource extends SignalSource {
                 addition.description().length() > first.description().length()
                         ? addition.description()
                         : first.description(),
-                aliases);
+                aliases,
+                first.detail().and(addition.detail()).and(attributed(first, addition)));
+    }
+
+    // The later report named by its own id where it was published, so a flaw two feeds report keeps both attributions.
+    private static VulnerabilityRecord attributed(Advisory first, Advisory addition) {
+        VulnerabilityRecord.Source source = addition.detail().source();
+        if (addition.id().equals(first.id()) || source == null) {
+            return VulnerabilityRecord.EMPTY;
+        }
+        return new VulnerabilityRecord(null, List.of(new VulnerabilityRecord.Reference(addition.id(), source)),
+                List.of(), List.of(), List.of(), null, null);
     }
 
     private static List<String> union(List<String> first, List<String> addition) {
