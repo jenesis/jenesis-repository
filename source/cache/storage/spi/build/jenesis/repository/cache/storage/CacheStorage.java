@@ -56,9 +56,8 @@ import build.jenesis.repository.walk.Traversal;
  *   <li><b>Staleness.</b> {@link Stored#recency} is "when was this last used": the newest stamp, else the backend's
  *       write time, on every backend, so eviction is least-recently-used everywhere. {@link #fileVersion} is the
  *       revalidation token a cached read compares.</li>
- *   <li><b>Lifecycle / ownership.</b> {@code CacheStorageProvider.resolve} builds exactly one instance, which owns any
- *       client, pool or thread for the life of the application. A {@link #scope} view borrows the parent's resources
- *       and needs no closing.</li>
+ *   <li><b>Lifecycle / ownership.</b> An instance owns no client, pool or thread: those are the store's it
+ *       delegates to, held for the life of the application. Neither it nor a {@link #scope} view needs closing.</li>
  *   <li><b>Ordering / determinism.</b> {@link #projects}, {@link #entries} and {@link #listDir} deliver in the
  *       lexicographic byte order of the enumerated <em>key</em>, a container's key ending in the separator
  *       ({@code <name>/}) and an entry's not ({@code <project>/<step>/<inputs>}): the order object stores list in, so a

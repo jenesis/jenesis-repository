@@ -1,10 +1,9 @@
 /**
  * The cache-storage contract kit: the executable {@code CacheStorage} contract ({@code CacheStorageContract}) and the
- * per-backend registration seam ({@code CacheStorageFixture}) the four {@code CacheStorageProvider} backends run it
- * through. It is the sibling of the {@code build.jenesis.repository.store.testkit}, and it
- * exists for the same reason: {@code test/cache/storage/{s3,gcs,azure}} each hand-wrote their own idea of what a
- * {@code CacheStorage} promises, so the four backends drifted into asserting four different subsets of one
- * interface - and the properties none of them asserted are exactly where they diverged.
+ * per-store registration seam ({@code CacheStorageFixture}) each store under the cache runs it through. It is the
+ * sibling of the {@code build.jenesis.repository.store.testkit}, and it exists for the same reason: {@code test/cache/storage/{s3,gcs,azure}}
+ * each hand-wrote their own idea of what a {@code CacheStorage} promises, so the four backends drifted into
+ * asserting four different subsets of one interface - and the properties none of them asserted are exactly where they diverged.
  *
  * <p><strong>Test support, never runtime.</strong> Nothing here provides a service and nothing here is reachable from
  * a request path, so the module is inert on a runtime graph; no runtime bundle, application shell or plugin module may
