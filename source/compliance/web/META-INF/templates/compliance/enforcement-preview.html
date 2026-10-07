@@ -51,8 +51,8 @@
         <article th:if="${blast.running()}">
             <p th:replace="~{base :: running('A pass is running; this screen refreshes when it lands.')}"></p>
         </article>
-        <p th:if="${blast.failure() != null}"
-           th:replace="~{base :: alert(|The last pass stopped: ${blast.failure()}|, 'danger')}"></p>
+        <th:block th:if="${blast.failure() != null}"><p
+           th:replace="~{base :: alert(|The last pass stopped: ${blast.failure()}|, 'danger')}"></p></th:block>
         <article th:if="${blast.computed()}">
             <h2>
                 <span th:text="${blast.count()}">0</span> release(s) would be held
