@@ -69,8 +69,11 @@ public record ClosureWalk(List<Member> members) {
         try {
             return RepositoryDefinition.parse(specification).fallbacks().stream()
                     .map(RepositoryDefinition.Fallback::source)
-                    .filter(source -> source instanceof RepositoryDefinition.Source.Repository)
-                    .map(source -> ((RepositoryDefinition.Source.Repository) source).name())
+                    .<String>mapMulti((source, names) -> {
+                        if (source instanceof RepositoryDefinition.Source.Repository repository) {
+                            names.accept(repository.name());
+                        }
+                    })
                     .toList();
         } catch (RuntimeException malformed) {
             LOGGER.warn("Resolving closures in {} through it alone: its definition '{}' did not parse",

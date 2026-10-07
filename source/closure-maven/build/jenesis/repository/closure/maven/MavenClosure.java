@@ -177,8 +177,7 @@ public final class MavenClosure implements ClosureSource.Resolving {
             String gav = ga + ":" + artifact.getVersion();
             if (missing.contains(gav)) {
                 cuts.add(new ClosureSection.Cut(ga, artifact.getVersion(), held.heldForReview(artifact)
-                        ? "held for review" : held.single() ? "not held by this repository"
-                        : "not held by this repository or a repository its fallbacks name"));
+                        ? ClosureSection.Cut.HELD_FOR_REVIEW : ClosureSection.Cut.notHeld(held.single())));
                 continue;
             }
             if (components.size() >= ClosureSource.MAX_COMPONENTS) {
