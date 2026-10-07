@@ -378,13 +378,7 @@ public final class Commands {
                     noun("logs", "the instance's most recent log entries",
                             OperationsCommands::logs,
                             act("logs [--level L] [--q TEXT] [--since SEQ] [--tenant T] [--limit N]",
-                                    "the tail of the in-memory log buffer; --since resumes after a tail's cursor")),
-                    noun("redirect-dns", "the DNS-based redirect records", 
-                            OperationsCommands::redirectDns,
-                            act("redirect-dns record <coordinate> <url> [--formats F] [--scope S] [--ttl N]",
-                                    "the TXT record to publish for a coordinate"),
-                            act("redirect-dns check <coordinate> [--expect U]",
-                                    "resolve the record and report what it says")))),
+                                    "the tail of the in-memory log buffer; --since resumes after a tail's cursor")))),
 
             new Section("Settings", List.of(
                     noun("settings", "the runtime settings", AdminCommands::settings,
