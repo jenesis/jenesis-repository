@@ -118,10 +118,8 @@
                 </tr>
                 </tbody>
             </table>
-            <p th:if="${next != null or paged}"><small>
-                <a th:if="${paged}" th:href="@{/ui/repositories/{repo}/import(repo=${repo})}">&larr; first page</a>
-                <a th:if="${next != null}" th:href="@{/ui/repositories/{repo}/import(repo=${repo}, after=${next})}">more
-                    migrations &rarr;</a></small></p>
+            <p th:replace="~{base :: pager(${next != null} ? @{/ui/repositories/{repo}/import(repo=${repo}, after=${next})} : null,
+                    ${paged} ? @{/ui/repositories/{repo}/import(repo=${repo})} : null)}"></p>
         </figure>
         <th:block th:if="${jobs.isEmpty() and !paged}">
             <div th:replace="~{base :: empty('No migrations yet. Start one above to walk another repository into this one.')}"></div>

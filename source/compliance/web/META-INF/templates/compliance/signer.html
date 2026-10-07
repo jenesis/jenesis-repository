@@ -45,8 +45,8 @@
                 </tbody>
             </table>
         </figure>
-        <p th:if="${next != null}"><small>
-            <a th:href="@{/ui/repositories/{repo}/signers/signed(repo=${repo},signer=${signer},after=${next})}">Next page &rarr;</a></small></p>
+        <p th:replace="~{base :: pager(${next != null} ? @{/ui/repositories/{repo}/signers/signed(repo=${repo},signer=${signer},after=${next})} : null,
+                ${asked.contains('after')} ? @{/ui/repositories/{repo}/signers/signed(repo=${repo},signer=${signer})} : null)}"></p>
         <th:block th:if="${coordinates.isEmpty()}">
             <div th:replace="~{base :: empty('This signer signed nothing that was accepted here.')}"></div>
         </th:block>

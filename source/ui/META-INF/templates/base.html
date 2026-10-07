@@ -278,6 +278,15 @@
      the kind now carries its own icon - so two badges meaning the same thing look the same without any template
      naming one. A fragment nobody renders, documented as though they did, is worse than no fragment. */-->
 
+<!--/* pager: how every paged screen says it is not the whole set and goes on - one link to the page after this one
+     ({@code next}, null on the last page) and, past the first page, one back to the first ({@code first}, null on the
+     first). A page that is the whole set draws nothing. Each screen builds its own links, since only it knows what its
+     query carries; the words and the order are the same everywhere. */-->
+<p th:fragment="pager(next, first)" th:if="${next != null or first != null}" class="app-pager"><small><a
+        th:if="${first != null}" th:href="${first}">&larr; First page</a><th:block
+        th:if="${first != null and next != null}"> &middot; </th:block><a th:if="${next != null}" th:href="${next}"
+        rel="next">More &rarr;</a></small></p>
+
 <!--/* Work that is running off the request path, and the marker that keeps the page current while it does.
 
      A screen never blocks and never waits: it renders what is known and refreshes itself. This is the one place

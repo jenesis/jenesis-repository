@@ -86,6 +86,20 @@ public class GlobalControllerAdvice {
         return Instants.DISPLAY;
     }
 
+    /** The names of the parameters this request carried a value for, so a screen's pager offers the way back to its
+     *  first page exactly when it was asked past it: a template may not read request parameters in the arguments it
+     *  hands a fragment. */
+    @ModelAttribute("asked")
+    public Set<String> asked(HttpServletRequest request) {
+        Set<String> names = new TreeSet<>();
+        request.getParameterMap().forEach((name, values) -> {
+            if (values.length > 0 && !values[0].isBlank()) {
+                names.add(name);
+            }
+        });
+        return names;
+    }
+
     /** How every screen shows a duration - see {@link DurationWords}. */
     @ModelAttribute("durations")
     public DurationWords durations() {

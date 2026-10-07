@@ -92,10 +92,10 @@
                 </th:block>
                 </tbody>
             </table>
-            <p th:if="${detail.next() != null}">
-                <a th:href="@{/ui/repositories/{repo}/coordinate(repo=${repo}, ecosystem=${detail.ecosystem()},
-                        coordinate=${detail.coordinate()}, after=${detail.next()})}">more versions &rarr;</a>
-            </p>
+            <p th:replace="~{base :: pager(${detail.next() != null} ? @{/ui/repositories/{repo}/coordinate(repo=${repo},
+                    ecosystem=${detail.ecosystem()}, coordinate=${detail.coordinate()}, after=${detail.next()})} : null,
+                    ${asked.contains('after')} ? @{/ui/repositories/{repo}/coordinate(repo=${repo},
+                    ecosystem=${detail.ecosystem()}, coordinate=${detail.coordinate()})} : null)}"></p>
         </figure>
     </article>
 </main>
