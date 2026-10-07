@@ -25,8 +25,8 @@ import build.jenesis.repository.store.Providers;
  *       outside it.</li>
  *   <li><b>Staleness.</b> Each {@link Section} carries its own {@code updated} instant and {@code state}, so a surface
  *       tells "derived and empty" from "never derived".</li>
- *   <li><b>Lifecycle / ownership.</b> The caller resolves the provider once and calls {@link #over} per request;
- *       {@link #installed()} caches and closes nothing.</li>
+ *   <li><b>Lifecycle / ownership.</b> {@link #installed()} answers the provider discovered on first use and held for
+ *       the process; a caller calls {@link #over} per request. Nothing is closed.</li>
  *   <li><b>Ordering / determinism.</b> Which provider {@link #installed()} answers depends on what is installed, never
  *       on discovery order.</li>
  * </ol>
@@ -39,7 +39,7 @@ public interface MetadataProvider {
     /** The installed provider, through {@link Providers#singleton}: exactly one, so none throws naming the module to
      *  add and a second throws rather than letting module-path order decide. */
     static MetadataProvider installed() {
-        return Providers.singleton("metadata", ServiceLoader.load(MetadataProvider.class))
+        return Providers.singleton("metadata", InstalledMetadata.DISCOVERED)
                 .orElseThrow(() -> new IllegalStateException("No metadata store is installed: every composition "
                         + "carries one, so add 'requires build.jenesis.repository.metadata.store;' to this "
                         + "composition's module"));

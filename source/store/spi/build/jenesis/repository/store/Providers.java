@@ -102,6 +102,38 @@ public final class Providers {
     }
 
     /**
+     * The providers a home's {@link ServiceLoader} discovers, instantiated on first use and held once that succeeds:
+     * what the module path carries does not change in a process, so a home asked on a repeated path walks it once.
+     * The selection over them - names, duplicates, enablement - still runs per call, since each primitive here takes
+     * the discovered providers as its argument, so a packaging error is refused on every call as on the first. A
+     * discovery that fails is not held, and is made again on the next call. The loader is the home's own, because
+     * {@link ServiceLoader#load(Class)} answers only in a module that {@code uses} the service. Providers held this
+     * way serve every caller on every thread, so a home holds only stateless ones.
+     */
+    public static final class Discovered<P> implements Iterable<P> {
+
+        private final Supplier<ServiceLoader<P>> loader;
+        private volatile List<P> held;
+
+        /** The providers {@code loader} discovers, normally {@code () -> ServiceLoader.load(X.class)} written in the
+         *  home's own module. */
+        public Discovered(Supplier<ServiceLoader<P>> loader) {
+            this.loader = Objects.requireNonNull(loader, "loader");
+        }
+
+        @Override
+        public Iterator<P> iterator() {
+            List<P> providers = held;
+            if (providers == null) {
+                // Two threads asking at once may both discover; each holds an equal list of stateless providers.
+                providers = loader.get().stream().map(ServiceLoader.Provider::get).toList();
+                held = providers;
+            }
+            return providers.iterator();
+        }
+    }
+
+    /**
      * The {@code ALL} policy: every enabled implementation contributes. Providers are validated (clause 5), sorted by
      * name, filtered through {@code enabled} and built with {@code create}; a provider that declines by yielding an
      * empty {@link Optional} - it is configured off in a way its enablement predicate does not see - is left out.
