@@ -438,6 +438,16 @@ public class RepositoryClientTest {
     }
 
     @Test
+    void a_key_with_no_label_or_expiry_reads_back_empty_rather_than_absent() {
+        // The bootstrap key a deployment is provisioned with has neither, and listing it threw before: a field the
+        // API leaves out arrived as null and the listing called isEmpty() on it.
+        AccessClient.Credential bare = new AccessClient.Credential("abc123", null, null, 0);
+        assertThat(bare.label()).isEmpty();
+        assertThat(bare.expires()).isEmpty();
+        assertThat(new AccessClient.Minted("abc123", "key", null).expires()).isEmpty();
+    }
+
+    @Test
     void repository_definitions_are_listed_set_and_removed() throws IOException, InterruptedException {
         List<SettingsClient.NamedValue> repos = client.settings().repositories(null);
         assertThat(repos).hasSize(1);
