@@ -19,7 +19,6 @@ import build.jenesis.repository.compliance.AdvisorySignal;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ComplianceSources;
 import build.jenesis.repository.compliance.FeedRefresh;
-import build.jenesis.repository.compliance.HealthSource.Health;
 import build.jenesis.repository.compliance.HealthSource;
 import build.jenesis.repository.compliance.RefreshableSource;
 import build.jenesis.repository.compliance.SignalSourceProvider;
@@ -42,7 +41,6 @@ import build.jenesis.repository.gate.store.HoldLifecycle;
 import build.jenesis.repository.gate.store.ReviewQueue;
 import build.jenesis.repository.gate.QuarantineLog;
 import build.jenesis.repository.gate.RetroLicensePlanner;
-import build.jenesis.repository.health.HealthLedger;
 import build.jenesis.repository.health.HealthLedgerProvider;
 import build.jenesis.repository.icon.Mark;
 import build.jenesis.repository.icon.Marks;
@@ -71,8 +69,11 @@ public class ComplianceReview extends TenantScope implements AutoCloseable {
      *  the store is not installed. */
     private final Optional<FindingsProvider> findingsLedger = FindingsProvider.installed();
 
-    /** The installed maintainer-health ledger; without it the panel says so and a rescan is a no-op. */
-    private final Optional<HealthLedgerProvider> healthLedger = HealthLedgerProvider.installed();
+    /** Maintainer health, the implementation the API's endpoint runs; empty without the health-ledger module, when the
+     *  panel says so and a rescan is a no-op. The source is resolved from the stored settings when a refresh asks, and
+     *  the console has no scheduler at hand, so its refresh leaves the ranking to the scheduled pass. */
+    private final Optional<MaintainerHealth> health = HealthLedgerProvider.installed()
+            .map(ledgers -> new MaintainerHealth(ledgers, this::healthSource, () -> null));
 
     /** Resolves a finding's recorded {@code source} to the mark the screen draws; discovery is fixed for the JVM. */
     private final FindingMarks marks = installedFindingWriters();
@@ -405,105 +406,30 @@ public class ComplianceReview extends TenantScope implements AutoCloseable {
     }
 
     /**
-    /**
-     * A repository's maintainer-health panel: whether the health module is {@code available}, whether a weakest-first
-     * ranking is built, its entries, and when it was last swept ({@code null}: never, shown as such).
-     *
-     * <p>{@code entries} is {@code null}, not empty, when there is no ranking, so the panel cannot read as "nothing is
-     * unhealthy". {@code lastScanned} is the ranking's build instant when ranked, the ledger's last sweep otherwise.
-     *
-     * @param scanning whether a rescan is running now
-     */
-    public record MaintainerHealthReport(boolean available, boolean ranked,
-                                         List<HealthController.HealthEntryView> entries, String nextCursor, int total,
-                                         Instant lastScanned, boolean scanning) {
-    }
-
     /** One weakest-first page of the maintainer-health panel from the rank index the scheduled pass commits, with no
      *  probe or write, so it stands when the source is down; {@code cursor} resumes a previous page. */
-    public MaintainerHealthReport maintainerHealth(String repository, String cursor) throws IOException {
-        if (healthLedger.isEmpty()) {
-            return new MaintainerHealthReport(false, false, null, null, 0, null, false);
-        }
-        return renderHealth(repository, false, cursor);
+    public MaintainerHealth.Report maintainerHealth(String repository, String cursor) throws IOException {
+        return health.isEmpty() ? MaintainerHealth.unavailable()
+                : health.get().report(scope(repository), cursor, HEALTH_PAGE_SIZE);
     }
 
-    /** Starts the explicit rescan behind the panel's button: each held coordinate is probed once against the
-     *  maintainer-health source and its score upserted, then the freshness stamped. With the source off it touches no
-     *  network. */
+    /** Starts the explicit rescan behind the panel's button - the API's refresh, under the same stored report, so a
+     *  rescan pressed here and one asked for over the API are one walk. With the source off it touches no network. */
     public boolean rescanMaintainerHealth(String repository) throws IOException {
-        if (healthLedger.isEmpty()) {
+        if (health.isEmpty()) {
             return false;
         }
         audit("health.rescan", repository);
-        // Off the request: a network round trip per coordinate. StoredReport records it running, so a second press is
-        // declined.
-        return StoredReport.compute(scope(repository), HEALTH_SCAN, forThisTenant(() -> {
-            MaintainerHealthReport scanned = renderHealth(repository, true, null);
-            return StoredReport.Rows.of(List.of(scanned.total() + " coordinates scored"));
-        }));
+        return health.get().refresh(scope(repository), this::forThisTenant);
     }
 
-    /** Whether a health rescan is running right now - read from the same stored report the pass writes. */
-    private boolean scanning(String repository) throws IOException {
-        return StoredReport.read(scope(repository), HEALTH_SCAN)
-                .map(StoredReport.Report::running)
-                .orElse(false);
-    }
-
-    /** Run the health rescan now and answer the first page - the test seam, and what the background pass calls. */
-    public MaintainerHealthReport rescanMaintainerHealthNow(String repository) throws IOException {
-        if (healthLedger.isEmpty()) {
-            return new MaintainerHealthReport(false, false, null, null, 0, null, false);
+    /** The maintainer-health source the stored settings select, asked when a refresh runs. */
+    private HealthSource healthSource() {
+        try {
+            return HealthSource.resolve(settings()::getProperty);
+        } catch (IOException unreadable) {
+            throw new UncheckedIOException(unreadable);
         }
-        return renderHealth(repository, true, null);
-    }
-
-    private MaintainerHealthReport renderHealth(String repository, boolean rescan, String cursor) throws IOException {
-        HealthLedger ledger = healthLedger.get().over(scope(repository));
-        if (rescan) {
-            HealthSource source = HealthSource.resolve(settings()::getProperty);
-            if (source != HealthSource.none()) {
-                Set<String> probed = new HashSet<>();
-                // Streamed over everything the repository holds, its cached copies too, as the scheduled pass is.
-                inventory(repository).holdings(held -> {
-                    if (!probed.add(held.ecosystem() + ' ' + held.coordinate())) {
-                        return;                                 // health is version-independent: probe each coordinate once
-                    }
-                    Optional<Health> looked;
-                    try {
-                        looked = source.health(held.ecosystem(), held.coordinate());
-                    } catch (RuntimeException _) {
-                        return;                                 // the live source degrades to empty on its own; a throw defers
-                    }
-                    if (looked.isPresent()) {
-                        try {
-                            ledger.record(held.ecosystem(), held.coordinate(), looked.get(), Instant.now());
-                        } catch (IOException | RuntimeException _) {
-                            // best-effort: the sweep persists the coordinate on its next pass
-                        }
-                    }
-                });
-            }
-            HealthLedger.scanned(scope(repository)).mark(Instant.now());
-            // The rank index is left to its leased pass, which alone may flip its marker.
-        }
-        // A page of the committed ranking; before one exists the panel says so rather than sorting here.
-        return switch (ledger.worstFirst(cursor, HEALTH_PAGE_SIZE)) {
-            // No entries, not an empty list; the instant is the ledger's last sweep.
-            case HealthLedger.Ranking.NotBuilt notBuilt ->
-                    new MaintainerHealthReport(true, false, null, null, 0, notBuilt.scannedAt().orElse(null),
-                            scanning(repository));
-            case HealthLedger.Ranking.Ranked ranked -> {
-                List<HealthController.HealthEntryView> entries = new ArrayList<>(ranked.entries().size());
-                for (HealthLedger.Located located : ranked.entries()) {
-                    entries.add(HealthController.HealthEntryView.of(located));
-                }
-                // The ranking's own build instant, so the page is never shown fresher than it is.
-                yield new MaintainerHealthReport(true, true, entries, ranked.nextCursor(), ranked.total(),
-                        ranked.scannedAt().orElse(null), scanning(repository));
-            }
-        };
     }
 
     /** The {@link #vulnerabilities(String) vulnerability panel} narrowed by view facets, blank showing everything:
@@ -524,9 +450,6 @@ public class ComplianceReview extends TenantScope implements AutoCloseable {
 
     /** The name under which the explicit rescan stores its progress and outcome. */
     public static final String VULNERABILITY_SCAN = "vulnerability-scan";
-
-    /** The maintainer-health rescan's stored report, so the pass runs off the request and the screen reads it back. */
-    public static final String HEALTH_SCAN = "health-scan";
 
     /**
      * One page of the panel, worst first, assembled by {@link VulnerabilityReports} as the API's endpoint is; this
