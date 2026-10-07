@@ -152,6 +152,16 @@ public final class ClosureSection {
 
     /** A dependency whose subtree did not resolve: what was asked for and why it ended there. */
     public record Cut(String coordinate, String requirement, String reason) {
+
+        /** The reason a version cut because the only versions that would do are held for review gives. */
+        public static final String HELD_FOR_REVIEW = "held for review";
+
+        /** The reason a dependency none of the walk's repositories holds is cut for, as every closure source words
+         *  it: for the repository {@code alone}, or for a walk through the repositories its fallbacks name. */
+        public static String notHeld(boolean alone) {
+            return alone ? "not held by this repository"
+                    : "not held by this repository or a repository its fallbacks name";
+        }
     }
 
     /**
