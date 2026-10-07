@@ -1,13 +1,11 @@
 package build.jenesis.repository.inventory;
 
 import module java.base;
-import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.metadata.Section;
 import build.jenesis.repository.metadata.SectionMutation;
 import build.jenesis.repository.metadata.Signal;
 import build.jenesis.repository.store.ArtifactStore;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -55,7 +53,7 @@ public final class AdvisedSection {
      *  {@code advised}. */
     static String indexKey(AdvisorySource.Query advised, String ecosystem, String coordinate, String version) {
         return indexRoot(advised.ecosystem(), advised.coordinate()) + "/"
-                + Checksums.sha256(ecosystem + "\n" + coordinate + "\n" + version);
+                + VersionRows.digest(ecosystem, coordinate, version);
     }
 
     /** Remove the index row of the copy {@code coordinate} at {@code version} of {@code ecosystem} recorded as asked
@@ -68,26 +66,6 @@ public final class AdvisedSection {
         String key = indexKey(advised.get(), ecosystem, coordinate, version);
         if (store.exists(key)) {
             store.delete(key);
-        }
-    }
-
-    /** The row naming a copy. */
-    static byte[] indexRow(String ecosystem, String coordinate, String version) {
-        return JSON.writeValueAsBytes(JSON.createObjectNode().put("ecosystem", ecosystem)
-                .put("coordinate", coordinate).put("version", version));
-    }
-
-    /** The copy a row names, or empty for a row that does not parse. */
-    static Optional<StoreRepositoryInventory.Coordinate> copy(byte[] row) {
-        try {
-            JsonNode node = JSON.readTree(row);
-            String ecosystem = node.path("ecosystem").asString("");
-            String coordinate = node.path("coordinate").asString("");
-            String version = node.path("version").asString("");
-            return ecosystem.isEmpty() || coordinate.isEmpty() || version.isEmpty() ? Optional.empty()
-                    : Optional.of(new StoreRepositoryInventory.Coordinate(ecosystem, coordinate, version));
-        } catch (RuntimeException unreadable) {
-            return Optional.empty();
         }
     }
 

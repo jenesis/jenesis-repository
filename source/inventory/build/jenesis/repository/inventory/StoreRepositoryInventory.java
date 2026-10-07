@@ -411,7 +411,7 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         List<Coordinate> copies = new ArrayList<>();
         for (String row : rows) {
             Optional<Coordinate> copy = store.readVersioned(root + "/" + row)
-                    .flatMap(versioned -> AdvisedSection.copy(versioned.content()));
+                    .flatMap(versioned -> VersionRows.decode(versioned.content()));
             if (copy.isEmpty()) {
                 continue;
             }
