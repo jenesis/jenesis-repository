@@ -4,6 +4,7 @@ import build.jenesis.repository.ui.store.ConsoleActor;
 import build.jenesis.repository.ui.store.RepositoryBrowse;
 import build.jenesis.repository.ui.store.TenantScope;
 import module java.base;
+import build.jenesis.repository.compliance.VulnerabilityRecord;
 import build.jenesis.repository.closure.spi.Reliance;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.StoredSettings;
@@ -549,11 +550,13 @@ public class ComplianceReview extends TenantScope implements AutoCloseable {
 
     /** One persisted finding as the console renders it, its labels as {@code source/name: value}. {@code reviewable}
      *  marks an AI-produced row that takes a review decision and {@code review} the recorded one; {@code ecosystem} and
-     *  {@code version} address a decision; {@code mark} is the source resolved against what is installed now. */
+     *  {@code version} address a decision; {@code mark} is the source resolved against what is installed now, and
+     *  {@code detail} what that source said beyond the rest. */
     public record FindingRow(String coordinate, String ecosystem, String bareCoordinate, String version, String id,
                              String source, Mark mark, String kind, String category, String severity,
                              String description, String references, String fixed, String firstSeen, String lastSeen,
-                             String supersededBy, List<String> labels, boolean reviewable, String review) {
+                             String supersededBy, List<String> labels, boolean reviewable, String review,
+                             VulnerabilityRecord detail) {
     }
 
     /**
@@ -598,7 +601,8 @@ public class ComplianceReview extends TenantScope implements AutoCloseable {
                     finding.kind().wire(), finding.category(), finding.severity().name(), finding.description(),
                     String.join(", ", finding.references()), finding.attributes().getOrDefault("fixed", ""),
                     finding.firstSeen().toString(), finding.lastSeen().toString(), finding.supersededBy(), labels,
-                    ReviewLabels.reviewable(finding.kind()), ReviewLabels.reviewOf(finding).orElse("")));
+                    ReviewLabels.reviewable(finding.kind()), ReviewLabels.reviewOf(finding).orElse(""),
+                    finding.detail()));
         }
         Optional<Findings.Facets> facets = ledger.facets();
         if (facets.isPresent()) {
