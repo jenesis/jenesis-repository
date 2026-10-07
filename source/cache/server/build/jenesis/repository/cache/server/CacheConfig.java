@@ -2,7 +2,7 @@ package build.jenesis.repository.cache.server;
 
 import module java.base;
 import module org.slf4j;
-import build.jenesis.repository.cache.storage.CacheStorageProvider;
+import build.jenesis.repository.cache.storage.delegating.DelegatingCacheStorage;
 import build.jenesis.repository.settings.StoredSettings;
 import build.jenesis.repository.store.StoreCache;
 import build.jenesis.repository.server.spi.Authorization;
@@ -61,7 +61,7 @@ public class CacheConfig {
                     + "per-credential keys through an admin console instead.", defaultTenant);
         }
         Cache cache = new Cache(
-                CacheStorageProvider.resolve(environment::getProperty, artifactStore), authorization,
+                DelegatingCacheStorage.over(artifactStore), authorization,
                 properties.getMaxBytes(), properties.getProjects(), reaper, properties.getMinFree(),
                 minFreePercent, properties.getDefaultProject(), properties.isProjectRequired(),
                 bootstrapKey, defaultTenant, registry);

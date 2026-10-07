@@ -5,7 +5,9 @@ import module java.base;
 import build.jenesis.repository.cache.storage.CacheStorage;
 import build.jenesis.repository.cache.storage.Names;
 import build.jenesis.repository.cache.storage.Pages;
+import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.store.RepositoryDocument;
 import build.jenesis.repository.store.Retries;
@@ -43,10 +45,38 @@ public final class DelegatingCacheStorage implements CacheStorage {
     /** The project's description, in the marker; absent when it has none. */
     public static final String DESCRIPTION = "description";
 
+    /** The repository's backend selection, which the cache follows: it has none of its own. */
+    private static final String STORE_SELECTION = "jenrepo.store";
+
     private final ArtifactStore store;
 
     public DelegatingCacheStorage(ArtifactStore store) {
         this.store = Objects.requireNonNull(store, "store");
+    }
+
+    /**
+     * The cache storage: the repository's own store, under one segment - the node's store, the metered one, so the
+     * cache's operations are counted with the rest.
+     *
+     * <p>The cache names no backend of its own: a second selection would let a deployment configure two backends
+     * reading the same {@code jenrepo.s3.*} keys, indistinguishable from a misconfiguration, while with one store
+     * "nothing configured" and "more than one configured" are answerable.
+     *
+     * <p><b>A segment, not a second root</b>, under {@link Scopes#SYSTEM}: rooted at the store, the cache would read
+     * every top-level directory as a project and the projects screen would walk every artifact blob.
+     * {@link ArtifactStore#scope} nests, so the layout is {@code <store>/.system/cache/<tenant>/...}. The
+     * {@code .system} name is outside the scope-name grammar, so no tenant can reach the space and no enumeration
+     * offers it as a tenant. A cache found anywhere else is not migrated: it is a cache, so it refills.
+     */
+    public static CacheStorage over(ArtifactStore store) {
+        return new DelegatingCacheStorage(store.scope(Scopes.SYSTEM).scope(Scopes.CACHE));
+    }
+
+    /** {@link #over(ArtifactStore)} over the store {@code config} selects - {@code jenrepo.store} and that backend's
+     *  own keys, fully qualified - for a caller that holds no store; the store's provider validates its required
+     *  keys, naming every one that is missing. */
+    public static CacheStorage over(UnaryOperator<String> config) {
+        return over(ArtifactStoreProvider.resolve(config.apply(STORE_SELECTION), config));
     }
 
     @Override

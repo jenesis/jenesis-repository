@@ -4,21 +4,17 @@ import module java.base;
 import build.jenesis.repository.cache.storage.CacheStorage;
 
 /**
- * How one {@code CacheStorageProvider} backend registers itself with the shared {@link CacheStorageContract} suite: a
- * fixture hands the kit a live, empty, tenant-scoped {@link CacheStorage} and names the provider class it stands for,
- * and the kit then drives <em>every</em> contract property against it. A backend is covered by writing a fixture,
+ * How one store under the cache registers itself with the shared {@link CacheStorageContract} suite: a
+ * fixture hands the kit a live, empty, tenant-scoped {@link CacheStorage} and the kit then drives <em>every</em> contract property against it. A backend is covered by writing a fixture,
  * never by copying assertions - which is exactly how the four hand-written backend suites came to assert four
  * different subsets of the same interface.
  *
- * <p>A fixture must build its storage through {@code CacheStorageProvider.resolve(config)} - the way a
- * deployment does - so the leg exercises the exclusive-with-default resolution, the {@code requiredConfig()}
- * validation and the provider's own client wiring rather than reaching past all three to a hand-built SDK client.
+ * <p>A fixture must build its storage through {@code DelegatingCacheStorage.over(config)} - the way a
+ * deployment does - so the leg exercises the store's resolution, its {@code requiredConfig()} validation and its own
+ * client wiring rather than reaching past all three to a hand-built SDK client.
  *
- * <p>Three declarations carry the fixture's honesty, and each is machine-checked rather than trusted:
+ * <p>Two declarations carry the fixture's honesty, and each is machine-checked rather than trusted:
  * <ul>
- *   <li>{@link #providerClass()} keys the fixture to a statically declared {@code provides ... with ...} class, so
- *       the census can prove no declared or runtime-discovered backend is unfixtured (and no fixture names a dead
- *       one);</li>
  *   <li>{@link #unsupported()} names the properties this fixture's <em>environment</em> cannot express, each with a
  *       mandatory reason. It is a statement about the emulator, never about the backend: a property no fixture
  *       anywhere exercises is a hole the census fails on;</li>
@@ -38,14 +34,9 @@ public interface CacheStorageFixture extends AutoCloseable {
      *  {@link #unavailable()} fixture fails rather than skips. */
     String REQUIRED_PROPERTY = "jenrepo.test.required";
 
-    /** The {@code CacheStorageProvider} name this fixture drives. There is one - {@code delegating} - since the
-     *  cache follows the repository's store rather than naming a backend; what a fixture varies is the STORE
-     *  underneath it, not the cache provider above. */
+    /** The name a failure reports this fixture by. The cache follows the repository's store rather than naming a
+     *  backend, so what a fixture varies - and what this names - is the STORE underneath it. */
     String backend();
-
-    /** The fully qualified {@code CacheStorageProvider} implementation class this fixture covers, as the census
-     *  parses it out of the backend module's {@code provides ... with ...} clause. */
-    String providerClass();
 
     /** Start whatever the fixture owns (a container, a temp directory) and resolve the storage. Called once, before
      *  any check runs; a failure here is always a test failure, never a skip - a fixture that began starting and

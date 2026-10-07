@@ -12,6 +12,7 @@
 open module build.jenesis.repository.cache.server {
     requires build.jenesis.repository.net.http;
     requires build.jenesis.repository.cache.storage;
+    requires build.jenesis.repository.cache.storage.delegating;
     requires build.jenesis.repository.scope;
     requires build.jenesis.repository.cache.protocol;
     requires build.jenesis.repository.server;
