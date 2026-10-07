@@ -240,6 +240,30 @@ class RepositoryDiscoveryTest {
     }
 
     @Test
+    void a_check_asks_each_domain_afresh_and_says_what_answers_and_where_a_path_goes() {
+        table.file("bytebuddy.net", "maven=https://maven.bytebuddy.net/releases/\nstop=false\n");
+        table.file("agent.bytebuddy.net", "maven=http://agent.bytebuddy.net/plain/\n");
+        RepositoryDiscovery discovery = discovery();
+        discovery.locate("/maven/build/jenesis/build.jenesis/0.20.0/build.jenesis-0.20.0.jar");
+
+        RepositoryDiscovery.Check jenesis = discovery.check("build.jenesis",
+                "/maven/build/jenesis/build.jenesis/0.20.0/build.jenesis-0.20.0.jar");
+        assertThat(table.asked("jenesis.build")).as("asked afresh, not as remembered").isEqualTo(2);
+        assertThat(jenesis.domains()).singleElement().satisfies(asked -> {
+            assertThat(asked.state()).isEqualTo("found");
+            assertThat(asked.file().entries()).containsKey(build.jenesis.repository.discovery.DiscoveryFile.Key.MAVEN);
+        });
+        assertThat(jenesis.located()).isEqualTo(new Located.Fetched(
+                URI.create(RELEASES + "download/v0.20.0/build.jenesis-0.20.0.jar"), true));
+
+        RepositoryDiscovery.Check agent = discovery.check("net.bytebuddy.agent", null);
+        assertThat(agent.domains()).extracting(RepositoryDiscovery.Asked::state).containsExactly("found", "refused");
+        assertThat(agent.domains().getLast().refusal()).contains("not an https location");
+
+        assertThat(discovery.check("lib", null).domains()).as("a name that is no domain asks none").isEmpty();
+    }
+
+    @Test
     void a_path_of_no_shape_discovery_reads_asks_for_nothing() {
         RepositoryDiscovery discovery = discovery();
 

@@ -317,6 +317,8 @@ public final class CliRequests {
             action("logs [--level L] [--q TEXT] [--since SEQ] [--tenant T] [--limit N]",
                     "logs --level WARN --q boom --since 7 --tenant acme --limit 5",
                     get("/api/logs", "level", "q", "since", "tenant", "limit")),
+            action("discovery check <name> [--path P]", "discovery check build.jenesis --path /maven/a/b/1/b-1.jar",
+                    post("/api/admin/discovery/check", "name", "path")),
 
             // Settings
             action("settings [--tenant N]", "settings --tenant acme", get("/api/settings", "tenant")),
@@ -385,6 +387,8 @@ public final class CliRequests {
                     get("/api/repository/deletion", "repo"))),
             new Case("tenants delete acme --yes --refresh=1s", List.of(delete("/api/admin/tenants/acme"),
                     get("/api/admin/tenants/acme/deletion"))),
+            new Case("discovery check build.jenesis --refresh=1s", List.of(post("/api/admin/discovery/check", "name"),
+                    get("/api/admin/discovery/check", "name"))),
             new Case("vulnerabilities " + PAGED, List.of(get("/api/vulnerabilities", "repo"),
                     get("/api/vulnerabilities", "repo", "after"))),
             new Case("search " + PAGED + " acme", List.of(get("/api/search", "repo", "q"),

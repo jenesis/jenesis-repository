@@ -54,6 +54,8 @@ final class ConsoleAuthorization {
                 .requestMatchers("/ui/metrics", "/ui/posture").hasRole(SuperadminRole.ROLE)
                 // The caches belong to no tenant.
                 .requestMatchers("/ui/caches", "/ui/caches/**").hasRole(SuperadminRole.ROLE)
+                // The discovery reader is the deployment's, and a check reaches outside it.
+                .requestMatchers("/ui/discovery", "/ui/discovery/**").hasRole(SuperadminRole.ROLE)
                 .requestMatchers("/ui/admin/**").access(tenants.require(UserDirectory.Role.ADMIN))
                 // Credential administration is admin-grade, as the API's manage:write: an editor must not mint an
                 // admin key or add a trust exchanging to admin.

@@ -110,7 +110,8 @@ public class ServingConfig {
                                              ProxyFormat.Fetcher upstreamFetcher, Environment environment,
                                              SpoolStore spool, ArtifactStore root,
                                              ObjectProvider<UpstreamCredentialSource> credentials,
-                                             ObjectProvider<DownloadTracker> downloads) {
+                                             ObjectProvider<DownloadTracker> downloads,
+                                             RepositoryDiscovery discovery) {
         UnaryOperator<String> config = Features.namespaced(environment::getProperty);
         // Size, timeout and throughput bounds on an untrusted upstream fetch, read against this spool's budget so a
         // per-artifact ceiling above it fails the boot rather than never firing.
@@ -128,15 +129,19 @@ public class ServingConfig {
                 .passingThrough(() -> spool.acquire(root.bindings()))
                 .hardening(hardeningBounds)
                 .withholding(withheld);
-        RepositoryDiscovery discovery = discovery(liveConfig);
         return redirecting(router.discovering(discovery), config, liveConfig, repositories, withheld,
                 credentials.getIfAvailable(() -> UpstreamCredentialSource.NONE), downloads.getIfAvailable(),
                 discovery);
     }
 
-    /** The reader a {@code discovered} leg locates its files through: over the screened client, refusing the private
-     *  hosts the proxy dial does not admit, each domain's file remembered for the period {@code discovery-ttl} names
-     *  now. */
+    /** The reader a {@code discovered} leg locates its files through, and the one the operator surfaces check with:
+     *  over the screened client, refusing the private hosts the proxy dial does not admit, each domain's file
+     *  remembered for the period {@code discovery-ttl} names now. */
+    @Bean
+    public RepositoryDiscovery repositoryDiscovery(LiveConfig liveConfig) {
+        return discovery(liveConfig);
+    }
+
     static RepositoryDiscovery discovery(LiveConfig liveConfig) {
         return new RepositoryDiscovery(new ScreenedTransport(),
                 target -> !liveConfig.proxyAllowInternal() && PrivateHostGuard.internal(target),

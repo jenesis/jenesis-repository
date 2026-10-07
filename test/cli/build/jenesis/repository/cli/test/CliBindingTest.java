@@ -111,6 +111,7 @@ public class CliBindingTest {
             Map.entry("image-scans", Binding.of("/api/image-scans", "image-scans", "releases")),
             Map.entry("consistency", Binding.of("/api/consistency", "consistency")),
             Map.entry("logs", Binding.of("/api/logs", "logs")),
+            Map.entry("discovery", Binding.of("/api/admin/discovery/check", "discovery", "check", "build.jenesis")),
             Map.entry("metrics", Binding.of("/api/admin/observability", "metrics")),
             Map.entry("spi", Binding.of("/api/admin/spi", "spi")),
             Map.entry("config", Binding.of("/api/config", "config")),
