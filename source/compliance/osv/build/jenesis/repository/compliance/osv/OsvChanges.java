@@ -126,10 +126,8 @@ public final class OsvChanges {
         Set<AdvisorySource.Package> packages = new LinkedHashSet<>();
         for (JsonNode affected : record.path("affected")) {
             JsonNode named = affected.path("package");
-            String ecosystem = named.path("ecosystem").asString("");
             String name = named.path("name").asString("");
-            int release = ecosystem.indexOf(':');
-            OsvQuery.ecosystem(release < 0 ? ecosystem : ecosystem.substring(0, release))
+            OsvQuery.ecosystem(OsvQuery.base(named.path("ecosystem").asString("")))
                     .filter(_ -> !name.isBlank())
                     .ifPresent(product -> packages.add(new AdvisorySource.Package(product, name)));
         }

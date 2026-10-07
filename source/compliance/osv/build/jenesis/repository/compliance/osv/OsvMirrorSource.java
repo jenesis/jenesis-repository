@@ -110,7 +110,7 @@ public final class OsvMirrorSource implements AdvisorySource.Mirror, AdvisorySou
                 throw new UncheckedIOException(new IOException("The OSV mirror holds no copy of " + osvName
                         + " yet: a repository selecting it holds the ecosystem, and its first draw has not landed"));
             }
-            String product = product(ecosystem);
+            String product = OsvQuery.base(ecosystem);
             List<Advisory> advisories = new ArrayList<>();
             for (JsonNode record : mirror.records(osvName, state.get(), OsvRanges.key(product, coordinate))) {
                 if (OsvRanges.affects(record, ecosystem, coordinate, version)) {
@@ -133,7 +133,7 @@ public final class OsvMirrorSource implements AdvisorySource.Mirror, AdvisorySou
         Set<String> covered = new TreeSet<>();
         for (String ecosystem : ecosystems) {
             if (OsvQuery.covers(ecosystem)) {
-                covered.add(product(ecosystem));
+                covered.add(OsvQuery.base(ecosystem));
             }
         }
         mirror.want(covered);
@@ -261,12 +261,6 @@ public final class OsvMirrorSource implements AdvisorySource.Mirror, AdvisorySou
 
     /** OSV's name of {@code ecosystem}'s copy: a distribution's whole, without a release. */
     private static String base(String ecosystem) {
-        return OsvQuery.osvName(product(ecosystem));
-    }
-
-    /** The product's name of {@code ecosystem} without a release. */
-    private static String product(String ecosystem) {
-        int release = ecosystem.indexOf(':');
-        return release < 0 ? ecosystem : ecosystem.substring(0, release);
+        return OsvQuery.osvName(OsvQuery.base(ecosystem));
     }
 }
