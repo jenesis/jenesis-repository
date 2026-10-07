@@ -109,6 +109,8 @@ public class HealthController {
             });
             response.setHeader(REFRESH_HEADER, started ? "started" : "running");
         }
+        // Read after the start, so the answer that started a refresh already says it is running.
+        boolean refreshing = StoredReport.read(store, REFRESH_REPORT).map(StoredReport.Report::running).orElse(false);
         // A page of the committed ranking, never one derived here.
         int pageLimit = Math.max(1, Math.min(limit, MAX_PAGE));
         String cursor = after.isBlank() ? null : after;
@@ -116,7 +118,7 @@ public class HealthController {
             // 503 and null entries, so a client ignoring `ranked` cannot read "nothing is unhealthy".
             case HealthLedger.Ranking.NotBuilt notBuilt -> {
                 response.setStatus(503);
-                yield new HealthReport(true, false, null, null, 0, notBuilt.scannedAt().orElse(null));
+                yield new HealthReport(true, false, null, null, 0, notBuilt.scannedAt().orElse(null), refreshing);
             }
             case HealthLedger.Ranking.Ranked ranked -> {
                 List<HealthEntryView> entries = new ArrayList<>(ranked.entries().size());
@@ -125,7 +127,7 @@ public class HealthController {
                 }
                 // The ranking's build instant, never the live stamp a later sweep advanced.
                 yield new HealthReport(true, true, entries, ranked.nextCursor(), ranked.total(),
-                        ranked.scannedAt().orElse(null));
+                        ranked.scannedAt().orElse(null), refreshing);
             }
         };
     }
@@ -189,10 +191,11 @@ public class HealthController {
     /**
      * The health report. {@code ranked} says whether a ranking is built; when it is not, {@code entries} is
      * {@code null} rather than empty, beside the {@code 503}. {@code lastScanned} is the ranking's build instant when
-     * ranked, the ledger's last sweep otherwise, {@code null} for never scanned.
+     * ranked, the ledger's last sweep otherwise, {@code null} for never scanned. {@code refreshing} says an explicit
+     * refresh is running, so the report is the one it will replace - what a caller watching it polls on.
      */
     public record HealthReport(boolean available, boolean ranked, List<HealthEntryView> entries, String nextCursor,
-                               int total, Instant lastScanned) {
+                               int total, Instant lastScanned, boolean refreshing) {
     }
 
     /** One coordinate's stored health: the overall score and three components ({@code -1} for one the source could not

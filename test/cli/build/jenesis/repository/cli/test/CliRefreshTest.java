@@ -57,6 +57,15 @@ public class CliRefreshTest {
             + "\"malicious\":false,\"fixed\":\"4.17.21\"}]}],\"total\":1,\"partial\":true,"
             + "\"lastScanned\":\"2026-01-01T00:00:09Z\",\"feedWarnings\":[],\"scanning\":false}";
 
+    private static final String UNRANKED_REFRESHING = "{\"available\":true,\"ranked\":false,\"entries\":null,"
+            + "\"total\":0,\"lastScanned\":null,\"refreshing\":true}";
+    private static final String RANKED = "{\"available\":true,\"ranked\":true,\"entries\":[{\"ecosystem\":\"npm\","
+            + "\"coordinate\":\"lodash\",\"sourceRepository\":\"github.com/lodash/lodash\",\"overall\":7.5,"
+            + "\"maintenance\":8,\"review\":7,\"provenance\":-1,\"scannedAt\":\"2026-01-01T00:00:09Z\"}],\"total\":1,"
+            + "\"lastScanned\":\"2026-01-01T00:00:09Z\",\"refreshing\":false}";
+    private static final String UNRANKED = "{\"available\":true,\"ranked\":false,\"entries\":null,\"total\":0,"
+            + "\"lastScanned\":\"2026-01-01T00:00:00Z\",\"refreshing\":false}";
+
     @TempDir
     private static Path home;
 
@@ -120,6 +129,26 @@ public class CliRefreshTest {
                 .whenScenarioStateIs("landed")
                 .willReturn(aResponse().withStatus(200)
                         .withHeader("Content-Type", "application/json").withBody(RESCANNED)));
+        // A health refresh over a repository never ranked: the server answers 503 until the first ranking is built,
+        // which is a state of the report, refreshing the first time it is read and ranked the second.
+        String health = "/api/health";
+        server.stubFor(get(urlPathEqualTo(health)).withQueryParam("repo", equalTo("releases"))
+                .withQueryParam("refresh", equalTo("true")).atPriority(1)
+                .willReturn(aResponse().withStatus(503).withHeader("Content-Type", "application/json")
+                        .withHeader("Jenesis-Refresh", "started").withBody(UNRANKED_REFRESHING)));
+        server.stubFor(get(urlPathEqualTo(health)).withQueryParam("repo", equalTo("releases"))
+                .withQueryParam("refresh", absent()).inScenario("health")
+                .whenScenarioStateIs(com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED)
+                .willSetStateTo("ranked")
+                .willReturn(aResponse().withStatus(503)
+                        .withHeader("Content-Type", "application/json").withBody(UNRANKED_REFRESHING)));
+        server.stubFor(get(urlPathEqualTo(health)).withQueryParam("repo", equalTo("releases"))
+                .withQueryParam("refresh", absent()).inScenario("health").whenScenarioStateIs("ranked")
+                .willReturn(aResponse().withStatus(200)
+                        .withHeader("Content-Type", "application/json").withBody(RANKED)));
+        server.stubFor(get(urlPathEqualTo(health)).withQueryParam("repo", equalTo("fresh"))
+                .willReturn(aResponse().withStatus(503)
+                        .withHeader("Content-Type", "application/json").withBody(UNRANKED)));
         System.setProperty("JENREPO_CLI_HOME", home.toString());
         Cli.run(new String[] {"login", "http://127.0.0.1:" + server.port() + "/", "--key-file",
                 Files.writeString(home.resolve("key"), "test-key").toString()});
@@ -203,6 +232,29 @@ public class CliRefreshTest {
                 .isZero());
 
         assertThat(out).contains("Started a re-scan of releases.").contains("is running").doesNotContain("GHSA-x");
+    }
+
+    @Test
+    void a_health_refresh_is_started_and_watched_until_the_ranking_lands() throws Exception {
+        server.resetRequests();
+        String out = capture(() -> assertThat(Cli.run(new String[] {
+                "health", "refresh", "releases", "--refresh=1s"})).as("an unranked report is a state, not a failure")
+                .isZero());
+
+        assertThat(out).contains("Started a health refresh of releases.");
+        assertThat(out).contains("has not been ranked yet; a refresh is running");
+        assertThat(out).as("the watch stops on the ranked report").contains("lodash")
+                .contains("1 of 1 scored, as of 2026-01-01T00:00:09Z.");
+        server.verify(1, getRequestedFor(urlPathEqualTo("/api/health")).withQueryParam("refresh", equalTo("true")));
+        server.verify(3, getRequestedFor(urlPathEqualTo("/api/health")));
+    }
+
+    @Test
+    void a_health_report_never_ranked_says_how_to_rank_it_and_succeeds() throws Exception {
+        String out = capture(() -> assertThat(Cli.run(new String[] {"health", "fresh"})).isZero());
+
+        assertThat(out).contains("has not been ranked yet (last scored 2026-01-01T00:00:00Z); health refresh fresh "
+                + "scores and ranks it.");
     }
 
     @Test

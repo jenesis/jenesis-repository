@@ -34,18 +34,36 @@ public final class RiskClient extends ClientCalls {
                 JSON.readValue(response.body(), LicensesView.class));
     }
 
-    /** The maintainer health stored for a repository's coordinates, one page; {@code refresh} starts a re-score of
-     *  every coordinate off the request path and answers the ledger as it stands. */
-    public HealthReport health(String repo, boolean refresh) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET", "/api/health?repo=" + enc(repo)
-                + (refresh ? "&refresh=true" : ""), null, null);
-        require(response, 200, "read the health of " + repo);
+    /** The maintainer health stored for a repository's coordinates, one page. Before the first ranking is built the
+     *  server answers {@code 503} with {@code ranked} false and no entries, which is a state of the report rather than
+     *  a failure to read it. */
+    public HealthReport health(String repo) throws IOException, InterruptedException {
+        return healthReport(send("GET", "/api/health?repo=" + enc(repo), null, null), repo);
+    }
+
+    /** Start a re-score of every coordinate off the request path: whether this request started it or found one
+     *  running, and the ledger as it stands. */
+    public HealthRefreshStart refreshHealth(String repo) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/health?repo=" + enc(repo) + "&refresh=true", null, null);
+        return new HealthRefreshStart(!"running".equals(response.headers().firstValue("Jenesis-Refresh").orElse("")),
+                healthReport(response, repo));
+    }
+
+    private static HealthReport healthReport(HttpResponse<String> response, String repo) throws IOException {
+        if (response.statusCode() != 503) {
+            require(response, 200, "read the health of " + repo);
+        }
         return JSON.readValue(response.body(), HealthReport.class);
     }
 
-    /** The answer {@code GET /api/health} gives: the scored coordinates, and when the scores were last refreshed. */
+    /** The answer {@code GET /api/health} gives: the scored coordinates, when the scores were last refreshed, and
+     *  whether a refresh is running now. */
     public record HealthReport(boolean available, boolean ranked, List<HealthEntry> entries, String nextCursor,
-                               int total, String lastScanned) {
+                               int total, String lastScanned, boolean refreshing) {
+    }
+
+    /** What starting a health refresh answered: whether this request started it, and the report as it stood. */
+    public record HealthRefreshStart(boolean started, HealthReport report) {
     }
 
     /** One coordinate's maintainer health: the overall score and its three components ({@code -1} when unknown). */

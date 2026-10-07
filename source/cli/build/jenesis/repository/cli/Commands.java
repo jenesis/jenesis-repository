@@ -122,7 +122,7 @@ public final class Commands {
                             ComplianceCommands::health,
                             act("health <repo>", "the stored scores, lowest first where ranked"),
                             act("health refresh <repo>", "re-score every coordinate in the background, and answer "
-                                    + "the scores as they stand")),
+                                    + "the scores as they stand; --refresh watches it finish")),
                     noun("enforcement-preview", "what enabling licence enforcement would newly hold",
                             ComplianceCommands::enforcementPreview,
                             act("enforcement-preview <repo> [--unknown]", "a dry run over what is already published")),
