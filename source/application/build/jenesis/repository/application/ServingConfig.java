@@ -57,8 +57,8 @@ import org.springframework.core.env.Environment;
  * {@link RoutedServing} read side, the tenancy routing, the live {@link FormatDispatcher}, batch ingestion and the
  * {@code RepositoryController} serving bean with {@link DeployEdgeHooks} and {@link PublishTenantFilter}.
  *
- * <p>{@link ImportController} is the one import edge: this module installs {@link RoutedImportEdge}, so the server's
- * own import controller, registered only when no {@code ImportEdgeProvider} is installed, is never created.
+ * <p>{@link ImportController} is the one import edge: the API's, beside the console's start of the same
+ * migration.
  */
 @Configuration(proxyBeanMethods = false)
 public class ServingConfig {
