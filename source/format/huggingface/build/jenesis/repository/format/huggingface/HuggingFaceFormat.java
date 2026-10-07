@@ -686,17 +686,22 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
                 headFromUpstream(upstreamHead, commit, resolve.filepath(), exchange);
                 return true;
             }
+            // An LFS-backed file's content sha256 is its git-lfs oid, which the Hub declares in the revision's sibling
+            // list - read beside the file - and as X-Linked-Etag on its resolve answer. That header rides only on the
+            // redirect to the file's CDN, which the transport follows past, so the list is what a CDN-backed file is
+            // held to. An ETag is no declaration: a plain git file's is a blob sha1, and a CDN's its own content hash.
+            ProxyRelay.Declared listed = revisionDeclaration(upstream, resolve, commit, fetcher);
+            if (!listed.readable()) {
+                return ProxyRelay.unverifiable(fileUrl, listed);
+            }
             try (ProxyFormat.Download download = fetcher.download(fileUrl, Map.of()).orElse(null)) {
                 if (download == null || download.status() != 200) {
                     return false;
                 }
-                // An LFS-backed file's response carries its content sha256 as the git-lfs oid in X-Linked-Etag (or
-                // ETag), and the streamed body is held to it. A non-LFS ETag is a git-blob sha1, not a content digest,
-                // so such a file caches plainly. The digest rides on the artifact's own response, so there is no
-                // separate declaring document to fail to read.
-                byte[] expected = lfsSha256(download);
-                if (!ProxyRelay.fill(blobs, fileKey, fileUrl, download.body(),
-                        expected == null ? ProxyRelay.Declared.NONE : ProxyRelay.Declared.of("SHA-256", expected))) {
+                byte[] linked = hex64(download.header("X-Linked-Etag"));
+                ProxyRelay.Declared expected = listed.verifiable() || linked == null ? listed
+                        : ProxyRelay.Declared.of("SHA-256", linked);
+                if (!ProxyRelay.fill(blobs, fileKey, fileUrl, download.body(), expected)) {
                     return false;
                 }
                 stampTime(store, base + "/revs/" + commit + "/time");
@@ -728,15 +733,33 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
         return etag.isBlank() ? null : etag;
     }
 
-    /** The content sha256 an LFS-backed download declares as its git-lfs oid: {@code X-Linked-Etag}, else {@code ETag},
-     *  a quoted 64-hex string. {@code null} otherwise: a non-LFS {@code ETag} is a git-blob sha1, a digest of
-     *  {@code "blob <len>\0" + content}, which cannot verify the raw bytes. */
-    private static byte[] lfsSha256(ProxyFormat.Download download) {
-        byte[] linked = hex64(download.header("X-Linked-Etag"));
-        if (linked != null) {
-            return linked;
+    /**
+     * What the Hub's revision document, with its blobs, declares for the file {@code resolve} names: its git-lfs
+     * sha256 when it is an LFS file, nothing for a plain git file or one the document does not list, and the
+     * document's own verdict when it could not be read - a declaring document that could not be read never makes an
+     * unverified fill.
+     */
+    private static ProxyRelay.Declared revisionDeclaration(URI upstream, Resolve resolve, String commit,
+                                                           ProxyFormat.Fetcher fetcher) throws IOException {
+        URI url = target(upstream, "api/" + resolve.type() + "/" + resolve.repoId() + "/revision/" + commit
+                + "?blobs=true");
+        ProxyRelay.Sidecar sidecar = ProxyRelay.declaring(fetcher, url, Map.of("Accept", "application/json"));
+        if (!sidecar.answered()) {
+            return sidecar.verdict();
         }
-        return hex64(download.header("ETag"));
+        JsonNode document;
+        try {
+            document = MAPPER.readTree(sidecar.document().body());
+        } catch (RuntimeException unreadable) {
+            return ProxyRelay.Declared.unreadable("the revision document at " + url + " is not JSON");
+        }
+        for (JsonNode sibling : document.path("siblings")) {
+            if (resolve.filepath().equals(sibling.path("rfilename").asString(""))) {
+                byte[] sha256 = hex64(sibling.path("lfs").path("sha256").asString(null));
+                return sha256 == null ? ProxyRelay.Declared.NONE : ProxyRelay.Declared.of("SHA-256", sha256);
+            }
+        }
+        return ProxyRelay.Declared.NONE;
     }
 
     /** Decode a possibly quoted or weak validator to bytes when it is exactly a 64-hex SHA-256, else {@code null}. */
