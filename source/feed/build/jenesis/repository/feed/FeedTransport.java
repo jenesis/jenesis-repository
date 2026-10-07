@@ -23,6 +23,19 @@ public interface FeedTransport {
      */
     FeedResponse send(FeedRequest request, Duration timeout) throws IOException;
 
+    /** What a test's stand-in for an endpoint answers a request with: the body of a {@code 200}. */
+    @FunctionalInterface
+    interface Exchange {
+        String answer(FeedRequest request) throws IOException;
+    }
+
+    /** A transport answering every request through {@code exchange}, as a {@code 200} the client bounds and pages as
+     *  it does a live response. */
+    static FeedTransport exchanging(Exchange exchange) {
+        Objects.requireNonNull(exchange, "exchange");
+        return (request, timeout) -> FeedResponse.of(200, exchange.answer(request));
+    }
+
     /** A transport over a JDK HTTP client the caller owns and closes (clause 10), for a deployment pooling one client
      *  or configuring a proxy, SSL context or executor. Redirects are not followed: a redirect would carry the
      *  credential to a host the vendor names, so a 3xx is reported as the named non-200 failure. */

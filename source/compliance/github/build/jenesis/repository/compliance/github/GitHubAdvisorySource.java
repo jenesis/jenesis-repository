@@ -107,10 +107,7 @@ public final class GitHubAdvisorySource implements AdvisorySource.Changes {
     private static final String UPDATED = "updated";
 
     /** The space of a source built with none: a draw or a read of the log is a wiring error there. */
-    private static final Supplier<ArtifactStore> NO_SPACE = () -> {
-        throw new IllegalStateException("This GitHub source was built without a signal space to keep its change log "
-                + "in");
-    };
+    private static final Supplier<ArtifactStore> NO_SPACE = FeedChanges.unbound(FEED);
 
     private final URI base;
     private final String token;

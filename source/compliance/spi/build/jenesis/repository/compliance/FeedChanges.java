@@ -27,6 +27,15 @@ public final class FeedChanges {
     private FeedChanges() {
     }
 
+    /** The space of a {@code feed} source built with none: a draw or a read of its log there is a wiring error, while
+     *  the source still screens. */
+    public static Supplier<ArtifactStore> unbound(String feed) {
+        return () -> {
+            throw new IllegalStateException("The " + feed + " source was built without a signal space to keep its "
+                    + "change log in");
+        };
+    }
+
     /** What one draw found: the positions to resume each list from, the packages it named, and whether it skipped
      *  changes it could not name. */
     public record Draw(Map<String, String> positions, Set<AdvisorySource.Package> packages, boolean gap) {
