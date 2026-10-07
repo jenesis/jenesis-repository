@@ -117,6 +117,7 @@ final class WingetFormatFixture implements EcosystemFormatFixture {
                 FormatContract.Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY, PROXY,
                 FormatContract.Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE, PROXY,
                 FormatContract.Property.PROXY_STREAMS_UPSTREAM_BODY, PROXY,
+                FormatContract.Property.PROXY_SCREEN_JUDGES_ONLY_THE_ARTIFACT, PROXY,
                 FormatContract.Property.COORDINATE_TRAVERSAL_REFUSED,
                 "WingetFormat implements ArtifactLayout for ecosystem()/describe() only: paths() answers empty by "
                         + "design, because a package's pointers live in the blobs namespace rather than under "
