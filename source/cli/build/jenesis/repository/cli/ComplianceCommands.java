@@ -196,10 +196,6 @@ final class ComplianceCommands {
         }
         RiskClient.FindingsReport report = CliSupport.client(home).risk().findings(args[1], coordinate, kind, source,
                 category, severity);
-        if (report == null) {
-            System.out.println("The findings store is not installed on this deployment.");
-            return 0;
-        }
         if (report.findings().isEmpty()) {
             System.out.println("No recorded findings match.");
             return 0;
@@ -665,10 +661,6 @@ final class ComplianceCommands {
             throw new IllegalArgumentException("Usage: enforcement-preview <repo> [--unknown]");
         }
         RiskClient.RetroPlan plan = CliSupport.client(home).risk().retroPlan(repo, unknown);
-        if (plan == null) {
-            System.out.println("License policy is not installed on this deployment.");
-            return 0;
-        }
         System.out.println("mode:  " + plan.mode());
         System.out.println("count: " + plan.count());
         for (RiskClient.RetroHeld held : plan.held()) {
@@ -687,10 +679,6 @@ final class ComplianceCommands {
             throw new IllegalArgumentException("Usage: findings report <repo> <file>");
         }
         RiskClient.ReportAnswer answer = CliSupport.client(home).risk().reportFindings(args[2], Path.of(args[3]));
-        if (answer == null) {
-            System.out.println("The findings store is not installed on this deployment.");
-            return 0;
-        }
         System.out.println("Recorded " + answer.recorded() + " finding(s); the gate's verdict is " + answer.verdict()
                 + (answer.held() ? ", and the version is withheld for review." : "."));
         for (String reason : answer.reasons()) {

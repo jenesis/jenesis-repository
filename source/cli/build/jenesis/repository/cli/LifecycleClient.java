@@ -58,51 +58,37 @@ public final class LifecycleClient extends ClientCalls {
         return true;
     }
 
-    /** Run the retention sweep over a repository, returning what it evicted and how many blobs it reclaimed, or
-     *  {@code null} when retention is not installed on this deployment (HTTP 501). */
+    /** Run the retention sweep over a repository, returning what it evicted and how many blobs it reclaimed. */
     public CleanupReport cleanup(String repo) throws IOException, InterruptedException {
         HttpResponse<String> response = send("POST", "/api/repository/cleanup?repo=" + enc(repo), null, null);
-        if (response.statusCode() == 501) {
-            return null;
-        }
         require(response, 200, "run cleanup on " + repo);
         return JSON.readValue(response.body(), CleanupReport.class);
     }
 
     /** The dry-run cleanup plan: what the sweep would evict, without deleting anything ({@code blobsReclaimed} is
-     *  always 0), or {@code null} when retention is not installed (HTTP 501). */
+     *  always 0). */
     public CleanupReport cleanupPlan(String repo) throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET", "/api/repository/cleanup/plan?repo=" + enc(repo), null, null);
-        if (response.statusCode() == 501) {
-            return null;
-        }
         require(response, 200, "plan cleanup on " + repo);
         return JSON.readValue(response.body(), CleanupReport.class);
     }
 
-    /** A repository's retention policy, or {@code null} when retention is not installed (HTTP 501). */
+    /** A repository's retention policy. */
     public RetentionView retention(String repo) throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET", "/api/repository/retention?repo=" + enc(repo), null, null);
-        if (response.statusCode() == 501) {
-            return null;
-        }
         require(response, 200, "read the retention policy of " + repo);
         return JSON.readValue(response.body(), RetentionView.class);
     }
 
     /** Set the given rules of a repository's retention - each a repository setting: a value sets it, a blank one
      *  clears it so the repository inherits, {@code none} switches a duration rule off, and a {@code null} one is left
-     *  as it is; {@code false} when retention is not installed (HTTP 501). */
-    public boolean setRetention(String repo, String keepLast, String maxAge, String prereleaseExpiry,
+     *  as it is. */
+    public void setRetention(String repo, String keepLast, String maxAge, String prereleaseExpiry,
                                 String notDownloadedFor) throws IOException, InterruptedException {
         String query = given("keepLast", keepLast) + given("maxAge", maxAge)
                 + given("prereleaseExpiry", prereleaseExpiry) + given("notDownloadedFor", notDownloadedFor);
         HttpResponse<String> response = send("PUT", "/api/repository/retention?repo=" + enc(repo) + query, null, null);
-        if (response.statusCode() == 501) {
-            return false;
-        }
         require(response, 200, "set the retention policy of " + repo);
-        return true;
     }
 
     private static String given(String parameter, String value) {

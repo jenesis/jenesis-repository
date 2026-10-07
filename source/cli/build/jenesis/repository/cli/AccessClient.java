@@ -219,22 +219,16 @@ public final class AccessClient extends ClientCalls {
     }
 
     /** The tenant's audit trail, newest first, optionally bounded by ISO-8601 {@code from}/{@code to} instants and a
-     *  single {@code action}; {@code null} when audit is not installed on this deployment (HTTP 501). */
+     *  single {@code action}. */
     public List<AuditEvent> audit(String from, String to, String action) throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET", "/api/audit" + auditQuery(from, to, action), null, null);
-        if (response.statusCode() == 501) {
-            return null;
-        }
         require(response, 200, "read the audit trail");
         return List.of(JSON.readValue(response.body(), AuditEvent[].class));
     }
 
-    /** The same audit trail as a CSV download for off-system retention, or {@code null} when audit is not installed. */
+    /** The same audit trail as a CSV download for off-system retention. */
     public String auditCsv(String from, String to, String action) throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET", "/api/audit.csv" + auditQuery(from, to, action), null, null);
-        if (response.statusCode() == 501) {
-            return null;
-        }
         require(response, 200, "export the audit trail");
         return response.body();
     }

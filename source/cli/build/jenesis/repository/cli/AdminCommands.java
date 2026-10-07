@@ -214,10 +214,7 @@ final class AdminCommands {
                 System.out.println("Set the storage quota.");
                 return 0;
             }
-            if (!client.settings().setRateLimit(tenant, Long.parseLong(args[3]))) {
-                System.out.println("Rate limiting is not installed on this deployment.");
-                return 1;
-            }
+            client.settings().setRateLimit(tenant, Long.parseLong(args[3]));
             System.out.println("Set the rate limit.");
             return 0;
         }
@@ -227,10 +224,16 @@ final class AdminCommands {
         SettingsClient.QuotaView quota = client.settings().quota();
         System.out.println("quota: " + (quota.maxBytes() == 0 ? "unlimited" : quota.maxBytes() + " bytes"));
         System.out.println("used:  " + quota.usedBytes() + " bytes");
-        SettingsClient.RateLimitView rate = client.settings().rateLimit();
-        System.out.println("rate:  " + (rate == null ? "rate limiting is not installed on this deployment"
-                : rate.permitsPerMinute() == 0 ? "no tenant ceiling (falls back to the deployment default)"
-                : rate.permitsPerMinute() + " permits per minute"));
+        // The quota is the noun's own; the ceiling is a module's, so a deployment without it still answers the rest.
+        String rate;
+        try {
+            long permits = client.settings().rateLimit().permitsPerMinute();
+            rate = permits == 0 ? "no tenant ceiling (falls back to the deployment default)"
+                    : permits + " permits per minute";
+        } catch (RepositoryClient.NotInstalled _) {
+            rate = "rate limiting is not installed on this deployment";
+        }
+        System.out.println("rate:  " + rate);
         return 0;
     }
 
@@ -250,19 +253,10 @@ final class AdminCommands {
         }
         RepositoryClient client = CliSupport.client(home);
         if (csv) {
-            String body = client.access().auditCsv(from, to, action);
-            if (body == null) {
-                System.out.println("Audit is not installed on this deployment.");
-                return 0;
-            }
-            System.out.print(body);
+            System.out.print(client.access().auditCsv(from, to, action));
             return 0;
         }
         List<AccessClient.AuditEvent> events = client.access().audit(from, to, action);
-        if (events == null) {
-            System.out.println("Audit is not installed on this deployment.");
-            return 0;
-        }
         if (events.isEmpty()) {
             System.out.println("No audit events.");
             return 0;
@@ -511,10 +505,6 @@ final class AdminCommands {
             }
             case 405 -> {
                 System.out.println("Repository '" + repo + "' does not accept writes (a proxy target is read-only).");
-                yield 1;
-            }
-            case 501 -> {
-                System.out.println("Upstream fetching is not installed on this deployment.");
                 yield 1;
             }
             case 400 -> {
