@@ -6,8 +6,9 @@ import build.jenesis.repository.compliance.Severity;
 
 /**
  * The advisory-to-finding mapping every surface that persists or replays feed advisories shares: the malicious flag
- * selects the kind, CVE aliases become references, a fixed version rides the {@code fixed} attribute, and the feed's
- * summary is kept as the description so no display re-fetches it.
+ * selects the kind, CVE aliases become references, a fixed version rides the {@code fixed} attribute, the feed's
+ * summary is kept as the description so no display re-fetches it, and what the source said beyond these - its
+ * attribution, ratings and weaknesses - is kept as the finding's structured detail.
  */
 public final class AdvisoryFindings {
 
@@ -21,7 +22,8 @@ public final class AdvisoryFindings {
                         "advisory", advisory.severity() == null ? Severity.NONE : advisory.severity(),
                         advisory.description(), seen)
                 .withReferences(advisory.cves())
-                .withProvenance(provenance);
+                .withProvenance(provenance)
+                .withDetail(advisory.detail());
         return advisory.fixed() == null ? finding : finding.withAttribute("fixed", advisory.fixed());
     }
 
@@ -36,7 +38,7 @@ public final class AdvisoryFindings {
         }
         return new AdvisorySource.Advisory(finding.id(), finding.severity(),
                 finding.kind() == Finding.Kind.MALWARE, finding.attributes().get("fixed"), cves,
-                finding.description());
+                finding.description(), List.of(), finding.detail());
     }
 
     /**

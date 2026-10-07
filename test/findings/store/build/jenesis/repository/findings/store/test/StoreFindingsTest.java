@@ -3,6 +3,7 @@ package build.jenesis.repository.findings.store.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.compliance.Severity;
+import build.jenesis.repository.compliance.VulnerabilityRecord;
 import build.jenesis.repository.findings.Finding;
 import build.jenesis.repository.findings.Findings;
 import build.jenesis.repository.findings.FindingsProvider;
@@ -48,6 +49,34 @@ class StoreFindingsTest {
 
         assertThat(findings.of("Maven", "org.apache.logging.log4j:log4j-core", "2.14.1"))
                 .singleElement().isEqualTo(recorded);
+    }
+
+    @Test
+    void what_a_source_said_of_a_finding_survives_the_ledger_and_every_mark_on_it() throws IOException {
+        VulnerabilityRecord.Source github = new VulnerabilityRecord.Source("GitHub Advisory Database",
+                "https://github.com/advisories/GHSA-1");
+        VulnerabilityRecord detail = new VulnerabilityRecord(github,
+                List.of(new VulnerabilityRecord.Reference("CVE-2021-44228", null)),
+                List.of(new VulnerabilityRecord.Rating(github, 10.0, Severity.CRITICAL, "CVSSv31",
+                        "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H")),
+                List.of(502), List.of(), Instant.parse("2021-12-10T00:40:56Z"), null);
+        findings.record("Maven", "org.acme:lib", "1.0", Finding.of("GHSA-1", "osv", Finding.Kind.VULNERABILITY,
+                "advisory", Severity.CRITICAL, "recorded", FIRST).withDetail(detail));
+        assertThat(findings.of("Maven", "org.acme:lib", "1.0")).singleElement()
+                .satisfies(finding -> assertThat(finding.detail()).isEqualTo(detail));
+
+        findings.label("Maven", "org.acme:lib", "1.0", "osv", "GHSA-1",
+                new Finding.Label("ai", "applicability", "applies", 0.7, LATER));
+        findings.supersede("Maven", "org.acme:lib", "1.0", "osv", "GHSA-1", "withdrawn");
+        assertThat(findings.of("Maven", "org.acme:lib", "1.0")).singleElement()
+                .satisfies(finding -> assertThat(finding.detail()).as("labelled and superseded").isEqualTo(detail));
+
+        VulnerabilityRecord rescored = VulnerabilityRecord.from(github);
+        findings.record("Maven", "org.acme:lib", "1.0", Finding.of("GHSA-1", "osv", Finding.Kind.VULNERABILITY,
+                "advisory", Severity.CRITICAL, "recorded", LATER).withDetail(rescored));
+        assertThat(findings.of("Maven", "org.acme:lib", "1.0")).singleElement()
+                .satisfies(finding -> assertThat(finding.detail()).as("a re-record says what the source says now")
+                        .isEqualTo(rescored));
     }
 
     @Test

@@ -76,7 +76,8 @@ public final class StoreFindings implements Findings {
                     rows.set(index, new Finding(existing.id(), existing.source(), existing.kind(),
                             existing.category(), existing.severity(), existing.confidence(), existing.description(),
                             existing.references(), existing.provenance(), existing.attributes(),
-                            existing.firstSeen(), existing.lastSeen(), supersededBy, existing.labels()));
+                            existing.firstSeen(), existing.lastSeen(), supersededBy, existing.labels(),
+                            existing.detail()));
                     return rows;
                 }
             }
@@ -210,7 +211,8 @@ public final class StoreFindings implements Findings {
                 rows.set(index, new Finding(existing.id(), existing.source(), existing.kind(),
                         existing.category(), existing.severity(), existing.confidence(), existing.description(),
                         existing.references(), existing.provenance(), existing.attributes(),
-                        existing.firstSeen(), existing.lastSeen(), existing.supersededBy(), labels));
+                        existing.firstSeen(), existing.lastSeen(), existing.supersededBy(), labels,
+                        existing.detail()));
                 return;
             }
         }

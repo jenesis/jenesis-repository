@@ -4,6 +4,7 @@ import module java.base;
 import module tools.jackson.databind;
 import module org.slf4j;
 import build.jenesis.repository.compliance.Severity;
+import build.jenesis.repository.compliance.VulnerabilityRecord;
 import build.jenesis.repository.findings.Finding;
 import build.jenesis.repository.metadata.Section;
 import build.jenesis.repository.metadata.SectionMutation;
@@ -28,6 +29,10 @@ public final class FindingsSection {
     public static final int SCHEMA = 1;
 
     private static final String FINDINGS_FIELD = "findings";
+
+    /** A row's field holding what its source said of it, as CycloneDX's {@code vulnerability} object; absent where the
+     *  source said nothing beyond the identifier and description. */
+    private static final String VULNERABILITY_FIELD = "vulnerability";
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -69,7 +74,7 @@ public final class FindingsSection {
                         finding.severity(), finding.confidence(), finding.description(), finding.references(),
                         finding.provenance(), finding.attributes(),
                         min(existing.firstSeen(), finding.firstSeen()), max(existing.lastSeen(), finding.lastSeen()),
-                        existing.supersededBy(), existing.labels()));
+                        existing.supersededBy(), existing.labels(), finding.detail()));
                 return false;
             }
         }
@@ -133,6 +138,9 @@ public final class FindingsSection {
                 mark.put("confidence", label.confidence());
                 mark.put("when", label.when().toString());
             }
+            if (!finding.detail().isEmpty()) {
+                row.set(VULNERABILITY_FIELD, finding.detail().toCycloneDx(JSON, finding.id(), null));
+            }
         }
         for (JsonNode unrecognised : carried) {
             findings.add(unrecognised);
@@ -165,7 +173,7 @@ public final class FindingsSection {
                         row.path("description").asString(), references, row.path("provenance").asString(),
                         attributes, Instant.parse(row.path("firstSeen").asString()),
                         Instant.parse(row.path("lastSeen").asString()), row.path("supersededBy").asString(null),
-                        labels));
+                        labels, VulnerabilityRecord.fromCycloneDx(row.path(VULNERABILITY_FIELD))));
             } catch (RuntimeException e) {
                 LOGGER.warn("Carrying an unrecognised findings row through unparsed", e);
                 parsed.carried().add(row);

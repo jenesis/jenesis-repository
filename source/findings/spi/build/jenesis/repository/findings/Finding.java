@@ -2,6 +2,7 @@ package build.jenesis.repository.findings;
 
 import module java.base;
 import build.jenesis.repository.compliance.Severity;
+import build.jenesis.repository.compliance.VulnerabilityRecord;
 
 /**
  * One durable finding against a coordinate: what was found, by which module or feed, and how it is categorized. It is
@@ -11,12 +12,15 @@ import build.jenesis.repository.compliance.Severity;
  *
  * <p>A finding no longer reported keeps its row with an ageing {@code lastSeen}, a wrong one is
  * {@linkplain #supersededBy marked} rather than erased, and later classifiers attach {@linkplain Label labels}.
- * Kind-specific facts (a fixed version, a call path) ride {@code attributes}.
+ * Kind-specific facts (a fixed version, a call path) ride {@code attributes}. What the finding's source said of it beyond
+ * its identifier and description - where it was published, each rating with who gave it, its other names, weaknesses
+ * and advisories - rides {@code detail}, structured as CycloneDX's {@code vulnerability} object, so the finding is
+ * attributed to its source wherever it is shown.
  */
 public record Finding(String id, String source, Kind kind, String category, Severity severity, double confidence,
                       String description, List<String> references, String provenance,
                       Map<String, String> attributes, Instant firstSeen, Instant lastSeen, String supersededBy,
-                      List<Label> labels) {
+                      List<Label> labels, VulnerabilityRecord detail) {
 
     /** What family of statement a finding makes. The ledger stores the name, so stored rows survive new kinds. */
     public enum Kind {
@@ -78,6 +82,15 @@ public record Finding(String id, String source, Kind kind, String category, Seve
         Objects.requireNonNull(firstSeen, "firstSeen");
         Objects.requireNonNull(lastSeen, "lastSeen");
         labels = labels == null ? List.of() : List.copyOf(labels);
+        detail = detail == null ? VulnerabilityRecord.EMPTY : detail;
+    }
+
+    /** A finding whose source said nothing beyond its identifier and description. */
+    public Finding(String id, String source, Kind kind, String category, Severity severity, double confidence,
+                   String description, List<String> references, String provenance, Map<String, String> attributes,
+                   Instant firstSeen, Instant lastSeen, String supersededBy, List<Label> labels) {
+        this(id, source, kind, category, severity, confidence, description, references, provenance, attributes,
+                firstSeen, lastSeen, supersededBy, labels, VulnerabilityRecord.EMPTY);
     }
 
     /** A fresh finding with the shared facts, seen now on both ends; the writer refines it with the withers. */
@@ -89,24 +102,30 @@ public record Finding(String id, String source, Kind kind, String category, Seve
 
     public Finding withConfidence(double confidence) {
         return new Finding(id, source, kind, category, severity, confidence, description, references, provenance,
-                attributes, firstSeen, lastSeen, supersededBy, labels);
+                attributes, firstSeen, lastSeen, supersededBy, labels, detail);
     }
 
     public Finding withReferences(List<String> references) {
         return new Finding(id, source, kind, category, severity, confidence, description, references, provenance,
-                attributes, firstSeen, lastSeen, supersededBy, labels);
+                attributes, firstSeen, lastSeen, supersededBy, labels, detail);
     }
 
     public Finding withProvenance(String provenance) {
         return new Finding(id, source, kind, category, severity, confidence, description, references, provenance,
-                attributes, firstSeen, lastSeen, supersededBy, labels);
+                attributes, firstSeen, lastSeen, supersededBy, labels, detail);
     }
 
     public Finding withAttribute(String key, String value) {
         Map<String, String> extended = new LinkedHashMap<>(attributes);
         extended.put(key, value);
         return new Finding(id, source, kind, category, severity, confidence, description, references, provenance,
-                extended, firstSeen, lastSeen, supersededBy, labels);
+                extended, firstSeen, lastSeen, supersededBy, labels, detail);
+    }
+
+    /** This finding, with {@code detail} as what its source said beyond its identifier and description. */
+    public Finding withDetail(VulnerabilityRecord detail) {
+        return new Finding(id, source, kind, category, severity, confidence, description, references, provenance,
+                attributes, firstSeen, lastSeen, supersededBy, labels, detail);
     }
 
     /** Whether this finding is still standing - not marked as superseded by a later or better one. */
