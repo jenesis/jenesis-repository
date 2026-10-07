@@ -20,6 +20,9 @@ import build.jenesis.repository.store.Providers;
  * records the matcher's advisories beside the cataloguer's bill - both made by the one cataloguing, so the bill
  * matched and the bill attached name the same packages.
  *
+ * <p>A scanner that runs on a tool an operator keeps fit - a command, a service - says what state the tool is in
+ * through the {@link ScannerTool} role beside this one.
+ *
  * <p>A scanner decides nothing. It carries the artifact there and the report back; the gate decides the advisories
  * it reports exactly as it decides a feed's, and the host keeps the bill it makes. Which scanners screen a repository
  * is the repository's {@value #SETTING} ({@link #selected}); where each answers and with which credential is the
