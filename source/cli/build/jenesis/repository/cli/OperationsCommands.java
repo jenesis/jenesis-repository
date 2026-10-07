@@ -60,6 +60,65 @@ final class OperationsCommands {
         return 0;
     }
 
+    /** How long a requested scanner-tools pass takes to be picked up: one scheduler tick of the node holding it. */
+    private static final Duration SCANNERS_PICKUP = Duration.ofSeconds(10);
+
+    /** Each configured scanner's tool as the scanner-tools pass last recorded it, or a refresh of them asked for. */
+    static int scanners(String[] args, Path home) throws Exception {
+        RepositoryClient client = CliSupport.client(home);
+        if (args.length == 2 && args[1].equals("refresh")) {
+            client.operations().scannersRefresh();
+            if (!Refresh.on()) {
+                System.out.println("A refresh of the scanner tools is requested; the node holding the pass picks it "
+                        + "up within its next scheduler tick.");
+                return 0;
+            }
+            return Refresh.until(SCANNERS_PICKUP, () -> {
+                OperationsClient.Scanners seen = client.operations().scanners();
+                if (seen.requested() != null) {
+                    System.out.println("Requested at " + seen.requested() + "; waiting for the pass to run.");
+                    return Refresh.Poll.State.running();
+                }
+                return Refresh.Poll.State.done(print(seen));
+            });
+        }
+        if (args.length != 1) {
+            throw new IllegalArgumentException("usage: scanners [refresh]");
+        }
+        return print(client.operations().scanners());
+    }
+
+    /** {@code scanners} as a person reads it. */
+    private static int print(OperationsClient.Scanners scanners) {
+        if (!"recorded".equals(scanners.state())) {
+            System.out.println("The scanner-tools pass has not recorded anything yet; it does on its next run.");
+            return 0;
+        }
+        System.out.println("As of " + scanners.recorded() + ".");
+        List<OperationsClient.ScannerTool> tools = scanners.tools() == null ? List.of() : scanners.tools();
+        if (tools.isEmpty()) {
+            System.out.println("No configured scanner runs on a tool this deployment reports on.");
+            return 0;
+        }
+        for (OperationsClient.ScannerTool tool : tools) {
+            List<String> reasons = tool.unfit() == null ? List.of() : tool.unfit();
+            String state = tool.failure() != null ? "not reachable: " + tool.failure()
+                    : !reasons.isEmpty() ? "unfit: " + String.join("; ", reasons) : "fit";
+            System.out.println(tool.name() + "  " + (tool.version() == null ? "version unknown" : tool.version())
+                    + " (" + tool.placement() + ")  " + state);
+            for (OperationsClient.ScannerDatabase database : tool.databases() == null
+                    ? List.<OperationsClient.ScannerDatabase>of() : tool.databases()) {
+                System.out.println("  " + database.name() + " database"
+                        + (database.build() == null ? "" : " " + database.build()) + ": "
+                        + (database.built() == null ? "" : "built " + database.built() + ", ")
+                        + (database.fetched() == null ? "never fetched" : "fetched " + database.fetched())
+                        + (database.nextUpdate() == null ? "" : ", next due " + database.nextUpdate())
+                        + (database.fetched() != null && !database.current() ? "  overdue" : ""));
+            }
+        }
+        return 0;
+    }
+
     static int walks(String[] args, Path home) throws Exception {
         if (args.length == 2 && args[1].equals("run")) {
             RepositoryClient client = CliSupport.client(home);

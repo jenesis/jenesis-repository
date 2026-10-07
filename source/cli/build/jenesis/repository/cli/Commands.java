@@ -363,6 +363,12 @@ public final class Commands {
                             act("signals", "each refreshable signal source as the signal-refresh pass last found it: "
                                     + "when it was drawn, why a refresh failed, and each ecosystem a mirroring feed "
                                     + "keeps a copy of")),
+                    noun("scanners", "the tools the content scanners run on", OperationsCommands::scanners,
+                            act("scanners", "each configured scanner's tool as the scanner-tools pass last found it: "
+                                    + "its version, each database with when it was built, fetched and next due, and "
+                                    + "why it is unfit or could not be asked"),
+                            act("scanners refresh [--refresh]", "ask every tool to fetch a database that is no longer "
+                                    + "current and say what state it is in; --refresh watches until the pass has run")),
                     noun("consistency", "agreement between the nodes of a cluster",
                             OperationsCommands::consistency,
                             act("consistency", "per-node fingerprints and any divergence")),
