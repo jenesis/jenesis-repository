@@ -81,31 +81,73 @@ public final class ClosureSection {
      * How {@code closure} reaches {@code coordinate} at {@code version}: from the dependency the resolved version names
      * itself down to it, each step the component the next was first named through. Empty where the closure does not
      * reach it. A step whose own component the closure does not hold - a dependency that was cut - ends the path there,
-     * named, since nothing records what named it.
+     * named, since nothing records what named it. A caller asking for many paths of one closure asks {@link #paths}
+     * once.
      */
     public static List<Hop> path(Closure closure, String coordinate, String version) {
-        Map<String, Component> byName = new HashMap<>();
-        for (Component component : closure.components()) {
-            byName.putIfAbsent(component.coordinate() + "@" + component.version(), component);
-        }
-        Component at = byName.get(coordinate + "@" + version);
-        if (at == null) {
-            return List.of();
-        }
-        Deque<Hop> hops = new ArrayDeque<>();
-        Set<String> visited = new HashSet<>();
-        while (at != null && visited.add(at.coordinate() + "@" + at.version())) {
-            hops.addFirst(new Hop(at.coordinate(), at.version()));
-            if (at.direct()) {
-                break;
+        return paths(closure).path(coordinate, version);
+    }
+
+    /** {@code closure}'s components and foreign packages indexed once, so each path it answers costs its depth. */
+    public static Paths paths(Closure closure) {
+        return new Paths(closure);
+    }
+
+    /** The paths of one closure, from an index built once - see {@link #path} and {@link #foreignPath}. */
+    public static final class Paths {
+
+        private final Map<Hop, Component> components = new HashMap<>();
+        private final Map<Hop, Foreign> foreign = new HashMap<>();
+        private final Map<Foreign.Named, Foreign> foreignByName = new HashMap<>();
+
+        private Paths(Closure closure) {
+            for (Component component : closure.components()) {
+                components.putIfAbsent(new Hop(component.coordinate(), component.version()), component);
             }
-            Component parent = byName.get(at.viaCoordinate() + "@" + at.viaVersion());
-            if (parent == null) {
-                hops.addFirst(new Hop(at.viaCoordinate(), at.viaVersion()));
+            for (Foreign named : closure.foreign()) {
+                foreign.putIfAbsent(new Hop(named.coordinate(), named.version()), named);
+                foreignByName.putIfAbsent(new Foreign.Named(named.ecosystem(), named.coordinate(), named.version()),
+                        named);
             }
-            at = parent;
         }
-        return List.copyOf(hops);
+
+        /** How the closure reaches the component {@code coordinate} at {@code version} - see {@link #path}. */
+        public List<Hop> path(String coordinate, String version) {
+            Component at = components.get(new Hop(coordinate, version));
+            return at == null ? List.of() : walk(at, components, Component::direct,
+                    component -> new Hop(component.coordinate(), component.version()),
+                    component -> new Hop(component.viaCoordinate(), component.viaVersion()));
+        }
+
+        /** How the closure reaches the foreign package {@code coordinate} at {@code version} of {@code ecosystem} -
+         *  see {@link #foreignPath}. */
+        public List<Hop> foreign(String ecosystem, String coordinate, String version) {
+            Foreign at = foreignByName.get(new Foreign.Named(ecosystem, coordinate, version));
+            return at == null ? List.of() : walk(at, foreign, Foreign::direct,
+                    named -> new Hop(named.coordinate(), named.version()),
+                    named -> new Hop(named.viaCoordinate(), named.viaVersion()));
+        }
+
+        /** From {@code at} up through what first named each step to the one the version names itself, and back down:
+         *  a step whose parent is not indexed ends the path there, named; a cycle ends it where it would repeat. */
+        private static <T> List<Hop> walk(T at, Map<Hop, T> indexed, Predicate<T> direct, Function<T, Hop> self,
+                                          Function<T, Hop> via) {
+            Deque<Hop> hops = new ArrayDeque<>();
+            Set<Hop> visited = new HashSet<>();
+            T step = at;
+            while (step != null && visited.add(self.apply(step))) {
+                hops.addFirst(self.apply(step));
+                if (direct.test(step)) {
+                    break;
+                }
+                T parent = indexed.get(via.apply(step));
+                if (parent == null) {
+                    hops.addFirst(via.apply(step));
+                }
+                step = parent;
+            }
+            return List.copyOf(hops);
+        }
     }
 
     /** A dependency whose subtree did not resolve: what was asked for and why it ended there. */
@@ -131,6 +173,10 @@ public final class ClosureSection {
         public boolean direct() {
             return viaCoordinate.isEmpty();
         }
+
+        /** A foreign package by its ecosystem, coordinate and version. */
+        record Named(String ecosystem, String coordinate, String version) {
+        }
     }
 
     /**
@@ -139,32 +185,7 @@ public final class ClosureSection {
      * component. Empty where the closure does not name it.
      */
     public static List<Hop> foreignPath(Closure closure, String ecosystem, String coordinate, String version) {
-        Map<String, Foreign> byName = new HashMap<>();
-        for (Foreign foreign : closure.foreign()) {
-            byName.putIfAbsent(foreign.coordinate() + "@" + foreign.version(), foreign);
-        }
-        Foreign at = null;
-        for (Foreign foreign : closure.foreign()) {
-            if (foreign.ecosystem().equals(ecosystem) && foreign.coordinate().equals(coordinate)
-                    && foreign.version().equals(version)) {
-                at = foreign;
-                break;
-            }
-        }
-        Deque<Hop> hops = new ArrayDeque<>();
-        Set<String> visited = new HashSet<>();
-        while (at != null && visited.add(at.coordinate() + "@" + at.version())) {
-            hops.addFirst(new Hop(at.coordinate(), at.version()));
-            if (at.direct()) {
-                break;
-            }
-            Foreign parent = byName.get(at.viaCoordinate() + "@" + at.viaVersion());
-            if (parent == null) {
-                hops.addFirst(new Hop(at.viaCoordinate(), at.viaVersion()));
-            }
-            at = parent;
-        }
-        return List.copyOf(hops);
+        return paths(closure).foreign(ecosystem, coordinate, version);
     }
 
     /** A version's closure: the components it reaches, the cuts, whether a bound stopped it, when it was read, the

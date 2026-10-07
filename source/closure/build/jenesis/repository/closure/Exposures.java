@@ -61,6 +61,7 @@ final class Exposures {
             byRepository.putIfAbsent(members.get(i).repository(), members.get(i));
         }
         List<ExposureSection.Reached> reached = new ArrayList<>();
+        ClosureSection.Paths paths = ClosureSection.paths(closure);
         int examined = 0;
         for (ClosureSection.Component component : closure.components()) {
             ClosureWalk.Member holder = component.elsewhere() ? byRepository.get(component.repository())
@@ -72,7 +73,7 @@ final class Exposures {
             boolean held = Holdings.of(holder.store()).withheld(ecosystem, component.coordinate(),
                     component.version());
             add(reached, findings, holder.store(), ecosystem, component.coordinate(), component.version(),
-                    component.repository(), held, risk, ClosureSection.path(closure, component.coordinate(),
+                    component.repository(), held, risk, paths.path(component.coordinate(),
                             component.version()), "");
         }
         for (ClosureSection.Cut cut : closure.cuts()) {
@@ -99,8 +100,8 @@ final class Exposures {
                 if (standing.isPresent()) {
                     add(reached, findings, store.get(), foreign.ecosystem(), foreign.coordinate(), foreign.version(),
                             repository.equals(own) ? "" : repository, !standing.get().served(), risk,
-                            ClosureSection.foreignPath(closure, foreign.ecosystem(), foreign.coordinate(),
-                                    foreign.version()), foreign.ecosystem());
+                            paths.foreign(foreign.ecosystem(), foreign.coordinate(), foreign.version()),
+                            foreign.ecosystem());
                 }
             }
         }
