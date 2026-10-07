@@ -76,7 +76,8 @@ final class OsvRecords {
             }
         }
         return new VulnerabilityRecord(source, references, ratings, cwes, advisories,
-                instant(vuln.path("published").asString(null)), instant(vuln.path("modified").asString(null)));
+                VulnerabilityRecord.date(vuln.path("published").asString(null)),
+                VulnerabilityRecord.date(vuln.path("modified").asString(null)));
     }
 
     private static void weaknesses(JsonNode ids, List<Integer> into) {
@@ -85,16 +86,6 @@ final class OsvRecords {
         }
     }
 
-    private static Instant instant(String text) {
-        if (text == null || text.isBlank()) {
-            return null;
-        }
-        try {
-            return Instant.parse(text.strip());
-        } catch (DateTimeException notInstant) {
-            return null;
-        }
-    }
 
     // The summary, else a bounded prefix of the details, so the findings ledger keeps what the advisory says without
     // re-fetching the feed.
