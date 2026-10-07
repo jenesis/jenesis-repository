@@ -8,6 +8,12 @@ import build.jenesis.repository.compliance.GatePolicyProvider;
 import build.jenesis.repository.compliance.ProvenanceSignerProvider;
 import build.jenesis.repository.compliance.SignalSourceProvider;
 import build.jenesis.repository.cleanup.RetentionProvider;
+import build.jenesis.repository.format.FetcherProvider;
+import build.jenesis.repository.gc.GarbageCollectorProvider;
+import build.jenesis.repository.server.spi.RateLimiterProvider;
+import build.jenesis.repository.server.spi.TokenExchangeProvider;
+import build.jenesis.repository.store.TenantsProvider;
+import build.jenesis.repository.walk.WalkProvider;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
 
@@ -16,7 +22,8 @@ import build.jenesis.repository.settings.SettingsContributor;
  * ({@code jenrepo.<feature>=true|false}, the {@code Features} convention) for the discovered modules
  * that carry no settings contributor of their own: every {@link RepositoryFormat}, {@link ImportSourceProvider}
  * and removable {@link ServerModuleProvider} feature surface, and every provider the maintenance, gate-policy,
- * signal-source and provenance-signer SPI homes switch off by name. Each toggle is a documented {@code BOOLEAN} setting
+ * signal-source, provenance-signer, retention, walk, token-exchange, rate-limiter, fetcher, tenant-directory and
+ * collector SPI homes switch off by name. Each toggle is a documented {@code BOOLEAN} setting
  * (default {@code true} - one image carries every module and configuration trims it), so the settings screens,
  * the config search and {@code /api/settings} list exactly the switchable modules of this deployment. A module
  * whose own contributor already catalogues a setting under its name (the {@code index} task's gate, say) keeps
@@ -52,10 +59,9 @@ public final class ModuleTogglesSettingsContributor implements SettingsContribut
             toggles.putIfAbsent(module.name(), "the " + module.name() + " feature endpoints");
         }
         // The provider families whose SPI homes switch an implementation off by its name (Features.active over
-        // provider.name()) and whose names had no catalogue row: the maintenance passes, the gate policy dimensions,
-        // the signal sources and the provenance signers. A name is the live switch whether or not it is listed, so
-        // listing it is what turns a one-letter near-miss of a catalogued key (private-name beside private-names)
-        // from a trap into a row an operator can read.
+        // provider.name()) and whose names have no catalogue row of their own. A name is the live switch whether or
+        // not it is listed, so listing it is what turns a one-letter near-miss of a catalogued key (private-name
+        // beside private-names) from a trap into a row an operator can read.
         for (String task : MaintenanceTaskProvider.installed()) {
             toggles.putIfAbsent(task, "the " + task + " maintenance pass");
         }
@@ -70,6 +76,24 @@ public final class ModuleTogglesSettingsContributor implements SettingsContribut
         }
         for (String engine : RetentionProvider.installed()) {
             toggles.putIfAbsent(engine, "the " + engine + " retention engine");
+        }
+        for (String walk : WalkProvider.names()) {
+            toggles.putIfAbsent(walk, "the " + walk + " store walk");
+        }
+        for (String exchange : TokenExchangeProvider.names()) {
+            toggles.putIfAbsent(exchange, "the " + exchange + " token exchange");
+        }
+        for (String limiter : RateLimiterProvider.names()) {
+            toggles.putIfAbsent(limiter, "the " + limiter + " rate limiter");
+        }
+        for (String fetcher : FetcherProvider.names()) {
+            toggles.putIfAbsent(fetcher, "the " + fetcher + " upstream fetcher");
+        }
+        for (String directory : TenantsProvider.names()) {
+            toggles.putIfAbsent(directory, "the " + directory + " tenant directory");
+        }
+        for (String collector : GarbageCollectorProvider.names()) {
+            toggles.putIfAbsent(collector, "the " + collector + " garbage collector");
         }
         List<Setting> settings = new ArrayList<>();
         toggles.forEach((name, what) -> {

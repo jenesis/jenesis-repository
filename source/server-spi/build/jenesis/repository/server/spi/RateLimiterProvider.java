@@ -76,4 +76,10 @@ public interface RateLimiterProvider {
                         provider -> provider.create(config))
                 .orElse(RateLimiter.NONE);
     }
+
+    /** The names of the installed providers, each the {@code jenrepo.<name>} switch that turns it off - what the
+     *  settings catalogue lists as this rate limiter's toggles. */
+    static SortedSet<String> names() {
+        return Providers.installedNames("rate-limiter", ServiceLoader.load(RateLimiterProvider.class), RateLimiterProvider::name, _ -> true);
+    }
 }
