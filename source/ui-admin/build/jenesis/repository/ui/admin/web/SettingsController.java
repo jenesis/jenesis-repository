@@ -275,8 +275,14 @@ public class SettingsController {
                                         @RequestParam(name = "token", defaultValue = "") String token,
                                         @RequestParam(name = "header", defaultValue = "") String header,
                                         RedirectAttributes redirect) throws IOException {
-        settings.setUpstreamCredential(host, scheme, username, password, token, header);
-        redirect.addFlashAttribute("message", "Stored an upstream credential for '" + host + "'.");
+        try {
+            settings.setUpstreamCredential(host, scheme, username, password, token, header);
+            redirect.addFlashAttribute("message", "Stored an upstream credential for '" + host + "'.");
+        } catch (IllegalStateException unsealable) {
+            // No key to seal it under, or no credential module: said on the screen, since the console's own handler
+            // reads an IllegalStateException as a missing tenant and would land on the dashboard saying nothing.
+            redirect.addFlashAttribute("error", unsealable.getMessage());
+        }
         return "redirect:/ui/settings/upstreams";
     }
 
