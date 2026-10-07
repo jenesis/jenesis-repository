@@ -8,6 +8,7 @@ import build.jenesis.repository.feed.FeedException;
 import build.jenesis.repository.feed.FeedRequest;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Checksums;
+import build.jenesis.repository.store.StoreCache;
 
 /**
  * The durable half of the OSV mirror: a copy of OSV's records for each ecosystem it is asked to keep, in the mirror's
@@ -44,6 +45,10 @@ final class OsvMirror {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
+    /** How long a lookup holds an ecosystem's {@code current} document before reading it again: a lookup sees a peer's
+     *  rebuilt copy within it, and this node's own writes at once. */
+    static final Duration STATE_TTL = Duration.ofSeconds(30);
+
     private final Supplier<ArtifactStore> space;
     private final FeedClient client;
     private final URI export;
@@ -64,9 +69,23 @@ final class OsvMirror {
 
     /** The ecosystem's current copy, OSV's name of it, or empty before its first build lands. */
     Optional<State> state(String osvName) throws IOException {
-        return readJson(current(osvName)).map(node -> new State(node.path("generation").asString(),
-                Instant.parse(node.path("built").asString()), Instant.parse(node.path("drawn").asString()),
-                Instant.parse(node.path("position").asString()), node.path("previous").asString(null)));
+        return readJson(current(osvName)).map(OsvMirror::state);
+    }
+
+    /** {@link #state} as a lookup reads it: through this node's cache of the mirror's space, held for
+     *  {@link #STATE_TTL}. */
+    Optional<State> heldState(String osvName) throws IOException {
+        return states().readVersioned(current(osvName)).map(stored -> state(JSON.readTree(stored.content())));
+    }
+
+    private static State state(JsonNode node) {
+        return new State(node.path("generation").asString(), Instant.parse(node.path("built").asString()),
+                Instant.parse(node.path("drawn").asString()), Instant.parse(node.path("position").asString()),
+                node.path("previous").asString(null));
+    }
+
+    private StoreCache states() {
+        return StoreCache.of("osvmirror", space.get(), STATE_TTL);
     }
 
     /** The ecosystems, the product's names, the mirror is asked to keep. */
@@ -99,7 +118,7 @@ final class OsvMirror {
     /**
      * Build a new copy of {@code osvName}, the product's {@code product}, from its whole export, name it current, and
      * delete the one before the copy it replaces. The copy it replaces stays one build longer: a node holds the state
-     * it read for {@link OsvMirrorSource#STATE_TTL}, and deleting what that state names would answer its lookups from
+     * it read for {@link #STATE_TTL}, and deleting what that state names would answer its lookups from
      * missing package documents - no records, which reads as clean.
      *
      * @throws FeedException the export could not be drawn; nothing is named current and the copy before keeps serving
@@ -367,7 +386,7 @@ final class OsvMirror {
         if (state.previous() != null) {
             node.put("previous", state.previous());
         }
-        writeJson(current(osvName), node);
+        states().write(current(osvName), JSON.writeValueAsBytes(node));
     }
 
     /** Delete every object under {@code prefix}, a page at a time. */
