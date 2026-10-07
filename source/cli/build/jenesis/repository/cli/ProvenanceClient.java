@@ -60,10 +60,20 @@ public final class ProvenanceClient extends ClientCalls {
      *  published versions built against it - each half one page resumed after its own cursor where one is given. */
     public Dependents dependents(String repo, String ecosystem, String coordinate, String version, String cursor,
                                  String declaredCursor) throws IOException, InterruptedException {
+        return dependents(repo, ecosystem, coordinate, version, null, cursor, declaredCursor);
+    }
+
+    /** {@link #dependents(String, String, String, String, String, String) What depends on a coordinate}, with pages of
+     *  {@code limit} rows, the server's default when {@code null}. */
+    public Dependents dependents(String repo, String ecosystem, String coordinate, String version, Integer limit,
+                                 String cursor, String declaredCursor) throws IOException, InterruptedException {
         String path = "/api/repository/dependents?repo=" + enc(repo) + "&ecosystem=" + enc(ecosystem)
                 + "&coordinate=" + enc(coordinate);
         if (version != null && !version.isBlank()) {
             path += "&version=" + enc(version);
+        }
+        if (limit != null) {
+            path += "&limit=" + limit;
         }
         if (cursor != null && !cursor.isBlank()) {
             path += "&after=" + enc(cursor);

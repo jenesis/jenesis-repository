@@ -293,14 +293,19 @@ public final class Cli {
                   Errors are JSON too under --json - {"error":...,"remedy":...,"exit":N} - and go to stderr, as
                   every message does, so stdout is only ever the answer.
 
-                  Without --json the output is line-oriented: one record per line, whitespace-separated columns,
-                  '-' where a value is absent.
+                  Without --json the output is for a person: a listing prints one record per line, with '-' where
+                  a value is absent and 'more: --cursor <next>' when a page follows, and a command answering with a
+                  document (metrics, config, scans, vex) prints it as the server sent it.
 
                 WHERE THE DANGER IS
-                  Most commands read. These write, and two of them delete data that is not recoverable:
+                  Most commands read. These delete data that cannot be recovered:
                     quarantine discard   drops held files
+                    cleanup <repo>       evicts what the repository's retention rules select
+                    repos delete         removes a repository and everything stored in it
+                    projects delete      removes a build-cache project and its entries
+                    tenants delete       removes a tenant and every repository in it
                     purge --delete       reclaims a removed module's stored data
-                  'purge' without --delete and 'cleanup plan' are dry runs that report what would happen. Prefer
+                  'cleanup plan' and 'purge' without --delete are dry runs that report what would happen. Prefer
                   them first.""");
     }
 }
