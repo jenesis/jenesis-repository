@@ -152,19 +152,19 @@ public class UserDirectory {
     }
 
     /**
-     * One bounded page of members after {@code cursor} ({@code null} starts at the beginning). Each subject's grants
-     * are read once, and one that is no member is skipped rather than shown role-less: a principal only a group names,
-     * a torn write, a racing removal. The page reads on past them until it holds {@code limit} members, so a tenant
-     * whose groups name many principals still shows its members; it stops after examining {@link #EXAMINED} ids,
-     * answering what it found with the cursor to resume after the last one examined.
+     * One bounded page of members after {@code cursor} ({@code null} starts at the beginning), enumerated over the
+     * tenant's member list ({@link Authorization#members}) rather than every principal a group names. Each one's
+     * grants are read once, and one that is no member after all is skipped rather than shown role-less: a grant
+     * lapsed or torn by a crash, a racing removal, a grant at a narrower scope than the tenant. The page reads on past
+     * them until it holds {@code limit} members; it stops after examining {@link #EXAMINED} ids, answering what it
+     * found with the cursor to resume after the last one examined.
      */
     public Page page(String cursor, int limit) {
         List<User> users = new ArrayList<>();
         String after = cursor;
         int examined = 0;
         while (true) {
-            Authorization.SubjectPage found = authorization.subjects(name(), Authorization.Kind.PRINCIPAL, after,
-                    limit);
+            Authorization.SubjectPage found = authorization.members(name(), after, limit);
             List<String> ids = found.ids();
             for (int i = 0; i < ids.size(); i++) {
                 after = ids.get(i);
@@ -204,6 +204,12 @@ public class UserDirectory {
      * count - SCIM's page and {@code totalResults} in one walk. Ids are enumerated a page at a time and a member's
      * grants are opened only inside the window, so a request holds one page of ids plus the window.
      *
+     * <p>The enumeration is the tenant's member list ({@link Authorization#members}), not its principals: a group
+     * names people who hold nothing of their own, and a total counted over them answered a syncing IdP with more
+     * users than any page of {@code Resources} would ever hold. The list is kept on the write path and repaired at
+     * start-up, so the one thing the total can still count that a page leaves out is a member whose grant lapsed or
+     * was torn since - a marker the next start takes away.
+     *
      * <p>The total is counted rather than kept in a stored counter: a counter beside each membership write drifts
      * across a crash between the writes undetectably, and a {@code totalResults} that silently lies is worse for a
      * syncing IdP than a bounded id walk.
@@ -216,8 +222,7 @@ public class UserDirectory {
         int total = 0;
         String cursor = null;
         while (true) {
-            Authorization.SubjectPage page =
-                    authorization.subjects(name(), Authorization.Kind.PRINCIPAL, cursor, PAGE);
+            Authorization.SubjectPage page = authorization.members(name(), cursor, PAGE);
             for (String id : page.ids()) {
                 if (total >= start && total < end) {
                     wanted.add(id);

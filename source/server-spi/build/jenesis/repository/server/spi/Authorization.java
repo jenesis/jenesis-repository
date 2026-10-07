@@ -76,6 +76,8 @@ public final class Authorization {
 
     private final PrincipalTenants tenants;
 
+    private final TenantMembers members;
+
     private Authorization(ArtifactStore store) {
         this(store, CredentialLifetimes.DEFAULT_LIFETIME, null, AnonymousRights.NONE);
     }
@@ -89,7 +91,8 @@ public final class Authorization {
         this.trusts = new OidcTrusts(space);
         this.roles = new Roles(space);
         this.tenants = new PrincipalTenants(space);
-        this.groups = new GroupMembership(space, tenants);
+        this.members = new TenantMembers(space);
+        this.groups = new GroupMembership(space, tenants, members);
     }
 
     /** An open deployment: every request is allowed, the explicit {@code jenrepo.auth=false} opt-out for the free
@@ -579,6 +582,20 @@ public final class Authorization {
     }
 
     /**
+     * One page of the principals holding a grant of their own in {@code tenant} - its members - in key order, with
+     * the cursor rule of {@link #subjects}.
+     *
+     * <p>Not the principal listing: a group naming a person gives them a subject in the tenant whether or not they
+     * hold anything of their own, so {@link #subjects} over {@link Kind#PRINCIPAL} names everyone a group mentions
+     * as well. A candidate set in the other direction too - it may name a principal whose grants have since lapsed
+     * or were torn by a crash, and never omits one holding a live grant - so a caller showing members confirms each
+     * through {@link #grants}.
+     */
+    public SubjectPage members(String tenant, String after, int limit) {
+        return members.page(tenant, after, limit);
+    }
+
+    /**
      * The scope-to-rights map a subject holds in {@code tenant}, empty when it holds none.
      *
      * <p>It freshens first, for the same reason {@link #authorize} does and it is not optional here: reads go
@@ -689,6 +706,7 @@ public final class Authorization {
             groups.rederive(tenant, member);
         }
         tenants.reconcile(tenant, subject);
+        members.reconcile(tenant, subject);
     }
 
     /** Record a freshly minted credential's metadata (created now, an optional label and optional expiry); the
@@ -740,6 +758,8 @@ public final class Authorization {
             throws IOException {
         enforceable(subject);
         space.require();
+        // Listed before it is granted, so no reader finds the grant and misses the member.
+        members.admit(tenant, subject);
         space.mutate(CredentialSpace.grantsPath(tenant, subject), grants -> {
             grants.setProperty(scope, tokens);
             if (expires == null) {
@@ -779,6 +799,7 @@ public final class Authorization {
             groups.rederiveGroup(tenant, subject.id());
         }
         tenants.reconcile(tenant, subject);
+        members.reconcile(tenant, subject);
     }
 
     /** Set or clear a credential's expiry; {@code null} removes it (the key no longer expires) unless the tenant
