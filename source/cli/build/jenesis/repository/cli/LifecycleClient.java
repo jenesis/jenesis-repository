@@ -197,7 +197,7 @@ public final class LifecycleClient extends ClientCalls {
      *  {@code next} is set has more behind it, whether or not it came back short. */
     public String lifecycleMarks(String repository, String after, Integer limit)
             throws IOException, InterruptedException {
-        StringBuilder path = new StringBuilder("/api/lifecycle?repository=").append(enc(repository));
+        StringBuilder path = new StringBuilder("/api/lifecycle?repo=").append(enc(repository));
         if (after != null && !after.isBlank()) {
             path.append("&after=").append(enc(after));
         }
@@ -214,7 +214,7 @@ public final class LifecycleClient extends ClientCalls {
             throws IOException, InterruptedException {
         // Query parameters, and a version: a mark names one version, which is what the endpoint binds and what the
         // stored flag carries; the endpoint refuses a JSON body.
-        HttpResponse<String> response = send("POST", "/api/lifecycle?repository=" + enc(repository)
+        HttpResponse<String> response = send("POST", "/api/lifecycle?repo=" + enc(repository)
                 + "&coordinate=" + enc(coordinate)
                 + "&version=" + enc(version)
                 + "&state=" + enc(state)
@@ -226,7 +226,7 @@ public final class LifecycleClient extends ClientCalls {
     public void clearLifecycle(String repository, String coordinate, String version)
             throws IOException, InterruptedException {
         HttpResponse<String> response = send("DELETE",
-                "/api/lifecycle?repository=" + enc(repository) + "&coordinate=" + enc(coordinate)
+                "/api/lifecycle?repo=" + enc(repository) + "&coordinate=" + enc(coordinate)
                         + "&version=" + enc(version), null, null);
         require(response, 200, "clear the lifecycle mark on " + coordinate + "@" + version);
     }

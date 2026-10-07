@@ -149,7 +149,7 @@ public final class MaintainerHealth {
      * otherwise, {@code null} for never scanned. {@code refreshing} says a refresh is running, so the report is the one
      * it will replace - what a caller watching it polls on.
      */
-    public record Report(boolean available, boolean ranked, List<Entry> entries, String nextCursor, int total,
+    public record Report(boolean available, boolean ranked, List<Entry> entries, String next, int total,
                          Instant lastScanned, boolean refreshing) {
     }
 

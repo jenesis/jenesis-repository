@@ -58,7 +58,7 @@ public final class JenesisSource implements ImportSource {
         do {
             URI url = URI.create(prefix + "/api/assets?repo="
                     + URLEncoder.encode(repository, StandardCharsets.UTF_8)
-                    + (token == null ? "" : "&cursor=" + URLEncoder.encode(token, StandardCharsets.UTF_8)));
+                    + (token == null ? "" : "&after=" + URLEncoder.encode(token, StandardCharsets.UTF_8)));
             ProxyFormat.Fetched page = get(url);
             if (page.status() != 200) {
                 throw ImportFailure.status(page.status(), url, "jenesis listing");
@@ -85,7 +85,7 @@ public final class JenesisSource implements ImportSource {
                 }
                 consumer.accept(format, layout, () -> open(prefix, served));
             }
-            token = body.path("cursor").asString(null);
+            token = body.path("next").asString(null);
             checkpoint.reached(token);
         } while (token != null);
     }

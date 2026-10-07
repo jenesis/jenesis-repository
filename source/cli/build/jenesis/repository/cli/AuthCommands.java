@@ -7,7 +7,7 @@ import module java.net.http;
 
 /**
  * The identity and access verbs: {@code login}/{@code logout}/{@code whoami} manage the session stored under
- * {@code ~/.jenesis}, and {@code credentials}/{@code roles}/{@code trusts} administer the tenant's keys, named
+ * {@code ~/.jenesis}, and {@code credentials}/{@code roles}/{@code keyless-ci} administer the tenant's keys, named
  * roles and OIDC trusts over the same {@link RepositoryClient} the console drives.
  */
 final class AuthCommands {
@@ -374,7 +374,7 @@ final class AuthCommands {
         switch (args[1]) {
             case "set" -> {
                 if (args.length < 3) {
-                    throw new IllegalArgumentException("Usage: trusts set <name> --issuer I --scope S --rights R "
+                    throw new IllegalArgumentException("Usage: keyless-ci set <name> --issuer I --scope S --rights R "
                             + "[--audience A] [--subject S] [--ttl D]");
                 }
                 String name = args[2];
@@ -392,23 +392,23 @@ final class AuthCommands {
                         case "--scope" -> scope = CliSupport.flag(args, ++i);
                         case "--rights" -> rights = CliSupport.flag(args, ++i);
                         case "--ttl" -> ttl = CliSupport.flag(args, ++i);
-                        default -> throw new IllegalArgumentException("Unknown trusts flag '" + args[i] + "'");
+                        default -> throw new IllegalArgumentException("Unknown keyless-ci flag '" + args[i] + "'");
                     }
                 }
                 if (issuer == null || scope == null || rights == null) {
-                    throw new IllegalArgumentException("trusts set needs --issuer, --scope and --rights.");
+                    throw new IllegalArgumentException("keyless-ci set needs --issuer, --scope and --rights.");
                 }
                 client.access().setTrust(name, issuer, audience, subject, scope, rights, ttl);
                 System.out.println("Saved trust " + name + ".");
             }
             case "remove" -> {
                 if (args.length < 3) {
-                    throw new IllegalArgumentException("Usage: trusts remove <name>");
+                    throw new IllegalArgumentException("Usage: keyless-ci remove <name>");
                 }
                 client.access().removeTrust(args[2]);
                 System.out.println("Removed trust " + args[2] + ".");
             }
-            default -> throw new IllegalArgumentException("Unknown trusts command '" + args[1] + "'");
+            default -> throw new IllegalArgumentException("Unknown keyless-ci command '" + args[1] + "'");
         }
         return 0;
     }
@@ -437,7 +437,7 @@ final class AuthCommands {
     /** The deployment's issued login keys - list, issue, revoke. */
     static int keylogin(String[] args, Path home) throws Exception {
         if (args.length < 2) {
-            throw new IllegalArgumentException("Usage: keylogin <list|issue|revoke> [...]");
+            throw new IllegalArgumentException("Usage: login-keys <list|issue|revoke> [...]");
         }
         switch (args[1]) {
             case "list" -> {
@@ -445,7 +445,7 @@ final class AuthCommands {
             }
             case "revoke" -> {
                 if (args.length < 3) {
-                    throw new IllegalArgumentException("Usage: keylogin revoke <id>");
+                    throw new IllegalArgumentException("Usage: login-keys revoke <id>");
                 }
                 CliSupport.client(home).access().revokeKeyLogin(args[2]);
                 System.out.println("Revoked login key " + args[2] + ".");
@@ -454,14 +454,14 @@ final class AuthCommands {
             case "issue" -> {
                 return issue(args, home);
             }
-            default -> throw new IllegalArgumentException("Unknown keylogin command '" + args[1] + "'");
+            default -> throw new IllegalArgumentException("Unknown login-keys command '" + args[1] + "'");
         }
     }
 
 private static int issue(String[] args, Path home) throws Exception {
         if (args.length < 3) {
             throw new IllegalArgumentException(
-                    "Usage: keylogin issue <principal> --tenant <name> [--login <display>] [--role <role>]");
+                    "Usage: login-keys issue <principal> --tenant <name> [--login <display>] [--role <role>]");
         }
         String principal = args[2], tenant = null, login = null, role = null;
         for (int i = 3; i < args.length; i++) {
@@ -469,12 +469,12 @@ private static int issue(String[] args, Path home) throws Exception {
                 case "--tenant" -> tenant = CliSupport.flag(args, ++i);
                 case "--login" -> login = CliSupport.flag(args, ++i);
                 case "--role" -> role = CliSupport.flag(args, ++i);
-                default -> throw new IllegalArgumentException("Usage: keylogin issue <principal> --tenant <name> "
+                default -> throw new IllegalArgumentException("Usage: login-keys issue <principal> --tenant <name> "
                         + "[--login <display>] [--role <role>]");
             }
         }
         if (tenant == null) {
-            throw new IllegalArgumentException("keylogin issue needs --tenant <name>");
+            throw new IllegalArgumentException("login-keys issue needs --tenant <name>");
         }
         return print(CliSupport.client(home).access().issueKeyLogin(principal, login, tenant, role));
     }

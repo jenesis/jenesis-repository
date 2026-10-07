@@ -153,8 +153,8 @@ public class BrowseControllerTest {
         assertThat(first.truncated()).isTrue();
         List<String> all = new ArrayList<>(first.results());
         var page = first;
-        while (page.nextCursor() != null) {
-            page = controller.search(REPO, "widget", page.nextCursor(), 2, request(), Servlets.response().servlet());
+        while (page.next() != null) {
+            page = controller.search(REPO, "widget", page.next(), 2, request(), Servlets.response().servlet());
             all.addAll(page.results());
         }
         assertThat(all).doesNotHaveDuplicates().hasSize(5);

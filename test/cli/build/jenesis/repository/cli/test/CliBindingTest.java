@@ -101,7 +101,7 @@ public class CliBindingTest {
             Map.entry("export", Binding.of("/api/repository/export", "export", "releases",
                     "--url", "http://x/")),
             Map.entry("projects", Binding.of("/api/cache/projects", "projects")),
-            Map.entry("keylogin", Binding.of("/api/keylogin", "keylogin", "list")),
+            Map.entry("login-keys", Binding.of("/api/keylogin", "login-keys", "list")),
             Map.entry("scim", Binding.of("/api/scim/token", "scim", "token")),
             Map.entry("posture", Binding.of("/api/admin/posture", "posture")),
             Map.entry("caches", Binding.of("/api/admin/caches", "caches")),
@@ -126,7 +126,7 @@ public class CliBindingTest {
             Map.entry("groups", Binding.of("/api/groups", "groups")),
             Map.entry("members", Binding.of("/api/principals", "members")),
             Map.entry("roles", Binding.of("/api/roles", "roles")),
-            Map.entry("trusts", Binding.of("/api/trusts", "trusts")));
+            Map.entry("keyless-ci", Binding.of("/api/trusts", "keyless-ci")));
 
     @TempDir
     private static Path home;
@@ -202,7 +202,7 @@ public class CliBindingTest {
         assertThat(requests.getFirst().getUrl())
                 .as("a mark must carry every parameter the endpoint requires, in the query")
                 .contains("/api/lifecycle")
-                .contains("repository=releases")
+                .contains("repo=releases")
                 .contains("coordinate=org.acme%3Alib")
                 .contains("version=1.0")
                 .contains("state=deprecated")

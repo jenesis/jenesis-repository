@@ -185,15 +185,14 @@ public class ManagementController {
     }
 
     /** The tenant's audit trail, newest first, optionally bounded by ISO-8601 {@code from}/{@code to} and one
-     *  {@code action}, and paged: by cursor ({@code after}, the previous answer's {@code Jenesis-Next-Cursor}, absent
-     *  on the last page) or by {@code offset}/{@code limit} (default 0/500, limit clamped to 1000). The CSV export
-     *  streams the whole trail. */
+     *  {@code action}, and paged by cursor: {@code after} is the previous answer's {@code Jenesis-Next-Cursor}, absent
+     *  on the last page - a header, since the answer is a list - and {@code limit} defaults to 500, clamped to 1000.
+     *  The CSV export streams the whole trail. */
     @GetMapping("/api/audit")
     @ResponseBody
     public List<AuditView> auditTrail(@RequestParam(name = "from", required = false) String from,
                                       @RequestParam(name = "to", required = false) String to,
                                       @RequestParam(name = "action", required = false) String action,
-                                      @RequestParam(name = "offset", defaultValue = "0") int offset,
                                       @RequestParam(name = "after", required = false) String after,
                                       @RequestParam(name = "limit", defaultValue = "500") int limit,
                                       HttpServletRequest http, HttpServletResponse response) throws IOException {
@@ -203,9 +202,8 @@ public class ManagementController {
         }
         int size = Math.clamp(limit, 1, 1000);
         String tenant = routing.tenant(http);
-        AuditTrail.Page page = after != null && !after.isBlank() || offset <= 0
-                ? audit.query(tenant, instant(from), instant(to), action, after, size)
-                : audit.query(tenant, instant(from), instant(to), action, offset, size);
+        AuditTrail.Page page = audit.query(tenant, instant(from), instant(to), action,
+                after == null || after.isBlank() ? null : after, size);
         if (page.next() != null) {
             response.setHeader("Jenesis-Next-Cursor", page.next());
         }

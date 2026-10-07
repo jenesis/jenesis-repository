@@ -125,7 +125,7 @@ public class FindingsController {
                                  @RequestParam(value = "source", required = false) String source,
                                  @RequestParam(value = "category", required = false) String category,
                                  @RequestParam(value = "severity", required = false) String severity,
-                                 @RequestParam(value = "offset", defaultValue = "0") int offset,
+                                 @RequestParam(value = "after", required = false) String after,
                                  @RequestParam(value = "limit", defaultValue = "500") int limit,
                                  HttpServletRequest request, HttpServletResponse response) throws IOException {
         if (!Repositories.valid(repo)) {
@@ -159,12 +159,23 @@ public class FindingsController {
                 return null;
             }
         }
+        // The ledger pages by row, so the opaque cursor a page hands out is the row the next one starts at.
+        int offset;
+        try {
+            offset = after == null || after.isBlank() ? 0 : Integer.parseInt(after);
+        } catch (NumberFormatException _) {
+            offset = -1;
+        }
+        if (offset < 0) {
+            response.setStatus(400);
+            return null;
+        }
         ArtifactStore store = repositories.store(tenant, repo);
         Findings ledger = findings.get().over(store);
-        // A bounded slice; `more` says whether another page remains.
+        // A bounded slice; `next` says whether another page remains, and where it starts.
         Findings.Page page = ledger.all(new Findings.Filter(
                 blankToNull(coordinate), kindFilter, blankToNull(source), blankToNull(category), severityFilter,
-                blankToNull(ecosystem)), Math.max(0, offset), Math.clamp(limit, 1, 1000));
+                blankToNull(ecosystem)), offset, Math.clamp(limit, 1, 1000));
         List<FindingView> views = new ArrayList<>();
         for (Findings.Located located : page.located()) {
             views.add(FindingView.of(located));
@@ -174,7 +185,8 @@ public class FindingsController {
         Instant lastScanned = page.builtScanStamp() != null
                 ? (page.builtScanStamp().isBlank() ? null : Instant.parse(page.builtScanStamp()))
                 : Findings.scanned(store).read().orElse(null);
-        return new FindingsView(true, views, page.more(), lastScanned);
+        return new FindingsView(true, views,
+                page.more() ? Integer.toString(offset + page.located().size()) : null, lastScanned);
     }
 
     /**
@@ -317,8 +329,10 @@ public class FindingsController {
         return value == null || value.isBlank() ? null : value;
     }
 
-    /** The ledger's answer, with the last feed refresh as {@code lastScanned}, {@code null} for never scanned. */
-    public record FindingsView(boolean available, List<FindingView> findings, boolean more, Instant lastScanned) {
+    /** The ledger's answer, with the cursor of the next page as {@code next} - passed back as {@code after},
+     *  {@code null} on the last page - and the last feed refresh as {@code lastScanned}, {@code null} for never
+     *  scanned. */
+    public record FindingsView(boolean available, List<FindingView> findings, String next, Instant lastScanned) {
     }
 
     /** One located finding, every field the ledger keeps - kind in its wire spelling ({@code ai-candidate}). */

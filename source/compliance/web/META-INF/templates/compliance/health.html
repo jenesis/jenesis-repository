@@ -92,8 +92,8 @@
             <footer th:unless="${report.entries().isEmpty()}">
                 <p><small>This page lists <span th:text="${report.entries().size()}">0</span> of
                     <span th:text="${report.total()}">0</span> scored coordinates, weakest first.</small></p>
-                <p th:if="${report.nextCursor() != null}">
-                    <a th:href="@{/ui/repositories/{repo}/health(repo=${repo}, after=${report.nextCursor()})}">next weakest &rarr;</a>
+                <p th:if="${report.next() != null}">
+                    <a th:href="@{/ui/repositories/{repo}/health(repo=${repo}, after=${report.next()})}">next weakest &rarr;</a>
                 </p>
             </footer>
         </th:block>

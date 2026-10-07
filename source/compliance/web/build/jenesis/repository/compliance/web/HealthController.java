@@ -97,6 +97,6 @@ public class HealthController {
         return report;
     }
 
-    /** The largest page served; a caller past it follows {@code nextCursor}. */
+    /** The largest page served; a caller past it follows {@code next}, passed back as {@code after}. */
     private static final int MAX_PAGE = 5000;
 }

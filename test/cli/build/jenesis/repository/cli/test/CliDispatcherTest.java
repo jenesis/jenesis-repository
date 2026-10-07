@@ -46,11 +46,11 @@ public class CliDispatcherTest {
     private static final String ASSETS_PAGE1 = "{\"repository\":\"releases\",\"assets\":[{"
             + "\"path\":\"/maven/org/acme/lib/1.0/lib-1.0.jar\",\"size\":13,\"sha256\":\"abc123\","
             + "\"format\":\"maven\",\"ecosystem\":\"Maven\",\"coordinate\":\"org.acme:lib\",\"version\":\"1.0\","
-            + "\"prerelease\":false}],\"cursor\":\"bWF2ZW4\"}";
+            + "\"prerelease\":false}],\"next\":\"bWF2ZW4\"}";
     private static final String ASSETS_PAGE2 = "{\"repository\":\"releases\",\"assets\":[{"
             + "\"path\":\"/npm/left-pad/-/left-pad-1.3.0.tgz\",\"size\":21,\"sha256\":\"def456\","
             + "\"format\":\"npm\",\"ecosystem\":\"npm\",\"coordinate\":\"left-pad\",\"version\":\"1.3.0\","
-            + "\"prerelease\":false}],\"cursor\":null}";
+            + "\"prerelease\":false}],\"next\":null}";
 
     @TempDir
     private static Path home;
@@ -321,13 +321,13 @@ public class CliDispatcherTest {
     @Test
     public void a_findings_page_says_where_the_next_one_starts() throws Exception {
         findingsStatus = 200;
-        findingsBody = "{\"available\":true,\"more\":true,\"findings\":[{\"ecosystem\":\"npm\",\"coordinate\":\"a\","
+        findingsBody = "{\"available\":true,\"next\":\"501\",\"findings\":[{\"ecosystem\":\"npm\",\"coordinate\":\"a\","
                 + "\"version\":\"1\",\"id\":\"GHSA-1\",\"source\":\"osv\",\"kind\":\"vulnerability\","
                 + "\"severity\":\"HIGH\"}]}";
         String out = capture(() -> assertThat(Cli.run(new String[] {"findings", "releases", "--cursor", "500"}))
                 .isZero());
-        assertThat(findingsQueries.getLast()).contains("offset=500");
-        assertThat(out).as("the next page starts after the rows this one showed").contains("more: --cursor 501");
+        assertThat(findingsQueries.getLast()).contains("after=500");
+        assertThat(out).as("the next page starts where the server said it does").contains("more: --cursor 501");
         findingsBody = "{\"available\":true,\"findings\":[]}";
     }
 
@@ -488,7 +488,7 @@ public class CliDispatcherTest {
                 return respond(indexStatus, indexBody);
             }
             if (matches(path, "/api/assets")) {
-                return respond(200, query != null && query.contains("cursor=") ? ASSETS_PAGE2 : ASSETS_PAGE1);
+                return respond(200, query != null && query.contains("after=") ? ASSETS_PAGE2 : ASSETS_PAGE1);
             }
             if (matches(path, "/api/admin/orphans")) {
                 return respond(200, "{\"orphans\":[{\"namespace\":\"build.x.phantom\",\"objects\":2,\"bytes\":9}]}");
