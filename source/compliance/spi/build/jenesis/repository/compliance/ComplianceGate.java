@@ -1,6 +1,7 @@
 package build.jenesis.repository.compliance;
 
 import module java.base;
+import build.jenesis.repository.store.Checksums;
 
 import build.jenesis.repository.store.ArchiveInflation;
 import build.jenesis.repository.store.ArchiveWalk;
@@ -126,12 +127,7 @@ public final class ComplianceGate {
             described.append(policy.getClass().getName()).append(',');
         }
         described.append('\n').append(dimensions);
-        try {
-            return "sha256:" + HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(described.toString().getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException("SHA-256 is a required algorithm of every JVM", impossible);
-        }
+        return "sha256:" + Checksums.sha256(described.toString());
     }
 
     /** This gate reading maintainer-health from {@code health} rather than each health-aware dimension's own source:
