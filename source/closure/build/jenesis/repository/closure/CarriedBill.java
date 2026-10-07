@@ -58,9 +58,7 @@ public final class CarriedBill implements ClosureSource.Carried {
             return Optional.empty();
         }
         DependencyGraph graph = bill.get();
-        Map<String, Integer> depths = new HashMap<>();
-        Map<String, String> parents = new HashMap<>();
-        walk(graph, depths, parents);
+        Tree tree = Tree.of(graph);
         Map<String, PackageUrls.Named> names = new HashMap<>();
         for (DependencyComponent component : graph.dependencies()) {
             named(component, ecosystem).ifPresent(at -> names.put(component.ref(), at));
@@ -68,13 +66,13 @@ public final class CarriedBill implements ClosureSource.Carried {
         List<ClosureSource.Entry> entries = new ArrayList<>();
         for (DependencyComponent component : graph.dependencies()) {
             // The component whose dependencies name this one, where the bill's graph says so and it is not the root.
-            PackageUrls.Named via = names.get(parents.get(component.ref()));
+            PackageUrls.Named via = names.get(tree.parents().get(component.ref()));
             entries.add(named(component, ecosystem)
                     .map(at -> via == null
                             ? ClosureSource.Entry.placed(at.ecosystem(), at.coordinate(), at.version(),
-                                    depths.getOrDefault(component.ref(), 1))
+                                    tree.depths().getOrDefault(component.ref(), 1))
                             : ClosureSource.Entry.placed(at.ecosystem(), at.coordinate(), at.version(),
-                                    depths.getOrDefault(component.ref(), 1), via.coordinate(), via.version()))
+                                    tree.depths().getOrDefault(component.ref(), 1), via.coordinate(), via.version()))
                     .orElseGet(() -> ClosureSource.Entry.unplaced(component.coordinate(), versionOf(component),
                             "named by the version's bill in a form this repository cannot place")));
         }
@@ -152,27 +150,33 @@ public final class CarriedBill implements ClosureSource.Carried {
         return lower.endsWith(".jar") || lower.endsWith(".war") || lower.endsWith(".ear");
     }
 
-    /** Each component's distance from the root along the bill's graph, into {@code depths}, and the component whose
-     *  edge reached it first, into {@code parents}; nothing where the bill names no root. */
-    private static void walk(DependencyGraph graph, Map<String, Integer> depths, Map<String, String> parents) {
-        if (graph.rootRef() == null) {
-            return;
-        }
-        Map<String, List<String>> edges = new HashMap<>();
-        for (DependencyEdge edge : graph.edges()) {
-            edges.computeIfAbsent(edge.from(), _ -> new ArrayList<>()).add(edge.to());
-        }
-        Deque<String> queue = new ArrayDeque<>(List.of(graph.rootRef()));
-        depths.put(graph.rootRef(), 0);
-        while (!queue.isEmpty()) {
-            String at = queue.poll();
-            for (String next : edges.getOrDefault(at, List.of())) {
-                if (!depths.containsKey(next)) {
-                    depths.put(next, depths.get(at) + 1);
-                    parents.put(next, at);
-                    queue.add(next);
+    /** A bill's graph walked from its root: each component's distance from the root, and the component whose edge
+     *  reached it first; empty where the bill names no root. */
+    private record Tree(Map<String, Integer> depths, Map<String, String> parents) {
+
+        static Tree of(DependencyGraph graph) {
+            if (graph.rootRef() == null) {
+                return new Tree(Map.of(), Map.of());
+            }
+            Map<String, List<String>> edges = new HashMap<>();
+            for (DependencyEdge edge : graph.edges()) {
+                edges.computeIfAbsent(edge.from(), _ -> new ArrayList<>()).add(edge.to());
+            }
+            Map<String, Integer> depths = new HashMap<>();
+            Map<String, String> parents = new HashMap<>();
+            Deque<String> queue = new ArrayDeque<>(List.of(graph.rootRef()));
+            depths.put(graph.rootRef(), 0);
+            while (!queue.isEmpty()) {
+                String at = queue.poll();
+                for (String next : edges.getOrDefault(at, List.of())) {
+                    if (!depths.containsKey(next)) {
+                        depths.put(next, depths.get(at) + 1);
+                        parents.put(next, at);
+                        queue.add(next);
+                    }
                 }
             }
+            return new Tree(Collections.unmodifiableMap(depths), Collections.unmodifiableMap(parents));
         }
     }
 
