@@ -231,8 +231,15 @@ final class ChainedScanner implements ContentScanner {
                         + matcher.name() + " to match");
             }
             Report matched = matching.match(catalogue);
+            Coverage coverage = catalogued.coverage() == null ? matched.coverage()
+                    : catalogued.coverage().and(matched.coverage());
+            if (matcher.reads().get(format) == Fidelity.LOSSY) {
+                Coverage lossy = Coverage.of(Completeness.PARTIAL, matcher.name() + " read the " + format
+                        + " catalogue it was handed only in part");
+                coverage = coverage == null ? lossy : coverage.and(lossy);
+            }
             return new Report(catalogued.scanner() + " " + CHAIN + " " + matched.scanner(), matched.advisories(),
-                    catalogued.bill(), catalogue);
+                    catalogued.bill(), catalogue, coverage);
         }
     }
 }
