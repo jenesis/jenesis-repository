@@ -13,8 +13,8 @@
  * implementation that no provider answers to fails at resolution rather than degrading to the seam's {@code NONE}
  * sentinel: the rate limiter ({@code RateLimiter} / {@code RateLimiterProvider}), the credential usage tracker
  * ({@code KeyUsageTracker} / {@code KeyUsageTrackerProvider}), the workload-identity token exchange
- * ({@code TokenExchange} / {@code TokenExchangeProvider}), the {@code /api/capabilities} contributor
- * ({@code CapabilityContributor}) and the import-edge ownership signal ({@code ImportEdgeProvider}). The
+ * ({@code TokenExchange} / {@code TokenExchangeProvider}), and the {@code /api/capabilities}
+ * contributor ({@code CapabilityContributor}). The
  * {@code resolve}/{@code installed} static discovery methods live on the provider types here, so the {@code uses}
  * clauses for them sit in this module; the server {@code requires transitive} this module, so a module that
  * {@code requires build.jenesis.repository.server} sees these types too.
@@ -36,5 +36,4 @@ module build.jenesis.repository.server.spi {
     uses build.jenesis.repository.server.spi.RateLimiterProvider;
     uses build.jenesis.repository.server.spi.KeyUsageTrackerProvider;
     uses build.jenesis.repository.server.spi.TokenExchangeProvider;
-    uses build.jenesis.repository.server.spi.ImportEdgeProvider;
 }

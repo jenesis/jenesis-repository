@@ -148,7 +148,8 @@ public class RepositoryImports extends TenantScope {
         if (fetcher == ProxyFormat.Fetcher.NONE) {
             throw new IllegalStateException("No upstream fetcher module is installed on this deployment.");
         }
-        return provider == null ? null : provider.create(request, fetcher);
+        // open(), not create(): every URL the source hands back is screened against the one the operator submitted.
+        return provider == null ? null : ImportSourceProvider.open(provider, request, fetcher);
     }
 
     /** Remember a job's source (the kind, URL, source repository and format - never the credentials), so a resume can

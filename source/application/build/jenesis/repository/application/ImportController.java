@@ -204,8 +204,15 @@ public class ImportController {
                     + "server-side with the upstream credentials attached, so it must be an https URL to a public "
                     + "host; set block-private-import-hosts=false to migrate from an internal or plaintext mirror.");
         }
-        // Parsed after the screen, so a URL the screen would reject never depends on URI.create's own message.
-        ImportRequest sourceRequest = new ImportRequest(URI.create(request.url()), request.repository());
+        // Parsed after the screen, so a URL the screen would reject never depends on URI.create's own message; with
+        // the screen opted out a malformed URL reaches here unparsed and is a bad request saying so.
+        URI target;
+        try {
+            target = URI.create(request.url());
+        } catch (IllegalArgumentException _) {
+            throw new IllegalArgumentException("The import URL is refused: the URL is malformed.");
+        }
+        ImportRequest sourceRequest = new ImportRequest(target, request.repository());
         if (request.format() != null) {
             sourceRequest = sourceRequest.withFormat(request.format());
         }
@@ -224,12 +231,19 @@ public class ImportController {
         ImportSourceProvider provider = ImportSourceProvider
                 .installed(source, Features.namespaced(environment::getProperty))
                 .orElse(null);
-        return provider == null ? null : provider.create(sourceRequest, upstreamFetcher);
+        // open(), not create(): the fetcher the connector walks with is screened against the URL submitted, so every
+        // per-asset URL a listing hands back - a hostile incumbent's downloadUrl aimed at the metadata service - is
+        // judged before it is fetched.
+        return provider == null ? null : ImportSourceProvider.open(provider, sourceRequest, upstreamFetcher);
     }
 
+    /** A refused request, answered with the refusal's own reason: the screen names which half refused - the host or
+     *  the transport - so an operator is sent to the one that matters. */
     @ExceptionHandler(IllegalArgumentException.class)
-    public void badRequest(HttpServletResponse response) {
+    public void badRequest(IllegalArgumentException refused, HttpServletResponse response) throws IOException {
         response.setStatus(400);
+        response.setContentType("text/plain;charset=UTF-8");
+        response.getWriter().write(refused.getMessage() == null ? "bad request" : refused.getMessage());
     }
 
     /** A resume that lost to a reap - the job it named was dismissed meanwhile, and starting again is the answer -
