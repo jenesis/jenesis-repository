@@ -28,6 +28,11 @@ public class ComplianceConsoleConfig {
     }
 
     @Bean
+    public SignalsScreenController signalsScreenController(ArtifactStore repositoryStore) {
+        return new SignalsScreenController(repositoryStore);
+    }
+
+    @Bean
     public ReviewDashboard reviewDashboard(ArtifactStore repositoryStore, CurrentTenant currentTenant,
                                            ObservationRegistry observations) {
         return new ReviewDashboard(repositoryStore, currentTenant, observations);

@@ -43,6 +43,11 @@ public class ComplianceWebConfig {
     }
 
     @Bean
+    public SignalsController signalsController(Repositories repositories) {
+        return new SignalsController(repositories.root());
+    }
+
+    @Bean
     public SignersController signersController(Repositories repositories, RepositoryRouting routing) {
         return new SignersController(repositories, routing);
     }

@@ -106,6 +106,7 @@ public class CliBindingTest {
             Map.entry("posture", Binding.of("/api/admin/posture", "posture")),
             Map.entry("caches", Binding.of("/api/admin/caches", "caches")),
             Map.entry("walks", Binding.of("/api/admin/walks", "walks")),
+            Map.entry("signals", Binding.of("/api/admin/signals", "signals")),
             Map.entry("consistency", Binding.of("/api/consistency", "consistency")),
             Map.entry("logs", Binding.of("/api/logs", "logs")),
             Map.entry("metrics", Binding.of("/api/admin/observability", "metrics")),
