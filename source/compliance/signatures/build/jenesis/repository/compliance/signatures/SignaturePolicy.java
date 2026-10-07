@@ -19,7 +19,8 @@ import build.jenesis.repository.compliance.Verdict;
  * <ul>
  *   <li><b>Invalid</b> - the bytes do not match the signature: tampering or corruption, REJECT by default.</li>
  *   <li><b>Untrusted</b> - a good signature by a signer the deployment has no reason to believe: recorded and served,
- *       since that is every signer before an operator admits any.</li>
+ *       since that is every signer before an operator admits any. Beside a trusted signature over the same file it
+ *       is said and never held for: someone the deployment trusts vouches for those bytes.</li>
  *   <li><b>Signer changed</b> - earlier versions carried another signer: held for a person, since a key rotation looks
  *       the same as a takeover.</li>
  *   <li><b>Missing</b> - the format expected a signature and none arrived.</li>
@@ -110,6 +111,13 @@ final class SignaturePolicy implements GatePolicy {
         }
         List<ComplianceGate.Finding> findings = new ArrayList<>();
         for (ComplianceGate.Signature signature : subject.signatures()) {
+            if (signature.vouchedBeside(subject.signatures())) {
+                // A trusted signer vouches for the same bytes: said, never held for.
+                findings.add(new ComplianceGate.Finding(Verdict.ALLOW, "Also signed"
+                        + (signature.signer() == null ? "" : " by " + signature.signer().wire()) + ", whom this "
+                        + "deployment does not trust, beside a trusted signature over " + signature.coveredPath()));
+                continue;
+            }
             findings.addAll(assess(signature));
         }
         return findings;
