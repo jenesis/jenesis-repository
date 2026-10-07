@@ -57,15 +57,16 @@ import build.jenesis.repository.store.Providers;
  *       vulnerabilities is what a clean artifact looks like. A chain whose cataloguer answers no catalogue fails the
  *       scan, since nothing was matched.</li>
  *   <li><b>Read purity.</b> Every call of a {@link Session} may reach the scanner; none is made on a request path - the
- *       host submits, collects and matches off it, in a pass.</li>
+ *       host submits, collects, matches and catalogues off it, in a pass. {@link Session#catalogue} reads the file it
+ *       is handed and nothing else.</li>
  *   <li><b>Selection.</b> {@code ALL}: every installed scanner the deployment configured screens a repository that
  *       names none; two answering to one name fail {@link #installed}.</li>
  *   <li><b>Lifecycle / ownership.</b> {@link #installed} instantiates afresh per call, so a caller on a repeated path
  *       holds the list. A provider owns no thread; a session owns its client for the pass and nothing past it.</li>
  *   <li><b>Bounded work / cancellation.</b> Every call is bounded in time by the scanner, and every body it reads in
  *       bytes; a scan that does not finish in the host's timeout is given up by the host, which stops collecting
- *       it. {@link Session#match} runs to completion while it is asked, within the scanner's own timeout, since a
- *       match reads a document it is handed and pulls nothing.</li>
+ *       it. {@link Session#match} and {@link Session#catalogue} run to completion while they are asked, within the
+ *       scanner's own timeout, since each reads what it is handed and pulls nothing.</li>
  * </ol>
  */
 public interface ContentScanner {
@@ -94,7 +95,10 @@ public interface ContentScanner {
         /** A container image, by its manifest, pulled from the registry the request names. */
         IMAGE_MANIFEST,
         /** A bill of materials, in a format the scanner {@linkplain #reads reads}, handed to it whole. */
-        BILL_OF_MATERIALS
+        BILL_OF_MATERIALS,
+        /** A published archive - a jar, a war, an ear - handed as a file on this node ({@link Session#catalogue}),
+         *  whose bill names what it bundles. */
+        ARCHIVE
     }
 
     /** What a scanner can make of what it is handed. */
@@ -165,6 +169,26 @@ public interface ContentScanner {
         /** Match {@code bill}, in a format the scanner {@linkplain #reads reads}: its report names the advisories the
          *  scanner's database matched and carries no bill. A scanner that reads no bill throws {@link Refused}. */
         Report match(Bill bill) throws IOException;
+
+        /** Catalogue {@code archive}, run to completion while asked: its report carries the bill of what the archive
+         *  bundles, in the format asked for, and no advisories. A scanner that is handed no archive - every one not
+         *  {@linkplain #consumes consuming} {@link Input#ARCHIVE} - throws {@link Refused}. */
+        default Report catalogue(Archive archive) throws IOException {
+            throw new Refused("this scanner is handed no archive");
+        }
+    }
+
+    /**
+     * A published archive to catalogue: its {@code file} on this node, which the scanner reads and nothing else, the
+     * {@code name} it was published under, and the bill {@code format} to make of it.
+     */
+    record Archive(Path file, String name, String format) {
+
+        public Archive {
+            Objects.requireNonNull(file, "file");
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(format, "format");
+        }
     }
 
     /** An image to scan: where the scanner pulls it from and the {@code Authorization} header it pulls with
