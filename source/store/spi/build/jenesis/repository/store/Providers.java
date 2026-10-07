@@ -25,7 +25,6 @@ import module java.base;
  * <li>{@code OPTIONAL_UNIQUE} - {@link #optionalUnique}: a singleton capability that may be absent; absence yields
  *     an empty {@link Optional} the SPI maps onto <em>its own</em> declared sentinel ({@code NONE}, {@code none()},
  *     the fixed tenant directory, ...).</li>
- * <li>{@code NAMED_UNIQUE} - {@link #namedUnique}: the selection is mandatory; there is no unselected outcome.</li>
  * <li>{@code EXCLUSIVE_WITH_DEFAULT} - {@link #exclusiveWithDefault}: exactly one implementation always resolves;
  *     an unselected deployment gets the named default, and the chosen implementation's configuration is validated
  *     by caller-supplied policy before it is built (the {@code ArtifactStoreProvider} shape).</li>
@@ -45,11 +44,12 @@ import module java.base;
  *
  * <h2>Contract</h2>
  * <ol>
- * <li><b>Thread-safety.</b> {@code Providers} is stateless: every method is a pure function of its arguments,
- *     holds no static mutable state, caches nothing, and may be called concurrently from any thread. It is only as
+ * <li><b>Thread-safety.</b> {@code Providers}' statics are stateless: every one is a pure function of its arguments,
+ *     holds no static mutable state, caches nothing, and may be called concurrently from any thread; what a home
+ *     holds, it holds in its own {@link Discovered}. It is only as
  *     thread-safe as the arguments handed in - a {@link ServiceLoader} instance is <em>not</em> thread-safe, so a
  *     caller must hand in a loader it does not share, which {@code ServiceLoader.load(X.class)} per call
- *     satisfies.</li>
+ *     satisfies, or the held list a {@link Discovered} hands out.</li>
  * <li><b>Idempotency / replay.</b> Calling a primitive twice over equal inputs produces an equal outcome - the same
  *     provider chosen, the same exception thrown. It performs no I/O and mutates nothing; repeating a resolve is
  *     always safe. Whether the <em>products</em> are equal is the {@code create} function's business.</li>
@@ -58,8 +58,8 @@ import module java.base;
  *     does a provider that declares a {@code null} or blank name. Absence is expressed as an empty {@link Optional}
  *     ({@link #optionalUnique}) or an empty {@link List}/{@link SortedSet} ({@link #all}, {@link #installedNames});
  *     mapping that onto the SPI's own declared sentinel is deliberately left to the SPI, so this class cannot
- *     silently choose semantics an SPI never specified. {@link #namedUnique} and {@link #exclusiveWithDefault} have
- *     no absence outcome at all - they throw.</li>
+ *     silently choose semantics an SPI never specified. {@link #exclusiveWithDefault} has no absence outcome at
+ *     all - it throws.</li>
  * <li><b>Selection failure.</b> An <em>explicitly selected</em> implementation that cannot be honoured
  *     throws {@link IllegalStateException} at resolution, naming the selection, distinguishing "no provider answers
  *     to that name" (module absent or name misspelled) from "the provider answered but yielded nothing" (switched
@@ -254,30 +254,6 @@ public final class Providers {
         }
         Named<P> only = candidates.getFirst();
         return created(create.apply(only.provider()), spi, only);
-    }
-
-    /**
-     * The {@code NAMED_UNIQUE} policy: the selection is mandatory, so there is no unselected outcome and no sentinel.
-     * A selection no provider answers to, or a provider that yields nothing, throws (clause 4).
-     *
-     * @param spi        the SPI's selection key (see {@link #all}).
-     * @param discovered the discovered providers.
-     * @param name       each provider's {@code name()}.
-     * @param selection  the required implementation name; blank or {@code null} is a programming error.
-     * @param create     builds the implementation; an empty answer is a configuration error, not an absence.
-     * @return the selected implementation, never {@code null}.
-     */
-    public static <P, T> T namedUnique(String spi,
-                                       Iterable<? extends P> discovered,
-                                       Function<? super P, String> name,
-                                       String selection,
-                                       Function<? super P, Optional<T>> create) {
-        Objects.requireNonNull(create, "create");
-        if (selection == null || selection.isBlank()) {
-            throw new IllegalArgumentException("A " + spi
-                    + " implementation name is required; this SPI has no unselected outcome.");
-        }
-        return select(spi, validated(spi, discovered, name), selection.strip(), create);
     }
 
     /**

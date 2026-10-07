@@ -16,7 +16,7 @@
  * Both are empty by default. Alongside them live the two halves of the shared SPI convention every discovered
  * seam in the product reuses: {@code Features} (is an implementation switched on, and which one did the operator
  * select) and {@code Providers} (the per-policy resolution primitives - {@code all}, {@code optionalUnique},
- * {@code namedUnique}, {@code exclusiveWithDefault}, {@code installedNames} - an SPI's own {@code resolve} /
+ * {@code exclusiveWithDefault}, {@code installedNames} - an SPI's own {@code resolve} /
  * {@code installed} statics delegate to, so an explicitly selected implementation that is absent, switched off or
  * misconfigured fails loudly instead of silently degrading to the unselected default).
  *
