@@ -355,6 +355,10 @@ public final class Commands {
                                     + "run cost, every installed consumer with what it repairs, and the standing "
                                     + "requests; the schedule itself is the 'walks' setting"),
                             act("walks run", "ask for a walk of the store now; every node picks it up within half a minute")),
+                    noun("signals", "the feeds and catalogues the gate screens with", OperationsCommands::signals,
+                            act("signals", "each refreshable signal source as the signal-refresh pass last found it: "
+                                    + "when it was drawn, why a refresh failed, and each ecosystem a mirroring feed "
+                                    + "keeps a copy of")),
                     noun("consistency", "agreement between the nodes of a cluster",
                             OperationsCommands::consistency,
                             act("consistency", "per-node fingerprints and any divergence")),

@@ -89,6 +89,11 @@ class AdvisoryFeedSelectionTest {
         }
 
         @Override
+        public List<Copy> copies() {
+            return List.of();
+        }
+
+        @Override
         public Freshness refresh() {
             return Freshness.FIXED;
         }

@@ -49,6 +49,28 @@ public final class OperationsClient extends ClientCalls {
         return response.body();
     }
 
+    /** What each refreshable signal source holds, as the signal-refresh pass last recorded it. */
+    public Signals signals() throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/admin/signals", null, null);
+        require(response, 200, "read the signal sources");
+        return JSON.readValue(response.body(), Signals.class);
+    }
+
+    /** The signal sources as the API reports them: {@code recorded}, or {@code not-recorded} before the pass has
+     *  run, when the pass recorded them, and each source. */
+    public record Signals(String state, String recorded, List<SignalSource> sources) {
+    }
+
+    /** One source: when its data was last drawn ({@code null} for never), whether that answer stands, why its last
+     *  refresh failed ({@code null} unless it did), and each ecosystem a mirroring feed keeps a copy of. */
+    public record SignalSource(String name, String refreshed, boolean authoritative, String failure,
+                               List<SignalCopy> copies) {
+    }
+
+    /** One ecosystem's copy: when it was built and last drawn, both {@code null} before its first build lands. */
+    public record SignalCopy(String ecosystem, String built, String drawn) {
+    }
+
     /** Ask for a walk of the store now; answers the standing requests. */
     public String walksRun() throws IOException, InterruptedException {
         HttpResponse<String> response = send("POST", "/api/admin/walks/run", null, null);

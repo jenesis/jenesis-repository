@@ -331,6 +331,7 @@ public class CliRequestShapeTest {
             action("caches flush", "caches flush", post("/api/admin/caches/flush")),
             action("walks", "walks", get("/api/admin/walks")),
             action("walks run", "walks run", post("/api/admin/walks/run")),
+            action("signals", "signals", get("/api/admin/signals")),
             action("consistency", "consistency", get("/api/consistency")),
             action("logs [--level L] [--q TEXT] [--since SEQ] [--tenant T] [--limit N]",
                     "logs --level WARN --q boom --since 7 --tenant acme --limit 5",

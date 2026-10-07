@@ -2,6 +2,7 @@ package build.jenesis.repository.compliance.web;
 
 import module java.base;
 import build.jenesis.repository.ui.ConsoleModuleProvider;
+import build.jenesis.repository.ui.NavEntry;
 import build.jenesis.repository.ui.RepositoryPage;
 import build.jenesis.repository.ui.RepositoryPage.Topic;
 
@@ -19,6 +20,13 @@ public final class ComplianceConsoleModule implements ConsoleModuleProvider {
     @Override
     public Class<?> configuration() {
         return ComplianceConsoleConfig.class;
+    }
+
+    /** The signal sources the gate screens with: deployment-wide, like the feeds they describe, so an operator's. */
+    @Override
+    public List<NavEntry> navEntries() {
+        return List.of(new NavEntry("Signal sources", "/ui/signals", NavEntry.Access.SUPERADMIN,
+                NavEntry.Group.OPERATIONS));
     }
 
     /** The screening pages of every repository; a page rendering another module's ledger is listed only where that
