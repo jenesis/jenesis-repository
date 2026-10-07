@@ -234,11 +234,12 @@ final class TerraformListings {
         }
     }
 
-    /** A module version is servable when its archive is stored, not withheld and not yanked. */
+    /** A module version is servable when its archive is stored, published here rather than fetched from the upstream,
+     *  not withheld and not yanked. */
     private boolean moduleServable(String repo, String namespace, String name, String system, String version)
             throws IOException {
         String key = TerraformCoordinates.moduleArchive(repo, namespace, name, system, version);
-        return blobs.exists(key) && !blobs.withheld(key)
+        return blobs.exists(key) && !blobs.withheld(key) && !TerraformCoordinates.isCached(store, key)
                 && !yanked(TerraformCoordinates.moduleCoordinate(namespace, name, system), version);
     }
 
@@ -250,7 +251,7 @@ final class TerraformListings {
         }
         String prefix = TerraformCoordinates.ROOT + repo + "/providers/" + namespace + "/" + type + "/" + version;
         for (String file : blobs.list(prefix)) {
-            if (blobs.withheld(prefix + "/" + file)) {
+            if (blobs.withheld(prefix + "/" + file) || TerraformCoordinates.isCached(store, prefix + "/" + file)) {
                 continue;
             }
             TerraformCoordinates.platformOf(type, version, file).ifPresent(platforms::add);
@@ -331,7 +332,7 @@ final class TerraformListings {
         String prefix = TerraformCoordinates.ROOT + repo + "/providers/" + namespace + "/" + type + "/" + version;
         for (String file : blobs.list(prefix)) {
             if (TerraformCoordinates.platformOf(type, version, file).isEmpty() || blobs.withheld(prefix + "/" + file)
-                    || yanked(namespace, type, version)) {
+                    || TerraformCoordinates.isCached(store, prefix + "/" + file) || yanked(namespace, type, version)) {
                 continue;
             }
             Optional<Blobs.Located> located = blobs.locate(prefix + "/" + file);
