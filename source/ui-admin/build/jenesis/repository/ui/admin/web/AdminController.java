@@ -1,6 +1,7 @@
 package build.jenesis.repository.ui.admin.web;
 
 import module java.base;
+import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.ui.KnownPrincipals;
@@ -141,7 +142,7 @@ public class AdminController {
                              @RequestParam("tokens") String tokens,
                              RedirectAttributes redirect) throws IOException {
         authorization.setGrant(current.name(), Authorization.Subject.group(name), scope, tokens.trim());
-        audit("group.grant.set", name + " " + scope);
+        audit(AuditActions.GROUP_GRANT_SET, name + " " + scope);
         redirect.addFlashAttribute("message",
                 "Granted " + tokens.trim() + " on " + scope + " to everyone in " + name + ".");
         return toGroup(name, redirect);
@@ -152,7 +153,7 @@ public class AdminController {
                                    @RequestParam("scope") String scope,
                                    RedirectAttributes redirect) throws IOException {
         authorization.removeGrant(current.name(), Authorization.Subject.group(name), scope);
-        audit("group.grant.remove", name + " " + scope);
+        audit(AuditActions.GROUP_GRANT_REMOVE, name + " " + scope);
         redirect.addFlashAttribute("message", "Removed the grant on " + scope + " from " + name + ".");
         return toGroup(name, redirect);
     }
@@ -164,7 +165,7 @@ public class AdminController {
                                  @RequestParam("id") String id,
                                  RedirectAttributes redirect) throws IOException {
         authorization.groups().addMember(current.name(), name, id.trim());
-        audit("group.member.add", name + " " + id.trim());
+        audit(AuditActions.GROUP_MEMBER_ADD, name + " " + id.trim());
         redirect.addFlashAttribute("message", "Added " + id.trim() + " to " + name + ".");
         return toGroup(name, redirect);
     }
@@ -174,7 +175,7 @@ public class AdminController {
                                     @RequestParam("id") String id,
                                     RedirectAttributes redirect) throws IOException {
         authorization.groups().removeMember(current.name(), name, id);
-        audit("group.member.remove", name + " " + id);
+        audit(AuditActions.GROUP_MEMBER_REMOVE, name + " " + id);
         redirect.addFlashAttribute("message", "Removed " + id + " from " + name + ".");
         return toGroup(name, redirect);
     }
@@ -184,7 +185,7 @@ public class AdminController {
     @PostMapping("/groups/remove")
     public String removeGroup(@RequestParam("name") String name, RedirectAttributes redirect) throws IOException {
         authorization.removeSubject(current.name(), Authorization.Subject.group(name));
-        audit("group.remove", name);
+        audit(AuditActions.GROUP_REMOVE, name);
         redirect.addFlashAttribute("message", "Removed group " + name + " and everything it granted.");
         return "redirect:/ui/admin";
     }
@@ -204,7 +205,7 @@ public class AdminController {
     @PostMapping("/scim-token")
     public String setScimToken(RedirectAttributes redirect) throws IOException {
         String token = new ScimTokens(tenantDocuments()).mint();
-        audit("scim.token.set", "scim");
+        audit(AuditActions.SCIM_TOKEN_SET, "scim");
         redirect.addFlashAttribute("message",
                 "SCIM token (shown once): " + token + " - set it on your identity provider's SCIM connector.");
         return "redirect:/ui/admin";
@@ -213,7 +214,7 @@ public class AdminController {
     @PostMapping("/scim-token/clear")
     public String clearScimToken(RedirectAttributes redirect) throws IOException {
         new ScimTokens(tenantDocuments()).set(null);
-        audit("scim.token.clear", "scim");
+        audit(AuditActions.SCIM_TOKEN_CLEAR, "scim");
         redirect.addFlashAttribute("message", "Cleared the SCIM token; SCIM provisioning for this tenant is off.");
         return "redirect:/ui/admin";
     }
@@ -268,7 +269,7 @@ public class AdminController {
             throw new IllegalArgumentException("You cannot remove your own access.");
         }
         directory.remove(id);
-        audit("member.deprovision", id);
+        audit(AuditActions.PRINCIPAL_REMOVE, id);
         redirect.addFlashAttribute("message", "Removed user " + id + ".");
         return "redirect:/ui/admin";
     }

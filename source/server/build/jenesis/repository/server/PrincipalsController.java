@@ -1,6 +1,7 @@
 package build.jenesis.repository.server;
 
 import module java.base;
+import build.jenesis.repository.audit.AuditActions;
 
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.CredentialLifetimes;
@@ -99,7 +100,7 @@ public final class PrincipalsController {
         String tenant = routing.tenant(http);
         String id = required(http, "id");
         authorization.removeSubject(tenant, Authorization.Subject.principal(id));
-        context.audit(tenant, key, "principal.remove", id);
+        context.audit(tenant, key, AuditActions.PRINCIPAL_REMOVE, id);
         response.setStatus(200);
     }
 

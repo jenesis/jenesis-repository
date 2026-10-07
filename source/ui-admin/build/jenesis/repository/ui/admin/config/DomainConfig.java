@@ -89,9 +89,12 @@ public class DomainConfig {
 
     @Bean
     public VolumeReclaim volumeReclaim(@Qualifier("cacheRootStorage") CacheStorage cacheRootStorage,
-                                       AuditTrail audit, ConsoleActor actor, ConfigurableEnvironment environment) {
-        // Spans the cache's root, so it can never walk the repositories for things to delete.
-        return new VolumeReclaim(cacheRootStorage, audit, actor, operatorTenant(environment));
+                                       ArtifactStore repositoryStore, AuditTrail audit, ConsoleActor actor,
+                                       ConfigurableEnvironment environment) {
+        // Spans the cache's root, so it can never walk the repositories for things to delete; its report is the
+        // deployment's, kept with the deployment's own configuration.
+        return new VolumeReclaim(cacheRootStorage, repositoryStore.scope(Scopes.SYSTEM).scope(Scopes.CONFIG), audit,
+                actor, operatorTenant(environment));
     }
 
     @Bean
