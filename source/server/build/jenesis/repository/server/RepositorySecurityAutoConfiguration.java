@@ -8,7 +8,6 @@ import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.RateLimiter;
 import build.jenesis.repository.store.Features;
 import jakarta.servlet.DispatcherType;
-import org.springframework.core.env.Environment;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -51,26 +50,14 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class RepositorySecurityAutoConfiguration {
 
     /**
-     * The manager every request is decided by: an installed {@link AuthorizationManagerProvider}'s, or this
-     * server's own deny-by-default one when no module provides a richer policy.
-     *
-     * <p>The provider is resolved <em>here</em>, inside the declaration, rather than contributed as a competing
-     * bean. A competing bean works only from whichever module happens to be the composition root - a discovered
-     * configuration is a deferred import and is evaluated after this conditional has already been decided - and
-     * it couples two modules through a bean name that nothing checks. Resolving here reaches every composition
-     * that carries the provider, including the ones a test harness assembles.
-     *
-     * <p>The declared type is the interface because that is what the chain consumes; the bean NAME still matters
-     * and is still the method name, since a deployment may also replace this bean outright.
+     * The manager every request is decided by: this server's own, deny by default. The bean's name is the method's,
+     * and a deployment may replace the bean outright by declaring one of that name.
      */
     @Bean
     @ConditionalOnMissingBean(name = "repositoryAuthorizationManager")
     public AuthorizationManager<RequestAuthorizationContext> repositoryAuthorizationManager(
-            Authorization authorization, RepositoryRouting routing, KeyUsageTracker keyUsageTracker,
-            Environment environment, RepositoryProperties properties) {
-        return AuthorizationManagerProvider
-                .resolve(authorization, keyUsageTracker, routing, Features.namespaced(environment::getProperty))
-                .orElseGet(() -> new RepositoryAuthorizationManager(authorization, keyUsageTracker, properties));
+            Authorization authorization, KeyUsageTracker keyUsageTracker, RepositoryProperties properties) {
+        return new RepositoryAuthorizationManager(authorization, keyUsageTracker, properties);
     }
 
     /**

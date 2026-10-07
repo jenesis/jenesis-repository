@@ -43,8 +43,8 @@ import org.springframework.web.util.UriUtils;
  * </ul>
  *
  * <p><b>There is no weaker twin.</b> Taking the repository rights on every {@code /api/} route would let a key with
- * a wildcard publish right administer the deployment. The rules above are this class's, every composition decides
- * with it, and a richer policy plugs in through {@link AuthorizationManagerProvider}.
+ * a wildcard publish right administer the deployment. The rules above are this class's, and every composition
+ * decides with it.
  *
  * <p>The computed {@link Authorization.Decision} is recorded on the request so
  * {@link RepositoryAuthorizationEntryPoint} can answer {@code 401} for an unauthorized request (no key, a malformed
