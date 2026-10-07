@@ -96,4 +96,10 @@ public interface GarbageCollectorProvider {
                 provider -> Features.active(provider.name(), provider.requiredConfig()),
                 provider -> provider.create(config));
     }
+
+    /** The names of the installed providers, each the {@code jenrepo.<name>} switch that turns it off - what the
+     *  settings catalogue lists as this garbage collector's toggles. */
+    static SortedSet<String> names() {
+        return Providers.installedNames("gc", ServiceLoader.load(GarbageCollectorProvider.class), GarbageCollectorProvider::name, _ -> true);
+    }
 }

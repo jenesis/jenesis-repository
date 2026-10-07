@@ -107,4 +107,10 @@ public interface WalkProvider {
                 provider -> Features.active(provider.name(), provider.requiredConfig()),
                 provider -> provider.create(config));
     }
+
+    /** The names of the installed providers, each the {@code jenrepo.<name>} switch that turns it off - what the
+     *  settings catalogue lists as this walk's toggles. */
+    static SortedSet<String> names() {
+        return Providers.installedNames("walk", ServiceLoader.load(WalkProvider.class), WalkProvider::name, _ -> true);
+    }
 }

@@ -122,4 +122,10 @@ public interface TenantsProvider {
                         provider -> provider.create(root, config))
                 .orElseGet(() -> Tenants.fixed(tenant));
     }
+
+    /** The names of the installed providers, each the {@code jenrepo.<name>} switch that turns it off - what the
+     *  settings catalogue lists as this tenant directory's toggles. */
+    static SortedSet<String> names() {
+        return Providers.installedNames("tenants", ServiceLoader.load(TenantsProvider.class), TenantsProvider::name, _ -> true);
+    }
 }

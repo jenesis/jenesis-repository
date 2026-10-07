@@ -99,12 +99,12 @@ class FeatureTogglesTest {
     }
 
     @Test
-    void a_key_usage_tracker_configured_off_resolves_to_none() {
-        assertThat(KeyUsageTrackerProvider.resolve(Authorization.anonymous(), key -> null))
-                .isNotSameAs(KeyUsageTracker.NONE);
+    void a_key_usage_tracker_answers_to_no_provider_name_switch() {
+        // The key-usage and download trackers' providers are both called batching, so a switch by that name would
+        // turn one off and leave the other: each is turned off by its own setting instead.
         Features.configure(Map.of("jenrepo.batching", "false")::get);
         assertThat(KeyUsageTrackerProvider.resolve(Authorization.anonymous(), key -> null))
-                .isSameAs(KeyUsageTracker.NONE);
+                .isNotSameAs(KeyUsageTracker.NONE);
     }
 
     @Test
