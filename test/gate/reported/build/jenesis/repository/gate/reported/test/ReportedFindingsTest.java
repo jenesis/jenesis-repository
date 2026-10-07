@@ -4,6 +4,7 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ComplianceGate;
+import build.jenesis.repository.compliance.ContentScanner;
 import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.compliance.VulnerabilityPolicy;
@@ -24,7 +25,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * A scanner's findings about a version already served, over a real store: recorded under the scanner's name, decided
  * by the gate a publish meets, and - when the gate would not admit them - withheld onto the review queue, from which
- * the ordinary release serves the version again.
+ * the ordinary release serves the version again. A report is the scanner's whole answer, superseding what it no
+ * longer says, and one that could not read all of the version is an inspection row saying what it missed.
  */
 class ReportedFindingsTest {
 
@@ -101,6 +103,45 @@ class ReportedFindingsTest {
         assertThat(outcome.verdict()).as("the operator's accepted risk stands for a reported finding too")
                 .isEqualTo(Verdict.ALLOW);
         assertThat(held()).isFalse();
+    }
+
+    @Test
+    void a_later_report_supersedes_what_the_scanner_no_longer_says_and_leaves_other_scanners_alone()
+            throws IOException {
+        apply(new ReportedFindings.Report("trivy", ECOSYSTEM, COORDINATE, VERSION, List.of(
+                new AdvisorySource.Advisory("CVE-2024-0005", Severity.LOW),
+                new AdvisorySource.Advisory("CVE-2024-0006", Severity.LOW))));
+        apply(new ReportedFindings.Report("grype", ECOSYSTEM, COORDINATE, VERSION, List.of(
+                new AdvisorySource.Advisory("CVE-2024-0005", Severity.LOW))));
+
+        apply(report(new AdvisorySource.Advisory("CVE-2024-0006", Severity.LOW)));
+
+        assertThat(ledger.of(ECOSYSTEM, COORDINATE, VERSION)).filteredOn(Finding::active)
+                .extracting(finding -> finding.source() + " " + finding.id())
+                .as("trivy's fixed finding is superseded; grype's report of it stands")
+                .containsExactlyInAnyOrder("trivy CVE-2024-0006", "grype CVE-2024-0005");
+        assertThat(ledger.of(ECOSYSTEM, COORDINATE, VERSION)).filteredOn(finding -> !finding.active())
+                .singleElement().satisfies(finding -> assertThat(finding.id()).isEqualTo("CVE-2024-0005"));
+
+        apply(new ReportedFindings.Report("trivy", ECOSYSTEM, COORDINATE, VERSION, List.of()));
+        assertThat(ledger.of(ECOSYSTEM, COORDINATE, VERSION)).filteredOn(Finding::active)
+                .extracting(Finding::source).as("a clean report clears what the scanner said").containsExactly("grype");
+    }
+
+    @Test
+    void a_report_that_read_only_part_of_the_version_says_what_it_missed() throws IOException {
+        apply(new ReportedFindings.Report("scanner", ECOSYSTEM, COORDINATE, VERSION, List.of(),
+                new ContentScanner.Coverage(ContentScanner.Completeness.PARTIAL, List.of("no package manager known"))));
+
+        assertThat(ledger.of(ECOSYSTEM, COORDINATE, VERSION)).singleElement().satisfies(finding -> {
+            assertThat(finding.id()).isEqualTo(ReportedFindings.COVERAGE);
+            assertThat(finding.kind()).isEqualTo(Finding.Kind.INSPECTION);
+            assertThat(finding.description()).contains("read only part").contains("no package manager known");
+        });
+
+        apply(new ReportedFindings.Report("scanner", ECOSYSTEM, COORDINATE, VERSION, List.of(),
+                ContentScanner.Coverage.COMPLETE));
+        assertThat(ledger.of(ECOSYSTEM, COORDINATE, VERSION)).noneMatch(Finding::active);
     }
 
     @Test

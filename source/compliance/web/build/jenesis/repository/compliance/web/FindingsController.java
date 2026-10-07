@@ -6,6 +6,7 @@ import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ComplianceGate;
+import build.jenesis.repository.compliance.ContentScanner;
 import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.gate.store.ReportedFindings;
 import build.jenesis.repository.server.kernel.Repositories;
@@ -42,7 +43,8 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>{@code POST /api/findings/report} takes an outside scanner's findings about a version the repository serves,
  * through {@link ReportedFindings}: recorded under the scanner's name and decided by the deployment's gate, so a verdict
- * other than allow withholds the version for review. It needs a key that may write to the repository, since a report
+ * other than allow withholds the version for review. A report is the scanner's whole answer, superseding what it said
+ * before and no longer says, and may say how much of the version it read ({@code completeness} and {@code gaps}). It needs a key that may write to the repository, since a report
  * can withdraw an artifact; an unserved version is a {@code 404}, a malformed report a {@code 400}.
  */
 @RestController
@@ -71,6 +73,9 @@ public class FindingsController {
 
     /** The most findings one report may carry, bounding one request's ledger write. */
     static final int MAX_REPORTED = 10_000;
+
+    /** The most gaps one report may name in what it could not read. */
+    static final int MAX_GAPS = 100;
 
     /** A scanner's name as a report gives it and the ledger records it: short, lower-case, and safe as a label. */
     private static final Pattern SOURCE = Pattern.compile("[a-z0-9][a-z0-9._-]{0,63}");
@@ -362,11 +367,12 @@ public class FindingsController {
     /** A scanner's report about one version: the scanner's name, the version as the repository records it, and
      *  what the scanner found. */
     public record ReportRequest(String source, String ecosystem, String coordinate, String version,
-                                List<Reported> findings) {
+                                List<Reported> findings, String completeness, List<String> gaps) {
 
         /** The report as the gate reads it; a missing field, an unknown severity, a source that is not a plain
-         *  name, a path-like coordinate or more than {@link #MAX_REPORTED} findings is an
-         *  {@link IllegalArgumentException}. */
+         *  name, a path-like coordinate, more than {@link #MAX_REPORTED} findings, a completeness other than
+         *  {@code complete}, {@code partial} or {@code not-catalogued}, or gaps with none or past
+         *  {@link #MAX_GAPS} is an {@link IllegalArgumentException}. */
         ReportedFindings.Report report() {
             if (source == null || !SOURCE.matcher(source).matches()) {
                 throw new IllegalArgumentException("source must be a plain lower-case name");
@@ -385,7 +391,33 @@ public class FindingsController {
             for (Reported finding : reported) {
                 advisories.add(finding.advisory());
             }
-            return new ReportedFindings.Report(source, ecosystem, coordinate, version, advisories);
+            return new ReportedFindings.Report(source, ecosystem, coordinate, version, advisories, coverage());
+        }
+
+        /** How much the scanner read, or {@code null} where the report says nothing of it. */
+        private ContentScanner.Coverage coverage() {
+            List<String> named = gaps == null ? List.of() : gaps;
+            if (completeness == null) {
+                if (!named.isEmpty()) {
+                    throw new IllegalArgumentException("gaps need a completeness");
+                }
+                return null;
+            }
+            if (named.size() > MAX_GAPS) {
+                throw new IllegalArgumentException("at most " + MAX_GAPS + " gaps per report");
+            }
+            ContentScanner.Completeness read = switch (completeness.strip().toLowerCase(Locale.ROOT)) {
+                case "complete" -> ContentScanner.Completeness.COMPLETE;
+                case "partial" -> ContentScanner.Completeness.PARTIAL;
+                case "not-catalogued" -> ContentScanner.Completeness.NOT_CATALOGUED;
+                default -> throw new IllegalArgumentException(
+                        "completeness is complete, partial or not-catalogued");
+            };
+            return new ContentScanner.Coverage(read, named.stream().filter(Objects::nonNull).map(String::strip)
+                    .filter(gap -> !gap.isEmpty())
+                    .map(gap -> gap.length() > AdvisorySource.Advisory.DESCRIPTION_LIMIT
+                            ? gap.substring(0, AdvisorySource.Advisory.DESCRIPTION_LIMIT) : gap)
+                    .toList());
         }
     }
 
