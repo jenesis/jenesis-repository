@@ -629,86 +629,37 @@ public class ComplianceReview extends TenantScope implements AutoCloseable {
                 source, id, decision, note, Instant.now());
     }
 
-    /** The retroactive licence enforcement dry run ({@link RetroLicensePlanner}) as the blast-radius panel shows it;
-     *  {@code includeUnknown} selects the {@code denied+unknown} mode. {@code installed=false} without a planner. */
-    public BlastRadiusView blastRadius(String repository, boolean includeUnknown) throws IOException {
-        return blastRadius(repository, includeUnknown, RetroLicensePlanner.installed());
+    /** The retroactive licence enforcement dry run as the enforcement preview shows it - the API's own
+     *  {@link LicenseBlastRadius}, read back from the stored report the last run left; {@code includeUnknown} selects
+     *  the {@code denied+unknown} mode. */
+    public LicenseBlastRadius.View blastRadius(String repository, boolean includeUnknown) throws IOException {
+        return blastRadius.read(scope(repository), includeUnknown);
     }
 
-    /**
-     * The stored blast-radius report for the mode, or the not-installed or not-computed state; the screen never runs the
-     * pass, which assesses every release.
-     */
-    public BlastRadiusView blastRadius(String repository, boolean includeUnknown,
-                                       Optional<RetroLicensePlanner> planner) throws IOException {
-        String mode = includeUnknown ? "denied+unknown" : "denied";
-        if (planner.isEmpty()) {
-            return new BlastRadiusView(false, mode, 0, List.of(), null, false, false);
-        }
-        Optional<StoredReport.Report> report = StoredReport.read(scope(repository), blastRadiusReport(includeUnknown));
-        if (report.isEmpty()) {
-            return new BlastRadiusView(true, mode, 0, List.of(), null, false, false);
-        }
-        StoredReport.Report stored = report.get();
-        List<BlastRadiusHeld> held = new ArrayList<>();
-        for (String row : stored.rows()) {
-            String[] parts = row.split("\t", 4);
-            if (parts.length == 4) {
-                held.add(new BlastRadiusHeld(parts[0], parts[1], parts[2],
-                        parts[3].isEmpty() ? List.of() : List.of(parts[3].split("; "))));
-            }
-        }
-        return new BlastRadiusView(true, mode, stored.count(), held,
-                stored.finishedAt() == null ? stored.startedAt() : stored.finishedAt(), stored.running(), true);
+    /** The preview over {@code planner} rather than the one discovered - the test seam for a graph that installs
+     *  none. */
+    public LicenseBlastRadius.View blastRadius(String repository, boolean includeUnknown,
+                                               Optional<RetroLicensePlanner> planner) throws IOException {
+        return new LicenseBlastRadius(planner).read(scope(repository), includeUnknown);
     }
 
-    /** Start the blast-radius pass for the mode in the background; answers whether a run was started. */
+    /** Start the preview's run for the mode in the background - the run the API's refresh starts, under the same
+     *  stored report; answers whether this call started it. */
     public boolean computeBlastRadius(String repository, boolean includeUnknown) throws IOException {
-        Optional<RetroLicensePlanner> planner = RetroLicensePlanner.installed();
-        if (planner.isEmpty()) {
-            return false;
-        }
-        Properties settings = settings();
-        ArtifactStore store = scope(repository);
-        return StoredReport.compute(store, blastRadiusReport(includeUnknown),
-                () -> rows(planner.get().plan(effective(settings), store, includeUnknown)));
+        return blastRadius.start(scope(repository), effective(settings()), includeUnknown, this::forThisTenant);
     }
 
-    /** Run the pass now and store its report - the test seam, and what a scheduled enforcement pass may call when it
-     *  already holds the plan; the screens read the result through {@link #blastRadius}. */
-    public BlastRadiusView computeBlastRadiusNow(String repository, boolean includeUnknown,
-                                                 RetroLicensePlanner planner) throws IOException {
-        Properties settings = settings();
-        ArtifactStore store = scope(repository);
-        Instant started = Instant.now();
-        StoredReport.Rows rows = rows(planner.plan(effective(settings), store, includeUnknown));
-        StoredReport.write(store, blastRadiusReport(includeUnknown), started, Instant.now(), rows);
-        return blastRadius(repository, includeUnknown, Optional.of(planner));
+    /** Run the preview now and store its report - the test seam; the screen reads the result through
+     *  {@link #blastRadius}. */
+    public LicenseBlastRadius.View computeBlastRadiusNow(String repository, boolean includeUnknown,
+                                                         RetroLicensePlanner planner) throws IOException {
+        return new LicenseBlastRadius(Optional.of(planner))
+                .computeNow(scope(repository), effective(settings()), includeUnknown);
     }
 
-    private static StoredReport.Rows rows(RetroLicensePlanner.Plan plan) {
-        List<String> rows = new ArrayList<>();
-        for (RetroLicensePlanner.Held entry : plan.held()) {
-            rows.add(entry.ecosystem() + "\t" + entry.coordinate() + "\t" + entry.version() + "\t"
-                    + String.join("; ", entry.reasons()));
-        }
-        return new StoredReport.Rows(plan.count(), List.copyOf(rows.subList(0, Math.min(rows.size(),
-                StoredReport.SAMPLE))));
-    }
-
-    private static String blastRadiusReport(boolean includeUnknown) {
-        return includeUnknown ? "blast-radius-unknown" : "blast-radius";
-    }
-
-    /** The blast-radius screen's model: what the last pass found ({@code held} is the first rows of {@code count}),
-     *  when it finished, whether a pass is running now, and whether one has ever been computed. */
-    public record BlastRadiusView(boolean installed, String mode, int count, List<BlastRadiusHeld> held,
-                                  Instant computedAt, boolean running, boolean computed) {
-    }
-
-    /** One release a retroactive-enforcement pass would newly hold, with the human-readable reasons behind the hold. */
-    public record BlastRadiusHeld(String ecosystem, String coordinate, String version, List<String> reasons) {
-    }
+    /** The preview, the implementation the API's retro plan runs; resolved once, since what is installed is fixed
+     *  for the JVM. */
+    private final LicenseBlastRadius blastRadius = new LicenseBlastRadius(RetroLicensePlanner.installed());
 
 
 

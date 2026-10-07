@@ -441,7 +441,8 @@ public class CliDispatcherTest {
                 return respond(rateLimitStatus, "{\"permitsPerMinute\":0}");
             }
             if (matches(path, "/api/licenses/retro/plan")) {
-                return respond(retroStatus, "{\"mode\":\"denied\",\"count\":0,\"held\":[]}");
+                return respond(retroStatus, "{\"mode\":\"denied\",\"state\":\"done\",\"count\":0,\"held\":[],"
+                        + "\"computedAt\":\"2026-01-01T00:00:00Z\"}");
             }
             if (matches(path, "/api/provenance/key")) {
                 return respond(provKeyStatus, "-----BEGIN PUBLIC KEY-----\n-----END PUBLIC KEY-----\n");
