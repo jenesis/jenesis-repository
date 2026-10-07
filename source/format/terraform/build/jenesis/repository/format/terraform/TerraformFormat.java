@@ -178,7 +178,9 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         String file = TerraformCoordinates.providerFile(type, version, os, arch);
         String key = TerraformCoordinates.providerArchive(repo, namespace, type, version, file);
         Optional<Blobs.Located> located = blobs.locate(key);
-        if (located.isEmpty() || blobs.withheld(key)) {
+        // A copy fetched from the upstream is the upstream's to describe: its sums are signed by the upstream's key,
+        // not this repository's, so the miss sends the client on to the upstream's document.
+        if (located.isEmpty() || blobs.withheld(key) || TerraformCoordinates.isCached(blobs.store(), key)) {
             exchange.respond(404);
             return;
         }
@@ -237,10 +239,12 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
                 return;
             }
             String hash = blobs.store(exchange.requestStream());
-            if (!linked(exchange, blobs, TerraformCoordinates.moduleArchive(repo, path[1], path[2], path[3], version),
-                    hash, path[1] + "/" + path[2] + "/" + path[3] + " " + version)) {
+            String key = TerraformCoordinates.moduleArchive(repo, path[1], path[2], path[3], version);
+            if (!linked(exchange, blobs, key, hash, path[1] + "/" + path[2] + "/" + path[3] + " " + version)) {
                 return;
             }
+            // Published here now, whatever the upstream once supplied under the same name.
+            blobs.store().delete(TerraformCoordinates.cached(key));
             listings(blobs).moduleRefresh(repo, path[1], path[2], path[3], version);
             exchange.respond(201);
         } else if (path.length == 5 && path[0].equals("providers") && path[4].endsWith(PROVIDER_ARCHIVE)) {
@@ -251,10 +255,12 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
                 return;
             }
             String hash = blobs.store(exchange.requestStream());
-            if (!linked(exchange, blobs, TerraformCoordinates.providerArchive(repo, path[1], path[2], path[3], path[4]),
-                    hash, path[1] + "/" + path[2] + " " + path[3] + " " + path[4])) {
+            String key = TerraformCoordinates.providerArchive(repo, path[1], path[2], path[3], path[4]);
+            if (!linked(exchange, blobs, key, hash, path[1] + "/" + path[2] + " " + path[3] + " " + path[4])) {
                 return;
             }
+            // Published here now, whatever the upstream once supplied under the same name.
+            blobs.store().delete(TerraformCoordinates.cached(key));
             listings(blobs).providerRefresh(repo, path[1], path[2], path[3], path[4]);
             exchange.respond(201);
         } else {
@@ -332,9 +338,9 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         exchange.respond(200, key.get());
     }
 
-    /** Serve a stored listing, with the {@code 404} keyed on the raw container rather than the servable subset: a
-     *  coordinate never held is absent, while one whose every version is withheld answers an empty document, since a
-     *  {@code 404} would claim "no such module" about something held, which a client caches. */
+    /** Serve a stored listing. A coordinate with nothing to list here - never published, every version withheld, or
+     *  holding only copies fetched from the upstream - answers {@code 404}, which on a proxy sends the request on to
+     *  the upstream's; the structural probe answers a coordinate never held without materialising a document for it. */
     private void serveListing(FormatExchange exchange, Blobs blobs, StoredListing.Spec spec, String container)
             throws IOException {
         if (blobs.isEmpty(container)) {
@@ -347,6 +353,11 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
             return;
         }
         try (StoredListing.Served document = served.get()) {
+            // Read after opening, which materialises an absent document; an unknown count is not zero.
+            if (document.header().count().orElse(-1L) == 0L) {
+                exchange.respond(404);
+                return;
+            }
             respond(exchange, document, spec.listing().endsWith("versions")
                     ? "application/json" : "text/plain; charset=utf-8");
         }
@@ -356,9 +367,23 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
      *  since a client verifies the signature against the list. */
     private void serveDerived(FormatExchange exchange, Blobs blobs, TerraformListings listings, String repo,
                               String namespace, String type, String version) throws IOException {
+        if (blobs.isEmpty(TerraformCoordinates.ROOT + repo + "/providers/" + namespace + "/" + type + "/" + version)) {
+            exchange.respond(404);   // the structural probe: nothing was ever held under this version
+            return;
+        }
         String derived = TerraformListings.shaSumsSignature(repo, namespace, type, version);
-        Optional<StoredListing.Header> source = StoredListing.header(blobs.store(),
-                TerraformListings.shaSums(repo, namespace, type, version));
+        String sums = TerraformListings.shaSums(repo, namespace, type, version);
+        Optional<StoredListing.Header> source = StoredListing.header(blobs.store(), sums);
+        if (source.isEmpty()) {
+            StoredListing.rebuild(blobs.store(), listings.shaSumsSpec(repo, namespace, type, version));
+            source = StoredListing.header(blobs.store(), sums);
+        }
+        // A signature over sums that name nothing published here signs nothing a client may install, so it is a miss
+        // as the sums are.
+        if (source.isEmpty() || source.get().count().orElse(-1L) == 0L) {
+            exchange.respond(404);
+            return;
+        }
         Optional<StoredListing.Served> served = StoredListing.openDerived(blobs.store(), derived);
         if (served.isEmpty() || source.isEmpty() || served.get().header().seq() < source.get().seq()) {
             if (served.isPresent()) {
@@ -672,6 +697,8 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
     private boolean fillPinned(FormatExchange exchange, ArtifactStore store, ProxyFormat.Fetcher fetcher,
                                TerraformGitSource git, String key, String repo) throws IOException {
         Blobs blobs = new Blobs(store);
+        // Marked before it is linked, so no listing generated in between counts the copy as published here.
+        store.writeVersioned(TerraformCoordinates.cached(key), new byte[0], null);
         if (!pinned(blobs, fetcher, git, key, repo)) {
             return false;
         }
@@ -814,6 +841,8 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
     private boolean fill(FormatExchange exchange, ArtifactStore store, ProxyFormat.Fetcher fetcher, URI url,
                          String key, ProxyRelay.Declared declared, String contentType) throws IOException {
         Blobs blobs = new Blobs(store);
+        // Marked before it is linked, so no listing generated in between counts the copy as published here.
+        store.writeVersioned(TerraformCoordinates.cached(key), new byte[0], null);
         try (ProxyFormat.Download download = fetcher.download(url, Map.of()).orElse(null)) {
             if (download == null || download.status() != 200
                     || !ProxyRelay.fill(blobs, key, url, download.body(), declared)) {

@@ -2,6 +2,7 @@ package build.jenesis.repository.format.terraform;
 
 import module java.base;
 
+import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Checksums;
 
 /**
@@ -29,6 +30,23 @@ final class TerraformCoordinates {
      *  repository and ref, which may be longer than a key segment and hold characters none may. */
     static String gitDigest(String repo, String identity) {
         return ROOT + repo + "/git/" + Checksums.sha256(identity.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * The marker beside {@code archive} saying its bytes are a copy fetched from the upstream rather than a release
+     * published here, so this registry's own version lists, {@code SHA256SUMS} and package documents leave it to the
+     * upstream's, which a client verifies against the upstream's key. Kept in the repository's {@code cached/} space,
+     * outside the {@code providers/} and {@code modules/} trees those documents are generated from.
+     */
+    static String cached(String archive) {
+        String rest = archive.substring(ROOT.length());
+        int slash = rest.indexOf('/');
+        return ROOT + rest.substring(0, slash) + "/cached" + rest.substring(slash);
+    }
+
+    /** Whether the archive at {@code archive} is a copy fetched from the upstream ({@link #cached}). */
+    static boolean isCached(ArtifactStore store, String archive) throws IOException {
+        return store.readVersioned(cached(archive)).isPresent();
     }
 
     /** A provider version's per-platform zip, named as the protocol's {@code filename} field reports it. */

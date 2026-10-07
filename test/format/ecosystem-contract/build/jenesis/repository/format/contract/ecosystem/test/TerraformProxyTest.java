@@ -56,6 +56,28 @@ class TerraformProxyTest {
     }
 
     @Test
+    void a_provider_fetched_from_the_upstream_is_never_described_as_published_here() throws Exception {
+        // The copy is cached, but its sums are signed by the upstream's key: were this repository to list the version
+        // and describe it in a document of its own, a client would verify the upstream's signature against this
+        // repository's key and refuse the provider. Each of its own surfaces is a miss, which sends the client on to
+        // the upstream's.
+        byte[] zip = "a provider".getBytes(StandardCharsets.UTF_8);
+        String document = packageDocument().replace("0".repeat(64),
+                HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(zip)));
+        ContractExchange fill = proxy(BASE + "/providers/acme/widget/1.0.0/" + FILE, upstream(Map.of(ROOT + PACKAGE,
+                document), Map.of(), Map.of("https://releases.invalid/widget/" + FILE, zip)));
+        assertThat(fill.status()).as("the zip is fetched and cached").isEqualTo(200);
+
+        assertThat(local(BASE + "/providers/acme/widget/1.0.0/" + FILE).status()).as("the cached copy serves")
+                .isEqualTo(200);
+        String version = BASE + "/providers/acme/widget/1.0.0/";
+        for (String path : List.of(BASE + "/" + PACKAGE, BASE + "/v1/providers/acme/widget/versions",
+                version + "SHA256SUMS", version + "SHA256SUMS.sig")) {
+            assertThat(local(path).status()).as("%s is the upstream's to answer", path).isEqualTo(404);
+        }
+    }
+
+    @Test
     void a_module_whose_source_is_an_archive_downloads_through_this_repository() throws IOException {
         ContractExchange exchange = proxy(BASE + "/v1/modules/acme/network/aws/1.0.0/download",
                 upstream(Map.of(), Map.of(ROOT + "v1/modules/acme/network/aws/1.0.0/download",
@@ -273,6 +295,16 @@ class TerraformProxyTest {
                 .map(ServiceLoader.Provider::get).filter(format -> format.name().equals("terraform"))
                 .findFirst().orElseThrow();
         ((ProxyFormat) terraform).proxy(exchange, store(), ROOT, fetcher);
+        return exchange;
+    }
+
+    /** {@code path} answered by this repository alone, with no upstream behind it. */
+    private ContractExchange local(String path) throws IOException {
+        RepositoryFormat terraform = ServiceLoader.load(RepositoryFormat.class).stream()
+                .map(ServiceLoader.Provider::get).filter(format -> format.name().equals("terraform"))
+                .findFirst().orElseThrow();
+        ContractExchange exchange = ContractExchange.of("GET", path);
+        terraform.handle(exchange, store());
         return exchange;
     }
 
