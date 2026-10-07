@@ -61,19 +61,40 @@ public final class LifecycleClient extends ClientCalls {
         return true;
     }
 
-    /** Run the retention sweep over a repository, returning what it evicted and how many blobs it reclaimed. */
-    public CleanupReport cleanup(String repo) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("POST", "/api/repository/cleanup?repo=" + enc(repo), null, null);
-        require(response, 200, "run cleanup on " + repo);
+    /** Start the retention sweep over a repository, and the collection behind it, off the request: whether this
+     *  request started it or found one running, and the sweep as it stood. */
+    public CleanupStart cleanup(String repo) throws IOException, InterruptedException {
+        return started(send("POST", "/api/repository/cleanup?repo=" + enc(repo), null, null), "run cleanup on " + repo);
+    }
+
+    /** The last cleanup sweep of a repository, or the one running now. */
+    public CleanupReport cleanupStatus(String repo) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/repository/cleanup?repo=" + enc(repo), null, null);
+        require(response, 200, "read the cleanup of " + repo);
         return JSON.readValue(response.body(), CleanupReport.class);
     }
 
-    /** The dry-run cleanup plan: what the sweep would evict, without deleting anything ({@code blobsReclaimed} is
-     *  always 0). */
+    /** Start the dry run of a sweep off the request: what it would evict and reclaim, deleting nothing. */
+    public CleanupStart startCleanupPlan(String repo) throws IOException, InterruptedException {
+        return started(send("GET", "/api/repository/cleanup/plan?repo=" + enc(repo) + "&refresh=true", null, null),
+                "plan cleanup on " + repo);
+    }
+
+    /** The last dry run of a sweep, or the one running now. */
     public CleanupReport cleanupPlan(String repo) throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET", "/api/repository/cleanup/plan?repo=" + enc(repo), null, null);
         require(response, 200, "plan cleanup on " + repo);
         return JSON.readValue(response.body(), CleanupReport.class);
+    }
+
+    private static CleanupStart started(HttpResponse<String> response, String action) throws IOException {
+        require(response, 200, action);
+        return new CleanupStart(!"running".equals(response.headers().firstValue("Jenesis-Refresh").orElse("")),
+                JSON.readValue(response.body(), CleanupReport.class));
+    }
+
+    /** What starting a sweep or a dry run answered: whether this request started it, and the run as it stood. */
+    public record CleanupStart(boolean started, CleanupReport report) {
     }
 
     /** A repository's retention policy. */
@@ -227,10 +248,18 @@ public final class LifecycleClient extends ClientCalls {
     private record ForwardingView(List<ForwardingEntry> entries, String next) {
     }
 
-    /** The result of a cleanup sweep or its dry-run plan: how many content-addressed blobs were reclaimed (0 for a
-     *  plan) and the {@code coordinate:version - reason} lines the sweep evicted or would evict.
-     *  {@code evicted} names the first evictions of the sweep; {@code evictedCount} counts them all. */
-    public record CleanupReport(int blobsReclaimed, List<String> evicted, int evictedCount) {
+    /** A cleanup sweep or its dry run as the last run left it: {@code state} ({@code not-run}, {@code running},
+     *  {@code done} or {@code failed}), when the latest began and the last finished, the {@code coordinate:version -
+     *  reason} lines it evicted or would evict - the first of {@code evictedCount} - its collection leg, and why the
+     *  latest run stopped. */
+    public record CleanupReport(boolean plan, String state, String startedAt, String finishedAt, int evictedCount,
+                                List<String> evicted, CleanupGc gc, String failure) {
+    }
+
+    /** A sweep's collection leg: whether a collector is installed, whether its judgment is complete, what it
+     *  condemned, spared and collected, and why it declined, empty in the ordinary case. */
+    public record CleanupGc(boolean installed, boolean complete, long condemned, long spared, long collected,
+                             String refusal) {
     }
 
     /** A repository's retention policy: how many latest versions to keep, and the ISO-8601 age / prerelease-expiry /
