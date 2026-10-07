@@ -76,7 +76,10 @@ import io.micrometer.core.instrument.MeterRegistry;
  *       itself; its units fan out on threads that grow as needed, at most {@code workers} at once per pass, so a unit
  *       that never returns holds its own thread and no other pass's; and every pass in flight is reported with where
  *       its thread is ({@link #running()}), named at {@code WARNING} with its stack once it has run past
- *       {@link #STALLED} - so a stall says what it is stuck on, on whatever machine it happens.</li>
+ *       {@link #STALLED} - so a stall says what it is stuck on, on whatever machine it happens. A node has been seen
+ *       with every pass frozen at one instant while it went on answering HTTP, and what that pass was blocked on was
+ *       never named: the store clients bound their connects and their silences, so a lock or a wait is as likely as
+ *       the network, and this report is what names it should it recur.</li>
  * </ol>
  */
 public final class MaintenanceScheduler implements AutoCloseable {
