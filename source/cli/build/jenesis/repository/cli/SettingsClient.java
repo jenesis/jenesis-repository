@@ -152,28 +152,20 @@ public final class SettingsClient extends ClientCalls {
                 200, "set the storage quota");
     }
 
-    /** The tenant's request-rate ceiling in permits per minute ({@code 0} falls back to the deployment default), or
-     *  {@code null} when rate limiting is not installed on this deployment (HTTP 501). */
+    /** The tenant's request-rate ceiling in permits per minute ({@code 0} falls back to the deployment default). */
     public RateLimitView rateLimit() throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET", "/api/rate-limit", null, null);
-        if (response.statusCode() == 501) {
-            return null;
-        }
         require(response, 200, "read the rate limit");
         return JSON.readValue(response.body(), RateLimitView.class);
     }
 
     /** Set ({@code > 0}) or clear ({@code 0}) a tenant's request-rate ceiling - the operator's to set, as the quota
-     *  is; {@code false} when rate limiting is not installed (HTTP 501). */
-    public boolean setRateLimit(String tenant, long permitsPerMinute) throws IOException, InterruptedException {
+     *  is. */
+    public void setRateLimit(String tenant, long permitsPerMinute) throws IOException, InterruptedException {
         String path = tenant == null ? "/api/rate-limit" : "/api/rate-limit?tenant=" + enc(tenant);
         HttpResponse<String> response = send("PUT", path,
                 body(Map.of("permitsPerMinute", permitsPerMinute)), "application/json");
-        if (response.statusCode() == 501) {
-            return false;
-        }
         require(response, 200, "set the rate limit");
-        return true;
     }
 
     /** The orphaned-data report: persisted storage-manifest entries whose declaring module is no longer installed

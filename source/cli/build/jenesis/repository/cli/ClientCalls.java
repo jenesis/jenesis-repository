@@ -95,6 +95,11 @@ abstract class ClientCalls {
         }
         headers.forEach(request::header);
         HttpResponse<String> response = client.send(request.build(), BoundedBody.ofString(uri, LARGEST_ANSWER));
+        // A 501 is the server saying it carries no module that would answer: what exit code 3 means, so it is that
+        // wherever the call is made, rather than an absence each command reports in its own words and exit code.
+        if (response.statusCode() == 501) {
+            throw RepositoryClient.NotInstalled.unimplemented(method + " " + path);
+        }
         // In --json mode the server's own answer is the output, so it is captured here rather than reconstructed
         // from whatever the calling command happened to parse out of it.
         if (Output.isJson() && response.statusCode() >= 200 && response.statusCode() < 300) {
@@ -109,7 +114,7 @@ abstract class ClientCalls {
         }
         if (response.statusCode() == 404
                 && response.headers().firstValue("Jenesis-Installed").filter("false"::equals).isPresent()) {
-            throw new RepositoryClient.NotInstalled(action);
+            throw RepositoryClient.NotInstalled.unrouted(action);
         }
         throw new IOException("Could not " + action + " (HTTP " + response.statusCode() + ")" + referenced(response));
     }

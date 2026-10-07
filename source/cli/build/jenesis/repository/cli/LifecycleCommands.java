@@ -26,10 +26,6 @@ final class LifecycleCommands {
             }
             default -> {
                 List<ContentsClient.StagingEntry> entries = client.contents().staging(args[1]);
-                if (entries == null) {
-                    System.out.println("Staging is not installed on this deployment.");
-                    return 0;
-                }
                 if (entries.isEmpty()) {
                     System.out.println("No staging in progress.");
                     return 0;
@@ -57,10 +53,6 @@ final class LifecycleCommands {
             }
             case 409 -> {
                 System.out.println("Staging id " + args[3] + " is already sealed.");
-                yield 1;
-            }
-            case 501 -> {
-                System.out.println("Staging is not installed on this deployment.");
                 yield 1;
             }
             default -> {
@@ -104,10 +96,6 @@ final class LifecycleCommands {
         RepositoryClient client = CliSupport.client(home);
         LifecycleClient.CleanupReport report = plan
                 ? client.lifecycle().cleanupPlan(repo) : client.lifecycle().cleanup(repo);
-        if (report == null) {
-            System.out.println("Retention is not installed on this deployment.");
-            return 0;
-        }
         if (report.evicted().isEmpty()) {
             System.out.println(plan ? "Nothing would be evicted." : "Nothing was evicted.");
         } else {
@@ -218,18 +206,11 @@ final class LifecycleCommands {
                     default -> throw new IllegalArgumentException("Unknown retention flag '" + args[i] + "'");
                 }
             }
-            if (!client.lifecycle().setRetention(repo, keepLast, maxAge, prereleaseExpiry, notDownloadedFor)) {
-                System.out.println("Retention is not installed on this deployment.");
-                return 1;
-            }
+            client.lifecycle().setRetention(repo, keepLast, maxAge, prereleaseExpiry, notDownloadedFor);
             System.out.println("Set the given retention rules of " + repo + "; the rest are as they were.");
             return 0;
         }
         LifecycleClient.RetentionView view = client.lifecycle().retention(args[1]);
-        if (view == null) {
-            System.out.println("Retention is not installed on this deployment.");
-            return 0;
-        }
         System.out.println("keep-last:          " + view.keepLast());
         System.out.println("max-age:            " + CliSupport.orDash(view.maxAge()));
         System.out.println("prerelease-expiry:  " + CliSupport.orDash(view.prereleaseExpiry()));

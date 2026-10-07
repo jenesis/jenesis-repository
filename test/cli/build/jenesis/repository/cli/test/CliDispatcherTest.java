@@ -23,10 +23,11 @@ import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
  * on - published or quarantined succeed (0), a rejection or a read-only repository fail (1) - and an unknown command
  * reports usage with a non-zero code, so a gate rejection cannot slip past a pipeline as a success. The review-and-
  * pipeline verbs map their own status codes: a quarantine listing renders each hold's reasons, a staging
- * promote conflict (409) and a forwarding retry with nothing parked (404) exit non-zero, and a not-installed staging
- * (501) or published index (404) reports the absence without failing the command. The governance and maintenance verbs
- * map theirs the same way: capabilities renders the module list, a not-installed rate limit (501) under limits
- * or enforcement-preview (501) reports the absence without failing, a provenance key with signing off (404) and a
+ * promote conflict (409) and a forwarding retry with nothing parked (404) exit non-zero, a module the deployment does
+ * not carry (501) exits 3 - "not served", as an unrouted request does - and says nothing on stdout, under {@code --json}
+ * too, and a published index not yet built (404) reports its absence. The governance and maintenance verbs map theirs
+ * the same way: capabilities renders the module list, limits still reads the quota where rate limiting (501) is not
+ * installed, a provenance key with signing off (404) and a
  * missing import job (404) exit non-zero, and a batch {@code --explode zip} with a gate-rejected member exits
  * non-zero.
  */
@@ -288,8 +289,13 @@ public class CliDispatcherTest {
         String empty = capture(() -> assertThat(Cli.run(new String[] {"findings", "releases"})).isZero());
         assertThat(empty).contains("No recorded findings match.");
         findingsStatus = 501;
-        String absent = capture(() -> assertThat(Cli.run(new String[] {"findings", "releases"})).isZero());
-        assertThat(absent).contains("not installed");
+        String absent = capture(() -> assertThat(Cli.run(new String[] {"findings", "releases"}))
+                .as("a module the deployment does not carry is exit 3, as the help promises").isEqualTo(3));
+        assertThat(absent).as("nothing reads as an answer on stdout").isEmpty();
+        String json = capture(() -> assertThat(Cli.run(new String[] {"findings", "releases", "--json"}))
+                .isEqualTo(3));
+        assertThat(json).as("no {\"ok\":true} for a call nothing answered").isEmpty();
+        findingsStatus = 200;
     }
 
     @Test
@@ -302,10 +308,10 @@ public class CliDispatcherTest {
     }
 
     @Test
-    public void staging_reports_when_it_is_not_installed() throws Exception {
+    public void staging_exits_not_served_when_it_is_not_installed() throws Exception {
         stagingListStatus = 501;
-        String out = capture(() -> assertThat(Cli.run(new String[] {"staging", "releases"})).isZero());
-        assertThat(out).contains("not installed");
+        assertThat(Cli.run(new String[] {"staging", "releases"})).isEqualTo(3);
+        stagingListStatus = 200;
     }
 
     @Test
@@ -352,10 +358,10 @@ public class CliDispatcherTest {
     }
 
     @Test
-    public void enforcement_preview_reports_when_not_installed() throws Exception {
+    public void enforcement_preview_exits_not_served_when_not_installed() throws Exception {
         retroStatus = 501;
-        String out = capture(() -> assertThat(Cli.run(new String[] {"enforcement-preview", "releases"})).isZero());
-        assertThat(out).contains("not installed");
+        assertThat(Cli.run(new String[] {"enforcement-preview", "releases"})).isEqualTo(3);
+        retroStatus = 200;
     }
 
     @Test

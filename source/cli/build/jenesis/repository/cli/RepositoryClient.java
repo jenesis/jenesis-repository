@@ -127,14 +127,25 @@ public final class RepositoryClient extends ClientCalls {
      * The server has no route for the call: the module that would serve it is not part of this deployment.
      *
      * <p>The server marks a request no route matched with {@code Jenesis-Installed: false}, telling it apart from a
-     * {@code 404} for something absent; the dispatcher turns it into its own exit code.
+     * {@code 404} for something absent, and answers {@code 501} where a route exists but the module behind it is not
+     * installed; the dispatcher turns either into its own exit code.
      */
     public static final class NotInstalled extends IOException {
 
         private static final long serialVersionUID = 1L;
 
-        NotInstalled(String action) {
-            super("The server has no route to " + action + ".");
+        private NotInstalled(String message) {
+            super(message);
+        }
+
+        /** A {@code 404} the server marked as unrouted, for {@code action}: no module serving it is installed. */
+        static NotInstalled unrouted(String action) {
+            return new NotInstalled("The server has no route to " + action + ".");
+        }
+
+        /** A {@code 501} for {@code request}: the route is there and the module that would answer it is not. */
+        static NotInstalled unimplemented(String request) {
+            return new NotInstalled("The server carries nothing that answers " + request + ".");
         }
     }
 
