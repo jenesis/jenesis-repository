@@ -64,9 +64,8 @@
                     </th:block>
                     </tbody>
                 </table>
-                <p th:if="${view.resolved().next() != null}"><small>Showing <th:block
-                        th:text="${view.resolved().dependents().size()}">50</th:block> here; <a th:href="@{/ui/repositories/{repo}/dependents(repo=${repo},ecosystem=${ecosystem},coordinate=${coordinate},version=${version},after=${view.resolved().next()})}">more depend on it</a>.</small></p>
-                <p th:if="${!after.isEmpty()}"><small><a th:href="@{/ui/repositories/{repo}/dependents(repo=${repo},ecosystem=${ecosystem},coordinate=${coordinate},version=${version})}">Back to the first page</a>.</small></p>
+                <p th:replace="~{base :: pager(${view.resolved().next() != null} ? @{/ui/repositories/{repo}/dependents(repo=${repo},ecosystem=${ecosystem},coordinate=${coordinate},version=${version},after=${view.resolved().next()})} : null,
+                        ${!after.isEmpty()} ? @{/ui/repositories/{repo}/dependents(repo=${repo},ecosystem=${ecosystem},coordinate=${coordinate},version=${version})} : null)}"></p>
             </th:block>
         </section>
 
@@ -107,9 +106,8 @@
                     </tr>
                     </tbody>
                 </table>
-                <p th:if="${view.declared().next() != null}"><small>Showing <th:block
-                        th:text="${view.declared().declarations().size()}">50</th:block> here; <a th:href="@{/ui/repositories/{repo}/dependents(repo=${repo},ecosystem=${ecosystem},coordinate=${coordinate},version=${version},declaredAfter=${view.declared().next()})}">more declare it</a>.</small></p>
-                <p th:if="${!declaredAfter.isEmpty()}"><small><a th:href="@{/ui/repositories/{repo}/dependents(repo=${repo},ecosystem=${ecosystem},coordinate=${coordinate},version=${version})}">Back to the first page</a>.</small></p>
+                <p th:replace="~{base :: pager(${view.declared().next() != null} ? @{/ui/repositories/{repo}/dependents(repo=${repo},ecosystem=${ecosystem},coordinate=${coordinate},version=${version},declaredAfter=${view.declared().next()})} : null,
+                        ${!declaredAfter.isEmpty()} ? @{/ui/repositories/{repo}/dependents(repo=${repo},ecosystem=${ecosystem},coordinate=${coordinate},version=${version})} : null)}"></p>
             </th:block>
         </section>
     </th:block>

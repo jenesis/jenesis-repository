@@ -80,8 +80,8 @@
                 </tbody>
             </table>
         </figure>
-        <p th:if="${nextCursor != null}"><small>Showing the first <span th:text="${members.size()}">200</span>
-            members; <a th:href="@{/ui/admin/group(name=${name},cursor=${nextCursor})}">more</a>.</small></p>
+        <p th:replace="~{base :: pager(${nextCursor != null} ? @{/ui/admin/group(name=${name},cursor=${nextCursor})} : null,
+                ${asked.contains('cursor')} ? @{/ui/admin/group(name=${name})} : null)}"></p>
         <th:block th:if="${members.isEmpty()}">
             <div th:replace="~{base :: empty('Nobody is in this group yet.')}"></div>
         </th:block>

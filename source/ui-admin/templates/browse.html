@@ -115,9 +115,8 @@
 
         <!--/* The bound is visible: every answer is one bounded page, so a clamped hit list says that more remain
              and links the next page rather than reading as the whole set. */-->
-        <p th:if="${truncated}"><small>Showing <span th:text="${results.size()}">100</span> matches; more remain.
-            <a th:href="@{/ui/repositories/{repo}/browse(repo=${repo},q=${query},cursor=${nextCursor})}">Next
-                page</a></small></p>
+        <p th:replace="~{base :: pager(${truncated} ? @{/ui/repositories/{repo}/browse(repo=${repo},q=${query},cursor=${nextCursor})} : null,
+                ${asked.contains('cursor')} ? @{/ui/repositories/{repo}/browse(repo=${repo},q=${query})} : null)}"></p>
 
         <th:block th:if="${results.isEmpty() and fullText}">
             <div th:replace="~{base :: empty('Nothing in this repository matches this search.')}"></div>

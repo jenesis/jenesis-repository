@@ -39,8 +39,8 @@
                 </tbody>
             </table>
         </figure>
-        <p th:if="${nextCursor != null}"><small>Showing the first <span th:text="${users.size()}">200</span> members;
-            <a th:href="@{/ui/admin(cursor=${nextCursor})}">more</a>.</small></p>
+        <p th:replace="~{base :: pager(${nextCursor != null} ? @{/ui/admin(cursor=${nextCursor})} : null,
+                ${asked.contains('cursor')} ? @{/ui/admin} : null)}"></p>
         <th:block th:if="${users.isEmpty()}">
             <div th:replace="~{base :: empty('No members yet — an env super-admin (JENREPO_UI_ADMINS) can add the first one below.')}"></div>
         </th:block>
@@ -120,8 +120,8 @@
                 </tbody>
             </table>
         </figure>
-        <p th:if="${groupsNext != null}"><small>Showing the first <span th:text="${groups.size()}">50</span> groups;
-            <a th:href="@{/ui/admin(groupsAfter=${groupsNext})}">more</a>.</small></p>
+        <p th:replace="~{base :: pager(${groupsNext != null} ? @{/ui/admin(groupsAfter=${groupsNext})} : null,
+                ${asked.contains('groupsAfter')} ? @{/ui/admin} : null)}"></p>
         <th:block th:if="${groups.isEmpty()}">
             <div th:replace="~{base :: empty('No groups yet — create one and everyone in it holds its rights.')}"></div>
         </th:block>

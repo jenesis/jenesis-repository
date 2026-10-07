@@ -113,12 +113,16 @@ public final class ConsoleLayout {
     /** A severity as every screen shows one: its band as a badge, taking the severity (or none, shown as unknown). */
     public static final String SEVERITY = "severity";
 
+    /** How a paged screen goes on: a link to the next page and, past the first, one back to it, taking the two
+     *  addresses (either {@code null}); nothing on a page that is the whole set. */
+    public static final String PAGER = "pager";
+
     /** Every fragment an extending console may build on. */
     public static final Set<String> FRAGMENTS = Set.of(
             PAGE_HEADER, PAGE_HEADER_CRUMBS, EMPTY, EMPTY_ACTION, ALERT, HEAD_CONTENTS, PRIMARY_BUTTON, SECONDARY_BUTTON,
             CAUTION_BUTTON, DANGER_BUTTON, DELETE_BUTTON, PHRASE_BUTTON, SHELL, SIGN_IN_SHELL, MESSAGES, SUBSECTION_ERROR,
             BROWSE_ROWS, BROWSE_UP, RUNNING, REPOSITORY_HEADER, REPOSITORY_OVERVIEW_HEADER, REPOSITORY_IDENTITY,
-            MODULE_VIEWS, FOLDER_LINK, TIME, ARTIFACT_LINK, SEVERITY);
+            MODULE_VIEWS, FOLDER_LINK, TIME, ARTIFACT_LINK, SEVERITY, PAGER);
 
     private ConsoleLayout() {
         throw new UnsupportedOperationException();

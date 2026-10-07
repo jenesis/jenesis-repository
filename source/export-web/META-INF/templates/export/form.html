@@ -54,8 +54,8 @@
                 </tbody>
             </table>
         </figure>
-        <p th:if="${next}"><a th:href="@{/ui/repositories/{repo}/export(repo=${repository}, after=${next})}">Showing
-            the first page - more exports follow</a></p>
+        <p th:replace="~{base :: pager(${next != null} ? @{/ui/repositories/{repo}/export(repo=${repository}, after=${next})} : null,
+                ${asked.contains('after')} ? @{/ui/repositories/{repo}/export(repo=${repository})} : null)}"></p>
     </article>
 
     <article id="start">
