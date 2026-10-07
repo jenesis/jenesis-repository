@@ -20,7 +20,7 @@ final class JenesisImportFixture implements ImportFixture {
     private static final String BASE = "http://jenrepo.t203";
     private static final String REPOSITORY = "main";
     private static final String PAGE_ONE = BASE + "/api/assets?repo=" + REPOSITORY;
-    private static final String PAGE_TWO = PAGE_ONE + "&cursor=page-two";
+    private static final String PAGE_TWO = PAGE_ONE + "&after=page-two";
 
     @Override
     public String source() {
@@ -86,7 +86,7 @@ final class JenesisImportFixture implements ImportFixture {
         for (String path : paths) {
             assets.add("{\"path\":\"" + path + "\",\"served\":\"" + served(path) + "\",\"format\":\"maven\"}");
         }
-        return "{\"assets\":" + assets + ",\"cursor\":" + (cursor == null ? "null" : "\"" + cursor + "\"") + "}";
+        return "{\"assets\":" + assets + ",\"next\":" + (cursor == null ? "null" : "\"" + cursor + "\"") + "}";
     }
     @Override
     public Map<ImportContract.Property, String> unsupported() {

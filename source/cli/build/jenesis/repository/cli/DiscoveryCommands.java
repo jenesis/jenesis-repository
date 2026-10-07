@@ -99,7 +99,7 @@ final class DiscoveryCommands {
                 System.out.println(asset.path() + "  " + asset.size() + "  " + asset.sha256() + coordinate);
                 total++;
             }
-            cursor = page.cursor();
+            cursor = page.next();
             if (!all || cursor == null) {
                 if (cursor != null) {
                     System.out.println("next cursor: " + cursor);

@@ -12,6 +12,9 @@ open module build.jenesis.repository.compliance.web.test {
     requires build.jenesis.repository.closure.spi;
     requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.compliance.web;
+    requires build.jenesis.repository.audit;
+    requires build.jenesis.repository.findings;
+    requires build.jenesis.repository.findings.store;
     requires build.jenesis.repository.inventory;
     requires build.jenesis.repository.metadata;
     requires build.jenesis.repository.metadata.store;

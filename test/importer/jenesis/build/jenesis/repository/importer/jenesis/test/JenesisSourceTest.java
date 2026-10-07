@@ -20,7 +20,7 @@ class JenesisSourceTest {
     private final URI base = URI.create("https://src.example/");
     private final String repository = "libs";
     private final String listUrl = "https://src.example/api/assets?repo=libs";
-    private final String page2Url = listUrl + "&cursor=tok1";
+    private final String page2Url = listUrl + "&after=tok1";
     private final String jarDownload = "https://src.example/repository/default/libs/maven/org/example/lib/1.0/lib-1.0.jar";
     private final String rawDownload = "https://src.example/repository/default/files/tools/installer.bin";
 
@@ -33,10 +33,10 @@ class JenesisSourceTest {
         byte[] jar = "jar-bytes".getBytes(StandardCharsets.UTF_8);
         String page1 = "{\"assets\":[{\"path\":\"/maven/org/example/lib/1.0/lib-1.0.jar\","
                 + "\"served\":\"/repository/default/libs/maven/org/example/lib/1.0/lib-1.0.jar\",\"format\":\"maven\","
-                + "\"size\":9,\"sha256\":\"abc\"}],\"cursor\":\"tok1\"}";
+                + "\"size\":9,\"sha256\":\"abc\"}],\"next\":\"tok1\"}";
         String page2 = "{\"assets\":[{\"path\":\"/raw/tools/installer.bin\","
                 + "\"served\":\"/repository/default/files/tools/installer.bin\",\"format\":\"raw\","
-                + "\"size\":3,\"sha256\":\"def\"}],\"cursor\":null}";
+                + "\"size\":3,\"sha256\":\"def\"}],\"next\":null}";
         FakeFetcher fetcher = new FakeFetcher(Map.of(
                 listUrl, ok(page1),
                 page2Url, ok(page2),
@@ -68,7 +68,7 @@ class JenesisSourceTest {
     void it_resumes_from_a_checkpointed_cursor() throws IOException {
         String page2 = "{\"assets\":[{\"path\":\"/raw/tools/installer.bin\","
                 + "\"served\":\"/repository/default/files/tools/installer.bin\",\"format\":\"raw\","
-                + "\"size\":3,\"sha256\":\"def\"}],\"cursor\":null}";
+                + "\"size\":3,\"sha256\":\"def\"}],\"next\":null}";
         FakeFetcher fetcher = new FakeFetcher(Map.of(page2Url, ok(page2)));
 
         List<String> paths = new ArrayList<>();
@@ -84,7 +84,7 @@ class JenesisSourceTest {
         byte[] jar = "jar-bytes".getBytes(StandardCharsets.UTF_8);
         String page1 = "{\"assets\":[{\"path\":\"/maven/org/example/lib/1.0/lib-1.0.jar\","
                 + "\"served\":\"/repository/default/libs/maven/org/example/lib/1.0/lib-1.0.jar\",\"format\":\"maven\","
-                + "\"size\":9,\"sha256\":\"abc\"}],\"cursor\":null}";
+                + "\"size\":9,\"sha256\":\"abc\"}],\"next\":null}";
         FakeFetcher fetcher = new FakeFetcher(Map.of(
                 listUrl, ok(page1),
                 jarDownload, new ProxyFormat.Fetched(200, jar, Map.of())));
@@ -107,7 +107,7 @@ class JenesisSourceTest {
         String page = "{\"assets\":[{\"path\":\"/maven/org/example/evil.jar\",\"served\":\".evil.example/x\","
                 + "\"format\":\"maven\"},{\"path\":\"/maven/org/example/ok.jar\","
                 + "\"served\":\"/repository/default/libs/maven/org/example/ok.jar\",\"format\":\"maven\"}],"
-                + "\"cursor\":null}";
+                + "\"next\":null}";
         FakeFetcher fetcher = new FakeFetcher(Map.of(listUrl, ok(page)));
 
         List<String> paths = new ArrayList<>();
@@ -121,7 +121,7 @@ class JenesisSourceTest {
     void a_traversal_laced_asset_path_is_skipped() throws IOException {
         String page = "{\"assets\":[{\"path\":\"/maven/../../auth/keys\",\"format\":\"maven\"},"
                 + "{\"path\":\"/maven/org/example/ok.jar\",\"served\":\"/repository/default/libs/maven/org/example/ok.jar\",\"format\":\"maven\"}],"
-                + "\"cursor\":null}";
+                + "\"next\":null}";
         FakeFetcher fetcher = new FakeFetcher(Map.of(
                 listUrl, ok(page),
                 "https://src.example/repository/default/libs/maven/org/example/ok.jar",

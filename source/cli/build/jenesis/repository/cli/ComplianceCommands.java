@@ -64,7 +64,7 @@ final class ComplianceCommands {
             System.out.println(report.entries().size() + " of " + report.total() + " scored"
                     + (report.lastScanned() == null ? ", never refreshed" : ", as of " + report.lastScanned())
                     + running + ".");
-            CliSupport.more(report.nextCursor());
+            CliSupport.more(report.next());
         }
         return report.refreshing() ? Refresh.Poll.State.running() : Refresh.Poll.State.done(0);
     }
@@ -214,7 +214,7 @@ final class ComplianceCommands {
                     + "[--source S] [--category C] [--severity S] [--cursor C]");
         }
         String ecosystem = null;
-        int offset = 0;
+        String cursor = null;
         String coordinate = null;
         String kind = null;
         String source = null;
@@ -223,8 +223,7 @@ final class ComplianceCommands {
         for (int i = 2; i < args.length; i++) {
             switch (args[i]) {
                 case "--ecosystem" -> ecosystem = CliSupport.flag(args, ++i);
-                // The ledger pages by row offset, so the cursor this command prints and takes is that offset.
-                case "--cursor" -> offset = Integer.parseInt(CliSupport.flag(args, ++i));
+                case "--cursor" -> cursor = CliSupport.flag(args, ++i);
                 case "--coordinate" -> coordinate = CliSupport.flag(args, ++i);
                 case "--kind" -> kind = CliSupport.flag(args, ++i);
                 case "--source" -> source = CliSupport.flag(args, ++i);
@@ -234,7 +233,7 @@ final class ComplianceCommands {
             }
         }
         RiskClient.FindingsReport report = CliSupport.client(home).risk().findings(args[1], ecosystem, coordinate,
-                kind, source, category, severity, offset);
+                kind, source, category, severity, cursor);
         if (report.findings().isEmpty()) {
             System.out.println("No recorded findings match.");
             return 0;
@@ -271,7 +270,7 @@ final class ComplianceCommands {
                 }
             }
         }
-        CliSupport.more(report.more() ? String.valueOf(offset + report.findings().size()) : null);
+        CliSupport.more(report.next());
         return 0;
     }
 

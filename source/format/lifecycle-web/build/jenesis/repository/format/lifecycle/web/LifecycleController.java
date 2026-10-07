@@ -46,7 +46,7 @@ public class LifecycleController {
      *  repository, and answers with the cursor that continues it (the CLI follows it). One coordinate's marks are
      *  bounded by its versions, so that form is answered whole, with no cursor. */
     @GetMapping("/api/lifecycle")
-    public LifecycleView list(@RequestParam("repository") String repository,
+    public LifecycleView list(@RequestParam("repo") String repository,
                               @RequestParam(value = "coordinate", required = false) String coordinate,
                               @RequestParam(value = "after", required = false) String after,
                               @RequestParam(value = "limit", required = false) Integer limit,
@@ -71,7 +71,7 @@ public class LifecycleController {
     /** Mark a coordinate/version deprecated or yanked; {@code state} is {@code deprecated} or {@code yanked}, and the
      *  optional {@code message} is the note surfaced to clients (npm's deprecation text). */
     @PostMapping("/api/lifecycle")
-    public void mark(@RequestParam("repository") String repository,
+    public void mark(@RequestParam("repo") String repository,
                      @RequestParam("coordinate") String coordinate,
                      @RequestParam("version") String version,
                      @RequestParam("state") String state,
@@ -99,7 +99,7 @@ public class LifecycleController {
 
     /** Clear a coordinate/version's mark. {@code 200} whether or not a mark was present (the end state is the same). */
     @DeleteMapping("/api/lifecycle")
-    public void clear(@RequestParam("repository") String repository,
+    public void clear(@RequestParam("repo") String repository,
                       @RequestParam("coordinate") String coordinate,
                       @RequestParam("version") String version,
                       @RequestHeader(value = Repositories.KEY, required = false) String key,

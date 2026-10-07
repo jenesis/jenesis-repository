@@ -494,14 +494,14 @@ public class RepositoryController {
     /**
      * The paged asset enumeration - the outbound mirror of the
      * import connectors, so a jenesis instance can be walked by another tool (or another jenesis) and getting your
-     * data out is never an afterthought. {@code GET /api/assets?repo=<name>&cursor=<token>&limit=<n>} returns a
+     * data out is never an afterthought. {@code GET /api/assets?repo=<name>&after=<token>&limit=<n>} returns a
      * flat, stably-ordered slice of the repository's published assets: each entry's {@code path}, {@code size} and
      * {@code sha256} come straight from the {@link build.jenesis.repository.store.Publication publication pointer},
      * or for a format keeping its own key space from the pointer its layout serves the path from ({@link AssetCatalog})
      * (no blob is ever opened - read-first) and its {@code format}/{@code ecosystem}/{@code coordinate}/
      * {@code version} from the owning format's layout, and {@code served} is the URL path it is served at -
-     * {@code /repository/<tenant>/<repository>} and the path within the repository. The opaque {@code cursor} in the
-     * response fetches the next page and is {@code null} once the walk is exhausted. {@code repo} names a repository
+     * {@code /repository/<tenant>/<repository>} and the path within the repository. The opaque {@code next} in the
+     * response, passed back as {@code after}, fetches the next page and is {@code null} once the walk is exhausted. {@code repo} names a repository
      * of the tenant the request answers for ({@link RepositoryRouting#tenant}) and is validated as a traversal-free
      * segment before it scopes the store; the wire is key-auth'd like every
      * other read ({@code repository:read}) by {@link RepositorySecurityAutoConfiguration}, which authorizes the
@@ -517,7 +517,7 @@ public class RepositoryController {
             return;
         }
         String after;
-        String cursor = request.getParameter("cursor");
+        String cursor = request.getParameter("after");
         if (cursor == null || cursor.isBlank()) {
             after = null;
         } else {
@@ -569,7 +569,7 @@ public class RepositoryController {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("repository", repository);
         body.put("assets", assets);
-        body.put("cursor", page.cursor() == null ? null
+        body.put("next", page.cursor() == null ? null
                 : Base64.getUrlEncoder().withoutPadding().encodeToString(page.cursor().getBytes(StandardCharsets.UTF_8)));
         response.setHeader("Content-Type", "application/json");
         respond(response, 200, JSON.writeValueAsString(body));

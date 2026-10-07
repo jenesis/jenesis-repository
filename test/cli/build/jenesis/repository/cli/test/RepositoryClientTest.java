@@ -91,11 +91,11 @@ public class RepositoryClientTest {
     private static final String ASSETS_PAGE1 = "{\"repository\":\"releases\",\"assets\":[{"
             + "\"path\":\"/maven/org/acme/lib/1.0/lib-1.0.jar\",\"size\":13,\"sha256\":\"abc123\","
             + "\"format\":\"maven\",\"ecosystem\":\"Maven\",\"coordinate\":\"org.acme:lib\",\"version\":\"1.0\","
-            + "\"prerelease\":false}],\"cursor\":\"bWF2ZW4\"}";
+            + "\"prerelease\":false}],\"next\":\"bWF2ZW4\"}";
     private static final String ASSETS_PAGE2 = "{\"repository\":\"releases\",\"assets\":[{"
             + "\"path\":\"/npm/left-pad/-/left-pad-1.3.0.tgz\",\"size\":21,\"sha256\":\"def456\","
             + "\"format\":\"npm\",\"ecosystem\":\"npm\",\"coordinate\":\"left-pad\",\"version\":\"1.3.0\","
-            + "\"prerelease\":false}],\"cursor\":null}";
+            + "\"prerelease\":false}],\"next\":null}";
     private static final String CAPABILITIES = "{\"version\":1,"
             + "\"formats\":[{\"name\":\"maven\",\"ecosystem\":\"maven\"}],"
             + "\"importSources\":[{\"name\":\"nexus\",\"label\":\"Nexus\",\"requiresFormat\":false}],"
@@ -219,7 +219,7 @@ public class RepositoryClientTest {
         server.stubFor(get(urlPathEqualTo("/api/provenance")).atPriority(5)
                 .willReturn(aResponse().withStatus(200).withBody(PROVENANCE)));
         server.stubFor(get(urlPathEqualTo("/api/assets")).atPriority(1)
-                .withQueryParam("cursor", matching(".*"))
+                .withQueryParam("after", matching(".*"))
                 .willReturn(aResponse().withStatus(200).withBody(ASSETS_PAGE2)));
         server.stubFor(get(urlPathEqualTo("/api/assets")).atPriority(5)
                 .willReturn(aResponse().withStatus(200).withBody(ASSETS_PAGE1)));
@@ -604,14 +604,14 @@ public class RepositoryClientTest {
             assertThat(asset.sha256()).isEqualTo("abc123");
             assertThat(asset.coordinate()).isEqualTo("org.acme:lib");
         });
-        assertThat(first.cursor()).as("a full page carries a resume cursor").isEqualTo("bWF2ZW4");
+        assertThat(first.next()).as("a full page carries a resume cursor").isEqualTo("bWF2ZW4");
 
-        // The cursor is threaded back as ?cursor= to fetch the next page, which exhausts the walk (cursor null).
-        ContentsClient.AssetPage second = client.contents().assets("releases", first.cursor(), 2);
-        assertThat(lastQuery).contains("cursor=bWF2ZW4");
+        // The cursor is threaded back as ?after= to fetch the next page, which exhausts the walk (cursor null).
+        ContentsClient.AssetPage second = client.contents().assets("releases", first.next(), 2);
+        assertThat(lastQuery).contains("after=bWF2ZW4");
         assertThat(second.assets()).extracting(ContentsClient.AssetEntry::path)
                 .containsExactly("/npm/left-pad/-/left-pad-1.3.0.tgz");
-        assertThat(second.cursor()).as("the exhausted walk carries no cursor").isNull();
+        assertThat(second.next()).as("the exhausted walk carries no cursor").isNull();
     }
 
     @Test

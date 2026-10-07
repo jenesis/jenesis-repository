@@ -64,7 +64,7 @@ public final class RiskClient extends ClientCalls {
 
     /** The answer {@code GET /api/health} gives: the scored coordinates, when the scores were last refreshed, and
      *  whether a refresh is running now. */
-    public record HealthReport(boolean available, boolean ranked, List<HealthEntry> entries, String nextCursor,
+    public record HealthReport(boolean available, boolean ranked, List<HealthEntry> entries, String next,
                                int total, String lastScanned, boolean refreshing) {
     }
 
@@ -119,7 +119,7 @@ public final class RiskClient extends ClientCalls {
     }
 
     /** Accumulate every worst-first page the server serves into one report: the server bounds each response to a page
-     *  (so it never buffers the whole vulnerable set in heap) and hands back a {@code nextCursor}; the client follows it
+     *  (so it never buffers the whole vulnerable set in heap) and hands back a {@code next}; the client follows it
      *  to the last page, so a caller still receives the whole ranked report. The reachability/applicability facets
      *  ride every page so each is narrowed identically, and what describes the scan rather than a page of rows - the
      *  feed warnings, the count, whether it is partial, when it was taken and whether a re-scan is running - is the
@@ -160,7 +160,7 @@ public final class RiskClient extends ClientCalls {
             if (page.vulnerable() != null) {
                 vulnerable.addAll(page.vulnerable());
             }
-            cursor = page.nextCursor();
+            cursor = page.next();
         } while (cursor != null && !cursor.isBlank());
         return new VulnerabilityReport(scanned, signals, vulnerable, null, feedWarnings, total, partial, lastScanned,
                 scanning);
@@ -170,20 +170,18 @@ public final class RiskClient extends ClientCalls {
      *  kind, source, category and severity - superseded findings included with their mark. */
     public FindingsReport findings(String repo, String coordinate, String kind, String source, String category,
                                    String severity) throws IOException, InterruptedException {
-        return findings(repo, null, coordinate, kind, source, category, severity, 0);
+        return findings(repo, null, coordinate, kind, source, category, severity, null);
     }
 
     /** One page of {@link #findings(String, String, String, String, String, String) the findings ledger}, narrowed
-     *  by {@code ecosystem} too and starting {@code offset} rows in; {@code more} on the answer says another page
-     *  follows. */
+     *  by {@code ecosystem} too and resumed {@code after} a previous page's {@code next}, which the answer carries
+     *  while another page follows. */
     public FindingsReport findings(String repo, String ecosystem, String coordinate, String kind, String source,
-                                   String category, String severity, int offset)
+                                   String category, String severity, String after)
             throws IOException, InterruptedException {
         StringBuilder path = new StringBuilder("/api/findings?repo=").append(enc(repo));
         appendFilter(path, "ecosystem", ecosystem);
-        if (offset > 0) {
-            path.append("&offset=").append(offset);
-        }
+        appendFilter(path, "after", after);
         appendFilter(path, "coordinate", coordinate);
         appendFilter(path, "kind", kind);
         appendFilter(path, "source", source);
@@ -284,14 +282,14 @@ public final class RiskClient extends ClientCalls {
     }
 
     /** {@code signals} lists the report columns the server's installed signal modules contribute; {@code null} when
-     *  an older server answers without them. {@code nextCursor} is the server's paging cursor - the client follows it
+     *  an older server answers without them. {@code next} is the server's paging cursor - the client follows it
      *  to accumulate every worst-first page, so the report a caller receives is the whole set even though the server
      *  serves it a bounded page at a time; it is {@code null} on a fully-accumulated report. {@code total} counts the
      *  ranked lines, {@code partial} says they were ranked from a bounded window because the index is not built yet,
      *  {@code lastScanned} is when the scan behind them was taken ({@code null} before the first), and
      *  {@code scanning} says a re-scan is running, so the report is the one it will replace. */
     public record VulnerabilityReport(boolean scanned, List<Signal> signals, List<VulnerableArtifact> vulnerable,
-                                      String nextCursor, List<String> feedWarnings, int total, boolean partial,
+                                      String next, List<String> feedWarnings, int total, boolean partial,
                                       String lastScanned, boolean scanning) {
     }
 
@@ -342,7 +340,7 @@ public final class RiskClient extends ClientCalls {
 
     /** The findings ledger's answer: one page of the persisted findings matching the query, each fully attributed,
      *  and whether more match. */
-    public record FindingsReport(boolean available, List<FindingRow> findings, boolean more) {
+    public record FindingsReport(boolean available, List<FindingRow> findings, String next) {
     }
 
     /** One persisted finding: its coordinate, identity, attribution, categorization, the persisted description and
