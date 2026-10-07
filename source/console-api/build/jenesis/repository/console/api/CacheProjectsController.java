@@ -127,7 +127,8 @@ public class CacheProjectsController {
         response.setStatus(200);
     }
 
-    /** One project's detail. */
+    /** One project's detail, its pass state among it - what a caller watching an eviction, a recount or a deletion
+     *  polls; {@code 404} once there is no such project, which is where a deletion ends. */
     @GetMapping("/api/cache/projects/{name}")
     public CacheService.ProjectDetail detail(@PathVariable("name") String name,
                                              @RequestHeader(value = Repositories.KEY, required = false) String key,
@@ -138,6 +139,10 @@ public class CacheProjectsController {
             return null;
         }
         RepositoryRequests.rejectTraversal(name);
+        if (!service.exists(name)) {
+            response.setStatus(404);
+            return null;
+        }
         return service.project(name);
     }
 
