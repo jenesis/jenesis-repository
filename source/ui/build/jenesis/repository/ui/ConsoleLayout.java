@@ -127,6 +127,17 @@ public final class ConsoleLayout {
     /**
      * A console built on {@link ConsoleLayout}, declaring which fragments it plugs into. It carries no rendering
      * behaviour; Thymeleaf resolves the fragments.
+     *
+     * <h2>Contract</h2>
+     * <ol>
+     *   <li><b>Absence sentinel.</b> {@link #name()} is never {@code null} or blank, and {@link #fragments()} never
+     *       {@code null}; a console plugging into nothing answers an empty set.</li>
+     *   <li><b>Selection failure.</b> {@code ALL}: every console on the module path declares itself, and a name not
+     *       in {@link #FRAGMENTS} is an error naming the console, never a page that renders empty. The console suites
+     *       discover every extension and verify each declared fragment against the templates.</li>
+     *   <li><b>Read purity.</b> Both methods are declarations: constant, with no I/O.</li>
+     *   <li><b>Lifecycle / ownership.</b> Created by {@code ServiceLoader}, holding nothing and never closed.</li>
+     * </ol>
      */
     public interface Extension {
 

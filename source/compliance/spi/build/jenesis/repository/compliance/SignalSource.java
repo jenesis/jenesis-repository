@@ -24,6 +24,22 @@ package build.jenesis.repository.compliance;
  * a separate write-role entry point. A provider does not declare it in
  * {@link SignalSourceProvider#signals()} - nobody resolves <em>for</em> it - and it is detected by
  * {@code instanceof} on the created object, exactly as the five contracts above are.
+ *
+ * <h2>Contract</h2>
+ * <p>The base every specialised contract adds to; each sub-interface states its own lookups' clauses.
+ * <ol>
+ *   <li><b>Thread-safety.</b> A created source is shared by every consumer on every thread - the gate, the sweeps,
+ *       the console - so {@link #freshness()} is safe to call concurrently with the source's own lookups.</li>
+ *   <li><b>Absence sentinel.</b> {@link #freshness()} is never {@code null}: a source that never fetches answers
+ *       {@link Freshness#FIXED}, one with nothing fetched yet {@link Freshness#NEVER}.</li>
+ *   <li><b>Read purity.</b> {@link #freshness()} renders what the source already holds: no vendor request, no
+ *       refresh, no stamp moved, and two readings with no lookup between them agree.</li>
+ *   <li><b>Staleness.</b> {@link #freshness()} is the surface: the instant of the data an answer is drawn from, and
+ *       whether it is authoritative, derived from the lookups the source made, so an outage, a stale copy and a
+ *       clean answer are three readings.</li>
+ *   <li><b>Lifecycle / ownership.</b> The provider that creates a source owns it; a source implementing only this
+ *       base is discovered and appears in no specialised view.</li>
+ * </ol>
  */
 public interface SignalSource {
 
