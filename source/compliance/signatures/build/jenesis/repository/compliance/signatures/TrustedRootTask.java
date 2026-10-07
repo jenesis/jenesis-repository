@@ -32,8 +32,9 @@ public final class TrustedRootTask implements MaintenanceTask {
     /** Where the trusted root is fetched from; empty, the default, means no fetch and no pass. */
     static final String URL = "signature-sigstore-trusted-root-url";
 
-    /** The public-good instance's published root, which the setting's text names. */
-    static final String DEFAULT_URL =
+    /** The public-good instance's published root, which the setting's text names and a caller needing a root with
+     *  none configured fetches ({@link #fetch(URI)}). */
+    public static final String DEFAULT_URL =
             "https://raw.githubusercontent.com/sigstore/root-signing/main/targets/trusted_root.json";
 
     static final IntervalSetting INTERVAL = IntervalSetting.of("signature-sigstore-trusted-root-interval", "P1D");
@@ -70,6 +71,36 @@ public final class TrustedRootTask implements MaintenanceTask {
         return configured == null ? "" : configured.trim();
     }
 
+    /** Where a caller needing a root fetches one under {@code config}: the URL it names, else {@value #DEFAULT_URL}. */
+    public static URI source(UnaryOperator<String> config) {
+        String url = url(config);
+        return URI.create(url.isBlank() ? DEFAULT_URL : url);
+    }
+
+    /**
+     * The trusted root at {@code url}, fetched and read as this pass reads it, for a caller that needs one now - a
+     * managed tool verifying the release it fetches - and keeps nothing.
+     *
+     * @throws IOException where it is not served, or is not a Sigstore trusted root the installed verifier reads
+     */
+    public static byte[] fetch(URI url) throws IOException {
+        return fetch(url, TrustedRootTask::download);
+    }
+
+    /** {@link #fetch(URI)} through {@code fetcher}. */
+    public static byte[] fetch(URI url, Fetcher fetcher) throws IOException {
+        Optional<byte[]> fetched = fetcher.fetch(url);
+        if (fetched.isEmpty()) {
+            throw new IOException("the trusted root at " + url + " was not served");
+        }
+        // A document the installed Sigstore verifier cannot read is refused, so a working root is never replaced by
+        // a login page.
+        return SignatureScheme.installed(ArtifactSignatures.Scheme.SIGSTORE_BUNDLE)
+                .flatMap(sigstore -> sigstore.trustMaterial(fetched.get()))
+                .orElseThrow(() -> new IOException("what " + url + " served is not a Sigstore trusted root this "
+                        + "build can read"));
+    }
+
     @Override
     public String name() {
         return NAME;
@@ -91,16 +122,7 @@ public final class TrustedRootTask implements MaintenanceTask {
             // A pasted root is used, so nothing is fetched.
             return;
         }
-        Optional<byte[]> fetched = fetcher.fetch(URI.create(url));
-        if (fetched.isEmpty()) {
-            throw new IOException("the trusted root at " + url + " was not served");
-        }
-        // A document the installed Sigstore verifier cannot read is refused, so a working root is never replaced by
-        // a login page.
-        byte[] root = SignatureScheme.installed(ArtifactSignatures.Scheme.SIGSTORE_BUNDLE)
-                .flatMap(sigstore -> sigstore.trustMaterial(fetched.get()))
-                .orElseThrow(() -> new IOException("what " + url + " served is not a Sigstore trusted root this "
-                        + "build can read"));
+        byte[] root = fetch(URI.create(url), fetcher);
         ArtifactStore store = context.store();
         Optional<ArtifactStore.Versioned> current = store.readVersioned(FetchedTrustedRoot.DOCUMENT);
         if (current.isPresent() && Arrays.equals(current.get().content(), root)) {
