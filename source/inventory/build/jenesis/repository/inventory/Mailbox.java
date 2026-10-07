@@ -2,9 +2,6 @@ package build.jenesis.repository.inventory;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.Checksums;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
 
 /**
  * A per-repository set of versions somebody asked a pass to look at again: one row per version at
@@ -23,8 +20,6 @@ public final class Mailbox {
      *  with the version on an eviction or when the reconcile finds its pointers gone. */
     public static final Mailbox CHANGED = new Mailbox("changed");
 
-    private static final JsonMapper JSON = JsonMapper.builder().build();
-
     private final String root;
 
     /** The mailbox whose rows live under {@code root} in each repository's store. */
@@ -39,15 +34,14 @@ public final class Mailbox {
 
     /** The row of {@code coordinate} at {@code version} of {@code ecosystem}. */
     String key(String ecosystem, String coordinate, String version) {
-        return root + "/" + Checksums.sha256(ecosystem + "\n" + coordinate + "\n" + version);
+        return root + "/" + VersionRows.digest(ecosystem, coordinate, version);
     }
 
     /** Ask the pass draining this mailbox in {@code store} to look at {@code coordinate} at {@code version} of
      *  {@code ecosystem} again. */
     public void post(ArtifactStore store, String ecosystem, String coordinate, String version) throws IOException {
-        store.write(key(ecosystem, coordinate, version), new ByteArrayInputStream(JSON.writeValueAsBytes(
-                JSON.createObjectNode().put("ecosystem", ecosystem).put("coordinate", coordinate)
-                        .put("version", version))));
+        store.write(key(ecosystem, coordinate, version),
+                new ByteArrayInputStream(VersionRows.encode(ecosystem, coordinate, version)));
     }
 
     /** Remove the row of a version the repository no longer holds, if it has one. */
@@ -77,24 +71,11 @@ public final class Mailbox {
             String key = root + "/" + name;
             Optional<ArtifactStore.Versioned> row = store.readVersioned(key);
             store.delete(key);
-            Optional<StoreRepositoryInventory.Coordinate> version = row.flatMap(read -> parse(read.content()));
+            Optional<StoreRepositoryInventory.Coordinate> version = row.flatMap(read -> VersionRows.decode(read.content()));
             if (version.isPresent()) {
                 visitor.accept(version.get());
             }
         }
         return names.size();
-    }
-
-    private static Optional<StoreRepositoryInventory.Coordinate> parse(byte[] row) {
-        try {
-            JsonNode node = JSON.readTree(row);
-            String ecosystem = node.path("ecosystem").asString("");
-            String coordinate = node.path("coordinate").asString("");
-            String version = node.path("version").asString("");
-            return ecosystem.isEmpty() || coordinate.isEmpty() || version.isEmpty() ? Optional.empty()
-                    : Optional.of(new StoreRepositoryInventory.Coordinate(ecosystem, coordinate, version));
-        } catch (RuntimeException unreadable) {
-            return Optional.empty();
-        }
     }
 }
