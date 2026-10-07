@@ -77,7 +77,7 @@ public class GroupAdministrationTest {
         }
 
         Model model = new ExtendedModelMap();
-        controller.admin(null, model);
+        controller.admin(null, null, model);
 
         @SuppressWarnings("unchecked")
         List<AdminController.GroupRow> rows = (List<AdminController.GroupRow>) model.getAttribute("groups");

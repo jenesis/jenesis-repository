@@ -73,12 +73,16 @@ public class AdminController {
     private static final int MEMBER_PREVIEW = 8;
 
     @GetMapping
-    public String admin(@RequestParam(name = "cursor", required = false) String cursor, Model model)
+    public String admin(@RequestParam(name = "cursor", required = false) String cursor,
+                        @RequestParam(name = "groupsAfter", required = false) String groupsAfter, Model model)
             throws IOException {
         UserDirectory.Page page = directory.page(cursor, MEMBERS_PAGE);
         model.addAttribute("users", page.users());
         model.addAttribute("nextCursor", page.nextCursor().orElse(null));
-        model.addAttribute("groups", groups());
+        Authorization.SubjectPage groups = authorization.subjects(current.name(), Authorization.Kind.GROUP,
+                groupsAfter, GROUPS_PAGE);
+        model.addAttribute("groups", groups(groups.ids()));
+        model.addAttribute("groupsNext", groups.next());
         // Everyone this deployment has seen sign in, offered on the id fields.
         model.addAttribute("knownPrincipals", known.page(null, KNOWN_PAGE));
         model.addAttribute("scimConfigured", new ScimTokens(tenantDocuments()).configured());
@@ -90,12 +94,12 @@ public class AdminController {
     }
 
     /**
-     * This tenant's groups with a preview of each membership, read through the {@link Authorization} the API's group
-     * routes use.
+     * One page of this tenant's groups, {@code names}, each with a preview of its membership, read through the
+     * {@link Authorization} the API's group routes use.
      */
-    private List<GroupRow> groups() throws IOException {
+    private List<GroupRow> groups(List<String> names) throws IOException {
         List<GroupRow> rows = new ArrayList<>();
-        for (String name : authorization.subjects(current.name(), Authorization.Kind.GROUP, null, GROUPS_PAGE).ids()) {
+        for (String name : names) {
             Authorization.SubjectPage members =
                     authorization.groups().members(current.name(), name, null, MEMBER_PREVIEW);
             rows.add(new GroupRow(name,

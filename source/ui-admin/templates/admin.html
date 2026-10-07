@@ -120,6 +120,8 @@
                 </tbody>
             </table>
         </figure>
+        <p th:if="${groupsNext != null}"><small>Showing the first <span th:text="${groups.size()}">50</span> groups;
+            <a th:href="@{/ui/admin(groupsAfter=${groupsNext})}">more</a>.</small></p>
         <th:block th:if="${groups.isEmpty()}">
             <div th:replace="~{base :: empty('No groups yet — create one and everyone in it holds its rights.')}"></div>
         </th:block>
