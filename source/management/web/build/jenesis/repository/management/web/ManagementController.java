@@ -13,6 +13,7 @@ import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.CredentialLifetimes;
 import build.jenesis.repository.server.spi.RateLimiter;
 import build.jenesis.repository.server.spi.RateLimiterProvider;
+import build.jenesis.repository.store.Features;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -46,7 +47,7 @@ public class ManagementController {
     private final LiveConfig live;
     private final SettingsEditor editor;
     // Module presence is static for a JVM; resolved once so the rate-limit surface can say "not installed".
-    private final boolean rateLimiting = RateLimiterProvider.resolve(key -> null) != RateLimiter.NONE;
+    private final boolean rateLimiting = RateLimiterProvider.resolve(Features.settings()) != RateLimiter.NONE;
 
     public ManagementController(Repositories repositories, RepositoryRouting routing, Authorization authorization,
                                 AuditTrail audit, LiveConfig live, SettingsEditor editor) {

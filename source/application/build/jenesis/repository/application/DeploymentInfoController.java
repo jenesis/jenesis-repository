@@ -20,6 +20,7 @@ import build.jenesis.repository.compliance.ComplianceSources;
 import build.jenesis.repository.settings.ModuleCapability;
 import build.jenesis.repository.settings.Setting;
 import build.jenesis.repository.settings.SettingsContributor;
+import build.jenesis.repository.store.Features;
 import org.springframework.core.env.Environment;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
@@ -49,7 +50,7 @@ public class DeploymentInfoController {
      *  deployment environment - held composed so no read can miss the pin leg. */
     private final UnaryOperator<String> effective;
     // Module presence is static for a JVM, so the discovered inputs are resolved once.
-    private final boolean rateLimiting = RateLimiterProvider.resolve(key -> null) != RateLimiter.NONE;
+    private final boolean rateLimiting = RateLimiterProvider.resolve(Features.settings()) != RateLimiter.NONE;
     private final List<ImportSourceCapabilityView> importSources = ImportSourceProvider.declared().stream()
             .map(provider -> new ImportSourceCapabilityView(provider.name(), provider.label(), provider.requiresFormat()))
             .toList();
