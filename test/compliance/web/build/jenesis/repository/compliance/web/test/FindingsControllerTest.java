@@ -19,7 +19,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * The findings endpoint pages by an opaque cursor, as every paged answer of the API does: a page hands out
  * {@code next} while more remain, the caller passes it back as {@code after}, and the last page carries none - so a
  * walk of the pages yields every finding exactly once. A cursor the endpoint did not hand out is refused rather than
- * read as the first page.
+ * read as the first page. A report saying how much of a version it read in words the endpoint does not know is refused
+ * before anything is decided.
  */
 class FindingsControllerTest {
 
@@ -73,6 +74,24 @@ class FindingsControllerTest {
             assertThat(page(forged, response)).isNull();
             assertThat(response.status()).as(forged).isEqualTo(400);
         }
+    }
+
+    @Test
+    void a_report_whose_coverage_does_not_read_is_refused_before_anything_is_decided() throws IOException {
+        List<String> gap = List.of("no package manager known");
+        for (FindingsController.ReportRequest request : List.of(
+                report("most", gap), report(null, gap), report("partial", Collections.nCopies(101, "a gap")))) {
+            Servlets.Response response = Servlets.response();
+
+            assertThat(controller.report("releases", null, request, Servlets.request("POST", "/api/findings/report"),
+                    response.servlet())).isNull();
+            assertThat(response.status()).as(request.completeness() + " " + request.gaps().size()).isEqualTo(400);
+        }
+    }
+
+    private static FindingsController.ReportRequest report(String completeness, List<String> gaps) {
+        return new FindingsController.ReportRequest("scanner", "npm", "lib0", "1.0.0", List.of(), completeness,
+                gaps);
     }
 
     private FindingsController.FindingsView page(String after, Servlets.Response response) throws IOException {

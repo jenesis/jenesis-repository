@@ -3,6 +3,8 @@ package build.jenesis.repository.gate.store;
 import module java.base;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ComplianceGate;
+import build.jenesis.repository.compliance.ContentScanner;
+import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.findings.AdvisoryFindings;
 import build.jenesis.repository.findings.Finding;
@@ -29,6 +31,12 @@ import build.jenesis.repository.store.Publication;
  * repository does not serve is refused rather than recorded: a report names something that is here, or it is about
  * nothing.
  *
+ * <p>A report is the scanner's whole answer about the version, as a scan the product runs is: a finding it recorded
+ * before and no longer names - fixed by a rebuild, withdrawn upstream - is superseded, kept as history, so a CI job
+ * reporting after every build leaves the ledger saying what its latest run found. A report that says it could not
+ * read all of the version ({@link ContentScanner.Coverage}) is one {@link Finding.Kind#INSPECTION inspection} row
+ * naming what it missed, so the version reads as not fully screened rather than clean.
+ *
  * <p>The verdict is taken from the gate's coordinate dimensions only ({@link ComplianceGate#assessUnclaimed}): a
  * report carries advisories, not the content the licence, attestation and secret dimensions read, so running those
  * over a bare coordinate would decide about content nobody inspected.
@@ -42,15 +50,25 @@ public final class ReportedFindings {
     /** The provenance a reported finding carries in the ledger, beside the scanner named as its source. */
     public static final String PROVENANCE = "reported";
 
+    /** The id of the row saying what a report could not read. */
+    public static final String COVERAGE = "reported-coverage";
+
     private ReportedFindings() {
     }
 
-    /** A scanner's findings about one version the repository serves. */
+    /** A scanner's findings about one version the repository serves, and how much of it the scanner could read -
+     *  {@code null} where it says nothing of that. */
     public record Report(String source, String ecosystem, String coordinate, String version,
-                         List<AdvisorySource.Advisory> advisories) {
+                         List<AdvisorySource.Advisory> advisories, ContentScanner.Coverage coverage) {
 
         public Report {
             advisories = List.copyOf(advisories);
+        }
+
+        /** A report saying nothing of what it covered. */
+        public Report(String source, String ecosystem, String coordinate, String version,
+                      List<AdvisorySource.Advisory> advisories) {
+            this(source, ecosystem, coordinate, version, advisories, null);
         }
     }
 
@@ -74,11 +92,28 @@ public final class ReportedFindings {
         if (paths.isEmpty()) {
             return Optional.empty();
         }
-        List<Finding> findings = new ArrayList<>(report.advisories().size());
+        List<Finding> findings = new ArrayList<>(report.advisories().size() + 1);
+        Set<String> reported = new HashSet<>();
         for (AdvisorySource.Advisory advisory : report.advisories()) {
             findings.add(AdvisoryFindings.of(advisory, report.source(), PROVENANCE, now));
+            reported.add(advisory.id());
+        }
+        ContentScanner.Coverage coverage = report.coverage();
+        if (coverage != null && coverage.completeness() != ContentScanner.Completeness.COMPLETE) {
+            findings.add(Finding.of(COVERAGE, report.source(), Finding.Kind.INSPECTION, "coverage", Severity.NONE,
+                    report.source() + " read " + (coverage.completeness() == ContentScanner.Completeness.NOT_CATALOGUED
+                            ? "nothing" : "only part") + " of the version"
+                            + (coverage.gaps().isEmpty() ? "" : ": " + String.join("; ", coverage.gaps())), now)
+                    .withProvenance(PROVENANCE));
+            reported.add(COVERAGE);
         }
         ledger.recordAll(report.ecosystem(), report.coordinate(), report.version(), findings);
+        for (Finding standing : ledger.of(report.ecosystem(), report.coordinate(), report.version())) {
+            if (report.source().equals(standing.source()) && standing.active() && !reported.contains(standing.id())) {
+                ledger.supersede(report.ecosystem(), report.coordinate(), report.version(), report.source(),
+                        standing.id(), "no longer reported by " + report.source());
+            }
+        }
 
         ComplianceGate.Subject subject = new ComplianceGate.Subject(report.ecosystem(), report.coordinate(),
                 report.version(), List.of());

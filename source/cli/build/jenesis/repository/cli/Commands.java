@@ -117,8 +117,8 @@ public final class Commands {
                             act("findings waiver revoke <repo> <ecosystem> <coordinate> <version> <source> <id>",
                                     "withdraw a waiver"),
                             act("findings report <repo> <file>", "hand a scanner's findings about a stored version to "
-                                    + "the gate: recorded under the scanner's name, and withheld for review if the "
-                                    + "gate would not admit them")),
+                                    + "the gate: recorded under the scanner's name as its whole answer, superseding "
+                                    + "what it said before, and withheld for review if the gate would not admit them")),
                     noun("image-scans", "the images a repository has had scanned", ComplianceCommands::imageScans,
                             act("image-scans <repo> [--cursor C]", "each scanned image with its state - covered, "
                                     + "pending or failed - where it was published or proxied, and what each scanner "
