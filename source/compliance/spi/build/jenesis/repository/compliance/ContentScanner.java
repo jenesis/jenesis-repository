@@ -230,10 +230,63 @@ public interface ContentScanner {
      *  identifier - the bill it made, and the catalogue it made for a chain's matcher, each {@code null} where it made
      *  none. A chain's report carries both the bill and the catalogue its cataloguer made, so what was matched is
      *  kept beside what is attached. */
-    record Report(String scanner, List<AdvisorySource.Advisory> advisories, Bill bill, Bill catalogue) {
+    record Report(String scanner, List<AdvisorySource.Advisory> advisories, Bill bill, Bill catalogue,
+                  Coverage coverage) {
 
         public Report {
             advisories = List.copyOf(advisories);
+        }
+
+        /** A report saying nothing of how much the scanner could read. */
+        public Report(String scanner, List<AdvisorySource.Advisory> advisories, Bill bill, Bill catalogue) {
+            this(scanner, advisories, bill, catalogue, null);
+        }
+    }
+
+    /** How much of what it was handed a scanner could read. */
+    enum Completeness {
+        /** Everything it takes: the operating system and its packages where there is one, and every library. */
+        COMPLETE,
+        /** Some of it, the {@link Coverage#gaps} saying what not: an operating system it does not know or that is
+         *  past its support, a catalogue it matched lossily. */
+        PARTIAL,
+        /** Nothing it reads: no operating system it knows and no package of a type it takes. */
+        NOT_CATALOGUED;
+
+        /** The lesser of this and {@code other}. */
+        public Completeness and(Completeness other) {
+            return other == null ? this : values()[Math.max(ordinal(), other.ordinal())];
+        }
+    }
+
+    /**
+     * How much of what it was handed a scan could read, and why not all of it: so a scan that did not apply - an
+     * operating system the scanner does not know, an archive holding nothing it reads - never reads as a scan that
+     * found nothing. A report carrying none says nothing of it.
+     */
+    record Coverage(Completeness completeness, List<String> gaps) {
+
+        public Coverage {
+            Objects.requireNonNull(completeness, "completeness");
+            gaps = List.copyOf(gaps);
+        }
+
+        /** Everything was read. */
+        public static final Coverage COMPLETE = new Coverage(Completeness.COMPLETE, List.of());
+
+        /** {@code completeness}, for the one reason {@code gap}. */
+        public static Coverage of(Completeness completeness, String gap) {
+            return new Coverage(completeness, List.of(gap));
+        }
+
+        /** This and {@code other} together: the lesser completeness, every gap of either. */
+        public Coverage and(Coverage other) {
+            if (other == null) {
+                return this;
+            }
+            List<String> gaps = new ArrayList<>(this.gaps);
+            other.gaps.stream().filter(gap -> !gaps.contains(gap)).forEach(gaps::add);
+            return new Coverage(completeness.and(other.completeness), gaps);
         }
     }
 

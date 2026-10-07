@@ -118,11 +118,31 @@ class ScannerChainTest {
             default -> null;
         }, _ -> "set", ContentScanner.Input.IMAGE_MANIFEST).getFirst();
 
-        chain.open(_ -> "set").submit(REQUEST);
+        Submitted submitted = chain.open(_ -> "set").submit(REQUEST);
 
         assertThat(syft.submitted).singleElement().satisfies(asked -> assertThat(asked.catalogue())
                 .isEqualTo(CYCLONEDX));
         assertThat(partial.matched).containsExactly(BILL);
+        assertThat(((Submitted.Done) submitted).report().coverage()).as("a lossy match never reads as a whole one")
+                .satisfies(coverage -> {
+                    assertThat(coverage.completeness()).isEqualTo(ContentScanner.Completeness.PARTIAL);
+                    assertThat(coverage.gaps()).singleElement().asString().contains("partial")
+                            .contains(CYCLONEDX).contains("only in part");
+                });
+    }
+
+    @Test
+    void what_the_cataloguer_could_not_read_stands_in_the_chains_report() throws IOException {
+        syft.submission.set(new Submitted.Done(new Report("syft 1.0", List.of(), BILL, CATALOGUE,
+                ContentScanner.Coverage.of(ContentScanner.Completeness.NOT_CATALOGUED,
+                        "no package of a type syft reads"))));
+
+        Submitted submitted = session().submit(REQUEST);
+
+        assertThat(((Submitted.Done) submitted).report().coverage()).isEqualTo(ContentScanner.Coverage.of(
+                ContentScanner.Completeness.NOT_CATALOGUED, "no package of a type syft reads"));
+        assertThat(ContentScanner.Completeness.PARTIAL.and(ContentScanner.Completeness.COMPLETE))
+                .as("the lesser of two").isEqualTo(ContentScanner.Completeness.PARTIAL);
     }
 
     @Test
