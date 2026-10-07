@@ -38,7 +38,11 @@ public final class AdvisedNameBackfill implements WalkConsumer {
 
     /** The installed layouts that keep artifacts in the shared blobs namespace, which name a pointer's version. */
     private static final List<BlobLayout> LAYOUTS = RepositoryFormat.installed().stream()
-            .filter(format -> format instanceof BlobLayout).map(format -> (BlobLayout) format).toList();
+            .<BlobLayout>mapMulti((format, layouts) -> {
+                if (format instanceof BlobLayout layout) {
+                    layouts.accept(layout);
+                }
+            }).toList();
 
     @Override
     public String name() {

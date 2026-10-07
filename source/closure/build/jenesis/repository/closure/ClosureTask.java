@@ -261,8 +261,7 @@ public final class ClosureTask implements MaintenanceTask {
 
                 @Override
                 public Optional<ArtifactStore> store(String repository) {
-                    return repository.equals(context.repository()) ? Optional.of(context.store())
-                            : context.tenantView().repository(repository).map(RepositoryContext::store);
+                    return storeOf(context, repository);
                 }
             };
         }
@@ -365,14 +364,19 @@ public final class ClosureTask implements MaintenanceTask {
      *  moved since the last pass ({@link Mailbox#CHANGED}) marks every published version its {@link ReliedOn} rows
      *  name as stale in that version's repository, whose own pass re-derives it. Runs whether or not this repository
      *  resolves closures; a failure is contained and reported, and the full passes there re-derive what it missed. */
+    /** The store of the repository named {@code repository} in the pass's tenant, the pass's own among them; empty
+     *  for one the tenant does not hold. */
+    private static Optional<ArtifactStore> storeOf(RepositoryContext context, String repository) {
+        return repository.equals(context.repository()) ? Optional.of(context.store())
+                : context.tenantView().repository(repository).map(RepositoryContext::store);
+    }
+
     private static void propagate(RepositoryContext context) {
         try {
             Optional<ArtifactStore> space = context.tenantView().store().map(tenant -> tenant.scope(ReliedOn.SPACE));
             Mailbox.CHANGED.drain(context.store(), DRAIN, changed -> {
                 ReliedOn.Visitor<ReliedOn.Row> mark = dependent -> {
-                    Optional<ArtifactStore> store = dependent.repository().equals(context.repository())
-                            ? Optional.of(context.store())
-                            : context.tenantView().repository(dependent.repository()).map(RepositoryContext::store);
+                    Optional<ArtifactStore> store = storeOf(context, dependent.repository());
                     if (store.isPresent()) {
                         ReliedOn.stale(store.get(), changed.ecosystem(), dependent);
                     }
@@ -430,9 +434,7 @@ public final class ClosureTask implements MaintenanceTask {
         }
         boolean clean = true;
         try {
-            long removed = ReliedOn.reconcile(context.store(), context.repository(), named -> named.equals(
-                    context.repository()) ? Optional.of(context.store())
-                    : context.tenantView().repository(named).map(RepositoryContext::store))
+            long removed = ReliedOn.reconcile(context.store(), context.repository(), named -> storeOf(context, named))
                     + DeclaredRows.reconcile(context.store());
             if (removed > 0) {
                 LOGGER.info("Removed {} dependent row(s) no closure names any more in {}/{}", removed,

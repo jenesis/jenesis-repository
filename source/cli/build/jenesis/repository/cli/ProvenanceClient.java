@@ -108,10 +108,18 @@ public final class ProvenanceClient extends ClientCalls {
     /** One component of a version's closure: {@code repository} is empty where the version's own repository holds it,
      *  and names the repository a fallback reached otherwise. */
     public record ClosureComponent(String coordinate, String version, boolean cached, int depth, String repository) {
+
+        public ClosureComponent {
+            repository = Objects.requireNonNullElse(repository, "");
+        }
     }
 
     /** A dependency whose subtree did not resolve, and why. */
     public record ClosureCut(String coordinate, String requirement, String reason) {
+
+        public ClosureCut {
+            requirement = Objects.requireNonNullElse(requirement, "");
+        }
     }
 
     /** A package the version's bill names in another ecosystem, followed by coordinate across the tenant. */
@@ -129,12 +137,24 @@ public final class ProvenanceClient extends ClientCalls {
                           List<ClosureComponent> components,
                           List<ClosureCut> cuts, List<ClosureForeign> foreign, ClosureExposure exposure,
                           ScreenedThrough screenedThrough) {
+
+        /** An answer leaving a list or the source out reads as empty, so a reader needs no guard of its own. */
+        public Closure {
+            source = Objects.requireNonNullElse(source, "");
+            components = components == null ? List.of() : List.copyOf(components);
+            cuts = cuts == null ? List.of() : List.copyOf(cuts);
+            foreign = foreign == null ? List.of() : List.copyOf(foreign);
+        }
     }
 
     /** What a version was screened through: {@code basis} is {@code FEEDS} (a cached copy asked of {@code feeds}),
      *  {@code UNCOVERED} (a cached copy no enabled feed covers), {@code CLOSURE} (a published version, through its
      *  closure) or {@code NOTHING} (a published version with no closure). */
     public record ScreenedThrough(String basis, List<String> feeds) {
+
+        public ScreenedThrough {
+            feeds = feeds == null ? List.of() : List.copyOf(feeds);
+        }
     }
 
     /** One version a closure reaches that is held for review or carries findings: {@code repository} is empty where
@@ -143,6 +163,12 @@ public final class ProvenanceClient extends ClientCalls {
      *  {@code repository} holds. */
     public record ClosureReached(String coordinate, String version, String repository, boolean held, int findings,
                                  String worst, List<ClosureHop> path, String ecosystem) {
+
+        public ClosureReached {
+            repository = Objects.requireNonNullElse(repository, "");
+            path = path == null ? List.of() : List.copyOf(path);
+            ecosystem = Objects.requireNonNullElse(ecosystem, "");
+        }
     }
 
     /** One step of a path through a closure: a dependency at the version the closure holds. */
@@ -161,6 +187,10 @@ public final class ProvenanceClient extends ClientCalls {
      *  {@code null} in a {@link Closure} until it did. */
     public record ClosureExposure(String derived, int examined, long held, long vulnerable,
                                   List<ClosureReached> reached) {
+
+        public ClosureExposure {
+            reached = reached == null ? List.of() : List.copyOf(reached);
+        }
     }
 
     /** The transitive closure the closure pass resolved for one version, as the version's document records it. */
