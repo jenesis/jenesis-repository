@@ -21,26 +21,20 @@ public final class ContentsClient extends ClientCalls {
      *  {@code BatchIngestion.EXPLODE_HEADER}, spelled here because this module does not depend on the server. */
     private static final String EXPLODE_HEADER = "Jenesis-Explode";
 
-    /** The staging ids of a repository with their state and item count, or {@code null} when staging is not installed
-     *  on this deployment (HTTP 501). */
+    /** The staging ids of a repository with their state and item count. */
     public List<StagingEntry> staging(String repo) throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET", "/api/repository/staging?repo=" + enc(repo), null, null);
-        if (response.statusCode() == 501) {
-            return null;
-        }
         require(response, 200, "list the staging of " + repo);
         return JSON.readValue(response.body(), StagingList.class).repositories();
     }
 
-    /** Promote a staged id into the release layout, returning the HTTP status (200 promoted, 409 already sealed,
-     *  501 staging not installed). */
+    /** Promote a staged id into the release layout, returning the HTTP status (200 promoted, 409 already sealed). */
     public int promoteStaging(String repo, String id) throws IOException, InterruptedException {
         return send("POST", "/api/repository/staging/" + enc(id) + "/promote?repo=" + enc(repo), null, null)
                 .statusCode();
     }
 
-    /** Drop a staged id and its held blobs, returning the HTTP status (200 dropped, 409 already sealed, 501 staging
-     *  not installed). */
+    /** Drop a staged id and its held blobs, returning the HTTP status (200 dropped, 409 already sealed). */
     public int dropStaging(String repo, String id) throws IOException, InterruptedException {
         return send("POST", "/api/repository/staging/" + enc(id) + "/drop?repo=" + enc(repo), null, null).statusCode();
     }
@@ -173,7 +167,7 @@ public final class ContentsClient extends ClientCalls {
     }
 
     /** Start an asynchronous migration into a repository from an incumbent manager, returning the HTTP status (202
-     *  accepted, 405 read-only target, 501 no upstream fetcher, 400 no such source) and, when accepted, the job id to
+     *  accepted, 405 read-only target, 400 no such source) and, when accepted, the job id to
      *  poll. Only {@code source}, {@code url} and {@code sourceRepository} are required; the rest are optional. */
     public ImportResult startImport(String repo, String source, String url, String sourceRepository, String format,
                                     String username, String password, String resume)
@@ -259,8 +253,8 @@ public final class ContentsClient extends ClientCalls {
     private record StagingList(List<StagingEntry> repositories, boolean more) {
     }
 
-    /** The acknowledgement of a submitted import: the HTTP {@code status} (202 accepted, 405 read-only, 501 no
-     *  upstream, 400 no such source) and, when accepted, the {@code job} id to poll. */
+    /** The acknowledgement of a submitted import: the HTTP {@code status} (202 accepted, 405 read-only, 400 no such
+     *  source) and, when accepted, the {@code job} id to poll. */
     public record ImportResult(int status, String job) {
     }
 

@@ -672,7 +672,7 @@ public class RepositoryClientTest {
     @Test
     void the_rate_limit_and_policy_are_read_and_set() throws IOException, InterruptedException {
         assertThat(client.settings().rateLimit().permitsPerMinute()).isEqualTo(600L);
-        assertThat(client.settings().setRateLimit(null, 120L)).as("a 200 means it was set").isTrue();
+        client.settings().setRateLimit(null, 120L);
         assertThat(lastPath).isEqualTo("/api/rate-limit");
         assertThat(lastBody).isEqualTo("{\"permitsPerMinute\":120}");
 
@@ -738,7 +738,7 @@ public class RepositoryClientTest {
         assertThat(view.keepLast()).isEqualTo(5);
         assertThat(view.maxAge()).isEqualTo("P30D");
 
-        assertThat(client.lifecycle().setRetention("releases", "3", "P30D", null, null)).isTrue();
+        client.lifecycle().setRetention("releases", "3", "P30D", null, null);
         assertThat(lastMethod).isEqualTo("PUT");
         assertThat(lastPath).isEqualTo("/api/repository/retention");
         assertThat(lastQuery).contains("repo=releases").contains("keepLast=3").contains("maxAge=P30D")

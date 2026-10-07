@@ -143,8 +143,7 @@ public final class RiskClient extends ClientCalls {
     }
 
     /** The persisted findings ledger of a repository, filterable by coordinate (bare or {@code coordinate:version}),
-     *  kind, source, category and severity - superseded findings included with their mark. Returns {@code null} when
-     *  the findings module is not installed on this deployment (HTTP 501). */
+     *  kind, source, category and severity - superseded findings included with their mark. */
     public FindingsReport findings(String repo, String coordinate, String kind, String source, String category,
                                    String severity) throws IOException, InterruptedException {
         StringBuilder path = new StringBuilder("/api/findings?repo=").append(enc(repo));
@@ -154,9 +153,6 @@ public final class RiskClient extends ClientCalls {
         appendFilter(path, "category", category);
         appendFilter(path, "severity", severity);
         HttpResponse<String> response = send("GET", path.toString(), null, null);
-        if (response.statusCode() == 501) {
-            return null;
-        }
         require(response, 200, "query findings in " + repo);
         return JSON.readValue(response.body(), FindingsReport.class);
     }
@@ -168,14 +164,11 @@ public final class RiskClient extends ClientCalls {
     }
 
     /** The retroactive-license-enforcement dry-run plan for a repository - what enabling enforcement would newly hold
-     *  under the current policy - or {@code null} when license policy is not installed (HTTP 501). With {@code unknown}
-     *  it additionally previews holding the coordinates whose license could not be identified. */
+     *  under the current policy. With {@code unknown} it additionally previews holding the coordinates whose license
+     *  could not be identified. */
     public RetroPlan retroPlan(String repo, boolean unknown) throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET",
                 "/api/licenses/retro/plan?repo=" + enc(repo) + "&unknown=" + unknown, null, null);
-        if (response.statusCode() == 501) {
-            return null;
-        }
         require(response, 200, "plan retroactive license enforcement for " + repo);
         return JSON.readValue(response.body(), RetroPlan.class);
     }
@@ -214,14 +207,10 @@ public final class RiskClient extends ClientCalls {
         require(send("POST", "/api/findings/waiver?" + query, null, null), 200, "waive finding " + finding.id());
     }
 
-    /** Post a scanner's report about one stored version, the request document read from {@code file} as it is.
-     *  Returns {@code null} when the findings module is not installed on this deployment (HTTP 501). */
+    /** Post a scanner's report about one stored version, the request document read from {@code file} as it is. */
     public ReportAnswer reportFindings(String repo, Path file) throws IOException, InterruptedException {
         HttpResponse<String> response = send("POST", "/api/findings/report?repo=" + enc(repo),
                 HttpRequest.BodyPublishers.ofFile(file), "application/json");
-        if (response.statusCode() == 501) {
-            return null;
-        }
         require(response, 200, "report findings from " + file.getFileName() + " into " + repo);
         return JSON.readValue(response.body(), ReportAnswer.class);
     }
