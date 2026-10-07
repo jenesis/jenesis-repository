@@ -152,6 +152,10 @@ public final class RepositoryClient extends ClientCalls {
     /** The served {@code /api/capabilities} document. Each optional module's feature flag sits at the top level,
      *  contributed by that module, and reads {@code false} when absent; {@link Features} carries only the postures the
      *  server itself resolves. */
+    /** One page of a listing and the cursor that resumes after it, {@code null} on the last page. */
+    public record Page<T>(List<T> items, String next) {
+    }
+
     public record Capabilities(int version, List<Format> formats, List<ImportSource> importSources,
                                List<RiskClient.Signal> signals, List<Module> modules, Features features,
                                boolean scan, boolean provenance, boolean audit, boolean dependents,

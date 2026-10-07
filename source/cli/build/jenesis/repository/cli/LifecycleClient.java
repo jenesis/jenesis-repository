@@ -18,11 +18,14 @@ public final class LifecycleClient extends ClientCalls {
     }
 
     /** The publish-through forwarding outbox of a repository: what is still queued, how many attempts each has taken,
-     *  whether it is parked after a terminal failure and the last error. */
-    public List<ForwardingEntry> forwarding(String repo) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET", "/api/forwarding?repo=" + enc(repo), null, null);
+     *  whether it is parked after a terminal failure and the last error - one page resumed after {@code cursor}. */
+    public RepositoryClient.Page<ForwardingEntry> forwarding(String repo, String cursor)
+            throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/forwarding?repo=" + enc(repo)
+                + (cursor == null ? "" : "&after=" + enc(cursor)), null, null);
         require(response, 200, "read the forwarding outbox of " + repo);
-        return JSON.readValue(response.body(), ForwardingView.class).entries();
+        ForwardingView view = JSON.readValue(response.body(), ForwardingView.class);
+        return new RepositoryClient.Page<>(view.entries(), view.next());
     }
 
     /** Forward every accepted publish in the caller's {@code repo} to {@code destRepo} of {@code destTenant}. The
@@ -153,8 +156,9 @@ public final class LifecycleClient extends ClientCalls {
     }
 
     /** Recent outbound webhook deliveries and their state. */
-    public String webhooks(String repo) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET", "/api/webhook?repo=" + enc(repo), null, null);
+    public String webhooks(String repo, String cursor) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/webhook?repo=" + enc(repo)
+                + (cursor == null ? "" : "&after=" + enc(cursor)), null, null);
         require(response, 200, "read the webhook deliveries for " + repo);
         return response.body();
     }
@@ -220,7 +224,7 @@ public final class LifecycleClient extends ClientCalls {
                                   int delivered, String error) {
     }
 
-    private record ForwardingView(List<ForwardingEntry> entries) {
+    private record ForwardingView(List<ForwardingEntry> entries, String next) {
     }
 
     /** The result of a cleanup sweep or its dry-run plan: how many content-addressed blobs were reclaimed (0 for a

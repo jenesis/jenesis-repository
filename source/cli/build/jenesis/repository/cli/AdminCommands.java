@@ -241,9 +241,11 @@ final class AdminCommands {
         String from = null;
         String to = null;
         String action = null;
+        String cursor = null;
         boolean csv = false;
         for (int i = 1; i < args.length; i++) {
             switch (args[i]) {
+                case "--cursor" -> cursor = CliSupport.flag(args, ++i);
                 case "--from" -> from = CliSupport.flag(args, ++i);
                 case "--to" -> to = CliSupport.flag(args, ++i);
                 case "--action" -> action = CliSupport.flag(args, ++i);
@@ -256,14 +258,15 @@ final class AdminCommands {
             System.out.print(client.access().auditCsv(from, to, action));
             return 0;
         }
-        List<AccessClient.AuditEvent> events = client.access().audit(from, to, action);
-        if (events.isEmpty()) {
+        RepositoryClient.Page<AccessClient.AuditEvent> events = client.access().audit(from, to, action, cursor);
+        if (events.items().isEmpty()) {
             System.out.println("No audit events.");
             return 0;
         }
-        for (AccessClient.AuditEvent event : events) {
+        for (AccessClient.AuditEvent event : events.items()) {
             System.out.printf("%s  %-20s %-24s %s%n", event.at(), event.actor(), event.action(), event.target());
         }
+        CliSupport.more(events.next());
         return 0;
     }
 

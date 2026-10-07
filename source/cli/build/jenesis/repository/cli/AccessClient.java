@@ -219,11 +219,16 @@ public final class AccessClient extends ClientCalls {
     }
 
     /** The tenant's audit trail, newest first, optionally bounded by ISO-8601 {@code from}/{@code to} instants and a
-     *  single {@code action}. */
-    public List<AuditEvent> audit(String from, String to, String action) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET", "/api/audit" + auditQuery(from, to, action), null, null);
+     *  single {@code action}, one page resumed after {@code cursor}; the next page's cursor is the
+     *  {@code Jenesis-Next-Cursor} header, absent on the last. */
+    public RepositoryClient.Page<AuditEvent> audit(String from, String to, String action, String cursor)
+            throws IOException, InterruptedException {
+        StringBuilder query = new StringBuilder(auditQuery(from, to, action));
+        appendParam(query, "after", cursor);
+        HttpResponse<String> response = send("GET", "/api/audit" + query, null, null);
         require(response, 200, "read the audit trail");
-        return List.of(JSON.readValue(response.body(), AuditEvent[].class));
+        return new RepositoryClient.Page<>(List.of(JSON.readValue(response.body(), AuditEvent[].class)),
+                response.headers().firstValue("Jenesis-Next-Cursor").orElse(null));
     }
 
     /** The same audit trail as a CSV download for off-system retention. */

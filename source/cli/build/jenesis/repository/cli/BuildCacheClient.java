@@ -90,8 +90,9 @@ public final class BuildCacheClient extends ClientCalls {
 
     /** The tenant's ingested build scans: a build reports to the tenant, not to a repository, so there is no
      *  repository to narrow them to. */
-    public String scans() throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET", "/api/scans", null, null);
+    public String scans(String cursor) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/scans" + (cursor == null ? "" : "?after=" + enc(cursor)),
+                null, null);
         require(response, 200, "read the scan runs");
         return response.body();
     }
@@ -143,8 +144,9 @@ public final class BuildCacheClient extends ClientCalls {
     }
 
     /** The tests seen to flake across the tenant's history. */
-    public String flakyTests() throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET", "/api/tests/flaky", null, null);
+    public String flakyTests(Integer limit) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/tests/flaky" + (limit == null ? "" : "?limit=" + limit),
+                null, null);
         require(response, 200, "read the flaky tests");
         return response.body();
     }

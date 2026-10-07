@@ -16,7 +16,7 @@ final class ScanCommands {
     }
 
     static int vex(String[] args, Path home) throws Exception {
-        String action = args.length > 1 ? args[1] : "";
+        String action = args.length > 1 && !args[1].startsWith("--") ? args[1] : "";
         switch (action) {
             case "show" -> {
                 if (args.length < 3) {
@@ -54,14 +54,18 @@ final class ScanCommands {
                     System.out.println("Wrote " + output + ".");
                 }
             }
-            case "" -> System.out.println(CliSupport.client(home).provenance().vexStatements());
+            case "" -> {
+                String statements = CliSupport.client(home).provenance().vexStatements(CliSupport.cursorOf(args, 1));
+                System.out.println(statements);
+                CliSupport.more(CliSupport.nextOf(statements));
+            }
             default -> throw new IllegalArgumentException("Unknown vex action '" + action + "'");
         }
         return 0;
     }
 
     static int scans(String[] args, Path home) throws Exception {
-        String action = args.length > 1 ? args[1] : "";
+        String action = args.length > 1 && !args[1].startsWith("--") ? args[1] : "";
         switch (action) {
             case "show" -> {
                 if (args.length < 3) {
@@ -86,7 +90,11 @@ final class ScanCommands {
                 System.out.println(CliSupport.client(home)
                         .buildCache().ingestScan(Files.readString(Path.of(args[2]))));
             }
-            case "" -> System.out.println(CliSupport.client(home).buildCache().scans());
+            case "" -> {
+                String runs = CliSupport.client(home).buildCache().scans(CliSupport.cursorOf(args, 1));
+                System.out.println(runs);
+                CliSupport.more(CliSupport.nextOf(runs));
+            }
             default -> throw new IllegalArgumentException("Unknown scans action '" + action + "'");
         }
         return 0;
@@ -109,10 +117,17 @@ final class ScanCommands {
                 System.out.println(CliSupport.client(home).buildCache().testRun(args[2]));
             }
             case "flaky" -> {
-                if (args.length > 2) {
-                    throw new IllegalArgumentException("Usage: tests flaky");
+                // Ranked by flakiness and capped rather than paged: the answer says how many there are beside how
+                // many came back, and --limit asks for more.
+                Integer limit = null;
+                for (int i = 2; i < args.length; i++) {
+                    if (args[i].equals("--limit")) {
+                        limit = Integer.valueOf(CliSupport.flag(args, ++i));
+                    } else {
+                        throw new IllegalArgumentException("Usage: tests flaky [--limit N]");
+                    }
                 }
-                System.out.println(CliSupport.client(home).buildCache().flakyTests());
+                System.out.println(CliSupport.client(home).buildCache().flakyTests(limit));
             }
             case "select" -> {
                 String changed = null;
@@ -126,7 +141,7 @@ final class ScanCommands {
                 System.out.println(CliSupport.client(home).buildCache().selectTests(changed));
             }
             default -> throw new IllegalArgumentException(
-                    "Usage: tests ingest <file> | tests show <id> | tests flaky | tests select");
+                    "Usage: tests ingest <file> | tests show <id> | tests flaky [--limit N] | tests select");
         }
         return 0;
     }
