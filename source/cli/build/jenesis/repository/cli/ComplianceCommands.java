@@ -355,7 +355,7 @@ final class ComplianceCommands {
         if (screened != null) {
             System.out.println(switch (screened.basis()) {
                 case "FEEDS" -> subject + " is screened by its coordinate through "
-                        + String.join(", ", screened.feeds() == null ? List.of() : screened.feeds()) + ".";
+                        + String.join(", ", screened.feeds()) + ".";
                 case "UNCOVERED" -> subject + " is unscreened: no enabled advisory feed covers " + closure.ecosystem()
                         + ", so no finding is not the same as clean.";
                 case "NOTHING" -> subject + " is unscreened: a version published here is asked of no feed, and its "
@@ -382,25 +382,31 @@ final class ComplianceCommands {
             default -> {
             }
         }
-        List<ProvenanceClient.ClosureComponent> components = closure.components() == null ? List.of()
-                : closure.components();
-        List<ProvenanceClient.ClosureCut> cuts = closure.cuts() == null ? List.of() : closure.cuts();
+        printResolved(subject, closure);
+        if (closure.exposure() != null) {
+            printExposure(closure.exposure());
+        }
+        return 0;
+    }
+
+    /** What a resolved closure holds: its components, where it was cut, and the packages of other ecosystems. */
+    private static void printResolved(String subject, ProvenanceClient.Closure closure) {
+        List<ProvenanceClient.ClosureComponent> components = closure.components();
+        List<ProvenanceClient.ClosureCut> cuts = closure.cuts();
         System.out.println(subject + "  " + closure.state().toLowerCase(Locale.ROOT)
                 + ("BILL".equals(closure.kind()) ? ", from the bill it carries, read " : ", resolved ")
-                + (closure.source() == null || closure.source().isBlank() ? "" : "by " + closure.source() + " ")
+                + (closure.source().isBlank() ? "" : "by " + closure.source() + " ")
                 + closure.resolved() + ": " + components.size() + " component(s), " + cuts.size() + " unresolved");
         for (ProvenanceClient.ClosureComponent component : components) {
-            String repository = component.repository() == null || component.repository().isBlank() ? ""
-                    : " of " + component.repository();
+            String repository = component.repository().isBlank() ? "" : " of " + component.repository();
             System.out.printf(Locale.ROOT, "    %s %s  %s%s, depth %d%n", component.coordinate(), component.version(),
                     component.cached() ? "a cached copy" : "a release", repository, component.depth());
         }
         for (ProvenanceClient.ClosureCut cut : cuts) {
             System.out.println("    unresolved: " + cut.coordinate()
-                    + (cut.requirement() == null || cut.requirement().isBlank() ? "" : " " + cut.requirement())
-                    + " - " + cut.reason());
+                    + (cut.requirement().isBlank() ? "" : " " + cut.requirement()) + " - " + cut.reason());
         }
-        List<ProvenanceClient.ClosureForeign> foreign = closure.foreign() == null ? List.of() : closure.foreign();
+        List<ProvenanceClient.ClosureForeign> foreign = closure.foreign();
         if (!foreign.isEmpty()) {
             System.out.println("  its bill names " + foreign.size() + " package(s) of other ecosystems, followed by "
                     + "coordinate across the tenant:");
@@ -412,27 +418,24 @@ final class ComplianceCommands {
         if (closure.truncated()) {
             System.out.println("    the closure stopped at its bound; what lies past it is not listed");
         }
-        ProvenanceClient.ClosureExposure exposure = closure.exposure();
-        if (exposure != null) {
-            List<ProvenanceClient.ClosureReached> reached = exposure.reached() == null ? List.of()
-                    : exposure.reached();
-            System.out.println("  relies on " + exposure.held() + " version(s) held for review and "
-                    + exposure.vulnerable() + " carrying findings, as of " + exposure.derived());
-            for (ProvenanceClient.ClosureReached version : reached) {
-                String repository = version.repository() == null || version.repository().isBlank() ? ""
-                        : " of " + version.repository();
-                String ecosystem = version.ecosystem() == null || version.ecosystem().isBlank() ? ""
-                        : " (" + version.ecosystem() + ")";
-                System.out.println("    " + version.coordinate() + " " + version.version() + ecosystem + repository
-                        + "  "
-                        + (version.held() ? "held for review" : "")
-                        + (version.held() && version.findings() > 0 ? ", " : "")
-                        + (version.findings() > 0 ? version.findings() + " finding(s), the worst "
-                        + version.worst().toLowerCase(Locale.ROOT) : ""));
-                through(version.path());
-            }
+    }
+
+    /** The versions a closure reaches that are held for review or carry findings, each with its path. */
+    private static void printExposure(ProvenanceClient.ClosureExposure exposure) {
+        List<ProvenanceClient.ClosureReached> reached = exposure.reached();
+        System.out.println("  relies on " + exposure.held() + " version(s) held for review and "
+                + exposure.vulnerable() + " carrying findings, as of " + exposure.derived());
+        for (ProvenanceClient.ClosureReached version : reached) {
+            String repository = version.repository().isBlank() ? "" : " of " + version.repository();
+            String ecosystem = version.ecosystem().isBlank() ? "" : " (" + version.ecosystem() + ")";
+            System.out.println("    " + version.coordinate() + " " + version.version() + ecosystem + repository
+                    + "  "
+                    + (version.held() ? "held for review" : "")
+                    + (version.held() && version.findings() > 0 ? ", " : "")
+                    + (version.findings() > 0 ? version.findings() + " finding(s), the worst "
+                    + version.worst().toLowerCase(Locale.ROOT) : ""));
+            through(version.path());
         }
-        return 0;
     }
 
     /** The dependencies a path goes through before the version it ends at, on a line of its own, where there are
