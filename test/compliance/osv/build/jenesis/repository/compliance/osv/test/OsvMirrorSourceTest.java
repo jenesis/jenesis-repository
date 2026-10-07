@@ -28,6 +28,9 @@ class OsvMirrorSourceTest {
     @TempDir
     Path root;
 
+    @TempDir
+    Path elsewhere;
+
     private ArtifactStore space;
     private final AtomicReference<Instant> now = new AtomicReference<>(START);
     private final Clock clock = new Clock() {
@@ -206,9 +209,10 @@ class OsvMirrorSourceTest {
         reader.refresh();
         assertThat(reader.advisories("npm", "evil", "1.0.0")).as("read once, so its state is held").hasSize(1);
 
-        // Another node rebuilds inside the window the reader holds the state it read for.
+        // Another node rebuilds inside the window the reader holds the state it read for. It reaches the same files
+        // through a link, so it is a store of its own identity - a cache of its own - as a second node's is.
         now.set(START.plus(Duration.ofSeconds(10)));
-        OsvMirrorSource rebuilder = source(Duration.ofSeconds(5));
+        OsvMirrorSource rebuilder = source(Duration.ofSeconds(5), peer());
         rebuilder.mirror(Set.of("npm"));
         rebuilder.refresh();
 
@@ -235,6 +239,18 @@ class OsvMirrorSourceTest {
     }
 
     private OsvMirrorSource source(Duration rebuild) {
+        return source(rebuild, space);
+    }
+
+    /** The mirror's space as another node reaches it: the same files under a root of another name. */
+    private ArtifactStore peer() throws IOException {
+        Path link = Files.createSymbolicLink(elsewhere.resolve("peer"), root);
+        return ArtifactStoreProvider.resolve("filesystem",
+                key -> "jenrepo.filesystem.root".equals(key) ? link.toString() : null).scope("signals")
+                .scope("osv-mirror");
+    }
+
+    private OsvMirrorSource source(Duration rebuild, ArtifactStore over) {
         return OsvMirrorSource.responding(request -> {
             String path = request.uri().getPath();
             asked.add(path);
@@ -251,7 +267,7 @@ class OsvMirrorSourceTest {
                     yield held.containsKey(id) ? FeedResponse.of(200, held.get(id)) : FeedResponse.of(404, "");
                 }
             };
-        }, () -> space, clock, rebuild);
+        }, () -> over, clock, rebuild);
     }
 
     /** Add {@code json} as record {@code id} of {@code ecosystem}'s export, modified at {@code modified}, at the head of
