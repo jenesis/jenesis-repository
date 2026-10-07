@@ -151,9 +151,11 @@ final class OperationsCommands {
             return 0;
         }
         if (args.length < 2) {
-            throw new IllegalArgumentException("Usage: webhook <repo> | webhook retry <repo> <id>");
+            throw new IllegalArgumentException("Usage: webhook <repo> [--cursor C] | webhook retry <repo> <id>");
         }
-        System.out.println(CliSupport.client(home).lifecycle().webhooks(args[1]));
+        String deliveries = CliSupport.client(home).lifecycle().webhooks(args[1], CliSupport.cursorOf(args, 2));
+        System.out.println(deliveries);
+        CliSupport.more(CliSupport.nextOf(deliveries));
         return 0;
     }
 

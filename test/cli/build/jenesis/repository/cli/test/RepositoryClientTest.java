@@ -513,7 +513,7 @@ public class RepositoryClientTest {
 
     @Test
     void quarantine_holds_are_listed_and_reviewed() throws IOException, InterruptedException {
-        List<ReviewClient.QuarantineEvent> events = client.review().quarantine("releases");
+        List<ReviewClient.QuarantineEvent> events = client.review().quarantine("releases", null).events();
         assertThat(lastPath).isEqualTo("/api/quarantine");
         assertThat(lastQuery).contains("repo=releases");
         assertThat(events).singleElement().satisfies(event -> {
@@ -540,7 +540,7 @@ public class RepositoryClientTest {
 
     @Test
     void the_forwarding_outbox_is_listed_and_a_parked_forward_is_retried() throws IOException, InterruptedException {
-        List<LifecycleClient.ForwardingEntry> entries = client.lifecycle().forwarding("mirror");
+        List<LifecycleClient.ForwardingEntry> entries = client.lifecycle().forwarding("mirror", null).items();
         assertThat(lastPath).isEqualTo("/api/forwarding");
         assertThat(entries).singleElement().satisfies(entry -> {
             assertThat(entry.ecosystem()).isEqualTo("npm");
@@ -716,7 +716,8 @@ public class RepositoryClientTest {
 
     @Test
     void the_audit_trail_is_filtered_and_parsed() throws IOException, InterruptedException {
-        List<AccessClient.AuditEvent> events = client.access().audit("2026-01-01T00:00:00Z", null, "credential.mint");
+        List<AccessClient.AuditEvent> events = client.access().audit("2026-01-01T00:00:00Z", null, "credential.mint",
+                null).items();
         assertThat(lastPath).isEqualTo("/api/audit");
         assertThat(lastQuery).contains("from=").contains("action=credential.mint");
         assertThat(lastQuery).as("a null bound is not sent").doesNotContain("to=");
