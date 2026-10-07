@@ -262,7 +262,9 @@ public interface AdvisorySource extends SignalSource {
      * <li><b>Durability.</b> An ecosystem's copy is replaced whole: a lookup reads the last copy that was completely
      *     drawn, never one being drawn.</li>
      * <li><b>Bounded work.</b> A lookup is a bounded number of point reads of the copy, however many records the
-     *     ecosystem holds.</li>
+     *     ecosystem holds; {@link #copies} one per ecosystem the copy is asked to keep.</li>
+     * <li><b>Staleness.</b> {@link #copies} says, per ecosystem, when its copy was built and last drawn, so an
+     *     ecosystem still waiting for its first build is told apart from one serving.</li>
      * </ol>
      */
     interface Mirror extends AdvisorySource, RefreshableSource {
@@ -270,6 +272,15 @@ public interface AdvisorySource extends SignalSource {
         /** Keep a copy of the ecosystems in {@code ecosystems}, the product's names - those the repositories selecting
          *  this feed hold - from the next {@link #refresh} on. An ecosystem left out is no longer drawn. */
         void mirror(Set<String> ecosystems) throws IOException;
+
+        /** What the copy holds now: one entry per ecosystem it is asked to keep, in the product's names. Read from
+         *  the stored copy, never the vendor. */
+        List<Copy> copies() throws IOException;
+
+        /** One ecosystem's copy: when it was built whole and when it was last drawn, both {@code null} before its
+         *  first build lands. */
+        record Copy(String ecosystem, Instant built, Instant drawn) {
+        }
     }
 
     /** The shared source that reports nothing, for deployments that gate on licenses only. It is a singleton so a

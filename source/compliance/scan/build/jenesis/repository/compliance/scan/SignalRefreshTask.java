@@ -7,6 +7,7 @@ import build.jenesis.repository.compliance.Freshness;
 import build.jenesis.repository.compliance.RefreshableSource;
 import build.jenesis.repository.compliance.RepositorySelection;
 import build.jenesis.repository.format.RepositoryType;
+import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.RepositoryDocument;
 import build.jenesis.repository.store.Requests;
 import build.jenesis.repository.maintenance.MaintenanceTask;
@@ -35,6 +36,9 @@ import build.jenesis.repository.maintenance.RepositoryContext;
  *
  * <p><strong>A failed draw fails the pass</strong> (clause 4): the source is named in an {@link IOException} the
  * scheduler logs and counts, while the prior-good catalogue keeps serving.
+ *
+ * <p>What the pass found - each source's freshness, why a refresh failed, each mirror's copies - is recorded as the
+ * {@link SignalStatus} document the operator surfaces read back, whether or not the pass failed.
  */
 public final class SignalRefreshTask implements MaintenanceTask {
 
@@ -53,16 +57,26 @@ public final class SignalRefreshTask implements MaintenanceTask {
     private final Map<String, Set<String>> wanted = new ConcurrentHashMap<>();
     /** The names of the enabled sources that keep a copy of their vendor's records. */
     private final Set<String> mirrors;
+    /** Where the pass records what it found, resolved when it records; {@code null} records nothing. */
+    private final Supplier<ArtifactStore> status;
 
     public SignalRefreshTask(Duration interval, Map<String, RefreshableSource> sources) {
-        this(interval, sources, Map.of());
+        this(interval, sources, Map.of(), null);
     }
 
     public SignalRefreshTask(Duration interval, Map<String, RefreshableSource> sources,
                              Map<String, AdvisorySource.Changes> changes) {
+        this(interval, sources, changes, null);
+    }
+
+    /** @param status the {@link SignalStatus#space space} the pass records what it found in, or {@code null} for a
+     *               composition that keeps no record. */
+    public SignalRefreshTask(Duration interval, Map<String, RefreshableSource> sources,
+                             Map<String, AdvisorySource.Changes> changes, Supplier<ArtifactStore> status) {
         this.interval = interval;
         this.sources = Map.copyOf(sources);
         this.changes = Map.copyOf(changes);
+        this.status = status;
         this.mirrors = this.sources.entrySet().stream()
                 .filter(source -> source.getValue() instanceof AdvisorySource.Mirror)
                 .map(Map.Entry::getKey).collect(Collectors.toUnmodifiableSet());
@@ -110,6 +124,8 @@ public final class SignalRefreshTask implements MaintenanceTask {
     @Override
     public void completed(Instant started) throws IOException {
         List<String> failed = new ArrayList<>();
+        // Why each source's refresh failed this pass, by signal name, for the record the surfaces read.
+        Map<String, String> reasons = new TreeMap<>();
         // Every signal is attempted even when an earlier one raised, so a fault under one mirror does not cost the
         // others their draw.
         Map<String, Set<String>> mirrored = new TreeMap<>();
@@ -142,6 +158,7 @@ public final class SignalRefreshTask implements MaintenanceTask {
                 } else {
                     failed.add(source.getKey() + " (vendor unreachable; last drawn "
                             + freshness.refreshed().map(Instant::toString).orElse("never") + ")");
+                    reasons.put(source.getKey(), "the vendor could not be reached");
                 }
             } catch (Throwable e) {
                 // The durable side failed, not the vendor. Throwable is caught because a plugged-in feed's likeliest
@@ -150,6 +167,7 @@ public final class SignalRefreshTask implements MaintenanceTask {
                 // below.
                 LOGGER.warn("Could not commit the {} signal's snapshot", source.getKey(), e);
                 failed.add(source.getKey() + " (" + e + ")");
+                reasons.put(source.getKey(), "its snapshot could not be committed: " + e);
             }
         }
         for (Map.Entry<String, AdvisorySource.Changes> feed : new TreeMap<>(changes).entrySet()) {
@@ -162,12 +180,35 @@ public final class SignalRefreshTask implements MaintenanceTask {
             } catch (Throwable e) {
                 LOGGER.warn("Could not draw what the {} feed changed", feed.getKey(), e);
                 failed.add(feed.getKey() + " changes (" + e + ")");
+                reasons.merge(feed.getKey(), "its changes could not be drawn: " + e, (a, b) -> a + "; " + b);
             }
         }
+        record(reasons);
         if (!failed.isEmpty()) {
             // Named, so an operator knows which signals are stale.
             throw new IOException("Could not refresh " + String.join(", ", failed)
                     + "; the prior-good data keeps serving and the pass is retried on the next interval");
+        }
+    }
+
+    /** Record what each source holds after this pass as the {@link SignalStatus} document; best-effort, since it is a
+     *  report: a failure to write it is logged and leaves the previous record standing, as of the instant it says. */
+    private void record(Map<String, String> reasons) {
+        if (status == null) {
+            return;
+        }
+        try {
+            List<SignalStatus.Source> recorded = new ArrayList<>();
+            for (Map.Entry<String, RefreshableSource> source : new TreeMap<>(sources).entrySet()) {
+                Freshness freshness = source.getValue().freshness();
+                List<AdvisorySource.Mirror.Copy> copies = source.getValue() instanceof AdvisorySource.Mirror mirror
+                        ? mirror.copies() : List.of();
+                recorded.add(new SignalStatus.Source(source.getKey(), freshness.refreshed().orElse(null),
+                        freshness.authoritative(), reasons.get(source.getKey()), copies));
+            }
+            SignalStatus.write(status.get(), new SignalStatus.Status(Instant.now(), recorded));
+        } catch (IOException | RuntimeException e) {
+            LOGGER.warn("Could not record what the signal-refresh pass found; the previous record stands", e);
         }
     }
 }

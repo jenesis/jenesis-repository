@@ -151,6 +151,17 @@ public final class OsvMirrorSource implements AdvisorySource.Mirror, AdvisorySou
         return freshness();
     }
 
+    @Override
+    public List<Copy> copies() throws IOException {
+        List<Copy> copies = new ArrayList<>();
+        for (String product : mirror.wanted()) {
+            Optional<OsvMirror.State> state = mirror.state(OsvQuery.osvName(product));
+            copies.add(new Copy(product, state.map(OsvMirror.State::built).orElse(null),
+                    state.map(OsvMirror.State::drawn).orElse(null)));
+        }
+        return List.copyOf(copies);
+    }
+
     /** A digest of the generations the wanted ecosystems serve: it moves when a build lands, which sends the passes
      *  judging held versions over every one of them again. */
     @Override

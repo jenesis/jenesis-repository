@@ -3,6 +3,7 @@ package build.jenesis.repository.compliance.scan;
 import module java.base;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.RefreshableSource;
+import build.jenesis.repository.compliance.SignalContext;
 import build.jenesis.repository.compliance.SignalSource;
 import build.jenesis.repository.compliance.SignalSourceProvider;
 import build.jenesis.repository.maintenance.IntervalSetting;
@@ -48,6 +49,7 @@ public final class SignalRefreshTaskProvider implements MaintenanceTaskProvider 
         });
         return mirrors.isEmpty() && changes.isEmpty()
                 ? Optional.empty()
-                : Optional.of(new SignalRefreshTask(INTERVAL.resolve(config), mirrors, changes));
+                : Optional.of(new SignalRefreshTask(INTERVAL.resolve(config), mirrors, changes,
+                        () -> SignalContext.of(SignalStatus.NAME, config).snapshots()));
     }
 }

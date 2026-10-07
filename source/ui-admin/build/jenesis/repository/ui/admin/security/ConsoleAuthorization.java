@@ -44,7 +44,7 @@ final class ConsoleAuthorization {
                 // Walks are deployment-wide settings reading every tenant's store; the form is gated with them.
                 .requestMatchers("/ui/walks", "/ui/walks/**").hasRole(SuperadminRole.ROLE)
                 // Deployment-wide screens outside /settings/**, named one by one.
-                .requestMatchers("/ui/metrics", "/ui/posture").hasRole(SuperadminRole.ROLE)
+                .requestMatchers("/ui/metrics", "/ui/posture", "/ui/signals").hasRole(SuperadminRole.ROLE)
                 // The caches belong to no tenant.
                 .requestMatchers("/ui/caches", "/ui/caches/**").hasRole(SuperadminRole.ROLE)
                 .requestMatchers("/ui/admin/**").access(tenants.require(UserDirectory.Role.ADMIN))

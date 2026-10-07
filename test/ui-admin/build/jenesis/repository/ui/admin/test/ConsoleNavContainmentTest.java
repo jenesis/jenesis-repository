@@ -69,7 +69,7 @@ class ConsoleNavContainmentTest {
 
     @Test
     void the_service_still_constructs_and_the_nav_simply_lacks_that_module() {
-        CapabilityService service = new CapabilityService(new StandardEnvironment());
+        CapabilityService service = new CapabilityService(fixturesOnly(Map.of()));
 
         // Until a second module joined this path, "no other module's links are lost" had no other module to lose:
         // the nav was empty and the assertion was that it stayed empty, which the containment would satisfy by
@@ -107,13 +107,22 @@ class ConsoleNavContainmentTest {
 
     @Test
     void a_switched_off_console_module_contributes_no_nav_link() {
-        StandardEnvironment switchedOff = new StandardEnvironment();
-        switchedOff.getPropertySources().addFirst(new MapPropertySource("test",
-                Map.of("jenrepo." + new NavigatingConsoleModule().name(), "false")));
+        StandardEnvironment switchedOff = fixturesOnly(Map.of("jenrepo." + new NavigatingConsoleModule().name(),
+                "false"));
 
         assertThat(new CapabilityService(switchedOff).moduleNav())
                 .as("a module the deployment switched off is not imported, so a link to its screen is a link to a "
                         + "404 - the nav has to ask the same question the imports ask")
                 .isEmpty();
+    }
+
+    /** An environment where this path's fixtures are the only modules contributing links: the screening module the
+     *  path also carries contributes a link of its own, so it is switched off, with {@code settings} beside it. */
+    private static StandardEnvironment fixturesOnly(Map<String, Object> settings) {
+        Map<String, Object> values = new HashMap<>(settings);
+        values.put("jenrepo.compliance", "false");
+        StandardEnvironment environment = new StandardEnvironment();
+        environment.getPropertySources().addFirst(new MapPropertySource("test", values));
+        return environment;
     }
 }

@@ -34,6 +34,32 @@ final class OperationsCommands {
      *  taken from the thing itself rather than from a number that would be wrong for everything else. */
     private static final Duration WALK_PICKUP = Duration.ofSeconds(30);
 
+    /** Each refreshable signal source as the signal-refresh pass last recorded it. */
+    static int signals(String[] args, Path home) throws Exception {
+        OperationsClient.Signals signals = CliSupport.client(home).operations().signals();
+        if (!"recorded".equals(signals.state())) {
+            System.out.println("The signal-refresh pass has not recorded anything yet; it does on its next run.");
+            return 0;
+        }
+        System.out.println("As of " + signals.recorded() + ".");
+        if (signals.sources() == null || signals.sources().isEmpty()) {
+            System.out.println("No refreshable signal source is switched on.");
+            return 0;
+        }
+        for (OperationsClient.SignalSource source : signals.sources()) {
+            String state = source.failure() != null ? "refresh failed: " + source.failure()
+                    : source.authoritative() ? "serving" : "not yet complete";
+            System.out.println(source.name() + "  last drawn " + (source.refreshed() == null ? "never"
+                    : source.refreshed()) + "  " + state);
+            for (OperationsClient.SignalCopy copy : source.copies() == null ? List.<OperationsClient.SignalCopy>of()
+                    : source.copies()) {
+                System.out.println("  " + copy.ecosystem() + ": " + (copy.built() == null ? "no copy yet"
+                        : "built " + copy.built() + ", last drawn " + copy.drawn()));
+            }
+        }
+        return 0;
+    }
+
     static int walks(String[] args, Path home) throws Exception {
         if (args.length == 2 && args[1].equals("run")) {
             RepositoryClient client = CliSupport.client(home);

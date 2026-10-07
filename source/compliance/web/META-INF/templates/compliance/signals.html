@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<!--
+  signals.html - what each refreshable signal source holds: when it was last drawn, whether that answer stands, why
+  its last refresh failed, and for a feed keeping a copy of its vendor's records each ecosystem's copy. The console
+  face of GET /api/admin/signals and of the CLI's signals, read from the record the signal-refresh pass keeps.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Signal sources')}"></head>
+<body>
+<header th:replace="~{fragments :: nav}"></header>
+<main id="main">
+    <div th:replace="~{fragments :: messages}"></div>
+    <header th:replace="~{base :: pageHeader('Signal sources')}"></header>
+
+    <p><small>The feeds and catalogues the gate screens with, as the signal-refresh pass found them when it last ran:
+        when each one's data was drawn, and why a refresh failed. A feed keeping a copy of its vendor's records lists
+        each ecosystem it keeps - one with no copy yet is screened as an outage until its first build lands. The
+        pass's own schedule and last run are on <a th:href="@{/ui/metrics}">Metrics</a>.</small></p>
+
+    <th:block th:if="${signals.state() == 'not-recorded'}">
+        <div th:replace="~{base :: empty('The signal-refresh pass has not recorded anything yet; it does on its next run.')}"></div>
+    </th:block>
+
+    <th:block th:if="${signals.state() == 'recorded'}">
+        <p><small>As of <time th:replace="~{base :: time(${signals.recorded()})}">when</time>.</small></p>
+        <div th:if="${signals.sources().isEmpty()}"
+             th:replace="~{base :: empty('No refreshable signal source is switched on.')}"></div>
+        <table th:unless="${signals.sources().isEmpty()}" class="app-list">
+            <caption class="app-sr-only">Signal sources</caption>
+            <thead>
+            <tr><th scope="col">Source</th><th scope="col">Last drawn</th><th scope="col">State</th></tr>
+            </thead>
+            <tbody>
+            <th:block th:each="s : ${signals.sources()}">
+                <tr>
+                    <td class="app-list__lead"><code th:text="${s.name()}">osv</code></td>
+                    <td>
+                        <time th:if="${s.refreshed() != null}" th:replace="~{base :: time(${s.refreshed()})}">when</time>
+                        <span th:if="${s.refreshed() == null}">never</span>
+                    </td>
+                    <td>
+                        <span th:if="${s.failure() != null}" class="app-badge app-badge--danger">refresh failed</span>
+                        <span th:if="${s.failure() == null and s.authoritative()}" class="app-badge">serving</span>
+                        <span th:if="${s.failure() == null and !s.authoritative()}" class="app-badge app-badge--warn">not yet complete</span>
+                    </td>
+                </tr>
+                <tr th:if="${s.failure() != null or !s.copies().isEmpty()}">
+                    <td colspan="3" class="app-list__detail">
+                        <p th:if="${s.failure() != null}" th:text="${s.failure()}">why</p>
+                        <ul th:unless="${s.copies().isEmpty()}">
+                            <li th:each="c : ${s.copies()}">
+                                <strong th:text="${c.ecosystem()}">Maven</strong>:
+                                <th:block th:if="${c.built() != null}">built
+                                    <time th:replace="~{base :: time(${c.built()})}">when</time>, last drawn
+                                    <time th:replace="~{base :: time(${c.drawn()})}">when</time></th:block>
+                                <span th:if="${c.built() == null}">no copy yet</span>
+                            </li>
+                        </ul>
+                    </td>
+                </tr>
+            </th:block>
+            </tbody>
+        </table>
+    </th:block>
+</main>
+</body>
+</html>
