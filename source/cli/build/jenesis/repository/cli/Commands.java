@@ -378,7 +378,12 @@ public final class Commands {
                     noun("logs", "the instance's most recent log entries",
                             OperationsCommands::logs,
                             act("logs [--level L] [--q TEXT] [--since SEQ] [--tenant T] [--limit N]",
-                                    "the tail of the in-memory log buffer; --since resumes after a tail's cursor")))),
+                                    "the tail of the in-memory log buffer; --since resumes after a tail's cursor")),
+                    noun("discovery", "what a domain's discovery file says", OperationsCommands::discovery,
+                            act("discovery check <name> [--path P]", "ask the domains a module name or groupId "
+                                    + "reverses into for their /.well-known/java-repository.properties now, and where "
+                                    + "a request path would go through a discovered leg; --refresh watches it "
+                                    + "finish")))),
 
             new Section("Settings", List.of(
                     noun("settings", "the runtime settings", AdminCommands::settings,

@@ -127,6 +127,7 @@ public final class RepositoryDiscovery {
     private final Supplier<Duration> ttl;
     private final Clock clock;
     private final ConcurrentHashMap<String, Remembered> files = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Checking> checks = new ConcurrentHashMap<>();
 
     /** Over {@code transport}, refusing what {@code refused} names, remembering each file for {@code ttl} by
      *  {@code clock}. */
@@ -152,6 +153,118 @@ public final class RepositoryDiscovery {
     /** Forgets every file remembered, so the next request asks each domain again. */
     public void forget() {
         files.clear();
+    }
+
+    /** What one domain's file was when a {@link #check} asked: {@code found} with the {@code file}, {@code absent},
+     *  {@code refused} with the {@code refusal}, or {@code not-reached} - a host this deployment does not reach. */
+    public record Asked(String domain, URI address, String state, DiscoveryFile file, String refusal) {
+    }
+
+    /**
+     * What the domains of {@code name} say now, for an operator asking why a request went where it went: each domain
+     * the walk reaches, asked afresh rather than as remembered, with what its file holds or why it is refused; which
+     * file answers each key; and, where {@code path} is given, where that request path's file is - or the refusal
+     * that ends its leg. The files read stay remembered as a request would leave them.
+     */
+    public Check check(String name, String path) {
+        List<String> domains = Domains.of(name);
+        domains.forEach(files::remove);
+        List<Asked> asked = new ArrayList<>();
+        boolean found = false;
+        for (String domain : domains) {
+            URI address = DiscoveryFile.address(domain);
+            if (refused.test(address)) {
+                asked.add(new Asked(domain, address, "not-reached", null, null));
+                if (found) {
+                    break;
+                }
+                continue;
+            }
+            Optional<DiscoveryFile> file;
+            try {
+                file = file(domain);
+            } catch (DiscoveryException refusal) {
+                asked.add(new Asked(domain, address, "refused", null, refusal.getMessage()));
+                break;
+            }
+            asked.add(new Asked(domain, address, file.isPresent() ? "found" : "absent", file.orElse(null), null));
+            if (file.isEmpty()) {
+                if (found) {
+                    break;
+                }
+                continue;
+            }
+            found = true;
+            if (file.get().stop()) {
+                break;
+            }
+        }
+        Map<Key, Answering> answering;
+        try {
+            answering = answering(name);
+        } catch (DiscoveryException refusal) {
+            answering = Map.of();
+        }
+        Located located = null;
+        String refusal = null;
+        if (path != null && !path.isBlank()) {
+            try {
+                located = locate(path.strip()).orElse(null);
+            } catch (DiscoveryException refused) {
+                refusal = refused.getMessage();
+            }
+        }
+        return new Check(name, List.copyOf(asked), Map.copyOf(answering), path, located, refusal);
+    }
+
+    /** A check as an operator surface sees it: {@code running} or {@code done}, when it started and finished, and
+     *  the {@link Check} once done. */
+    public record Checking(String name, String path, String state, Instant started, Instant finished, Check check) {
+    }
+
+    /** The most checks remembered at once; past it the oldest finished ones are forgotten. */
+    public static final int MOST_CHECKS = 100;
+
+    /**
+     * Starts a {@link #check} of {@code name} and {@code path} off the caller's thread, unless one is running, and
+     * answers its state at once - so a screen or a command never waits on the domains, and reads the outcome back
+     * through {@link #checking}.
+     */
+    public Checking ask(String name, String path) {
+        String key = name + "\u0000" + (path == null ? "" : path);
+        Checking running = new Checking(name, path, "running", clock.instant(), null, null);
+        Checking previous = checks.putIfAbsent(key, running);
+        if (previous != null && previous.state().equals("running")) {
+            return previous;
+        }
+        if (previous != null && !checks.replace(key, previous, running)) {
+            return checks.get(key);
+        }
+        if (checks.size() > MOST_CHECKS) {
+            checks.entrySet().removeIf(entry -> !entry.getKey().equals(key)
+                    && entry.getValue().state().equals("done"));
+        }
+        Thread.ofVirtual().name("discovery-check").start(() -> {
+            Check check;
+            try {
+                check = check(name, path);
+            } catch (RuntimeException failed) {
+                check = new Check(name, List.of(), Map.of(), path, null, String.valueOf(failed.getMessage()));
+            }
+            checks.put(key, new Checking(name, path, "done", running.started(), clock.instant(), check));
+        });
+        return running;
+    }
+
+    /** The last check of {@code name} and {@code path} this node ran or is running, or empty where none was asked. */
+    public Optional<Checking> checking(String name, String path) {
+        return Optional.ofNullable(checks.get(name + "\u0000" + (path == null ? "" : path)));
+    }
+
+    /** A {@link #check}'s answer: the domains asked, which answers each key, and where {@code path} is -
+     *  {@code located} {@code null} where no file names it, or {@code refusal} where its leg is refused. */
+    public record Check(String name, List<Asked> domains, Map<Key, Answering> answering, String path,
+                        Located located, String refusal) {
     }
 
     /**

@@ -3,6 +3,7 @@ package build.jenesis.repository.management.web;
 import java.util.Objects;
 import java.util.Arrays;
 import build.jenesis.repository.audit.AuditTrail;
+import build.jenesis.repository.discovery.RepositoryDiscovery;
 import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.CredentialContext;
 import build.jenesis.repository.server.kernel.LiveConfig;
@@ -17,6 +18,7 @@ import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Tenants;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -70,6 +72,13 @@ public class ManagementWebConfig {
     public StoragePurgeController storagePurgeController(StorageNamespaces namespaces, Tenants tenants, AuditTrail audit,
                                                         RepositoryRouting routing) {
         return new StoragePurgeController(namespaces, tenants, audit, routing);
+    }
+
+    /** The discovery check over the API, registered by hand like every controller here; the reader is the server's,
+     *  so a composition without one answers 501. */
+    @Bean
+    public DiscoveryAdminController discoveryAdminController(ObjectProvider<RepositoryDiscovery> discovery) {
+        return new DiscoveryAdminController(discovery);
     }
 
     /** The walks over the API, registered by hand like every controller here: absent, {@code GET /api/admin/walks} and
