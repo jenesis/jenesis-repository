@@ -9,8 +9,6 @@ import build.jenesis.repository.compliance.Freshness;
 import build.jenesis.repository.feed.FeedClient;
 import build.jenesis.repository.feed.FeedException;
 import build.jenesis.repository.feed.FeedPolicy;
-import build.jenesis.repository.feed.FeedRequest;
-import build.jenesis.repository.feed.FeedResponse;
 import build.jenesis.repository.feed.FeedTransport;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Checksums;
@@ -55,12 +53,6 @@ public final class OsvMirrorSource implements AdvisorySource.Mirror, AdvisorySou
             .requestTimeout(Duration.ofMinutes(10))
             .maxAttempts(2);
 
-    /** A test's stand-in for OSV's export: the whole response to {@code request}. */
-    @FunctionalInterface
-    public interface Responder {
-        FeedResponse answer(FeedRequest request) throws IOException;
-    }
-
     private final OsvMirror mirror;
     private final Supplier<ArtifactStore> space;
     private final Clock clock;
@@ -82,10 +74,10 @@ public final class OsvMirrorSource implements AdvisorySource.Mirror, AdvisorySou
                 rebuild);
     }
 
-    /** A source drawing every request through {@code responder}, keeping its copy in {@code space} on {@code clock}. */
-    public static OsvMirrorSource responding(Responder responder, Supplier<ArtifactStore> space, Clock clock,
+    /** A source sending every request through {@code transport}, keeping its copy in {@code space} on {@code clock}. */
+    public static OsvMirrorSource responding(FeedTransport transport, Supplier<ArtifactStore> space, Clock clock,
                                              Duration rebuild) {
-        return new OsvMirrorSource(FeedClient.of(FEED, (request, timeout) -> responder.answer(request), POLICY),
+        return new OsvMirrorSource(FeedClient.of(FEED, transport, POLICY),
                 OsvAdvisorySource.DEFAULT_EXPORT, space, clock, () -> rebuild);
     }
 

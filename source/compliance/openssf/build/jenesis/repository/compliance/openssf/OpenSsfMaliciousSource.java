@@ -4,13 +4,13 @@ import module java.base;
 import module tools.jackson.databind;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.AdvisorySource.Advisory;
+import build.jenesis.repository.compliance.FeedChanges;
 import build.jenesis.repository.compliance.Freshness;
 import build.jenesis.repository.compliance.FreshnessTracker;
 import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.feed.FeedClient;
 import build.jenesis.repository.feed.FeedException;
 import build.jenesis.repository.feed.FeedPolicy;
-import build.jenesis.repository.feed.FeedRequest;
 import build.jenesis.repository.feed.FeedResponse;
 import build.jenesis.repository.feed.FeedTransport;
 import build.jenesis.repository.feed.Osv;
@@ -72,12 +72,6 @@ public final class OpenSsfMaliciousSource implements AdvisorySource.Batched, Adv
     /** A malicious-package feed gates, so it takes the client's fail-closed defaults unchanged. */
     private static final FeedPolicy POLICY = FeedPolicy.closed();
 
-    /** A test's stand-in for OSV's endpoints: the body of the answer to {@code request}. */
-    @FunctionalInterface
-    public interface Exchange {
-        String answer(FeedRequest request) throws IOException;
-    }
-
     private final FeedClient client;
     private final URI query;
     private final URI querybatch;
@@ -114,14 +108,13 @@ public final class OpenSsfMaliciousSource implements AdvisorySource.Batched, Adv
 
     /** A source answering every request through {@code exchange}, as a 200 the client bounds and pages as a live
      *  one. */
-    public static OpenSsfMaliciousSource exchanging(Exchange exchange) {
+    public static OpenSsfMaliciousSource exchanging(FeedTransport.Exchange exchange) {
         return exchanging(exchange, OsvQuery.Shared.none());
     }
 
-    /** As {@link #exchanging(Exchange)}, sharing its answers through {@code shared}. */
-    public static OpenSsfMaliciousSource exchanging(Exchange exchange, OsvQuery.Shared shared) {
-        return new OpenSsfMaliciousSource(FeedClient.of(FEED, (request, timeout) -> FeedResponse.of(200,
-                exchange.answer(request)), POLICY), DEFAULT_ENDPOINT, Clock.systemUTC(), shared);
+    /** As {@link #exchanging(FeedTransport.Exchange)}, sharing its answers through {@code shared}. */
+    public static OpenSsfMaliciousSource exchanging(FeedTransport.Exchange exchange, OsvQuery.Shared shared) {
+        return new OpenSsfMaliciousSource(FeedClient.of(FEED, FeedTransport.exchanging(exchange), POLICY), DEFAULT_ENDPOINT, Clock.systemUTC(), shared);
     }
 
     /** The production form, over the deployment clock the reading's retry window is measured on. */
@@ -135,17 +128,14 @@ public final class OpenSsfMaliciousSource implements AdvisorySource.Batched, Adv
                 space, clock, OsvQuery.Shared.decision());
     }
 
-    /** As {@link #exchanging(Exchange)}, keeping its change log in {@code space} on {@code clock}. */
-    public static OpenSsfMaliciousSource exchanging(Exchange exchange, Supplier<ArtifactStore> space, Clock clock) {
-        return new OpenSsfMaliciousSource(FeedClient.of(FEED, (request, timeout) -> FeedResponse.of(200,
-                exchange.answer(request)), POLICY), DEFAULT_ENDPOINT, OsvAdvisorySource.DEFAULT_EXPORT, space, clock,
+    /** As {@link #exchanging(FeedTransport.Exchange)}, keeping its change log in {@code space} on {@code clock}. */
+    public static OpenSsfMaliciousSource exchanging(FeedTransport.Exchange exchange, Supplier<ArtifactStore> space, Clock clock) {
+        return new OpenSsfMaliciousSource(FeedClient.of(FEED, FeedTransport.exchanging(exchange), POLICY), DEFAULT_ENDPOINT, OsvAdvisorySource.DEFAULT_EXPORT, space, clock,
                 OsvQuery.Shared.none());
     }
 
     /** No space to keep a change log in: a source built where no deployment bound one still screens. */
-    private static final Supplier<ArtifactStore> NO_SPACE = () -> {
-        throw new IllegalStateException("the malicious-package feed was built with no space for its change log");
-    };
+    private static final Supplier<ArtifactStore> NO_SPACE = FeedChanges.unbound(FEED);
 
     @Override
     public int drawChanges() throws IOException {
