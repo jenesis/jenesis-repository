@@ -121,6 +121,10 @@ public final class FormatContract {
         /** A version listed by every enumeration surface leaves all of them the moment it is held, and its served
          *  path answers {@code 404} - one hold, no surface left behind (clause 7). */
         WITHHELD_VERSION_LEAVES_EVERY_ENUMERATION,
+        /** Every enumeration surface of a repository that holds nothing answers {@code 404}. A proxy asks its upstream
+         *  only when the repository's own answer is a miss, so an empty document there would stand in for the
+         *  upstream's for good, and a client would find nothing the upstream lists. */
+        EMPTY_ENUMERATION_IS_A_MISS,
         /** A proxied body whose advertised upstream digest disagrees with its bytes is refused and nothing is cached,
          *  while the honest body is accepted ({@code ProxyFormat} clause 5). */
         PROXY_VERIFIES_UPSTREAM_INTEGRITY,
@@ -198,6 +202,9 @@ public final class FormatContract {
                 new Check(Property.WITHHELD_VERSION_LEAVES_EVERY_ENUMERATION,
                         "a held version leaves every enumeration surface and 404s where it served",
                         FormatContract::withheldVersionLeavesEveryEnumeration),
+                new Check(Property.EMPTY_ENUMERATION_IS_A_MISS,
+                        "a repository holding nothing answers its enumerations with a miss",
+                        FormatContract::emptyEnumerationIsAMiss),
                 new Check(Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY,
                         "an upstream body that fails its advertised digest is refused and never cached",
                         FormatContract::proxyVerifiesUpstreamIntegrity),
@@ -613,6 +620,25 @@ public final class FormatContract {
         for (FormatFixture.Probe probe : enumerated.probes()) {
             isTrue(!body(fixture, store, probe.path()).contains(probe.token()), fixture,
                     "a re-applied hold is idempotent: " + probe.path() + " still omits '" + probe.token() + "'");
+        }
+    }
+
+    private static void emptyEnumerationIsAMiss(FormatFixture fixture, ArtifactStore store) throws Exception {
+        // The surfaces are the ones the fixture names for a version it seeds; each is then asked of a repository that
+        // holds nothing at all.
+        FormatFixture.Enumerated enumerated = fixture.enumerated(store.scope("seeded")).orElseThrow(() -> failure(
+                fixture, "this fixture seeds no enumeration surface. Either seed one, or exclude "
+                        + Property.EMPTY_ENUMERATION_IS_A_MISS + " with a reason saying the format publishes none."));
+        List<FormatFixture.Probe> relayed = enumerated.probes().stream().filter(FormatFixture.Probe::relayed).toList();
+        isTrue(!relayed.isEmpty(), fixture, "an enumeration leg must name at least one surface a proxy relays, or it "
+                + "asserts nothing; a format whose every surface lists only what it holds excludes "
+                + Property.EMPTY_ENUMERATION_IS_A_MISS + " saying so");
+        ArtifactStore empty = store.scope("empty");
+        for (FormatFixture.Probe probe : relayed) {
+            ContractExchange exchange = get(fixture, probe.path());
+            fixture.serving().handle(exchange, empty);
+            equal(exchange.status(), 404, fixture, probe.path() + " of a repository holding nothing is a miss, so a "
+                    + "proxy asks its upstream; an empty document would answer in the upstream's place");
         }
     }
 

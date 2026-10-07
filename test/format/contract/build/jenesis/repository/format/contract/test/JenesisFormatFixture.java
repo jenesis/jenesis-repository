@@ -81,6 +81,9 @@ final class JenesisFormatFixture implements FormatFixture {
                         + "catalogue - so there is no name for a hold to leave. Its serve-side retraction (a held "
                         + "path answers 404) is the publish/-namespace screen the Maven and raw legs prove over the "
                         + "same Publication.located chain",
+                FormatContract.Property.EMPTY_ENUMERATION_IS_A_MISS,
+                "the module layout publishes no enumeration surface at all, so there is no listing to answer for an "
+                        + "empty repository, and no proxy to send a miss on to",
                 FormatContract.Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY,
                 "JenesisFormat implements no ProxyFormat: the module layout is publish-only, with no upstream to "
                         + "mirror, so there is no fetched body to verify",

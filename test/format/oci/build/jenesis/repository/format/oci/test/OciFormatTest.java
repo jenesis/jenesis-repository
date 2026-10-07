@@ -445,11 +445,12 @@ class OciFormatTest {
         assertThat(catalog.status()).isEqualTo(200);
         assertThat(catalog.responseText()).isEqualTo("{\"repositories\":[\"kept\"]}");
 
-        // The held image's tags/list must not disclose the withheld tag (its existence included).
+        // The held image's tags/list must not disclose the withheld tag (its existence included): an image with no tag
+        // to list is one the registry does not know.
         FakeExchange heldTags = new FakeExchange("GET", "/v2/held/tags/list");
         format.handle(heldTags, store);
-        assertThat(heldTags.status()).isEqualTo(200);
-        assertThat(heldTags.responseText()).isEqualTo("{\"name\":\"held\",\"tags\":[]}");
+        assertThat(heldTags.status()).isEqualTo(404);
+        assertThat(heldTags.responseText()).contains("NAME_UNKNOWN");
 
         // The non-withheld image still lists normally.
         FakeExchange keptTags = new FakeExchange("GET", "/v2/kept/tags/list");

@@ -97,6 +97,7 @@ final class HomebrewFormatFixture implements EcosystemFormatFixture {
                 FormatContract.Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE, PROXY,
                 FormatContract.Property.PROXY_STREAMS_UPSTREAM_BODY, PROXY,
                 FormatContract.Property.WITHHELD_VERSION_LEAVES_EVERY_ENUMERATION, NO_ENUMERATION,
+                FormatContract.Property.EMPTY_ENUMERATION_IS_A_MISS, NO_ENUMERATION,
                 FormatContract.Property.GENERATED_INDEX_IS_REVALIDATABLE, NO_ENUMERATION,
                 FormatContract.Property.GENERATED_INDEX_CARRIES_THE_REQUEST_SCHEME, NO_ENUMERATION,
                 FormatContract.Property.COORDINATE_TRAVERSAL_REFUSED,

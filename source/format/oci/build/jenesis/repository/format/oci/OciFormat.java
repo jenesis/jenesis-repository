@@ -830,6 +830,14 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
         // Streamed and stopped at the window's edge, so a window costs its names.
         Optional<StoredListing.Served> served = StoredListing.open(store, new OciListings(store).tagsSpec(name));
+        // An image with no tag here is one this registry does not know, as the specification answers for an unknown
+        // name, and on a proxy that miss is what sends the request on to the upstream; an empty list would answer in
+        // its place. Read after opening, which materialises an absent document; an unknown count is not zero.
+        if (served.isPresent() && served.get().header().count().orElse(-1L) == 0L) {
+            served.get().close();
+            error(exchange, 404, "NAME_UNKNOWN", "repository name not known to registry: " + name);
+            return;
+        }
         if (exchange.queryParameter("n") == null) {
             stream(exchange, served, "tags", name);
             return;
