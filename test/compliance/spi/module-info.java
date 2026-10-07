@@ -23,6 +23,7 @@ open module build.jenesis.repository.compliance.spi.test {
     // SignalContextTest resolves a real filesystem store to assert the snapshot root a mirrored catalogue is
     // confined to; it is the store contract's own reference backend, so the assertion is about the layout.
     requires build.jenesis.repository.store.filesystem;
+    requires tools.jackson.databind;
     requires org.junit.jupiter;
     requires org.assertj.core;
 }
