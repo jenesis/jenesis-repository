@@ -119,8 +119,21 @@ public interface ExportTarget {
         }
     }
 
-    /** What the target answered: its status and, up to a small cap, its body. */
-    record Response(int status, String body) {
+    /**
+     * What the target answered: its status, up to a small cap of its body, and the {@code Location} it named, as a path
+     * relative to the target's URL - empty when it named none, or one outside the target, which an exporter could not
+     * address anyway. A registry answers an upload it will take in a session of its own that way.
+     */
+    record Response(int status, String body, Optional<String> location) {
+
+        public Response {
+            Objects.requireNonNull(location, "location");
+        }
+
+        /** An answer naming no location. */
+        public Response(int status, String body) {
+            this(status, body, Optional.empty());
+        }
 
         /** A {@code 2xx}. */
         public boolean ok() {
