@@ -1,6 +1,7 @@
 package build.jenesis.repository.inventory;
 
 import module java.base;
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.metadata.Section;
 import build.jenesis.repository.metadata.SectionMutation;
@@ -53,8 +54,8 @@ public final class AdvisedSection {
     /** The index row of the copy {@code coordinate} at {@code version} of {@code ecosystem}, asked under
      *  {@code advised}. */
     static String indexKey(AdvisorySource.Query advised, String ecosystem, String coordinate, String version) {
-        return indexRoot(advised.ecosystem(), advised.coordinate()) + "/" + HexFormat.of().formatHex(sha256(
-                (ecosystem + "\n" + coordinate + "\n" + version).getBytes(StandardCharsets.UTF_8)));
+        return indexRoot(advised.ecosystem(), advised.coordinate()) + "/"
+                + Checksums.sha256(ecosystem + "\n" + coordinate + "\n" + version);
     }
 
     /** Remove the index row of the copy {@code coordinate} at {@code version} of {@code ecosystem} recorded as asked
@@ -87,14 +88,6 @@ public final class AdvisedSection {
                     : Optional.of(new StoreRepositoryInventory.Coordinate(ecosystem, coordinate, version));
         } catch (RuntimeException unreadable) {
             return Optional.empty();
-        }
-    }
-
-    private static byte[] sha256(byte[] bytes) {
-        try {
-            return MessageDigest.getInstance("SHA-256").digest(bytes);
-        } catch (NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException("SHA-256 is a required JDK algorithm", impossible);
         }
     }
 
