@@ -100,7 +100,10 @@ public final class Commands {
                             ComplianceCommands::vulnerabilities,
                             act("vulnerabilities <repo> [--reachability reachable|not-reachable|unknown]"
                                     + " [--applicability applies|not-applicable|unknown]",
-                                    "the advisory verdicts, narrowed by call-graph and applicability facets")),
+                                    "the advisory verdicts, narrowed by call-graph and applicability facets"),
+                            act("vulnerabilities rescan <repo>", "ask the feeds again for every cached copy in the "
+                                    + "background, and answer the report as it stands; --refresh watches it "
+                                    + "finish")),
                     noun("findings", "the persisted findings ledger", ComplianceCommands::findings,
                             act("findings <repo> [--coordinate C] [--kind K] [--source S] [--category C]"
                                     + " [--severity S]", "the durable, attributed findings"),

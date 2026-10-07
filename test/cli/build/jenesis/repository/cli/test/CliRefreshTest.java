@@ -7,6 +7,7 @@ import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import build.jenesis.repository.cli.Cli;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.absent;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -48,6 +49,13 @@ public class CliRefreshTest {
             + "\"categories\":[],\"licenses\":[],\"rows\":0,\"truncated\":false}";
     private static final String NOT_COUNTED = "{\"state\":\"not-counted\",\"versions\":0,\"categories\":[],"
             + "\"licenses\":[],\"rows\":0,\"truncated\":false}";
+
+    private static final String SCANNING = "{\"scanned\":true,\"signals\":[],\"vulnerable\":[],\"total\":0,"
+            + "\"partial\":false,\"lastScanned\":\"2026-01-01T00:00:00Z\",\"feedWarnings\":[],\"scanning\":true}";
+    private static final String RESCANNED = "{\"scanned\":true,\"signals\":[],\"vulnerable\":[{\"coordinate\":"
+            + "\"npm:lodash:4.17.11\",\"usedByText\":\"\",\"advisories\":[{\"id\":\"GHSA-x\",\"severity\":\"HIGH\","
+            + "\"malicious\":false,\"fixed\":\"4.17.21\"}]}],\"total\":1,\"partial\":true,"
+            + "\"lastScanned\":\"2026-01-01T00:00:09Z\",\"feedWarnings\":[],\"scanning\":false}";
 
     @TempDir
     private static Path home;
@@ -97,6 +105,21 @@ public class CliRefreshTest {
         server.stubFor(get(urlPathEqualTo(licenses)).withQueryParam("repo", equalTo("fresh"))
                 .willReturn(aResponse().withStatus(200)
                         .withHeader("Content-Type", "application/json").withBody(NOT_COUNTED)));
+        // A vulnerability re-scan: the start answers at once, the report says scanning the first time it is read
+        // after, and the re-scan has landed the second time.
+        String vulnerabilities = "/api/vulnerabilities";
+        server.stubFor(get(urlPathEqualTo(vulnerabilities)).withQueryParam("refresh", equalTo("true")).atPriority(1)
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withHeader("Jenesis-Refresh", "started").withBody(SCANNING)));
+        server.stubFor(get(urlPathEqualTo(vulnerabilities)).withQueryParam("refresh", absent()).inScenario("rescan")
+                .whenScenarioStateIs(com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED)
+                .willSetStateTo("landed")
+                .willReturn(aResponse().withStatus(200)
+                        .withHeader("Content-Type", "application/json").withBody(SCANNING)));
+        server.stubFor(get(urlPathEqualTo(vulnerabilities)).withQueryParam("refresh", absent()).inScenario("rescan")
+                .whenScenarioStateIs("landed")
+                .willReturn(aResponse().withStatus(200)
+                        .withHeader("Content-Type", "application/json").withBody(RESCANNED)));
         System.setProperty("JENREPO_CLI_HOME", home.toString());
         Cli.run(new String[] {"login", "http://127.0.0.1:" + server.port() + "/", "--key-file",
                 Files.writeString(home.resolve("key"), "test-key").toString()});
@@ -156,6 +179,30 @@ public class CliRefreshTest {
         server.verify(1, getRequestedFor(urlPathEqualTo("/api/licenses")).withQueryParam("refresh",
                 equalTo("true")));
         server.verify(3, getRequestedFor(urlPathEqualTo("/api/licenses")));
+    }
+
+    @Test
+    void a_vulnerability_rescan_is_started_and_watched_until_it_lands() throws Exception {
+        server.resetRequests();
+        String out = capture(() -> assertThat(Cli.run(new String[] {
+                "vulnerabilities", "rescan", "releases", "--refresh=1s"})).isZero());
+
+        assertThat(out).as("the first answer says the re-scan was started").contains("Started a re-scan of releases.");
+        assertThat(out).as("the running reading says what it is a report of")
+                .contains("A re-scan of releases is running; this is the report as it stood at 2026-01-01T00:00:00Z");
+        assertThat(out).as("the watch stops on the landed report, and says what it is")
+                .contains("As of 2026-01-01T00:00:09Z.").contains("Partial:").contains("GHSA-x");
+        server.verify(1, getRequestedFor(urlPathEqualTo("/api/vulnerabilities")).withQueryParam("refresh",
+                equalTo("true")));
+        server.verify(3, getRequestedFor(urlPathEqualTo("/api/vulnerabilities")));
+    }
+
+    @Test
+    void without_a_watch_a_vulnerability_rescan_answers_at_once() throws Exception {
+        String out = capture(() -> assertThat(Cli.run(new String[] {"vulnerabilities", "rescan", "releases"}))
+                .isZero());
+
+        assertThat(out).contains("Started a re-scan of releases.").contains("is running").doesNotContain("GHSA-x");
     }
 
     @Test
