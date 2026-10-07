@@ -922,6 +922,11 @@ public final class WalkConsumerContract {
         }
 
         @Override
+        public String description() {
+            return "a consumer a test drives";
+        }
+
+        @Override
         public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
             if (++deliveries == failAt) {
                 throw new IOException("injected consumer failure");
@@ -945,6 +950,11 @@ public final class WalkConsumerContract {
         @Override
         public String name() {
             return name;
+        }
+
+        @Override
+        public String description() {
+            return "a consumer a test drives";
         }
 
         @Override
