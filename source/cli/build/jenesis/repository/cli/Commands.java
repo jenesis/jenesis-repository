@@ -119,6 +119,10 @@ public final class Commands {
                             act("findings report <repo> <file>", "hand a scanner's findings about a stored version to "
                                     + "the gate: recorded under the scanner's name, and withheld for review if the "
                                     + "gate would not admit them")),
+                    noun("image-scans", "the images a repository has had scanned", ComplianceCommands::imageScans,
+                            act("image-scans <repo> [--cursor C]", "each scanned image with its state - covered, "
+                                    + "pending or failed - where it was published or proxied, and what each scanner "
+                                    + "did")),
                     noun("health", "the maintainer health of what a repository holds",
                             ComplianceCommands::health,
                             act("health <repo> [--cursor C]", "the stored scores, lowest first where ranked"),
