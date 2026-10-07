@@ -6,10 +6,9 @@ import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.cache.storage.delegating.DelegatingCacheStorage;
 import build.jenesis.repository.cache.storage.CacheStorage;
-import build.jenesis.repository.cache.storage.CacheStorageProvider;
 
 /**
- * How a test gets a cache storage over a directory, resolved through the SPI exactly as a deployment resolves it.
+ * How a test gets a cache storage over a directory, built by the factory a deployment builds it with.
  *
  * <p>It exists because the alternative is worse in two ways. The storage classes are not constructible from a test:
  * the cache delegates to the artifact store, whose backend modules export no package beyond their own
@@ -47,7 +46,7 @@ public final class CacheStorages {
      */
     public static CacheStorage filesystem(Path root) {
         String configured = root.toString();
-        return CacheStorageProvider.resolve(key -> switch (key) {
+        return DelegatingCacheStorage.over(key -> switch (key) {
             case "jenrepo.store" -> "filesystem";
             case "jenrepo.filesystem.root" -> configured;
             default -> null;

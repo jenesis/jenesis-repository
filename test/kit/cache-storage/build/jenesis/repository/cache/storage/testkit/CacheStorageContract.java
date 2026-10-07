@@ -4,7 +4,7 @@ import module java.base;
 import build.jenesis.repository.cache.storage.CacheStorage;
 import build.jenesis.repository.cache.storage.CacheStorage.Entry;
 import build.jenesis.repository.cache.storage.CacheStorage.Stored;
-import build.jenesis.repository.cache.storage.CacheStorageProvider;
+import build.jenesis.repository.cache.storage.delegating.DelegatingCacheStorage;
 import build.jenesis.repository.walk.Traversal;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -34,13 +34,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>Every check runs inside its own freshly scoped subspace of the fixture's storage, so the checks are hermetic
  * and order-independent: a check may assert emptiness, and one check's leftovers can never be another's enumeration.
  *
- * <h2>Clauses this kit discharges</h2>
- * Most of this
- * kit's twenty checks are about {@code CacheStorage}, which is the product interface rather than the discovered SPI;
- * what it proves about the <em>provider</em> is the tenant-scoping clause, through {@code TENANT_SCOPE_ISOLATION} and
- * {@code TENANT_NAME_REJECTED} over a real backend.
- *
- * @jenesis.covers build.jenesis.repository.cache.storage.CacheStorageProvider 6
+ * <p>The checks are about {@code CacheStorage} itself, and the two resolution-level ones about
+ * {@link DelegatingCacheStorage#over(UnaryOperator)}, the one factory a deployment builds its cache storage with: the
+ * tenant scoping through {@code TENANT_SCOPE_ISOLATION} and {@code TENANT_NAME_REJECTED}, and the endpoint screen
+ * through {@code PLAINTEXT_ENDPOINT_REFUSED}, over a real store.
  */
 public final class CacheStorageContract {
 
@@ -247,7 +244,7 @@ public final class CacheStorageContract {
      * suite.
      *
      * <p>The resolution-level checks are built here, closed over {@code fixture}, because they drive
-     * {@code CacheStorageProvider.resolve} with the fixture's own config rather than a storage it already produced.
+     * {@code DelegatingCacheStorage.over} with the fixture's own config rather than a storage it already produced.
      * They ignore the storage argument the driver hands them.
      */
     public static List<Check> checks(CacheStorageFixture fixture) {
@@ -394,10 +391,10 @@ public final class CacheStorageContract {
                         + "here because a property with no mutation is otherwise indistinguishable from one nobody "
                         + "got round to falsifying.",
                 Property.PLAINTEXT_ENDPOINT_REFUSED,
-                "the check never touches a CacheStorage. It drives CacheStorageProvider.resolve with the fixture's "
+                "the check never touches a CacheStorage. It drives DelegatingCacheStorage.over with the fixture's "
                         + "own plaintext endpoint and asserts the resolution refuses, so the subject is the "
-                        + "provider's configuration screen and there is no storage object to decorate. Falsifying it "
-                        + "would mean mutating the provider, which is a different kit than this one.");
+                        + "store's configuration screen and there is no storage object to decorate. Falsifying it "
+                        + "would mean mutating the store, which is a different kit than this one.");
     }
 
     /** The key the large lanes set; the same one the artifact side's streaming row runs behind. */
@@ -1103,7 +1100,7 @@ public final class CacheStorageContract {
                     + "the value was " + optOut);
         }
 
-        String message = throwsIse(() -> CacheStorageProvider.resolve(allowed::get),
+        String message = throwsIse(() -> DelegatingCacheStorage.over(allowed::get),
                 "resolving the '" + fixture.backend() + "' backend against its plaintext endpoint with the opt-out "
                         + "removed - credentials and cached bytes would travel in clear with no operator signal");
         if (!message.contains(plaintext.allowInsecureKey())) {
@@ -1112,7 +1109,7 @@ public final class CacheStorageContract {
         }
 
         // ... and the screen is an opt-out, not a ban: the same config resolves once the operator sets it.
-        notNull(CacheStorageProvider.resolve(plaintext.config()::get),
+        notNull(DelegatingCacheStorage.over(plaintext.config()::get),
                 "the very same plaintext endpoint resolves once the opt-out is explicitly set");
     }
 
