@@ -18,7 +18,7 @@ public final class LogsSettingsContributor implements SettingsContributor {
         return List.of(
                 new Setting("logs-buffer", "Operations", "Recent-logs buffer size",
                         "How many most-recent log entries the in-memory recent-logs ring retains (the ring behind"
-                                + " GET /api/logs and the operator GET /api/admin/logs) before the oldest is evicted.",
+                                + " GET /api/logs) before the oldest is evicted.",
                         Setting.Kind.INTEGER, Integer.toString(LogRingBuffer.DEFAULT_CAPACITY), false).advanced());
     }
 }

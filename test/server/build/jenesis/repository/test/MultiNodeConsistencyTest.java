@@ -12,6 +12,7 @@ import build.jenesis.repository.server.ConsistencyReport;
 import build.jenesis.repository.server.NodeConsistency;
 import build.jenesis.repository.server.NodeConsistencyObservability;
 import build.jenesis.repository.server.NodeDivergence;
+import build.jenesis.repository.server.ConsistencyController;
 import build.jenesis.repository.server.NodeDivergenceAdvisor;
 import build.jenesis.repository.server.NodeFingerprintPublisher;
 import build.jenesis.repository.server.NodeFingerprint;
@@ -159,6 +160,12 @@ class MultiNodeConsistencyTest {
         assertThat(report.converged()).isFalse();
         assertThat(report.divergences()).anySatisfy(divergence ->
                 assertThat(divergence.kind()).isEqualTo(NodeDivergence.Kind.CONFIG_MISMATCH));
+        // The one route says why it matters and what fixes it beside each divergence, as the posture screen does.
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> advisories =
+                (List<Map<String, Object>>) ConsistencyController.document(report, "node-a").get("advisories");
+        assertThat(advisories).as("an advisory per divergence").hasSameSizeAs(report.divergences())
+                .allSatisfy(advisory -> assertThat(advisory).containsKeys("id", "severity", "why", "fix"));
     }
 
     @Test

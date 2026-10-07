@@ -6,6 +6,7 @@ import module java.base;
 import build.jenesis.repository.server.LogEntry;
 import build.jenesis.repository.server.LogRingAppender;
 import build.jenesis.repository.server.LogRingBuffer;
+import build.jenesis.repository.server.RecentLogsController;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
 import org.slf4j.LoggerFactory;
@@ -112,8 +113,26 @@ class RecentLogsTest {
     }
 
     @Test
+    void the_last_n_cap_keeps_the_most_recent_matches_oldest_first() {
+        LogRingBuffer ring = new LogRingBuffer(10);
+        for (int i = 1; i <= 6; i++) {
+            ring.record(Instant.now(), "INFO", Level.INFO.toInt(), "app", "entry " + i, null);
+        }
+        assertThat(ring.recent(null, null, null, null, 2)).extracting(LogEntry::message)
+                .as("the last 2, in oldest-first order").containsExactly("entry 5", "entry 6");
+        Map<String, Object> document = new RecentLogsController(ring).logs(null, null, null, null, 2);
+        assertThat(document.get("count")).as("the route answers the same cap").isEqualTo(2);
+        assertThat(document.get("cursor")).as("and the cursor a tailing reader passes back").isEqualTo(ring.cursor());
+    }
+
+    @Test
     void an_empty_ring_degrades_gracefully_to_an_empty_read() {
-        assertThat(new LogRingBuffer(10).recent(null, null, null, null, 100)).isEmpty();
+        LogRingBuffer ring = new LogRingBuffer(10);
+        assertThat(ring.recent(null, null, null, null, 100)).isEmpty();
+        Map<String, Object> document = new RecentLogsController(ring).logs(null, null, null, null, null);
+        assertThat(document.get("cursor")).isEqualTo(0L);
+        assertThat(document.get("count")).isEqualTo(0);
+        assertThat((List<?>) document.get("entries")).isEmpty();
     }
 
     @Test

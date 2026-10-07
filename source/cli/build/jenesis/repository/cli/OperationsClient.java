@@ -66,7 +66,7 @@ public final class OperationsClient extends ClientCalls {
 
     /** Per-node fingerprints and any divergence between the nodes of a cluster. */
     public String consistency() throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET", "/api/admin/consistency", null, null);
+        HttpResponse<String> response = send("GET", "/api/consistency", null, null);
         require(response, 200, "read the node consistency report");
         return response.body();
     }
@@ -75,7 +75,7 @@ public final class OperationsClient extends ClientCalls {
      *  {@code cursor} a previous tail answered, so a reader resumes after what it saw. */
     public String logs(String level, String text, Long since, String tenant, Integer limit)
             throws IOException, InterruptedException {
-        StringBuilder path = new StringBuilder("/api/admin/logs");
+        StringBuilder path = new StringBuilder("/api/logs");
         appendQuery(path, "level", level);
         appendQuery(path, "q", text);
         appendQuery(path, "since", since == null ? null : since.toString());
