@@ -394,8 +394,8 @@ public final class GitHubAdvisorySource implements AdvisorySource.Changes {
             AdvisoryDatabases.cwe(cwe.path("cwe_id").asString(null)).ifPresent(cwes::add);
         }
         return new VulnerabilityRecord(github, references, ratings, cwes, List.of(),
-                instant(advisory.path("published_at").asString(null)),
-                instant(advisory.path("updated_at").asString(null)));
+                VulnerabilityRecord.date(advisory.path("published_at").asString(null)),
+                VulnerabilityRecord.date(advisory.path("updated_at").asString(null)));
     }
 
     /** The name the GitHub Advisory Database is attributed by. */
@@ -414,16 +414,6 @@ public final class GitHubAdvisorySource implements AdvisorySource.Changes {
                 vector == null || vector.isBlank() ? "other" : VulnerabilityRecord.Rating.method(vector), vector));
     }
 
-    private static Instant instant(String text) {
-        if (text == null || text.isBlank()) {
-            return null;
-        }
-        try {
-            return Instant.parse(text.strip());
-        } catch (DateTimeException notInstant) {
-            return null;
-        }
-    }
 
     // The advisory's summary, else a bounded prefix of its description, so the findings ledger keeps what the advisory
     // says without re-fetching the feed.
