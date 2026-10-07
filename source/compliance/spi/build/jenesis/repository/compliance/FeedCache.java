@@ -160,9 +160,18 @@ public final class FeedCache<T> {
         return cached != null && clock.millis() < cached.until() ? Optional.of((T) cached.value()) : Optional.empty();
     }
 
-    /** Drop every held answer whose key {@code stale} matches, so the next ask for it loads afresh. */
-    public void forget(Predicate<String> stale) {
-        cache.keySet().removeIf(stale);
+    /** The key of an answer about {@code version} of {@code coordinate} in {@code ecosystem}, in a cache holding one
+     *  answer per coordinate version - what {@link #forgetVersions} matches. */
+    public static String versionKey(String ecosystem, String coordinate, String version) {
+        return ecosystem + " " + coordinate + " " + version;
+    }
+
+    /** Drop every held answer about a version of {@code packages}, in a cache keyed by {@link #versionKey}, so the
+     *  next ask for one loads afresh. */
+    public void forgetVersions(Set<AdvisorySource.Package> packages) {
+        Set<String> stale = new HashSet<>();
+        packages.forEach(named -> stale.add(named.ecosystem() + " " + named.coordinate()));
+        cache.keySet().removeIf(key -> stale.contains(key.substring(0, Math.max(0, key.lastIndexOf(' ')))));
     }
 
     /** Hold {@code value} as {@code key}'s answer, drawn by a load that answered several keys at once: it is served

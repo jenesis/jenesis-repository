@@ -172,25 +172,21 @@ public final class OsvAdvisorySource implements AdvisorySource.Batched, Advisory
                 asked.add(at);
             }
         }
-        for (int from = 0; from < asked.size(); from += OsvQuery.BATCH_LIMIT) {
-            List<Integer> chunk = asked.subList(from, Math.min(asked.size(), from + OsvQuery.BATCH_LIMIT));
-            List<OsvQuery.Listed> listed = OsvQuery.ask(client, querybatch, chunk.stream().map(queries::get).toList());
-            for (int i = 0; i < chunk.size(); i++) {
-                AdvisorySource.Query query = queries.get(chunk.get(i));
-                String key = key(query.ecosystem(), query.coordinate(), query.version());
-                if (listed.get(i).more()) {
-                    // More records than a batch answer carries: the query's own pages are drawn instead.
-                    cache.get(key);
-                    continue;
-                }
-                List<Advisory> found = new ArrayList<>();
-                for (OsvQuery.Record named : listed.get(i).records()) {
-                    OsvRecords.advisory(records.get(named.id() + " " + named.modified()), query.coordinate())
-                            .ifPresent(found::add);
-                }
-                cache.put(key, List.copyOf(found));
+        OsvQuery.ask(client, querybatch, queries, asked, _ -> { }, (at, listed) -> {
+            AdvisorySource.Query query = queries.get(at);
+            String key = key(query.ecosystem(), query.coordinate(), query.version());
+            if (listed.more()) {
+                // More records than a batch answer carries: the query's own pages are drawn instead.
+                cache.get(key);
+                return;
             }
-        }
+            List<Advisory> found = new ArrayList<>();
+            for (OsvQuery.Record named : listed.records()) {
+                OsvRecords.advisory(records.get(named.id() + " " + named.modified()), query.coordinate())
+                        .ifPresent(found::add);
+            }
+            cache.put(key, List.copyOf(found));
+        });
         // Every query asked is now held, a repeated one included, so each position reads its answer back.
         for (int at = 0; at < queries.size(); at++) {
             AdvisorySource.Query query = queries.get(at);
@@ -214,9 +210,7 @@ public final class OsvAdvisorySource implements AdvisorySource.Batched, Advisory
     /** Every held answer for a version of {@code packages} - the key's ecosystem and coordinate, ahead of its version. */
     @Override
     public void forget(Set<AdvisorySource.Package> packages) {
-        Set<String> stale = new HashSet<>();
-        packages.forEach(named -> stale.add(named.ecosystem() + " " + named.coordinate()));
-        cache.forget(key -> stale.contains(key.substring(0, Math.max(0, key.lastIndexOf(' ')))));
+        cache.forgetVersions(packages);
     }
 
     /** One record in full, the record cache's loader; the key is the id and the modification instant the batch named,
@@ -228,7 +222,7 @@ public final class OsvAdvisorySource implements AdvisorySource.Batched, Advisory
     /** The cache key: the three coordinates joined by spaces, so it reads well in the cache's failure. A coordinate
      *  and a version never contain one, so the key reads back from its end. */
     private static String key(String ecosystem, String coordinate, String version) {
-        return ecosystem + " " + coordinate + " " + version;
+        return FeedCache.versionKey(ecosystem, coordinate, version);
     }
 
     /** One coordinate version's query, the cache's loader: every page drawn through the shared client. */
