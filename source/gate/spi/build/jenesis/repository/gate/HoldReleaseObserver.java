@@ -20,26 +20,27 @@ import build.jenesis.repository.store.ArtifactStore;
  * <p>{@code HoldReleaseContract} in the store test kit drives the executable clauses through the release fixtures.
  *
  * <ol>
- * <li><b>Role - a pre-commit, fail-closed mutation hook, despite the name.</b> It rides the gate's own
- *     {@code uses HoldReleaseObserver} clause, so it can never be routed into the after-commit observer family whose
- *     failures are swallowed. {@code HoldLifecycle.release} calls {@link #released} first: before the release link,
- *     before {@code HoldClears} lifts the withhold marker, before the {@code /quarantine} pointer is unpublished, the
- *     dispatch descriptor consumed and the release event sent. {@code HoldLifecycle.discard} calls {@link #discarded}
- *     before the dispatch descriptor is dropped, a retroactive hold's release pointer unpublished, a blobs-namespace
- *     version's served blobs evicted and the {@code /quarantine} pointer cleared; only the quarantine log rows are reaped
- *     before it, so a discard hook must not assume its {@code audit/quarantine} row exists. The role must never move
- *     onto a deferred or outbox-backed delivery: a release visible before its override marker is written is exactly
- *     what the enforce sweeps re-hold.</li>
+ * <li><b>Role - a pre-commit, fail-closed mutation hook, despite the name.</b> It rides the gate's own {@code uses
+ *     HoldReleaseObserver} clause, so it can never be routed into the after-commit observer family whose failures are
+ *     swallowed. {@code HoldLifecycle.release} calls {@link #released} first: before the release link, before {@code
+ *     HoldClears} lifts the withhold marker, before the {@code /quarantine} pointer is unpublished, the dispatch
+ *     descriptor consumed and the release event sent. {@code HoldLifecycle.discard} calls {@link #discarded} before the
+ *     dispatch descriptor is dropped, a retroactive hold's release pointer unpublished, a blobs-namespace version's
+ *     served blobs evicted and the {@code /quarantine} pointer cleared; only the quarantine log rows are reaped before
+ *     it, so a discard hook must not assume its {@code audit/quarantine} row exists. The role must never move onto a
+ *     deferred or outbox-backed delivery: a release visible before its override marker is written is exactly what the
+ *     enforce sweeps re-hold.</li>
  * <li><b>Thread-safety.</b> A hook is discovered once and shared by every fan-out on every thread, so it holds no
- *     mutable instance state. Fan-outs themselves run concurrently over the same {@code holds/} and
- *     {@code overrides/} keys (two reviewers, or a review racing an enforce sweep), so a hook that reads then writes such
- *     a key uses compare-and-set with bounded retries.</li>
+ *     mutable instance state. Fan-outs themselves run concurrently over the same {@code holds/} and {@code overrides/}
+ *     keys (two reviewers, or a review racing an enforce sweep), so a hook that reads then writes such a key uses
+ *     compare-and-set with bounded retries.</li>
  * <li><b>Idempotency / replay.</b> Every method converges when called again with the same arguments: the fan-out has
  *     no checkpoint, so a failure at hook <i>k</i> leaves hooks <i>1..k-1</i> durable and the retry re-runs all of
  *     them. An override promotion is an upsert, a record deletion a delete-if-present.</li>
- * <li><b>Absence sentinel.</b> {@code null} is never legal. {@link #holds} answers {@code false} for a path no format
- *     maps and for a coordinate this kind never held; {@link #kind()} is never blank. {@link #onReleased} and
- *     {@link #onDiscarded} are no-ops for a path this kind never held and invent no record or override.</li>
+ * <li><b>Absence sentinel.</b> {@code null} is never legal. {@link HoldKindObserver#holds} answers {@code false} for a
+ *     path no format maps and for a coordinate this kind never held; {@link HoldKindObserver#kind()} is never blank.
+ *     {@link #onReleased} and {@link #onDiscarded} are no-ops for a path this kind never held and invent no record or
+ *     override.</li>
  * <li><b>Selection failure.</b> The policy is {@code ALL}: every discovered hook runs and no arrangement is a
  *     resolution error. Removing a provider is not fail-open, because {@link #anyHolds} and {@link #heldByAnotherKind}
  *     union the durable {@link HoldRecords} with the provider fan-out; a kind with a record and no provider is
@@ -59,16 +60,17 @@ import build.jenesis.repository.store.ArtifactStore;
  *     unchanged, so the release or discard fails and nothing is mutated, and a hook never swallows its own store
  *     failure. {@link #anyHolds} and {@link #heldByAnotherKind} propagate too, so a caller that cannot prove a path
  *     unheld does not clear it.</li>
- * <li><b>Read purity and write scope.</b> {@link #holds} and {@link #kind()} read the store and layout
- *     {@code describe} only, with no external I/O and no mutation, since {@link #anyHolds} sits on the accepted-publish
- *     path and inside {@code HoldClears}' guard. {@link #onReleased} and {@link #onDiscarded} write only inside the
- *     {@code StorageNamespace} prefixes their module declares.</li>
+ * <li><b>Read purity and write scope.</b> {@link HoldKindObserver#holds} and {@link HoldKindObserver#kind()} read the
+ *     store and layout {@code describe} only, with no external I/O and no mutation, since {@link #anyHolds} sits on the
+ *     accepted-publish path and inside {@code HoldClears}' guard. {@link #onReleased} and {@link #onDiscarded} write
+ *     only inside the {@code StorageNamespace} prefixes their module declares.</li>
  * <li><b>Staleness.</b> Every method re-reads durable state; no hook caches {@code holds/} or {@code overrides/},
  *     which sweeps it never observes write.</li>
  * <li><b>Lifecycle / ownership.</b> {@link #discovered()} answers the one {@link ServiceLoader} discovery, made on
- *     first use and held for the process, since what the module path carries does not change. Each fan-out has an overload taking the hooks, the
- *     substitution seam a suite drives the real choreography through. A provider has a cheap public no-argument
- *     constructor, owns no thread, client or connection, keeps no state across calls and is never closed.</li>
+ *     first use and held for the process, since what the module path carries does not change. Each fan-out has an
+ *     overload taking the hooks, the substitution seam a suite drives the real choreography through. A provider has a
+ *     cheap public no-argument constructor, owns no thread, client or connection, keeps no state across calls and is
+ *     never closed.</li>
  * <li><b>Ordering / concurrency.</b> Fan-out order is not part of the contract: each hook owns its own
  *     {@code holds/<kind>/} and {@code overrides/<kind>/} keys, reads no other kind's records during the fan-out, and
  *     depends on no other hook. Every hook completes before the release becomes visible.</li>
@@ -89,21 +91,13 @@ public interface HoldReleaseObserver {
     void onReleased(ArtifactStore store, String path) throws IOException;
 
     /** React to a reviewer discarding {@code path}: drop this observer's hold record for it, since a discarded version
-     *  has no {@code published} record any sweep would reach. No override is promoted. A no-op by default. */
-    default void onDiscarded(ArtifactStore store, String path) throws IOException {
-    }
+     *  has no {@code published} record any sweep would reach. No override is promoted. */
+    void onDiscarded(ArtifactStore store, String path) throws IOException;
 
-    /** Whether this observer's kind holds a retroactive record for {@code path}'s coordinate version, which the
-     *  accepted-re-publish guard asks of every kind. {@code false} by default. */
-    default boolean holds(ArtifactStore store, String path) throws IOException {
-        return false;
-    }
-
-    /** The kind token of this observer's hold records, the {@code <kind>} segment of its
-     *  {@code holds/<kind>/<eco>/<coord>/<ver>} keys, so an automated release of one kind can ask whether another
-     *  still holds. The default, the class name, matches no hold key. */
-    default String kind() {
-        return getClass().getName();
+    /** What the fan-out tells installed hooks apart by: a {@link HoldKindObserver}'s kind, which two hooks may not
+     *  share, and any other hook's class. */
+    private static String identity(HoldReleaseObserver observer) {
+        return observer instanceof HoldKindObserver kind ? kind.kind() : observer.getClass().getName();
     }
 
     /** Whether any hold kind holds a retroactive record for {@code path}, which decides whether a pointer at it is
@@ -120,7 +114,7 @@ public interface HoldReleaseObserver {
             return true;
         }
         for (HoldReleaseObserver observer : observers) {
-            if (observer.holds(store, path)) {
+            if (observer instanceof HoldKindObserver kind && kind.holds(store, path)) {
                 return true;
             }
         }
@@ -148,7 +142,8 @@ public interface HoldReleaseObserver {
             }
         }
         for (HoldReleaseObserver observer : observers) {
-            if (!observer.kind().equals(releasingKind) && observer.holds(store, path)) {
+            if (observer instanceof HoldKindObserver kind && !kind.kind().equals(releasingKind)
+                    && kind.holds(store, path)) {
                 return true;
             }
         }
@@ -177,11 +172,11 @@ public interface HoldReleaseObserver {
             }
         }
         for (HoldReleaseObserver observer : observers) {
-            if (observer.kind().equals(releasingKind)) {
+            if (!(observer instanceof HoldKindObserver kind) || kind.kind().equals(releasingKind)) {
                 continue;
             }
             for (String path : servedPaths) {
-                if (observer.holds(store, path)) {
+                if (kind.holds(store, path)) {
                     return true;
                 }
             }
@@ -221,7 +216,7 @@ public interface HoldReleaseObserver {
     static Iterable<HoldReleaseObserver> discovered() {
         // The primitive refuses two observers of one kind, whose shared key space would let one's release clear the
         // other's hold, and sorts by kind, so the fan-out order is the same on every node.
-        return Providers.all("hold-release", HoldReleaseObservers.DISCOVERED, HoldReleaseObserver::kind, _ -> true,
-                Optional::of);
+        return Providers.all("hold-release", HoldReleaseObservers.DISCOVERED, HoldReleaseObserver::identity,
+                _ -> true, Optional::of);
     }
 }
