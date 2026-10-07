@@ -28,6 +28,9 @@ module build.jenesis.repository.gateway {
     // The definitions model the router resolves through; transitive because the router's constructor and the
     // RedirectHandler seam name it.
     requires transitive build.jenesis.repository.definitions;
+    // A discovered leg locates its files through the domain's discovery file; the router takes the reader it is wired
+    // with, so its callers see the type.
+    requires transitive build.jenesis.repository.discovery;
     // The ProxyLeg seam names the one proxy outbound dial (proxy-allow-internal); the router screens the
     // operator-configured upstream under that same key, so it reads the constant rather than respelling it.
     requires build.jenesis.repository.blobs;

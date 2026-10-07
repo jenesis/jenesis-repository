@@ -108,7 +108,8 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
         }
     }
 
-    /** Where a fallback's content comes from: an external upstream, or another repository resolved by recursion. */
+    /** Where a fallback's content comes from: an external upstream, another repository resolved by recursion, or the
+     *  location the coordinate's own domain names in its discovery file. */
     public sealed interface Source {
         /** An external upstream URL (the source token contains a scheme, {@code "://"}). */
         record Upstream(URI url) implements Source {
@@ -122,6 +123,14 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
             public Repository {
                 Objects.requireNonNull(name, "name");
             }
+        }
+
+        /** Discovered: each request's upstream is where the domain its coordinate's name reverses into says, in its
+         *  {@code /.well-known/java-repository.properties}. Written {@code fallback discovered}, the keyword taking
+         *  precedence over a repository of that name; fetched, screened and kept as an {@link Upstream} leg is, or
+         *  {@code redirect}ed - the one way it serves a format with no proxy leg, such as the Jenesis module
+         *  format. */
+        record Discovered() implements Source {
         }
     }
 
@@ -206,9 +215,8 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
                     if (source instanceof Source.Upstream upstream && plaintextUpstream(upstream.url())) {
                         warnPlaintext(upstream.url());
                     }
-                    // Caching applies to an Upstream fallback; a Repository target owns its own bytes, so false
-                    // there.
-                    boolean store = source instanceof Source.Upstream;
+                    // Caching applies to a fetching fallback; a Repository target owns its own bytes, so false there.
+                    boolean store = fetching(source);
                     fallbacks.add(new Fallback(source, store, Screening.DEFAULT));
                     current = fallbacks.size() - 1;
                 }
@@ -273,7 +281,8 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
                 // An explicit no-screen opt-out is never silent - a bookmark redirect on a redirect fallback, a
                 // no-screen proxy otherwise.
                 LOGGER.warn("SECURITY: fallback '"
-                        + ((Source.Upstream) fallback.source()).url() + "' is declared 'unscreened' - its "
+                        + (fallback.source() instanceof Source.Upstream upstream ? upstream.url() : "discovered")
+                        + "' is declared 'unscreened' - its "
                         + "fetched artifacts are served with NO compliance screening. Remove 'unscreened' "
                         + "or use 'harden' to full-body screen; served unscreened as configured: "
                         + specification);
@@ -286,30 +295,39 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
     }
 
     /** Whether an ordered fallback list mixes screening strength - a {@code HARDEN} upstream beside a weaker one - the
-     *  hazard warned of (not refused) at parse. Only {@link Source.Upstream} fallbacks carry a strength statically; a
+     *  hazard warned of (not refused) at parse. Only a {@link #fetching} fallback carries a strength statically; a
      *  repository member's is its own resolved definition, which the router evaluates. */
     public static boolean mixedStrength(List<Fallback> fallbacks) {
         boolean hardened = fallbacks.stream().anyMatch(fallback ->
-                fallback.source() instanceof Source.Upstream && fallback.screening() == Screening.HARDEN);
+                fetching(fallback.source()) && fallback.screening() == Screening.HARDEN);
         boolean weaker = fallbacks.stream().anyMatch(fallback ->
-                fallback.source() instanceof Source.Upstream && fallback.screening() != Screening.HARDEN);
+                fetching(fallback.source()) && fallback.screening() != Screening.HARDEN);
         return hardened && weaker;
     }
 
-    /** Whether this repository has any hardened upstream leg: a {@link Source.Upstream} fallback with
+    /** Whether this repository has any hardened upstream leg: a {@link #fetching} fallback with
      *  {@code screening == HARDEN}, whatever else the definition holds. Such a repository's cached upstream bytes must
      *  be re-screened per hit and are never redirect-safe, so keying this on anything narrower would let a definition
      *  skip both and serve retroactively refused bytes. Repository members are hardened recursively by the router. */
     public boolean harden() {
         return fallbacks.stream().anyMatch(fallback ->
-                fallback.source() instanceof Source.Upstream && fallback.screening() == Screening.HARDEN);
+                fetching(fallback.source()) && fallback.screening() == Screening.HARDEN);
     }
 
-    /** Resolve a {@code fallback} source token: a {@code "://"}-bearing token is a {@link Source.Upstream}, anything
-     *  else a {@link Source.Repository}. */
+    /** Whether a fallback of {@code source} fetches from outside - an {@link Source.Upstream} or a
+     *  {@link Source.Discovered} one - and so carries its own store and screening policy. */
+    public static boolean fetching(Source source) {
+        return source instanceof Source.Upstream || source instanceof Source.Discovered;
+    }
+
+    /** Resolve a {@code fallback} source token: a {@code "://"}-bearing token is a {@link Source.Upstream}, the keyword
+     *  {@code discovered} a {@link Source.Discovered}, anything else a {@link Source.Repository}. */
     private static Source parseSource(String token, String specification) {
         if (token.contains("://")) {
             return new Source.Upstream(upstreamUri(token, specification));
+        }
+        if (token.equals("discovered")) {
+            return new Source.Discovered();
         }
         return new Source.Repository(token);
     }
