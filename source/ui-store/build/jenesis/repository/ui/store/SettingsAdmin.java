@@ -440,6 +440,10 @@ public class SettingsAdmin {
                                 screeningLabel(fallback.screening()), null));
                 case RepositoryDefinition.Source.Repository repository ->
                         fallbacks.add(new FallbackBadge(false, repository.name(), false, "", repository.name()));
+                // Where each coordinate's own domain says, so there is no one address to show.
+                case RepositoryDefinition.Source.Discovered discovered ->
+                        fallbacks.add(new FallbackBadge(true, "discovered", fallback.store(),
+                                screeningLabel(fallback.screening()), null));
             }
         }
         return new RepositoryShape(true, definition.writable(), List.copyOf(fallbacks),
@@ -458,6 +462,11 @@ public class SettingsAdmin {
                     + "fallback too.");
         }
         for (RepositoryDefinition.Fallback fallback : definition.fallbacks()) {
+            if (fallback.source() instanceof RepositoryDefinition.Source.Discovered
+                    && fallback.screening() == RepositoryDefinition.Screening.UNSCREENED) {
+                warnings.add("unscreened discovered leg: what each domain's file points at is served with NO "
+                        + "compliance screening. Remove 'unscreened' or use 'harden' to full-body screen.");
+            }
             if (fallback.source() instanceof RepositoryDefinition.Source.Upstream upstream) {
                 if (fallback.screening() == RepositoryDefinition.Screening.UNSCREENED) {
                     warnings.add("unscreened upstream '" + upstream.url() + "': its fetched artifacts are served with "

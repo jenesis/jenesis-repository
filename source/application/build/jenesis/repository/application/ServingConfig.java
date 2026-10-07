@@ -5,6 +5,9 @@ import module org.slf4j;
 
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.definitions.RepositoryDefinition;
+import build.jenesis.repository.discovery.DiscoverySettingsContributor;
+import build.jenesis.repository.discovery.RepositoryDiscovery;
+import build.jenesis.repository.discovery.ScreenedTransport;
 import build.jenesis.repository.server.kernel.AuthFetcher;
 import build.jenesis.repository.server.kernel.LiveConfig;
 import build.jenesis.repository.server.kernel.LiveUpstreams;
@@ -125,8 +128,26 @@ public class ServingConfig {
                 .passingThrough(() -> spool.acquire(root.bindings()))
                 .hardening(hardeningBounds)
                 .withholding(withheld);
-        return redirecting(router, config, liveConfig, repositories, withheld,
-                credentials.getIfAvailable(() -> UpstreamCredentialSource.NONE), downloads.getIfAvailable());
+        RepositoryDiscovery discovery = discovery(liveConfig);
+        return redirecting(router.discovering(discovery), config, liveConfig, repositories, withheld,
+                credentials.getIfAvailable(() -> UpstreamCredentialSource.NONE), downloads.getIfAvailable(),
+                discovery);
+    }
+
+    /** The reader a {@code discovered} leg locates its files through: over the screened client, refusing the private
+     *  hosts the proxy dial does not admit, each domain's file remembered for the period {@code discovery-ttl} names
+     *  now. */
+    static RepositoryDiscovery discovery(LiveConfig liveConfig) {
+        return new RepositoryDiscovery(new ScreenedTransport(),
+                target -> !liveConfig.proxyAllowInternal() && PrivateHostGuard.internal(target),
+                () -> {
+                    try {
+                        return Duration.parse(liveConfig.effective(DiscoverySettingsContributor.TTL,
+                                DiscoverySettingsContributor.TTL_DEFAULT).strip());
+                    } catch (DateTimeParseException | NullPointerException unread) {
+                        return RepositoryDiscovery.DEFAULT_TTL;
+                    }
+                }, Clock.systemUTC());
     }
 
     /** Registers whether the redirect token parses, for the boot-time definition sweep that runs before the router
@@ -147,7 +168,8 @@ public class ServingConfig {
      */
     static RepositoryRouter redirecting(RepositoryRouter router, UnaryOperator<String> config, LiveConfig liveConfig,
                                         Repositories repositories, RepositoryRouter.WithheldGuard withheld,
-                                        UpstreamCredentialSource credentialSource, DownloadTracker downloadTracker) {
+                                        UpstreamCredentialSource credentialSource, DownloadTracker downloadTracker,
+                                        RepositoryDiscovery discovery) {
         List<RedirectHandlerProvider> providers = RedirectHandlerProvider.installed();
         boolean upstream = false;
         List<RepositoryRouter.RedirectHandler> handlers = new ArrayList<>();
@@ -166,7 +188,7 @@ public class ServingConfig {
             // The dial the definition sweep honours, so an admitted internal upstream is a valid redirect target.
             Predicate<URI> privateHost = target -> !liveConfig.proxyAllowInternal() && PrivateHostGuard.internal(target);
             RedirectHandlerProvider.Context context = new RedirectHandlerProvider.Context(config, screen,
-                    privateHost, credentialed, recording);
+                    privateHost, credentialed, recording, discovery);
             for (RedirectHandlerProvider provider : providers) {
                 Optional<RepositoryRouter.RedirectHandler> handler = provider.create(context);
                 if (handler.isEmpty()) {
