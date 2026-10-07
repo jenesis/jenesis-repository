@@ -57,6 +57,9 @@ public final class AuditActions {
     /** A walk of the store requested by an operator - a standing request the next scheduler tick runs. */
     public static final String WALKS_RUN = action("walks.run");
 
+    /** The scanner tools asked by an operator to refresh - a standing request for the scanner-tools pass. */
+    public static final String SCANNERS_REFRESH = action("scanners.refresh");
+
     /** A repository created before anything was published into it. */
     public static final String REPOSITORY_CREATE = action("repository.create");
 

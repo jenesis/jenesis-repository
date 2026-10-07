@@ -71,6 +71,37 @@ public final class OperationsClient extends ClientCalls {
     public record SignalCopy(String ecosystem, String built, String drawn) {
     }
 
+    /** What each configured scanner runs on, as the scanner-tools pass last recorded it. */
+    public Scanners scanners() throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/admin/scanners", null, null);
+        require(response, 200, "read the scanner tools");
+        return JSON.readValue(response.body(), Scanners.class);
+    }
+
+    /** Ask for the scanner tools to be refreshed now; answers the record with the refresh standing. */
+    public Scanners scannersRefresh() throws IOException, InterruptedException {
+        HttpResponse<String> response = send("POST", "/api/admin/scanners/refresh", null, null);
+        require(response, 200, "request a refresh of the scanner tools");
+        return JSON.readValue(response.body(), Scanners.class);
+    }
+
+    /** The scanner tools as the API reports them: {@code recorded}, or {@code not-recorded} before the pass has run,
+     *  when the pass recorded them, each tool, and when a standing refresh was asked for ({@code null} for none). */
+    public record Scanners(String state, String recorded, List<ScannerTool> tools, String requested) {
+    }
+
+    /** One scanner's tool: where it runs, its version and the one pinned, each database, why it is unfit, and why
+     *  the pass could not ask it ({@code null} where it answered). */
+    public record ScannerTool(String name, String placement, String version, String pinned,
+                              List<ScannerDatabase> databases, List<String> unfit, String failure, String inspected) {
+    }
+
+    /** One database a tool matches against: its build, when it was built, fetched and next due, its digest and
+     *  source, and whether it was current when the tool was asked. */
+    public record ScannerDatabase(String name, String build, String built, String fetched, String nextUpdate,
+                                  String digest, String source, boolean current) {
+    }
+
     /** Ask for a walk of the store now; answers the standing requests. */
     public String walksRun() throws IOException, InterruptedException {
         HttpResponse<String> response = send("POST", "/api/admin/walks/run", null, null);
