@@ -158,6 +158,8 @@ public class CliRequestShapeTest {
                     post("/api/findings/report", "repo").file()),
             action("health <repo> [--cursor C]", "health releases --cursor c", get("/api/health", "repo", "after")),
             action("health refresh <repo>", "health refresh releases", get("/api/health", "repo", "refresh")),
+            action("image-scans <repo> [--cursor C]", "image-scans releases --cursor c",
+                    get("/api/image-scans", "repo", "after")),
             action("enforcement-preview <repo> [--unknown]", "enforcement-preview releases --unknown",
                     get("/api/licenses/retro/plan", "repo", "unknown")),
             action("enforcement-preview compute <repo> [--unknown]", "enforcement-preview compute releases --unknown",
