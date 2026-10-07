@@ -86,20 +86,15 @@ public final class HeldVersions {
      *  version. */
     private static List<String> names(ArtifactStore store, String root, String what) throws IOException {
         List<String> names = new ArrayList<>();
-        String after = "";
-        while (true) {
-            List<String> page = new ArrayList<>();
-            store.page(root, after, PAGE, page::add);
-            names.addAll(page);
+        Names level = Names.over(store, root, PAGE);
+        for (String name = level.next(); name != null; name = level.next()) {
+            names.add(name);
             if (names.size() > MAX_VERSIONS) {
                 throw new IOException("more than " + MAX_VERSIONS + " names under " + what + " are recorded as held; "
                         + "refusing to answer, because a short answer discloses a held version");
             }
-            if (page.size() < PAGE) {
-                return names;
-            }
-            after = page.getLast();
         }
+        return names;
     }
 
     private static String coordinateRoot(String ecosystem, String coordinate) {

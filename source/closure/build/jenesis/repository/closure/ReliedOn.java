@@ -13,6 +13,7 @@ import build.jenesis.repository.metadata.MetadataDocument;
 import build.jenesis.repository.metadata.MetadataProvider;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Epoch;
+import build.jenesis.repository.store.Names;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -113,17 +114,12 @@ public final class ReliedOn {
     static void dependents(ArtifactStore holder, String ecosystem, String coordinate, String version,
                            Visitor<Row> visitor) throws IOException {
         String level = level(ecosystem, coordinate, version);
-        String after = "";
-        while (after != null) {
-            List<String> names = new ArrayList<>();
-            holder.page(level, after, SWEEP_PAGE, names::add);
-            for (String name : names) {
-                Optional<Row> row = row(holder, level + "/" + name);
-                if (row.isPresent()) {
-                    visitor.accept(row.get());
-                }
+        Names names = Names.over(holder, level, SWEEP_PAGE);
+        for (String name = names.next(); name != null; name = names.next()) {
+            Optional<Row> row = row(holder, level + "/" + name);
+            if (row.isPresent()) {
+                visitor.accept(row.get());
             }
-            after = names.size() < SWEEP_PAGE ? null : names.getLast();
         }
     }
 
