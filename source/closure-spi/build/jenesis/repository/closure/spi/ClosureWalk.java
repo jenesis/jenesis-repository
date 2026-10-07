@@ -33,6 +33,14 @@ public record ClosureWalk(List<Member> members) {
     public record Member(String repository, ArtifactStore store) {
     }
 
+    /** The member holding what a closure places in {@code repository}: the walk's first for the empty name, which is
+     *  the version's own repository, and otherwise the first fallback of that name; empty for one the walk does not
+     *  reach. */
+    public Optional<Member> holder(String repository) {
+        return repository.isEmpty() ? Optional.of(members.getFirst())
+                : members.stream().skip(1).filter(member -> member.repository().equals(repository)).findFirst();
+    }
+
     /** The walk of one repository alone. */
     public static ClosureWalk of(ArtifactStore store) {
         return new ClosureWalk(List.of(new Member("", store)));
