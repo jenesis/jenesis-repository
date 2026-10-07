@@ -71,20 +71,25 @@ public final class OperationsClient extends ClientCalls {
         return response.body();
     }
 
-    /** The tail of the instance's in-memory log buffer. */
-    public String logs(String level, Integer limit) throws IOException, InterruptedException {
+    /** The tail of the instance's in-memory log buffer, filtered by level, text and tenant; {@code since} is the
+     *  {@code cursor} a previous tail answered, so a reader resumes after what it saw. */
+    public String logs(String level, String text, Long since, String tenant, Integer limit)
+            throws IOException, InterruptedException {
         StringBuilder path = new StringBuilder("/api/admin/logs");
-        String separator = "?";
-        if (level != null) {
-            path.append(separator).append("level=").append(enc(level));
-            separator = "&";
-        }
-        if (limit != null) {
-            path.append(separator).append("limit=").append(limit);
-        }
+        appendQuery(path, "level", level);
+        appendQuery(path, "q", text);
+        appendQuery(path, "since", since == null ? null : since.toString());
+        appendQuery(path, "tenant", tenant);
+        appendQuery(path, "limit", limit == null ? null : limit.toString());
         HttpResponse<String> response = send("GET", path.toString(), null, null);
         require(response, 200, "read the recent logs");
         return response.body();
+    }
+
+    private static void appendQuery(StringBuilder path, String name, String value) {
+        if (value != null && !value.isBlank()) {
+            path.append(path.indexOf("?") < 0 ? '?' : '&').append(name).append('=').append(enc(value));
+        }
     }
 
     /** The generated observability reference: the meters and traces this build exposes. */

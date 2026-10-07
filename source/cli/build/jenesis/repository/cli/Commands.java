@@ -157,7 +157,7 @@ public final class Commands {
                             act("provenance cert", "the signer's certificate chain (PEM)")),
                     noun("dependents", "what depends on a package or one version of it",
                             DiscoveryCommands::dependents,
-                            act("dependents <repo> <ecosystem> <coordinate> [--version V] [--cursor T] "
+                            act("dependents <repo> <ecosystem> <coordinate> [--version V] [--limit N] [--cursor T] "
                                             + "[--declared-cursor T]",
                                     "the published versions of the tenant built against the version, each with the "
                                             + "path its closure reaches it along, and the versions whose manifest "
@@ -197,7 +197,7 @@ public final class Commands {
                             act("pins unpin <repo> <ecosystem> <coordinate> <version>", "lift a pin")),
                     noun("lifecycle", "deprecation and end-of-life marks",
                             LifecycleCommands::lifecycle,
-                            act("lifecycle <repo>", "the marked coordinates"),
+                            act("lifecycle <repo> [--limit N] [--cursor C]", "the marked coordinates"),
                             act("lifecycle mark <repo> <coordinate> <version> <state> [--message T]",
                                     "mark one version deprecated or yanked"),
                             act("lifecycle clear <repo> <coordinate> <version>", "remove a mark")),
@@ -293,7 +293,8 @@ public final class Commands {
                             act("roles remove <name>", "remove a role")),
                     noun("trusts", "the OIDC trusts a CI job exchanges against", AuthCommands::trusts,
                             act("trusts", "list the trusts"),
-                            act("trusts set <name> --issuer I --scope S --rights R", "define a trust"),
+                            act("trusts set <name> --issuer I --scope S --rights R [--audience A] [--subject S] [--ttl D]",
+                                    "define a trust"),
                             act("trusts remove <name>", "remove a trust")),
                     noun("policy", "the credential-lifetime policy", ComplianceCommands::policy,
                             act("policy", "the current policy"),
@@ -349,7 +350,8 @@ public final class Commands {
                             act("consistency", "per-node fingerprints and any divergence")),
                     noun("logs", "the instance's most recent log entries",
                             OperationsCommands::logs,
-                            act("logs [--level L] [--limit N]", "the tail of the in-memory log buffer")),
+                            act("logs [--level L] [--q TEXT] [--since SEQ] [--tenant T] [--limit N]",
+                                    "the tail of the in-memory log buffer; --since resumes after a tail's cursor")),
                     noun("redirect-dns", "the DNS-based redirect records", 
                             OperationsCommands::redirectDns,
                             act("redirect-dns record <coordinate> <url> [--formats F] [--scope S] [--ttl N]",

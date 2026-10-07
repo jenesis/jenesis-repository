@@ -112,24 +112,26 @@ final class DiscoveryCommands {
     }
 
     static int dependents(String[] args, Path home) throws Exception {
-        String usage = "Usage: dependents <repo> <ecosystem> <coordinate> [--version V] [--cursor T] "
+        String usage = "Usage: dependents <repo> <ecosystem> <coordinate> [--version V] [--limit N] [--cursor T] "
                 + "[--declared-cursor T]";
         if (args.length < 4 || args[2].startsWith("--") || args[3].startsWith("--")) {
             throw new IllegalArgumentException(usage);
         }
         String version = null;
+        Integer limit = null;
         String cursor = null;
         String declaredCursor = null;
         for (int i = 4; i < args.length; i++) {
             switch (args[i]) {
                 case "--version" -> version = CliSupport.flag(args, ++i);
+                case "--limit" -> limit = Integer.valueOf(CliSupport.flag(args, ++i));
                 case "--cursor" -> cursor = CliSupport.flag(args, ++i);
                 case "--declared-cursor" -> declaredCursor = CliSupport.flag(args, ++i);
                 default -> throw new IllegalArgumentException(usage);
             }
         }
         ProvenanceClient.Dependents answer = CliSupport.client(home).provenance()
-                .dependents(args[1], args[2], args[3], version, cursor, declaredCursor);
+                .dependents(args[1], args[2], args[3], version, limit, cursor, declaredCursor);
         String subject = answer.coordinate() + (answer.version() == null ? "" : " " + answer.version());
         resolved(answer.resolved(), subject);
         declared(answer.declared(), answer.coordinate());
