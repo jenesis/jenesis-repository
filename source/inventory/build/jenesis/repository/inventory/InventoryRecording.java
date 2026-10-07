@@ -338,7 +338,7 @@ final class InventoryRecording {
             // The reverse index row first: a row whose document does not record the name yet is passed over, and the
             // write is idempotent on a key the copy alone composes.
             store.write(AdvisedSection.indexKey(advised, ecosystem, coordinate, version),
-                    new ByteArrayInputStream(AdvisedSection.indexRow(ecosystem, coordinate, version)));
+                    new ByteArrayInputStream(VersionRows.encode(ecosystem, coordinate, version)));
         }
         String key = MetadataKey.version(ecosystem, coordinate, version);
         DocumentTurns.decide(store, key, current -> {

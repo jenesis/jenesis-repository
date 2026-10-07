@@ -2,11 +2,11 @@ package build.jenesis.repository.closure.spi;
 
 import module java.base;
 import build.jenesis.repository.inventory.Mailbox;
+import build.jenesis.repository.inventory.VersionRows;
 import build.jenesis.repository.metadata.MetadataDocument;
 import build.jenesis.repository.metadata.MetadataProvider;
 import build.jenesis.repository.metadata.MetadataStore;
 import build.jenesis.repository.store.ArtifactStore;
-import build.jenesis.repository.store.Checksums;
 
 /**
  * A bill of materials attached to a published version rather than carried in its files - what a scanner made of an
@@ -86,6 +86,6 @@ public final class VersionBills {
     }
 
     private static String key(String ecosystem, String coordinate, String version) {
-        return ROOT + "/" + Checksums.sha256(ecosystem + "\n" + coordinate + "\n" + version);
+        return ROOT + "/" + VersionRows.digest(ecosystem, coordinate, version);
     }
 }
