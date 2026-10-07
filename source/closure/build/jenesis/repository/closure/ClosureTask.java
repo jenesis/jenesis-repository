@@ -295,9 +295,11 @@ public final class ClosureTask implements MaintenanceTask {
                 // The rows go before the closure they index, and a pass that finds the closure recorded makes sure of
                 // them where they could be missing: a full pass, or an exposure naming a held version anew.
                 if (fresh || changed || full) {
-                    indexed += ReliedOn.index(through, release.ecosystem(), new ReliedOn.Row(context.repository(),
-                            release.coordinate(), release.version()), closure.get(), derived, fresh,
-                            context.tenantView().store(), touched);
+                    ReliedOn.Changed rows = ReliedOn.index(through, release.ecosystem(),
+                            new ReliedOn.Row(context.repository(), release.coordinate(), release.version()),
+                            closure.get(), derived, fresh, context.tenantView().store());
+                    indexed += rows.rows();
+                    rows.holders().forEach(holder -> touched.putIfAbsent(holder.identity(), holder));
                 }
                 // A fresh closure and its exposure are one compare-and-set, never two.
                 SequencedMap<String, SectionMutation> writes = new LinkedHashMap<>();
@@ -342,7 +344,8 @@ public final class ClosureTask implements MaintenanceTask {
                         reached(ExposureSection.exposure(retired.exposure())),
                         now.flatMap(document -> ClosureSection.closure(document.section(ClosureSection.TAG))),
                         reached(now.flatMap(document -> ExposureSection.exposure(
-                                document.section(ExposureSection.TAG)))), tenant, touched);
+                                document.section(ExposureSection.TAG)))), tenant)
+                        .holders().forEach(holder -> touched.putIfAbsent(holder.identity(), holder));
             });
             for (ArtifactStore holder : touched.values()) {
                 ReliedOn.epoch(holder).bump();
