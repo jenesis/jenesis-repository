@@ -28,10 +28,10 @@
         <!--/* Running and idle read the same way here as on the vulnerability panel: the pass is started, not
              awaited, so the screen says it is under way and the button steps aside rather than inviting a second
              pass over the first. */-->
-        <th:block th:if="${report.scanning()}">
+        <th:block th:if="${report.refreshing()}">
             <p th:replace="~{base :: running('A rescan against the maintainer-health source is running.')}"></p>
         </th:block>
-        <form th:if="${isAdmin and !report.scanning()}" method="post"
+        <form th:if="${isAdmin and !report.refreshing()}" method="post"
               th:action="@{'/ui/repositories/' + ${repo} + '/health/rescan'}">
             <button th:replace="~{base :: secondaryButton('Rescan maintainer-health')}">Rescan maintainer-health</button>
         </form>
