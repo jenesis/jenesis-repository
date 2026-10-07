@@ -36,8 +36,8 @@
                 </tbody>
             </table>
         </figure>
-        <p th:if="${next != null}"><small>
-            <a th:href="@{/ui/repositories/{repo}/signers(repo=${repo},after=${next})}">Next page &rarr;</a></small></p>
+        <p th:replace="~{base :: pager(${next != null} ? @{/ui/repositories/{repo}/signers(repo=${repo},after=${next})} : null,
+                ${asked.contains('after')} ? @{/ui/repositories/{repo}/signers(repo=${repo})} : null)}"></p>
         <th:block th:if="${signers.isEmpty()}">
             <div th:replace="~{base :: empty('No signed version has been accepted yet.')}"></div>
         </th:block>

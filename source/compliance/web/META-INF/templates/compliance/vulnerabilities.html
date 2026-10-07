@@ -135,10 +135,10 @@
                 </th:block>
                 </tbody>
             </table>
-            <p th:if="${report.next() != null}">
-                <a th:href="@{/ui/repositories/{repo}/vulnerabilities(repo=${repo}, reachability=${reachability},
-                        applicability=${applicability}, after=${report.next()})}">next worst &rarr;</a>
-            </p>
+            <p th:replace="~{base :: pager(${report.next() != null} ? @{/ui/repositories/{repo}/vulnerabilities(repo=${repo},
+                    reachability=${reachability}, applicability=${applicability}, after=${report.next()})} : null,
+                    ${asked.contains('after')} ? @{/ui/repositories/{repo}/vulnerabilities(repo=${repo},
+                    reachability=${reachability}, applicability=${applicability})} : null)}"></p>
         </figure>
     </article>
 </main>

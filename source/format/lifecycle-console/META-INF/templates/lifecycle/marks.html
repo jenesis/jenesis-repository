@@ -56,8 +56,8 @@
                 </tbody>
             </table>
         </figure>
-        <p th:if="${next != null}"><a th:href="@{/ui/repositories/{repo}/lifecycle(repo=${repository},after=${next})}">Showing
-            the first page - more marked versions follow &rarr;</a></p>
+        <p th:replace="~{base :: pager(${next != null} ? @{/ui/repositories/{repo}/lifecycle(repo=${repository},after=${next})} : null,
+                ${asked.contains('after')} ? @{/ui/repositories/{repo}/lifecycle(repo=${repository})} : null)}"></p>
     </article>
 
     <article th:if="${isEditor and refusal == null}">
