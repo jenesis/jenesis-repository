@@ -23,6 +23,9 @@ final class StandInScanner implements ContentScanner {
     /** Every collection a session of it was asked, as its identifier, bill and catalogue formats. */
     final List<List<String>> collected = new CopyOnWriteArrayList<>();
 
+    /** Every archive a session of it was asked to catalogue. */
+    final List<Archive> catalogued = new CopyOnWriteArrayList<>();
+
     /** Every bill a session of it was asked to match. */
     final List<Bill> matched = new CopyOnWriteArrayList<>();
 
@@ -55,6 +58,12 @@ final class StandInScanner implements ContentScanner {
      *  set. */
     static StandInScanner cataloguer(String name, String key, String... catalogues) {
         return new StandInScanner(name, Set.of(Input.IMAGE_MANIFEST), Set.of(Output.BILL_OF_MATERIALS),
+                List.of(catalogues), Map.of(), key);
+    }
+
+    /** A cataloguer of images that is also handed published archives, configured where {@code key} is set. */
+    static StandInScanner archiver(String name, String key, String... catalogues) {
+        return new StandInScanner(name, Set.of(Input.IMAGE_MANIFEST, Input.ARCHIVE), Set.of(Output.BILL_OF_MATERIALS),
                 List.of(catalogues), Map.of(), key);
     }
 
@@ -125,6 +134,16 @@ final class StandInScanner implements ContentScanner {
             public Collected collect(String id, String bill, String catalogue, boolean last) {
                 collected.add(Arrays.asList(id, bill, catalogue));
                 return collection.get();
+            }
+
+            @Override
+            public Report catalogue(Archive archive) throws IOException {
+                if (!consumes.contains(Input.ARCHIVE)) {
+                    return Session.super.catalogue(archive);
+                }
+                catalogued.add(archive);
+                return new Report(label(), List.of(), new Bill(archive.format(),
+                        ("{\"bundled-by\":\"" + archive.name() + "\"}").getBytes(StandardCharsets.UTF_8)), null);
             }
 
             @SuppressWarnings("unchecked")

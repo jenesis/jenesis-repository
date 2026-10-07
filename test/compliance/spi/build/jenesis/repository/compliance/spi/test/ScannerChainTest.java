@@ -126,6 +126,25 @@ class ScannerChainTest {
     }
 
     @Test
+    void a_chain_hands_an_archive_to_its_cataloguer_alone_and_a_scanner_taking_none_refuses_it() throws IOException {
+        StandInScanner archiver = StandInScanner.archiver("syft", "syft-command", SYFT_JSON, CYCLONEDX);
+        ContentScanner chain = ContentScanner.selected(List.of(archiver, grype), _ -> null, _ -> "set",
+                ContentScanner.Input.ARCHIVE).getFirst();
+        ContentScanner.Archive archive = new ContentScanner.Archive(Path.of("app-1.0.war"), "app-1.0.war", CYCLONEDX);
+
+        assertThat(chain.name()).as("chained by default, and handed archives as its cataloguer is")
+                .isEqualTo("syft>grype");
+        ContentScanner.Report report = chain.open(_ -> "set").catalogue(archive);
+
+        assertThat(report.bill().format()).isEqualTo(CYCLONEDX);
+        assertThat(report.advisories()).isEmpty();
+        assertThat(archiver.catalogued).containsExactly(archive);
+        assertThat(grype.matched).as("a published archive is known through its closure, never matched").isEmpty();
+        assertThatThrownBy(() -> syft.open(_ -> "set").catalogue(archive)).isInstanceOf(ContentScanner.Refused.class)
+                .hasMessageContaining("handed no archive");
+    }
+
+    @Test
     void a_chain_is_handed_no_bill_of_its_own() {
         assertThatThrownBy(() -> session().match(CATALOGUE)).isInstanceOf(ContentScanner.Refused.class);
     }

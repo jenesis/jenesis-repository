@@ -210,6 +210,14 @@ final class ChainedScanner implements ContentScanner {
             };
         }
 
+        /** The cataloguer's bill of {@code archive}, its matcher not asked: an archive is catalogued for what it
+         *  bundles, which a published version's closure is resolved from and what is known of each package reaches it
+         *  through. */
+        @Override
+        public Report catalogue(Archive archive) throws IOException {
+            return cataloguing.catalogue(archive);
+        }
+
         @Override
         public Report match(Bill bill) throws Refused {
             throw new Refused(name() + " is handed what its cataloguer takes, never a bill");
