@@ -70,6 +70,13 @@ import io.micrometer.core.instrument.MeterRegistry;
  *   <li><b>The worker says whether it is running.</b> {@link #worker()} stamps every completed scheduling iteration,
  *       due work or not, and records why the loop stopped if it ever does - so "maintenance is not running" and
  *       "maintenance found nothing to do" are different readings rather than the same silence.</li>
+ *   <li><b>No task can stall the others.</b> A hang is not a failure, so containment never sees one: a pass blocked in
+ *       a call that never returns would otherwise hold the loop, and with it every other pass on the node. So each due
+ *       pass runs on a thread of its own and the loop moves on; a pass still running is not started again beside
+ *       itself; its units fan out on threads that grow as needed, at most {@code workers} at once per pass, so a unit
+ *       that never returns holds its own thread and no other pass's; and every pass in flight is reported with where
+ *       its thread is ({@link #running()}), named at {@code WARNING} with its stack once it has run past
+ *       {@link #STALLED} - so a stall says what it is stuck on, on whatever machine it happens.</li>
  * </ol>
  */
 public final class MaintenanceScheduler implements AutoCloseable {
@@ -89,6 +96,10 @@ public final class MaintenanceScheduler implements AutoCloseable {
 
     /** How long after a failed pass its retry request falls due. */
     static final Duration RETRY = Duration.ofHours(1);
+
+    /** How long a pass may run before it is named, with its stack, as still running - and again each time it has run
+     *  that much longer. A long pass over a large store is legitimate; the report is a diagnostic, never a stop. */
+    static final Duration STALLED = Duration.ofMinutes(15);
 
     private final Repositories repositories;
     private final ArtifactStore root;
@@ -119,9 +130,17 @@ public final class MaintenanceScheduler implements AutoCloseable {
     private final TaskSchedule schedule = new TaskSchedule();
     /** The Micrometer sink - the only meter-aware collaborator. */
     private final PassMetrics metrics;
-    /** The bounded pool the (tenant, repository) units of a pass fan out across, so a large fleet's sweep is not one
-     *  serial walk; daemon-threaded so a test that never closes the scheduler still lets its JVM exit. */
+    /** The pool the (tenant, repository) units of a pass fan out across, so a large fleet's sweep is not one serial
+     *  walk: it grows as needed, each pass running at most {@link #width} units at once, so a unit that never returns
+     *  holds its own thread and no other pass's; daemon-threaded so a test that never closes the scheduler still lets
+     *  its JVM exit. */
     private final ExecutorService workers;
+    /** How many units one pass runs at once on {@link #workers}. */
+    private final int width;
+    /** The threads each due pass runs on, so a pass that never returns holds its own thread rather than the loop. */
+    private final ExecutorService passes;
+    /** Every pass in flight on the loop's dispatch, by task name. */
+    private final Map<String, InFlight> inFlight = new ConcurrentHashMap<>();
     private volatile boolean running;
     private Thread thread;
     /** When the worker last <em>completed</em> a scheduling iteration - stamped on every pass round the loop, whether
@@ -242,10 +261,16 @@ public final class MaintenanceScheduler implements AutoCloseable {
         // makes every exclusive pass throw, so it must never resolve to a scheduler that looks healthy.
         this.leases = new LeaseGuard(root, leaseTtl);
         this.metrics = new PassMetrics(registry);
-        this.workers = Executors.newFixedThreadPool(Math.max(1, workers), runnable -> {
+        this.width = Math.max(1, workers);
+        this.workers = Executors.newCachedThreadPool(runnable -> {
             Thread worker = new Thread(runnable, "jenesis-repository-maintenance-worker");
             worker.setDaemon(true);
             return worker;
+        });
+        this.passes = Executors.newCachedThreadPool(runnable -> {
+            Thread pass = new Thread(runnable, "jenesis-repository-maintenance-pass");
+            pass.setDaemon(true);
+            return pass;
         });
     }
 
@@ -307,6 +332,58 @@ public final class MaintenanceScheduler implements AutoCloseable {
      *  */
     public Map<String, TaskSchedule.TaskRun> taskRuns() {
         return schedule.runs();
+    }
+
+    /** Every pass the loop has in flight on this node, by task name: since when, and where its work is now - a unit's
+     *  thread while one of its units runs, its own thread otherwise. */
+    public Map<String, Running> running() {
+        Map<String, Running> running = new TreeMap<>();
+        inFlight.forEach((name, pass) -> running.put(name, new Running(pass.since(), pass.stack())));
+        return Collections.unmodifiableMap(running);
+    }
+
+    /** A pass in flight: when it started, and the stack of the thread its work is on, empty before a thread has
+     *  picked it up. */
+    public record Running(Instant since, List<StackTraceElement> stack) {
+
+        public Running {
+            stack = List.copyOf(stack);
+        }
+    }
+
+    /** One pass the loop dispatched: when, the thread running it once one has, and when it was last named as still
+     *  running. */
+    private static final class InFlight {
+
+        private final Instant since;
+        private final Set<Thread> units = ConcurrentHashMap.newKeySet();
+        private volatile Thread thread;
+        private volatile Instant named;
+
+        private InFlight(Instant since) {
+            this.since = since;
+            this.named = since;
+        }
+
+        Instant since() {
+            return since;
+        }
+
+        /** Where the work is: the first unit still running, else the pass's own thread. */
+        List<StackTraceElement> stack() {
+            Thread running = units.stream().findFirst().orElse(thread);
+            return running == null ? List.of() : List.of(running.getStackTrace());
+        }
+
+        /** Every thread the pass is on: its own, and each unit's still running. */
+        List<Thread> threads() {
+            List<Thread> threads = new ArrayList<>();
+            if (thread != null) {
+                threads.add(thread);
+            }
+            threads.addAll(units);
+            return threads;
+        }
     }
 
     /**
@@ -384,6 +461,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
                 Thread.currentThread().interrupt();
             }
         }
+        passes.shutdownNow();
         workers.shutdownNow();
         leases.close();
         Requests.retireRoot(root);
@@ -414,7 +492,7 @@ public final class MaintenanceScheduler implements AutoCloseable {
                 for (Map.Entry<ScheduledTask, Requests.Request> requested : requested().entrySet()) {
                     ScheduledTask task = requested.getKey();
                     Requests.Request request = requested.getValue();
-                    contain(task.name(), "on request (" + request.reason() + ")", Escalation.OPERATOR, () -> {
+                    dispatch(task, "on request (" + request.reason() + ")", asked, () -> {
                         pass(task, asked);
                         Requests.clear(root, request);
                     });
@@ -436,8 +514,9 @@ public final class MaintenanceScheduler implements AutoCloseable {
                 }
                 Instant at = Instant.now();
                 for (ScheduledTask task : schedule.due(tasks, at)) {
-                    contain(task.name(), "on its scheduled pass", Escalation.OPERATOR, () -> pass(task, at));
+                    dispatch(task, "on its scheduled pass", at, () -> pass(task, at));
                 }
+                watch(Instant.now());
                 iterated();
             }
             stopped = "closed";
@@ -452,6 +531,58 @@ public final class MaintenanceScheduler implements AutoCloseable {
             }
             throw fatal;
         }
+    }
+
+    /**
+     * Run {@code attempt} for {@code task} on a thread of its own, contained as the loop contains it, unless a pass of
+     * the task is still in flight - a pass is never run beside itself. The loop does not wait for it: a pass that never
+     * returns holds its own thread, and every other pass keeps its schedule.
+     */
+    private void dispatch(ScheduledTask task, String where, Instant at, Attempt attempt) {
+        InFlight pass = new InFlight(at);
+        if (inFlight.putIfAbsent(task.name(), pass) != null) {
+            return;
+        }
+        try {
+            passes.execute(() -> {
+                Thread thread = Thread.currentThread();
+                thread.setName("jenesis-repository-maintenance-pass-" + task.name());
+                pass.thread = thread;
+                try {
+                    contain(task.name(), where, Escalation.OPERATOR, attempt);
+                } finally {
+                    inFlight.remove(task.name(), pass);
+                    thread.setName("jenesis-repository-maintenance-pass");
+                }
+            });
+        } catch (RejectedExecutionException closing) {
+            inFlight.remove(task.name(), pass);     // the scheduler is closing: nothing more is started
+        }
+    }
+
+    /** Name, with its stack, every pass in flight that has run {@link #STALLED} longer than it was last named. */
+    private void watch(Instant now) {
+        inFlight.forEach((name, pass) -> {
+            if (pass.named.plus(STALLED).isAfter(now)) {
+                return;
+            }
+            pass.named = now;
+            try {
+                Throwable where = new Throwable("where the pass's threads are now");
+                where.setStackTrace(new StackTraceElement[0]);
+                for (Thread thread : pass.threads()) {
+                    Throwable at = new Throwable(thread.getName());
+                    at.setStackTrace(thread.getStackTrace());
+                    where.addSuppressed(at);
+                }
+                LOGGER.warn("Maintenance task '" + name + "' has run for "
+                        + Duration.between(pass.since(), now).truncatedTo(ChronoUnit.SECONDS) + " and is still "
+                        + "running; it is not started again until it returns, and every other pass keeps its schedule",
+                        where);
+            } catch (Throwable diagnostic) {
+                // A report that cannot be made must not end the loop that made it.
+            }
+        });
     }
 
     /** One scheduled pass of a due task: under its single-writer lease when it is exclusive (a {@code false} return
@@ -713,8 +844,8 @@ public final class MaintenanceScheduler implements AutoCloseable {
     }
 
     /**
-     * Run one task across every tenant and repository. The (tenant, repository) units fan out over the bounded
-     * {@link #workers} pool instead of a single serial walk, so a large fleet's sweep completes in wall-clock time set
+     * Run one task across every tenant and repository. The (tenant, repository) units fan out over the
+     * {@link #workers} pool, at most {@code workers} of a pass at once, instead of a single serial walk, so a large fleet's sweep completes in wall-clock time set
      * by the slowest unit rather than their sum; an exclusive pass already holds the task's single-writer {@link Lease}
      * (renewed on the {@link LeaseGuard}'s wall-clock cadence, independent of unit boundaries), so this parallelism
      * shards the work within the one node that owns the pass, never against a rival. A failing unit is logged and
@@ -806,12 +937,12 @@ public final class MaintenanceScheduler implements AutoCloseable {
                     return null;
                 });
                 if (batch.size() == FANOUT_BATCH) {
-                    runUnits(batch);
+                    runUnits(batch, inFlight.get(task.name()));
                     batch.clear();
                 }
             });
         }
-        runUnits(batch);
+        runUnits(batch, inFlight.get(task.name()));
     }
 
     /** The per-tenant repository enumeration. A maintenance pass that skipped repositories would be a sweep that looks
@@ -821,20 +952,53 @@ public final class MaintenanceScheduler implements AutoCloseable {
     private static final BoundedChildren REPOSITORIES =
             BoundedChildren.bounded().entries(Integer.MAX_VALUE).page(FANOUT_BATCH);
 
-    /** Run the fanned-out repository units across the pool and wait for all to settle. Each unit contains, names and
-     *  counts its own failure, so draining the futures only guards an unexpected internal error; a pool that is
-     *  shutting down (a close raced this pass) rejects the batch, and the units then run inline so the pass still
-     *  completes.
+    /** Run the fanned-out repository units across the pool, at most {@code workers} of this pass at once, and wait
+     *  for all to settle. Each unit contains, names and counts its own failure, so draining the futures only guards an
+     *  unexpected internal error; a pool that is shutting down (a close raced this pass) rejects what is left, which
+     *  then runs inline so the pass still completes.
      *
      *  <p>Neither residual catch is silent. An {@link Error} out of a unit would be captured by the {@link FutureTask}
      *  and re-surface here as an {@link ExecutionException}; the unit body contains it, as it does on the inline
      *  fallback, and what reaches this method is logged rather than dropped. */
-    private void runUnits(List<Callable<Void>> units) {
+    private void runUnits(List<Callable<Void>> units, InFlight pass) {
         if (units.isEmpty()) {
             return;
         }
+        // At most width units of this pass at once, each on a thread of its own: a unit that never returns holds its
+        // own thread and one of this pass's permits, never a thread another pass's units need.
+        Semaphore permits = new Semaphore(width);
+        InFlight owner = pass;
         try {
-            for (Future<Void> future : workers.invokeAll(units)) {
+            List<Future<Void>> futures = new ArrayList<>(units.size());
+            for (Callable<Void> unit : units) {
+                permits.acquire();
+                try {
+                    futures.add(workers.submit(() -> {
+                        Thread thread = Thread.currentThread();
+                        if (owner != null) {
+                            owner.units.add(thread);
+                        }
+                        try {
+                            return unit.call();
+                        } finally {
+                            if (owner != null) {
+                                owner.units.remove(thread);
+                            }
+                            permits.release();
+                        }
+                    }));
+                } catch (RejectedExecutionException closing) {
+                    // A close raced this pass: what is left runs inline, so the pass still completes.
+                    permits.release();
+                    try {
+                        unit.call();
+                    } catch (Throwable unexpected) {
+                        LOGGER.warn("A maintenance unit failed on the inline fallback the pool shutdown forced it "
+                                + "onto; the pass continues with the remaining repositories", unexpected);
+                    }
+                }
+            }
+            for (Future<Void> future : futures) {
                 future.get();
             }
         } catch (InterruptedException _) {
@@ -842,15 +1006,6 @@ public final class MaintenanceScheduler implements AutoCloseable {
         } catch (ExecutionException unexpected) {
             LOGGER.warn("A maintenance unit failed outside its own containment; the pass continues with the "
                     + "remaining repositories", unexpected);
-        } catch (RejectedExecutionException _) {
-            for (Callable<Void> unit : units) {
-                try {
-                    unit.call();
-                } catch (Throwable unexpected) {
-                    LOGGER.warn("A maintenance unit failed on the inline fallback the pool shutdown forced it onto; "
-                            + "the pass continues with the remaining repositories", unexpected);
-                }
-            }
         }
     }
 

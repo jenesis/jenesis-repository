@@ -58,7 +58,8 @@ public final class TaskSchedule {
     static final Duration FLOOR = Duration.ofSeconds(1);
 
     /** Due times keyed by task <em>name</em> (never by instance): a re-resolve that yields fresh task objects keeps
-     *  each pass on its own schedule. Touched only by the single worker loop. */
+     *  each pass on its own schedule. Every touch is synchronized: the worker loop arms and reads it, and a pass
+     *  thread yields its own entry. */
     private final Map<String, Instant> due = new HashMap<>();
 
     /** Per-task last-run bookkeeping keyed by task name - the worker loop, {@link MaintenanceScheduler#runNow} and the
@@ -101,7 +102,7 @@ public final class TaskSchedule {
      * {@code now} first, and tasks that are no longer enabled drop out - so this call is also where the due map
      * converges on the current task list.
      */
-    Duration sleep(List<ScheduledTask> tasks, Instant now) {
+    synchronized Duration sleep(List<ScheduledTask> tasks, Instant now) {
         arm(tasks, now);
         if (due.isEmpty()) {
             return IDLE_POLL;

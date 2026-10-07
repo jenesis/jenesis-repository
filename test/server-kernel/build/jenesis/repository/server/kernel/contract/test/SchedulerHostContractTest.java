@@ -250,6 +250,53 @@ class SchedulerHostContractTest {
         assertThat(failures(scheduler, "ordinary")).as("contained on the caller path too, and counted").isPositive();
     }
 
+    // --- promise 6: no task can stall the others --------------------------------------------------------------------
+
+    @Test
+    void a_pass_that_never_returns_stalls_only_itself_and_is_seen_running_where_it_is_stuck() throws Exception {
+        // The shape a fleet node was found in: one pass blocked inside a store call that never returned, and every
+        // other pass on the node - and the loop's own iteration stamp - stopped at that instant while HTTP still
+        // answered. A hang is not a failure, so containment never saw it.
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger stuck = new AtomicInteger();
+        AtomicInteger sane = new AtomicInteger();
+        MaintenanceScheduler scheduler = scheduler(
+                new Hostile("stuck") {
+                    @Override
+                    public void repository(RepositoryContext context) {
+                        stuck.incrementAndGet();
+                        try {
+                            release.await();
+                        } catch (InterruptedException _) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }
+                },
+                new Hostile("sane") {
+                    @Override
+                    public void repository(RepositoryContext context) {
+                        sane.incrementAndGet();
+                    }
+                });
+
+        scheduler.start();
+        await(() -> stuck.get() == 1 && sane.get() > 3, "the sane task to keep running beside the stuck one",
+                scheduler);
+        long iterations = scheduler.worker().iterations();
+        await(() -> scheduler.worker().iterations() > iterations + 3,
+                "the loop to keep iterating while a pass is stuck", scheduler);
+
+        assertThat(stuck.get()).as("a pass still running is not started again beside itself").isEqualTo(1);
+        assertThat(scheduler.running()).as("and is seen running, with where its thread is").containsKey("stuck")
+                .doesNotContainKey("sane");
+        assertThat(scheduler.running().get("stuck").stack()).anySatisfy(frame ->
+                assertThat(frame.getMethodName()).isEqualTo("await"));
+
+        release.countDown();
+        await(() -> !scheduler.running().containsKey("stuck") && stuck.get() > 1,
+                "the released pass to finish and be scheduled again", scheduler);
+    }
+
     // --- promise 5: the worker says whether it is running -------------------------------------------------------------
 
     @Test
