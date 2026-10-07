@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.raw;
 
 import module java.base;
+import module org.slf4j;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.Publication;
@@ -12,6 +13,7 @@ import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.RepositoryImporter;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.StoredListing;
+import build.jenesis.repository.store.UpstreamMemory;
 import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.format.ExportTarget;
 import build.jenesis.repository.format.PublishedExport;
@@ -22,9 +24,20 @@ import build.jenesis.repository.format.PublishedExport;
  * {@link Publication} (so a raw file identical to a jar, tarball or OCI layer dedupes to one {@code blobs/<sha256>}), a
  * {@code GET} serves them, a {@code GET} on a trailing-slash path lists the directory, and a {@code DELETE} removes the
  * pointer.
+ *
+ * <p>Proxying, a file is fetched once and served from its copy ever after - except a file the repository names as one
+ * that moves ({@value #MOVING}): a document an upstream rewrites in place, such as the {@code latest.json} naming a
+ * scanner's current database. That one is a mutable index under {@link ProxyFormat}'s first clause - relayed as the
+ * upstream serves it and never linked, remembered in the node's memory of upstream documents for its ttl, so a burst
+ * of readers costs the upstream one fetch.
  */
 public final class RawFormat implements RepositoryFormat, ProxyFormat, RepositoryImporter.Delegating,
         RepositoryExporter {
+
+    /** The repository setting naming the files that move, as globs under {@code /raw/}. */
+    public static final String MOVING = "raw-moving";
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(RawFormat.class);
 
     /** The migration-import capability, delegated to {@link RawImporter}. */
     private final RawImporter importer = new RawImporter();
@@ -111,10 +124,13 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
     }
 
-    /** A raw file is the upstream's or this repository's, never a merge of the two. */
+    /** A raw file is the upstream's or this repository's, never a merge of the two - but a file that moves is asked of
+     *  the upstream whatever is held, so a copy kept before the repository named it as moving does not answer for
+     *  it. */
     @Override
     public boolean mergesUpstream(FormatExchange exchange) {
-        return false;
+        String path = exchange.path();
+        return path.startsWith("/raw/") && moving(path.substring("/raw/".length()), exchange.setting(MOVING));
     }
 
     @Override
@@ -127,8 +143,11 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
         String rest = path.substring("/raw/".length());
         String root = upstream.toString();
-        Optional<ProxyFormat.Download> fetched = fetcher.download(
-                URI.create(root.endsWith("/") ? root + rest : root + "/" + rest), Map.of());
+        URI target = URI.create(root.endsWith("/") ? root + rest : root + "/" + rest);
+        if (moving(rest, exchange.setting(MOVING))) {
+            return relay(exchange, store, target, fetcher);
+        }
+        Optional<ProxyFormat.Download> fetched = fetcher.download(target, Map.of());
         if (fetched.isEmpty()) {
             return false;
         }
@@ -144,6 +163,82 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
         handle(exchange, store);
         return true;
+    }
+
+    /**
+     * Relay the file that moves at {@code target} as the upstream serves it now, linking nothing. An upstream that
+     * answered {@code 404} or {@code 410} lets the local {@code 404} stand; one that could not be asked, or answered
+     * anything else, is a {@code 502}, since a client reads a moving file's absence as an answer - no database
+     * published - rather than as a reason to retry (clause 2).
+     */
+    private static boolean relay(FormatExchange exchange, ArtifactStore store, URI target, ProxyFormat.Fetcher fetcher)
+            throws IOException {
+        UpstreamMemory memory = UpstreamMemory.node();
+        Optional<UpstreamMemory.Remembered> remembered = memory.get(store, target);
+        byte[] body;
+        String type;
+        if (remembered.isPresent()) {
+            body = remembered.get().body();
+            type = remembered.get().headers().get("Content-Type");
+        } else {
+            Optional<ProxyFormat.Fetched> fetched = fetcher.fetch(target, Map.of());
+            if (fetched.isPresent() && (fetched.get().status() == 404 || fetched.get().status() == 410)) {
+                return false;
+            }
+            if (fetched.isEmpty() || fetched.get().status() != 200) {
+                LOGGER.warn("Refusing to answer {} as absent: {}. Nothing was served; a client reads a moving file's "
+                        + "absence as the upstream's own answer.", target, fetched.isEmpty()
+                        ? ProxyFormat.Fetcher.NO_ANSWER : "the upstream answered " + fetched.get().status());
+                exchange.respond(502);
+                return true;
+            }
+            body = fetched.get().body();
+            type = fetched.get().header("Content-Type");
+            memory.put(store, target, body, fetched.get()::header);
+        }
+        exchange.setResponseHeader("Content-Type", type == null ? "application/octet-stream" : type);
+        exchange.respond(200, body);
+        return true;
+    }
+
+    /**
+     * Whether {@code rest}, a path under {@code /raw/}, is among the files {@code globs} names as moving: globs
+     * separated by commas or whitespace, where {@code *} matches within one path segment, {@code **} across segments,
+     * {@code **}{@code /} also matches no segment at all, and {@code ?} matches one character of a segment. No glob,
+     * nothing moves.
+     */
+    static boolean moving(String rest, String globs) {
+        if (globs == null || globs.isBlank()) {
+            return false;
+        }
+        for (String glob : globs.strip().split("[,\\s]+")) {
+            if (!glob.isEmpty() && Pattern.matches(regex(glob), rest)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** {@code glob} as the regular expression {@link #moving} matches a path with. */
+    private static String regex(String glob) {
+        StringBuilder regex = new StringBuilder();
+        for (int at = 0; at < glob.length(); at++) {
+            char c = glob.charAt(at);
+            if (glob.startsWith("**/", at)) {
+                regex.append("(?:.*/)?");
+                at += 2;
+            } else if (glob.startsWith("**", at)) {
+                regex.append(".*");
+                at++;
+            } else if (c == '*') {
+                regex.append("[^/]*");
+            } else if (c == '?') {
+                regex.append("[^/]");
+            } else {
+                regex.append(Pattern.quote(String.valueOf(c)));
+            }
+        }
+        return regex.toString();
     }
 
     /** A directory page ({@code GET} or {@code HEAD} on a trailing slash): the folder's stored listing, streamed as it
