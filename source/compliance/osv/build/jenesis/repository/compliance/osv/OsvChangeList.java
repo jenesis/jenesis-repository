@@ -27,6 +27,37 @@ final class OsvChangeList {
     /** What one list says since a position - every line after it, newest first - and whether the window ran out
      *  before reaching it. Without a position, its head alone. */
     record Listed(List<Line> lines, boolean exhausted) {
+
+        /**
+         * Hand these lines to {@code taker} oldest first, from {@code from}, until {@code budget} lines have been
+         * taken - past which a line at the instant last reached is still handed on, since a position is exclusive and
+         * a boundary instant has to be named whole. Answers the instant reached, the position a draw resumes after,
+         * and how many lines were taken.
+         */
+        <E extends Exception> Drained drain(Instant from, int budget, Taker<E> taker) throws IOException, E {
+            Instant reached = from;
+            int taken = 0;
+            for (Line line : lines.reversed()) {
+                if (taken >= budget && !line.modified().equals(reached)) {
+                    break;
+                }
+                if (taker.take(line)) {
+                    taken++;
+                }
+                reached = line.modified();
+            }
+            return new Drained(reached, taken);
+        }
+    }
+
+    /** What a draw does with one line: answers whether the line counts against its budget. */
+    @FunctionalInterface
+    interface Taker<E extends Exception> {
+        boolean take(Line line) throws IOException, E;
+    }
+
+    /** Where a drain stopped, and how many lines it took. */
+    record Drained(Instant reached, int taken) {
     }
 
     /** What {@code ecosystem}'s list at {@code export} says since {@code position} through {@code client}, or empty

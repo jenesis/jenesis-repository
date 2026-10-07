@@ -91,18 +91,15 @@ public final class OsvChanges {
             }
             // Oldest first, so a draw that runs out of budget resumes after what it named; a boundary instant is
             // named whole, since the position is exclusive.
-            Instant reached = position.get();
-            for (OsvChangeList.Line line : listed.lines().reversed()) {
-                if (budget <= 0 && !line.modified().equals(reached)) {
-                    break;
+            OsvChangeList.Drained drained = listed.drain(position.get(), budget, line -> {
+                if (!kept.test(line.id())) {
+                    return false;
                 }
-                if (kept.test(line.id())) {
-                    named.addAll(affected(line.id()));
-                    budget--;
-                }
-                reached = line.modified();
-            }
-            positions.put(ecosystem, reached.toString());
+                named.addAll(affected(line.id()));
+                return true;
+            });
+            budget -= drained.taken();
+            positions.put(ecosystem, drained.reached().toString());
         }
         return FeedChanges.commit(store, log, new FeedChanges.Draw(positions, named, gap), clock.instant());
     }
