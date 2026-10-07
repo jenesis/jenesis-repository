@@ -65,9 +65,10 @@ import build.jenesis.repository.store.Providers;
  *   <li><b>Read purity and non-blocking.</b> {@link #accept} performs no outbound I/O: it records a durable note in its
  *       store and returns, the delivery belonging to the sink's background drain, a {@code MaintenanceTaskProvider}.
  *       Inline delivery would put a third party inside the publish path. Nothing structurally prevents it.</li>
- *   <li><b>Lifecycle / ownership.</b> {@link #emit} and {@link #installed()} each look the sinks up and cache nothing,
- *       so a sink is constructed per event: a cheap public no-argument constructor, no threads, clients or connections,
- *       no state across calls. Anything outliving the call belongs in the store.</li>
+ *   <li><b>Lifecycle / ownership.</b> {@link #emit} delivers to the sinks discovered on the first event and held for
+ *       the process, so one sink serves every event on every thread: a public no-argument constructor, no threads,
+ *       clients or connections, no mutable state. Anything outliving the call belongs in the store.
+ *       {@link #installed()} looks the sinks up afresh.</li>
  *   <li><b>Ordering / concurrency.</b> Fan-out is in name order ({@link Providers} sorts before creating),
  *       deterministic but not a sequencing guarantee: sinks are independent. Nothing orders events across deliveries,
  *       so a subscriber may see a {@code release} before its {@code quarantine}, and one needing order reconciles
@@ -141,10 +142,7 @@ public interface EventSink {
      *  primitive, so the containment never re-enters a sink to ask its name. A duplicate name or a doubly-registered
      *  sink throws here, before any sink is called (clause 4). */
     private static List<Map.Entry<String, EventSink>> resolved() {
-        return Providers.all(SPI,
-                ServiceLoader.load(EventSink.class),
-                EventSink::name,
-                _ -> true,
+        return Providers.all(SPI, EventSinks.DISCOVERED, EventSink::name, _ -> true,
                 sink -> Optional.of(Map.entry(sink.name(), sink)));
     }
 
