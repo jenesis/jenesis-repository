@@ -426,6 +426,11 @@ public class CacheService {
         return Eviction.clearAll(storage(), name);
     }
 
+    /** Whether the signed-in tenant has a project by this name; a malformed name is refused rather than answered. */
+    public boolean exists(String name) {
+        return storage().projectExists(validateName(name));
+    }
+
     private void requireProject(String name) {
         if (!storage().projectExists(validateName(name))) {
             throw new IllegalArgumentException("No such project: " + name);

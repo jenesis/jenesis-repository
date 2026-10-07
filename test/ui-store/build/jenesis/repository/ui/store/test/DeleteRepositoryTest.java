@@ -8,6 +8,7 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.RepositoryDocument;
 import build.jenesis.repository.store.RepositoryRemoval;
+import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.ui.CurrentTenant;
 import build.jenesis.repository.ui.store.RepositoryAdmin;
@@ -102,6 +103,31 @@ class DeleteRepositoryTest {
         await(() -> !admin.repositories().contains("files"),
                 () -> "still listed; the scope holds " + scope.list("") + " and scans as " + scanned(scope));
         assertThat(scope.list("")).isEmpty();
+    }
+
+    @Test
+    void a_purge_that_stops_part_way_says_why_until_the_repository_is_deleted_again() throws Exception {
+        FaultInjectingStore store = FaultInjectingStore.wrap(store());
+        RepositoryLifecycle lifecycle = lifecycle(store);
+        lifecycle.create("files", "raw");
+        ArtifactStore scope = store.scope("acme").scope("files");
+        scope.write("raw/a.txt", new ByteArrayInputStream("a".getBytes(UTF_8)));
+        store.failEveryOn(FaultInjectingStore.Op.DELETE, FaultInjectingStore.keyContaining("raw/a.txt"));
+
+        assertThat(lifecycle.delete("files")).isEqualTo(RepositoryRemoval.Begun.STARTED);
+        await(() -> RepositoryRemoval.status(scope).state() == RepositoryRemoval.State.FAILED,
+                () -> "reads " + RepositoryRemoval.status(scope));
+        RepositoryRemoval.Status stopped = RepositoryRemoval.status(scope);
+        assertThat(stopped.failure()).as("the reason the purge stopped").isNotBlank();
+        assertThat(stopped.startedAt()).as("when the deletion began is kept beside it").isNotNull();
+        assertThat(scanned(scope)).as("what it could not delete is still there").contains("raw/a.txt");
+
+        store.heal();
+        assertThat(lifecycle.delete("files")).isEqualTo(RepositoryRemoval.Begun.RESUMED);
+        assertThat(RepositoryRemoval.status(scope).failure())
+                .as("a resumed deletion does not carry the stopped one's reason").isNull();
+        await(() -> RepositoryRemoval.status(scope).state() == RepositoryRemoval.State.GONE,
+                () -> "reads " + RepositoryRemoval.status(scope) + "; the scope holds " + scanned(scope));
     }
 
     @Test

@@ -260,6 +260,20 @@ public final class SettingsClient extends ClientCalls {
         return response.body();
     }
 
+    /** Where a repository's deletion stands. */
+    public RepositoryDeletion repositoryDeletion(String name) throws IOException, InterruptedException {
+        // A name given as tenant/repository is asked by its repository; the key's routing decides the tenant.
+        String repository = name.substring(name.lastIndexOf('/') + 1);
+        HttpResponse<String> response = send("GET", "/api/repository/deletion?repo=" + enc(repository), null, null);
+        require(response, 200, "read the deletion of repository " + name);
+        return JSON.readValue(response.body(), RepositoryDeletion.class);
+    }
+
+    /** A repository's deletion as the API reports it: its state ({@code running}, {@code failed}, {@code gone} or
+     *  {@code present}), when it started and why its purge stopped. */
+    public record RepositoryDeletion(String repository, String state, String startedAt, String failure) {
+    }
+
     /** The deployment's tenants - an operator key's view, which is the only one allowed to ask. */
     public List<String> tenants() throws IOException, InterruptedException {
         HttpResponse<String> response = send("GET", "/api/admin/tenants", null, null);

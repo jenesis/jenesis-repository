@@ -430,7 +430,8 @@ public class ConfigController {
      *  {@code DELETE /repository/<tenant>/<name>} - through the removal every surface makes
      *  ({@link RepositoryRemoval}). The deployment's definition of the name is every tenant's, so it stays. The
      *  repository stops answering before this returns and its objects go off the request path, so the answer is
-     *  {@code 202}; a deletion a node stopped part way is resumed. {@code 404} when there is none. */
+     *  {@code 202}, and {@link #repositoryDeletion} says where it stands; a deletion a node stopped part way is
+     *  resumed. {@code 404} when there is none. */
     @DeleteMapping("/repository/{tenant}/{name}")
     public void deleteRepository(@PathVariable("name") String name,
                                  @RequestHeader(value = Repositories.KEY, required = false) String key,
@@ -454,7 +455,25 @@ public class ConfigController {
         text(response, 202, begun == RepositoryRemoval.Begun.RESUMED
                 ? "Resumed deleting repository '" + repository + "'."
                 : "Deleting repository '" + repository + "'; it no longer answers, and everything it held is being "
-                        + "removed.");
+                        + "removed. GET /api/repository/deletion?repo=" + repository + " says when it is gone.");
+    }
+
+    /** Where the deletion of a repository stands - {@code GET /api/repository/deletion?repo=} - read from its removal
+     *  marker and its document, two point reads ({@link RepositoryRemoval#status}): {@code running}, {@code failed}
+     *  with the reason its purge stopped, {@code gone} once neither the repository nor its deletion is left, or
+     *  {@code present} when nothing is deleting it. What a caller that started a deletion polls. */
+    @GetMapping("/api/repository/deletion")
+    @ResponseBody
+    public Deletion repositoryDeletion(@RequestParam("repo") String repo, HttpServletRequest http)
+            throws IOException {
+        RepositoryRemoval.Status status = RepositoryRemoval.status(
+                repositories.store(repositoryTenant(repo, http), repo));
+        return new Deletion(repo, status.state().name().toLowerCase(Locale.ROOT), status.startedAt(),
+                status.failure());
+    }
+
+    /** A repository's deletion as {@code GET /api/repository/deletion} answers it. */
+    public record Deletion(String repository, String state, Instant startedAt, String failure) {
     }
 
     private static void text(HttpServletResponse response, int status, String message) throws IOException {

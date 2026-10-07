@@ -18,6 +18,11 @@ import build.jenesis.repository.scope.Scopes;
  * the same Delete, from any surface - finds the marker, and purges what is left. Nothing resumes it by itself: a
  * deletion happens because somebody asked for it, never because something was found missing.
  *
+ * <p><b>Readable while it runs.</b> {@link #status} reads the marker alone, so any surface can say whether a deletion
+ * is running, stopped part way (the marker carries the reason, written when the purge gives up), or over - which
+ * is the absence of both the marker and the repository's document, indistinguishable from a name that never held a
+ * repository, since the store keeps no record of what it no longer holds.
+ *
  * <p>What a repository was defined as - an upstream, a group - is a setting rather than an object in its scope, so
  * the caller forgets it; this class owns the scope alone.
  */
@@ -48,14 +53,15 @@ public final class RepositoryRemoval {
      */
     public static Begun begin(ArtifactStore repository) throws IOException {
         if (removing(repository)) {
+            // Resumed: the marker is written afresh, so a reason a stopped purge left is not read as this one's.
+            repository.write(MARKER, new ByteArrayInputStream(marker(Instant.now(), null)));
             repository.delete(Scopes.REPOSITORY);
             return Begun.RESUMED;
         }
         if (RepositoryDocument.read(repository).isEmpty()) {
             return Begun.ABSENT;
         }
-        byte[] marker = ("started=" + Instant.now() + "\n").getBytes(StandardCharsets.UTF_8);
-        if (!repository.writeVersioned(MARKER, marker, null)) {
+        if (!repository.writeVersioned(MARKER, marker(Instant.now(), null), null)) {
             // Another request began it between the read and the write; the rest is the same.
             repository.delete(Scopes.REPOSITORY);
             return Begun.RESUMED;
@@ -67,6 +73,56 @@ public final class RepositoryRemoval {
     /** Whether the repository whose scope this is is being deleted. */
     public static boolean removing(ArtifactStore repository) throws IOException {
         return repository.exists(MARKER);
+    }
+
+    /**
+     * Where the deletion of the repository whose scope this is stands, from its marker and its document: two point
+     * reads, whatever the repository holds.
+     */
+    public static Status status(ArtifactStore repository) throws IOException {
+        Optional<ArtifactStore.Versioned> marker = repository.readVersioned(MARKER);
+        if (marker.isEmpty()) {
+            return new Status(RepositoryDocument.exists(repository) ? State.PRESENT : State.GONE, null, null);
+        }
+        Properties read = new Properties();
+        read.load(new StringReader(new String(marker.get().content(), StandardCharsets.UTF_8)));
+        String started = read.getProperty("started", "");
+        Instant at;
+        try {
+            at = started.isBlank() ? null : Instant.parse(started);
+        } catch (DateTimeParseException _) {
+            at = null;
+        }
+        String failure = read.getProperty("failed", "");
+        return failure.isBlank() ? new Status(State.RUNNING, at, null) : new Status(State.FAILED, at, failure);
+    }
+
+    /** Where a repository's deletion stands. */
+    public enum State {
+
+        /** The repository is there and nothing is deleting it. */
+        PRESENT,
+
+        /** A deletion has begun and its purge has not finished. */
+        RUNNING,
+
+        /** A purge stopped part way; deleting the repository again carries on from what is left. */
+        FAILED,
+
+        /** Neither the repository nor a deletion of it: a deletion that finished, or a name that never held one. */
+        GONE
+    }
+
+    /** A deletion's {@code state}, when it began ({@code null} unless one is running or stopped) and why its purge
+     *  stopped ({@code null} unless it did). */
+    public record Status(State state, Instant startedAt, String failure) {
+    }
+
+    /** The marker's body: when the deletion began, and why its purge stopped once one has. */
+    private static byte[] marker(Instant started, String failure) {
+        String body = "started=" + started + "\n"
+                + (failure == null ? "" : "failed=" + failure.replace('\n', ' ').replace('\r', ' ') + "\n");
+        return body.getBytes(StandardCharsets.UTF_8);
     }
 
     /**
@@ -83,8 +139,23 @@ public final class RepositoryRemoval {
             } catch (IOException | RuntimeException failed) {
                 logger.log(System.Logger.Level.WARNING, "Deleting repository " + name + " stopped part way; it still "
                         + "reads as being deleted, and deleting it again finishes it.", failed);
+                stopped(tenant, repository, failed);
             }
         });
+    }
+
+    /** Records in the marker why a purge stopped, keeping when it began, so {@link #status} can say so; best-effort,
+     *  since a store that refused the purge may refuse this too, and the deletion then still reads as running. */
+    static void stopped(ArtifactStore tenant, String repository, Exception failure) {
+        String key = repository + "/" + MARKER;
+        try {
+            Status status = status(tenant.scope(repository));
+            Instant started = status.startedAt() == null ? Instant.now() : status.startedAt();
+            String reason = failure.getMessage() == null ? failure.getClass().getSimpleName() : failure.getMessage();
+            tenant.write(key, new ByteArrayInputStream(marker(started, reason)));
+        } catch (IOException | RuntimeException _) {
+            // the marker still says the deletion began; deleting again resumes it either way
+        }
     }
 
     /**

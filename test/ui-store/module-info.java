@@ -18,6 +18,7 @@ open module build.jenesis.repository.ui.store.test {
     requires build.jenesis.repository.audit;
     requires build.jenesis.repository.server.spi;
     requires build.jenesis.repository.store.filesystem;
+    requires build.jenesis.repository.store.testkit;
     requires build.jenesis.repository.format.raw;
     requires build.jenesis.repository.format.maven;
     requires build.jenesis.repository.format.jenesis;
