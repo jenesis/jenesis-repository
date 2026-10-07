@@ -13,6 +13,7 @@
  */
 open module build.jenesis.repository.cli.test {
     requires build.jenesis.repository.cli;
+    requires build.jenesis.repository.cli.testkit;
     requires java.net.http;
     requires tools.jackson.databind;
     requires org.junit.jupiter;
