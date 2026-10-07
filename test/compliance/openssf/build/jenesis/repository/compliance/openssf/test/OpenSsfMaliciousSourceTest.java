@@ -4,6 +4,7 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.Severity;
+import build.jenesis.repository.compliance.VulnerabilityRecord;
 import build.jenesis.repository.compliance.openssf.OpenSsfMaliciousSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,6 +32,9 @@ class OpenSsfMaliciousSourceTest {
                     assertThat(advisory.id()).isEqualTo("MAL-2024-1234");
                     assertThat(advisory.malicious()).as("a curated record is malicious by definition").isTrue();
                     assertThat(advisory.severity()).as("no severity word stays NONE; the flag gates").isEqualTo(Severity.NONE);
+                    assertThat(advisory.detail().source()).as("attributed to the dataset, read through OSV")
+                            .isEqualTo(new VulnerabilityRecord.Source("OpenSSF Malicious Packages",
+                                    "https://osv.dev/vulnerability/MAL-2024-1234"));
                 });
     }
 

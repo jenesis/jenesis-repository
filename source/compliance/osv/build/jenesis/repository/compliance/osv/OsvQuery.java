@@ -4,6 +4,7 @@ import module java.base;
 import module tools.jackson.databind;
 import build.jenesis.repository.compliance.AdvisoryMemo;
 import build.jenesis.repository.compliance.AdvisorySource;
+import build.jenesis.repository.compliance.VulnerabilityRecord;
 import build.jenesis.repository.compliance.Ecosystems;
 import build.jenesis.repository.feed.FeedClient;
 import build.jenesis.repository.feed.FeedException;
@@ -44,6 +45,13 @@ public final class OsvQuery {
     private static final Set<String> RELEASED = Set.of("Alpine", Ecosystems.DEBIAN);
 
     private OsvQuery() {
+    }
+
+    /** What an OSV record {@code vuln} says of the vulnerability {@code id} beyond its identifier, severity and
+     *  description - its attribution, ratings, references, weaknesses, advisories and dates - as every source reading
+     *  OSV's records states it. */
+    public static VulnerabilityRecord detailOf(JsonNode vuln, String id) {
+        return OsvRecords.detailOf(vuln, id);
     }
 
     /** Whether OSV publishes {@code ecosystem}, so a query of it is answered rather than refused. A source answers
