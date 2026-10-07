@@ -72,11 +72,11 @@ public final class ContentsClient extends ClientCalls {
         Search page;
         do {
             HttpResponse<String> response = send("GET", "/api/search?repo=" + enc(repo) + "&q=" + enc(query)
-                    + (cursor == null ? "" : "&cursor=" + enc(cursor)), null, null);
+                    + (cursor == null ? "" : "&after=" + enc(cursor)), null, null);
             require(response, 200, "search " + repo);
             page = JSON.readValue(response.body(), Search.class);
             results.addAll(page.results());
-            String next = page.nextCursor();
+            String next = page.next();
             // Strictly advancing, so this terminates; a repeated or blank cursor is a server that cannot page on.
             cursor = next == null || next.isBlank() || next.equals(cursor) ? null : next;
         } while (cursor != null);
@@ -208,13 +208,13 @@ public final class ContentsClient extends ClientCalls {
     }
 
     /** One page of a repository's published-asset enumeration - the {@code GET /api/assets} walk, the outbound
-     *  mirror of the import connectors. {@code cursor} is the opaque
+     *  mirror of the import connectors. {@code next} is the opaque
      *  token that fetches the next page (pass it back as {@code after}); it is {@code null} once the walk is exhausted.
      *  {@code limit} caps the page (the server clamps it to its own maximum); a {@code null} limit takes the default. */
     public AssetPage assets(String repo, String after, Integer limit) throws IOException, InterruptedException {
         StringBuilder path = new StringBuilder("/api/assets?repo=").append(enc(repo));
         if (after != null && !after.isBlank()) {
-            path.append("&cursor=").append(enc(after));
+            path.append("&after=").append(enc(after));
         }
         if (limit != null) {
             path.append("&limit=").append(limit);
@@ -272,7 +272,7 @@ public final class ContentsClient extends ClientCalls {
 
     /** One page of the asset enumeration: the repository walked, its assets, and the cursor to resume after the last
      *  one ({@code null} once the walk is exhausted). */
-    public record AssetPage(String repository, List<AssetEntry> assets, String cursor) {
+    public record AssetPage(String repository, List<AssetEntry> assets, String next) {
     }
 
     /** One enumerated asset: its serving request path, stored size and SHA-256 straight from the publication pointer,
@@ -302,6 +302,6 @@ public final class ContentsClient extends ClientCalls {
 
     /** One page of {@code /api/search}: how the repository answered, the rows, and the cursor to resume after -
      *  {@code null} when nothing remains. */
-    private record Search(String mode, boolean indexed, List<String> results, String nextCursor) {
+    private record Search(String mode, boolean indexed, List<String> results, String next) {
     }
 }

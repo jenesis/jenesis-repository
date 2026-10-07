@@ -77,7 +77,7 @@ public class BrowseController {
     @ResponseBody
     public SearchView search(@RequestParam("repo") String repo,
                              @RequestParam(value = "q", defaultValue = "") String query,
-                             @RequestParam(value = "cursor", required = false) String cursor,
+                             @RequestParam(value = "after", required = false) String cursor,
                              @RequestParam(value = "limit", required = false) Integer limit,
                              HttpServletRequest http,
                              HttpServletResponse response) throws IOException {
@@ -141,10 +141,11 @@ public class BrowseController {
     }
 
     /** One bounded page of search hits: the mode and whether the index answered, the disclosed rows as displays and as
-     *  parts, whether matches remain, and the opaque cursor ({@code null} exactly when nothing remains) - the rows
+     *  parts, whether matches remain, and the opaque cursor {@code next}, passed back as {@code after} ({@code null}
+     *  exactly when nothing remains) - the rows
      *  alone could not tell a complete answer from a clamped one. */
     public record SearchView(String mode, boolean indexed, List<String> results, List<Hit> hits, boolean truncated,
-                             String nextCursor) {
+                             String next) {
     }
 
     /** One hit's parts: ecosystem, coordinate and version, or the path of an artifact without a coordinate. */

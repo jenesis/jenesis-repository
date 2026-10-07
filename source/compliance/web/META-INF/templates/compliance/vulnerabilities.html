@@ -135,9 +135,9 @@
                 </th:block>
                 </tbody>
             </table>
-            <p th:if="${report.nextCursor() != null}">
+            <p th:if="${report.next() != null}">
                 <a th:href="@{/ui/repositories/{repo}/vulnerabilities(repo=${repo}, reachability=${reachability},
-                        applicability=${applicability}, after=${report.nextCursor()})}">next worst &rarr;</a>
+                        applicability=${applicability}, after=${report.next()})}">next worst &rarr;</a>
             </p>
         </figure>
     </article>

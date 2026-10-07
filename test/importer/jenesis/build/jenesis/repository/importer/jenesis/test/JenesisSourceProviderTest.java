@@ -42,7 +42,7 @@ class JenesisSourceProviderTest {
     private static final String LIST_URL = "https://src.example/api/assets?repo=libs";
 
     private static String walkKey(ImportRequest request) throws IOException {
-        FakeFetcher fetcher = new FakeFetcher(Map.of(LIST_URL, ok("{\"assets\":[],\"cursor\":null}")));
+        FakeFetcher fetcher = new FakeFetcher(Map.of(LIST_URL, ok("{\"assets\":[],\"next\":null}")));
         new JenesisSourceProvider().create(request, fetcher)
                 .forEach((format, path, content) -> { }, cursor -> { });
         assertThat(fetcher.requests).as("the listing was fetched exactly once").hasSize(1);

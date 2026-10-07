@@ -133,19 +133,19 @@ class ManagementWebTest {
         }
         Servlets.Response first = Servlets.response();
 
-        List<ManagementController.AuditView> page = controller.auditTrail(null, null, null, 0, null, 2, request(),
+        List<ManagementController.AuditView> page = controller.auditTrail(null, null, null, null, 2, request(),
                 first.servlet());
 
         assertThat(page).hasSize(2);
         String next = first.header("Jenesis-Next-Cursor");
         assertThat(next).as("more remains, so the answer says where it resumes").isNotNull();
         Servlets.Response last = Servlets.response();
-        List<ManagementController.AuditView> rest = controller.auditTrail(null, null, null, 0, next, 2, request(),
+        List<ManagementController.AuditView> rest = controller.auditTrail(null, null, null, next, 2, request(),
                 last.servlet());
         assertThat(rest).hasSize(1);
         assertThat(last.header("Jenesis-Next-Cursor")).as("the last page carries no cursor").isNull();
-        assertThat(controller.auditTrail(null, null, AuditActions.ROLE_SET, 1, null, 500, request(),
-                Servlets.response().servlet())).as("an offset page").hasSize(2);
+        assertThat(controller.auditTrail(null, null, AuditActions.ROLE_SET, null, 500, request(),
+                Servlets.response().servlet())).as("narrowed to one action").hasSize(3);
     }
 
     @Test
@@ -174,7 +174,7 @@ class ManagementWebTest {
         Servlets.Response page = Servlets.response();
         Servlets.Response csv = Servlets.response();
 
-        assertThat(unaudited.auditTrail(null, null, null, 0, null, 10, request(), page.servlet())).isNull();
+        assertThat(unaudited.auditTrail(null, null, null, null, 10, request(), page.servlet())).isNull();
         unaudited.auditCsv(null, null, null, request(), csv.servlet());
 
         assertThat(page.status()).isEqualTo(501);
