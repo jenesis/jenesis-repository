@@ -190,8 +190,7 @@ public final class ClosureResolver {
         }
         if (!anyHeld) {
             return heldForReview(ecosystem, grammar, dependency) ? Choice.cut(ALL_HELD, false)
-                    : Choice.cut(readers.size() == 1 ? "not held by this repository"
-                            : "not held by this repository or a repository its fallbacks name", false);
+                    : Choice.cut(ClosureSection.Cut.notHeld(readers.size() == 1), false);
         }
         // Newest first; a stable sort keeps the walk's order among repositories holding the same version.
         admitted.sort((left, right) -> grammar.compare(right.holding().version(), left.holding().version()));

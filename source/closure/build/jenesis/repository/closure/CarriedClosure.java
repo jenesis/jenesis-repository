@@ -77,12 +77,11 @@ public final class CarriedClosure {
             Optional<Holdings.Placed> placed = Holdings.place(holdings, ecosystem, entry.coordinate(),
                     entry.version());
             if (placed.isEmpty()) {
-                cuts.add(new ClosureSection.Cut(entry.coordinate(), entry.version(), members.size() == 1
-                        ? "named by " + document + ", not held by this repository"
-                        : "named by " + document + ", not held by this repository or a repository its fallbacks "
-                                + "name"));
+                cuts.add(new ClosureSection.Cut(entry.coordinate(), entry.version(),
+                        "named by " + document + ", " + ClosureSection.Cut.notHeld(members.size() == 1)));
             } else if (!placed.get().standing().served()) {
-                cuts.add(new ClosureSection.Cut(entry.coordinate(), entry.version(), "held for review"));
+                cuts.add(new ClosureSection.Cut(entry.coordinate(), entry.version(),
+                        ClosureSection.Cut.HELD_FOR_REVIEW));
             } else {
                 int member = placed.get().member();
                 components.add(new ClosureSection.Component(entry.coordinate(), entry.version(),
