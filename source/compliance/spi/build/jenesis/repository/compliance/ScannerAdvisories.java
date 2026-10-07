@@ -1,6 +1,7 @@
 package build.jenesis.repository.compliance;
 
 import module java.base;
+import module tools.jackson.databind;
 
 /**
  * What a content scanner found, read as the advisories the gate decides and the findings ledger records - one mapping
@@ -51,6 +52,34 @@ public final class ScannerAdvisories {
                    Double scoreV3, Double scoreV2) {
             this(id, pkg, version, fixVersion, severity, description, scoreV3, scoreV2, VulnerabilityRecord.EMPTY);
         }
+    }
+
+    /** Who gave a rating, by the key the Trivy database files it under. */
+    private static final Map<String, String> RATERS = Map.of("nvd", "NVD", "ghsa", "GitHub Advisory Database",
+            "redhat", "Red Hat");
+
+    /**
+     * The ratings in a per-rater CVSS map as the Trivy database writes it - {@code {"nvd": {"V3Vector": ...,
+     * "V3Score": ...}, "redhat": {...}}}, with {@code V40}, {@code V3} and {@code V2} vectors and scores - each by who
+     * gave it. Trivy reports the map under {@code CVSS}, and a scanner adapter over Trivy's database under its vendor
+     * attributes; anything that is not such a map reads as no ratings.
+     */
+    public static List<VulnerabilityRecord.Rating> ratings(JsonNode byRater) {
+        List<VulnerabilityRecord.Rating> ratings = new ArrayList<>();
+        if (byRater == null || !byRater.isObject()) {
+            return ratings;
+        }
+        for (Map.Entry<String, JsonNode> rated : byRater.properties()) {
+            VulnerabilityRecord.Source rater = new VulnerabilityRecord.Source(
+                    RATERS.getOrDefault(rated.getKey(), rated.getKey()), null);
+            for (String version : List.of("V40", "V3", "V2")) {
+                JsonNode score = rated.getValue().path(version + "Score");
+                VulnerabilityRecord.Rating.stated(rater, score.isNumber() ? score.asDouble() : null,
+                        rated.getValue().path(version + "Vector").asString(null),
+                        version.equals("V2") ? "CVSSv2" : "other").ifPresent(ratings::add);
+            }
+        }
+        return ratings;
     }
 
     /**

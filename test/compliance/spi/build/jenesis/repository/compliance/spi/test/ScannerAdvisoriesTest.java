@@ -2,6 +2,7 @@ package build.jenesis.repository.compliance.spi.test;
 
 import module java.base;
 import module org.junit.jupiter.api;
+import module tools.jackson.databind;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ScannerAdvisories;
 import build.jenesis.repository.compliance.Severity;
@@ -49,6 +50,27 @@ class ScannerAdvisoriesTest {
         assertThat(detail.source()).isEqualTo(alpine);
         assertThat(detail.ratings()).singleElement().satisfies(rating -> assertThat(rating.source()).isEqualTo(nvd));
         assertThat(detail.cwes()).as("from the row naming it").containsExactly(787);
+    }
+
+    @Test
+    void a_per_rater_cvss_map_reads_as_each_raters_ratings_and_anything_else_as_none() {
+        JsonNode map = JsonMapper.builder().build().readTree("""
+                {"nvd": {"V2Vector": "AV:N/AC:L/Au:N/C:P/I:P/A:P", "V2Score": 7.5,
+                         "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", "V3Score": 9.8},
+                 "vendor-x": {"V3Score": 5.3},
+                 "redhat": {"V40Vector": "", "V3Score": 0}}""");
+
+        List<VulnerabilityRecord.Rating> ratings = ScannerAdvisories.ratings(map);
+
+        assertThat(ratings).containsExactly(
+                new VulnerabilityRecord.Rating(new VulnerabilityRecord.Source("NVD", null), 9.8, Severity.CRITICAL,
+                        "CVSSv31", "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"),
+                new VulnerabilityRecord.Rating(new VulnerabilityRecord.Source("NVD", null), 7.5, Severity.HIGH,
+                        "CVSSv2", "AV:N/AC:L/Au:N/C:P/I:P/A:P"),
+                new VulnerabilityRecord.Rating(new VulnerabilityRecord.Source("vendor-x", null), 5.3,
+                        Severity.MEDIUM, "other", null));
+        assertThat(ScannerAdvisories.ratings(map.path("absent"))).isEmpty();
+        assertThat(ScannerAdvisories.ratings(null)).isEmpty();
     }
 
     @Test
