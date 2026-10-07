@@ -30,8 +30,8 @@ import build.jenesis.repository.store.ArtifactStore;
  *     before it, so a discard hook must not assume its {@code audit/quarantine} row exists. The role must never move
  *     onto a deferred or outbox-backed delivery: a release visible before its override marker is written is exactly
  *     what the enforce sweeps re-hold.</li>
- * <li><b>Thread-safety.</b> A hook is instantiated per fan-out and used by one thread, so it need not be thread-safe,
- *     but holds no mutable instance state. Fan-outs themselves run concurrently over the same {@code holds/} and
+ * <li><b>Thread-safety.</b> A hook is discovered once and shared by every fan-out on every thread, so it holds no
+ *     mutable instance state. Fan-outs themselves run concurrently over the same {@code holds/} and
  *     {@code overrides/} keys (two reviewers, or a review racing an enforce sweep), so a hook that reads then writes such
  *     a key uses compare-and-set with bounded retries.</li>
  * <li><b>Idempotency / replay.</b> Every method converges when called again with the same arguments: the fan-out has
@@ -65,8 +65,8 @@ import build.jenesis.repository.store.ArtifactStore;
  *     {@code StorageNamespace} prefixes their module declares.</li>
  * <li><b>Staleness.</b> Every method re-reads durable state; no hook caches {@code holds/} or {@code overrides/},
  *     which sweeps it never observes write.</li>
- * <li><b>Lifecycle / ownership.</b> {@link #discovered()} is the one {@link ServiceLoader} call and caches nothing, so
- *     providers are constructed afresh on every fan-out. Each fan-out has an overload taking the hooks, the
+ * <li><b>Lifecycle / ownership.</b> {@link #discovered()} answers the one {@link ServiceLoader} discovery, made on
+ *     first use and held for the process, since what the module path carries does not change. Each fan-out has an overload taking the hooks, the
  *     substitution seam a suite drives the real choreography through. A provider has a cheap public no-argument
  *     constructor, owns no thread, client or connection, keeps no state across calls and is never closed.</li>
  * <li><b>Ordering / concurrency.</b> Fan-out order is not part of the contract: each hook owns its own
@@ -221,7 +221,7 @@ public interface HoldReleaseObserver {
     static Iterable<HoldReleaseObserver> discovered() {
         // The primitive refuses two observers of one kind, whose shared key space would let one's release clear the
         // other's hold, and sorts by kind, so the fan-out order is the same on every node.
-        return Providers.all("hold-release", ServiceLoader.load(HoldReleaseObserver.class),
-                HoldReleaseObserver::kind, _ -> true, Optional::of);
+        return Providers.all("hold-release", HoldReleaseObservers.DISCOVERED, HoldReleaseObserver::kind, _ -> true,
+                Optional::of);
     }
 }

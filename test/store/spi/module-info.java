@@ -26,6 +26,9 @@ open module build.jenesis.repository.store.test {
     requires build.jenesis.repository.observation;
     requires org.junit.jupiter;
     requires org.assertj.core;
+    // Discovered over this module's own provider (ProvidersDiscoveredTest), which a ServiceLoader answers only in a
+    // module that uses the service.
+    uses build.jenesis.repository.store.ArtifactStoreProvider;
     provides build.jenesis.repository.store.ArtifactStoreProvider
             with build.jenesis.repository.store.test.NeedyArtifactStoreProvider;
     // The withhold-change feed guard (WithholdFeedTest) needs a discovered PublicationObserver, since Withheld.mark /

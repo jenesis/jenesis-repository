@@ -13,13 +13,18 @@ public final class SettingsSecrets {
     private SettingsSecrets() {
     }
 
+    /** The installed catalogue's secret keys, held once read: the catalogue is what the module path carries, and a
+     *  read-back asks about every key it renders. A catalogue that fails to read is not held, so its refusal is
+     *  raised again on the next call. */
+    private static volatile Set<String> held;
+
     /** The keys of every SECRET-kind setting in the installed catalogue: write-only values a read-back omits. */
     public static Set<String> keys() {
-        Set<String> secrets = new HashSet<>();
-        for (Setting setting : SettingsContributor.all()) {
-            if (setting.kind() == Setting.Kind.SECRET) {
-                secrets.add(setting.key());
-            }
+        Set<String> secrets = held;
+        if (secrets == null) {
+            secrets = SettingsContributor.all().stream().filter(setting -> setting.kind() == Setting.Kind.SECRET)
+                    .map(Setting::key).collect(Collectors.toUnmodifiableSet());
+            held = secrets;
         }
         return secrets;
     }

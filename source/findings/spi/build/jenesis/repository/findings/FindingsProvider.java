@@ -23,8 +23,8 @@ import build.jenesis.repository.store.Providers;
  * <li><b>Tenant scoping.</b> The caller hands in a scoped store, and the ledger reads and writes nothing outside
  *     it.</li>
  * <li><b>Staleness.</b> Every row carries its first- and last-seen instants.</li>
- * <li><b>Lifecycle / ownership.</b> The caller resolves the provider once and calls {@link #over} per request; the
- *     provider owns whatever the ledger needs closed. {@link #installed()} caches nothing.</li>
+ * <li><b>Lifecycle / ownership.</b> {@link #installed()} answers the provider discovered on first use and held for
+ *     the process; a caller calls {@link #over} per request. The provider owns whatever the ledger needs closed.</li>
  * <li><b>Bounded work / cancellation.</b> A ledger bounds its own repository-wide reads:
  *     {@link Findings#all(Findings.Filter, int, int)} collects no more than its window and
  *     {@link Findings#all(Findings.Filter, Findings.Visitor)} materialises nothing. The inherited defaults refuse past
@@ -38,6 +38,6 @@ public interface FindingsProvider {
 
     /** The installed provider, empty without a persistence module; a second installed provider throws. */
     static Optional<FindingsProvider> installed() {
-        return Providers.singleton("findings", ServiceLoader.load(FindingsProvider.class));
+        return Providers.singleton("findings", InstalledFindings.DISCOVERED);
     }
 }
