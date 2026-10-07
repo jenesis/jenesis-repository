@@ -22,6 +22,10 @@ import module java.base;
  * every one the vulnerability is {@link Severity#UNKNOWN}, which a severity floor reads as failing closed. Where one
  * identifier arrives with different severities across its packages, the strongest stands.
  *
+ * <p>What the scanner's database says of a vulnerability beyond its identifier - where it was published, each rating
+ * with who gave it, its weaknesses - rides each row, and every row of one identifier lends what it says to the one
+ * advisory.
+ *
  * <p>A report that carries no list of rows at all is refused rather than read as clean: an empty list is what a clean
  * image looks like, and a report whose list went missing - a renamed field, a truncated document - must surface as a
  * failed scan, not as an admission.
@@ -33,9 +37,20 @@ public final class ScannerAdvisories {
 
     /** One vulnerability of one package as a scanner reports it: its identifier, the package and the version
      *  installed, the version fixing it, the scanner's severity word, a description, and the CVSS scores it gives -
-     *  any of which but the identifier may be {@code null}. */
+     *  any of which but the identifier may be {@code null} - and what the scanner's database says of it beyond these,
+     *  its attribution, ratings and weaknesses ({@link VulnerabilityRecord#EMPTY} where it says nothing more). */
     public record Row(String id, String pkg, String version, String fixVersion, String severity, String description,
-                      Double scoreV3, Double scoreV2) {
+                      Double scoreV3, Double scoreV2, VulnerabilityRecord detail) {
+
+        public Row {
+            detail = detail == null ? VulnerabilityRecord.EMPTY : detail;
+        }
+
+        /** A row whose scanner says nothing of the vulnerability beyond its identifier, severity and scores. */
+        public Row(String id, String pkg, String version, String fixVersion, String severity, String description,
+                   Double scoreV3, Double scoreV2) {
+            this(id, pkg, version, fixVersion, severity, description, scoreV3, scoreV2, VulnerabilityRecord.EMPTY);
+        }
     }
 
     /**
@@ -67,7 +82,9 @@ public final class ScannerAdvisories {
         SequencedSet<String> installed = new LinkedHashSet<>();
         SequencedSet<String> fixes = new LinkedHashSet<>();
         String summary = null;
+        VulnerabilityRecord detail = VulnerabilityRecord.EMPTY;
         for (Row row : found) {
+            detail = detail.and(row.detail());
             Severity reported = severity(row);
             severity = severity == null ? reported : Severity.strongest(severity, reported);
             String pkg = row.pkg() == null || row.pkg().isBlank() ? "an unnamed package" : row.pkg().strip();
@@ -83,7 +100,7 @@ public final class ScannerAdvisories {
         String description = AdvisorySource.Advisory.description(null,
                 String.join(", ", installed) + (summary == null ? "" : ": " + summary));
         return new AdvisorySource.Advisory(id, severity, false, fixes.isEmpty() ? null : String.join(", ", fixes),
-                cves, description);
+                cves, description, List.of(), detail);
     }
 
     /** One row's severity: the scanner's own word, which is its assessment of the package as installed, read as
