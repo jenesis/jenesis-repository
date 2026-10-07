@@ -1,6 +1,7 @@
 package build.jenesis.repository.console.api;
 
 import module java.base;
+import build.jenesis.repository.audit.AuditActions;
 
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.store.Documents;
@@ -51,7 +52,7 @@ public class ScimTokenController {
             return Map.of();
         }
         String token = tokens.mint();
-        record(tenant, key, "scim.token.set");
+        record(tenant, key, AuditActions.SCIM_TOKEN_SET);
         response.setStatus(201);
         return Map.of("token", token, "shown", "once");
     }
@@ -65,7 +66,7 @@ public class ScimTokenController {
             return Map.of();
         }
         tokens.set(null);
-        record(tenant, key, "scim.token.clear");
+        record(tenant, key, AuditActions.SCIM_TOKEN_CLEAR);
         return Map.of("cleared", true);
     }
 

@@ -1,6 +1,7 @@
 package build.jenesis.repository.staging.web;
 
 import module java.base;
+import build.jenesis.repository.audit.AuditActions;
 
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.format.RepositoryType;
@@ -92,7 +93,7 @@ public class StagingController {
         RepositoryRequests.rejectRawTraversal(id);
         staging.get().promote(id);
         // A promotion releases a staged set in full, so it is audited.
-        audit(tenant, key, "staging.promote", repo + "/" + id);
+        audit(tenant, key, AuditActions.STAGING_PROMOTE, repo + "/" + id);
         response.setStatus(200);
     }
 
@@ -110,7 +111,7 @@ public class StagingController {
         RepositoryRequests.rejectRawTraversal(id);
         staging.get().drop(id);
         // Dropping discards a staged set, so it is audited.
-        audit(tenant, key, "staging.drop", repo + "/" + id);
+        audit(tenant, key, AuditActions.STAGING_DROP, repo + "/" + id);
         response.setStatus(200);
     }
 

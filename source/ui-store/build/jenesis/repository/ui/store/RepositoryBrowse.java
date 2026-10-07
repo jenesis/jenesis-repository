@@ -477,11 +477,6 @@ public class RepositoryBrowse extends TenantScope implements AutoCloseable {
                                 FindingsState findings, boolean screenPending, ClosureSection.Closure closure,
                                 ExposureSection.Exposure exposure, ScreenedThrough screenedThrough) {
 
-        /** When the closure pass last derived {@link #exposure}, as the page dates it. */
-        public String exposureAt() {
-            return exposure == null ? "" : stamp(exposure.derived());
-        }
-
         /** Whether this is a release still waiting for its closure: a cached copy has none of its own. */
         public boolean awaitsClosure() {
             return closure == null && !cached;

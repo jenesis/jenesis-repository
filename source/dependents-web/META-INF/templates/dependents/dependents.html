@@ -81,7 +81,7 @@
             </p>
             <th:block th:if="${view.declared().installed()}">
                 <p><small th:if="${view.declared().built() != null}">Declared dependencies last indexed in full:
-                    <span th:text="${view.declared().built()}">-</span></small>
+                    <time th:replace="~{base :: time(${view.declared().built()})}">when</time></small>
                     <small th:if="${view.declared().built() == null}">The declared dependencies have not been indexed in
                     full yet - the background pass does it; until then none are listed.</small></p>
                 <th:block th:if="${view.declared().built() != null and view.declared().declarations().isEmpty()}">

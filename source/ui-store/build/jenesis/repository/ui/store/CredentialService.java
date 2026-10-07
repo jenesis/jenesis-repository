@@ -120,7 +120,7 @@ public class CredentialService {
         String id = Authorization.hash(key);
         Instant expiry = authorization.lifetimes().mintExpiry(tenant, expires, nonExpiring);
         authorization.provision(tenant, id, label, expiry);
-        audit("credential.mint", id);
+        audit(AuditActions.CREDENTIAL_MINT, id);
         return new Created(id, key, expiry);
     }
 
@@ -128,13 +128,13 @@ public class CredentialService {
      *  {@code overlap} (null defaults to a week). The successor's key is shown once. */
     public Created rotate(String id, Duration overlap) throws IOException {
         Authorization.Rotated rotated = authorization.rotate(tenant(), requireId(id), overlap);
-        audit("credential.rotate", id + " -> " + Authorization.hash(rotated.key()));
+        audit(AuditActions.CREDENTIAL_ROTATE, id + " -> " + Authorization.hash(rotated.key()));
         return new Created(Authorization.hash(rotated.key()), rotated.key(), rotated.expires());
     }
 
     public void setGrant(String id, String project, String path, String role) throws IOException {
         authorization.setGrant(tenant(), requireId(id), scope(project, path), tokensForRole(role));
-        audit("grant.set", id + " " + project);
+        audit(AuditActions.GRANT_SET, id + " " + project);
     }
 
     /** Resolve a named role to its grant tokens for the current tenant. */
@@ -178,19 +178,19 @@ public class CredentialService {
 
     public void removeGrant(String id, String project) throws IOException {
         authorization.removeGrant(tenant(), requireId(id), project);
-        audit("grant.remove", id + " " + project);
+        audit(AuditActions.GRANT_REMOVE, id + " " + project);
     }
 
     /** Set or clear ({@code null}) a credential's expiry. */
     public void setExpiry(String id, Instant expires) throws IOException {
         authorization.setExpiry(tenant(), requireId(id), expires);
-        audit("credential.expiry", id);
+        audit(AuditActions.CREDENTIAL_EXPIRY, id);
     }
 
     /** Set or clear (blank) a credential's source-IP allowlist: comma-separated CIDRs or plain addresses. */
     public void setAllowedAddresses(String id, String addresses) throws IOException {
         authorization.setAllowedAddresses(tenant(), requireId(id), addresses);
-        audit("credential.allowed-ips", id);
+        audit(AuditActions.CREDENTIAL_ALLOWED_IPS, id);
     }
 
     /** The current tenant's OIDC trusts: each exchanges a matching id-token for a short-lived credential. */
@@ -265,7 +265,7 @@ public class CredentialService {
 
     public void delete(String id) throws IOException {
         authorization.revoke(tenant(), requireId(id));
-        audit("credential.revoke", id);
+        audit(AuditActions.CREDENTIAL_REVOKE, id);
     }
 
     private String tenant() {

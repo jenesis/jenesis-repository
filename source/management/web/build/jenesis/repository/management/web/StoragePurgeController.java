@@ -1,6 +1,7 @@
 package build.jenesis.repository.management.web;
 
 import module java.base;
+import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.server.RepositoryRouting;
@@ -72,7 +73,7 @@ public class StoragePurgeController {
             return ResponseEntity.status(404).build();
         }
         if (!dryRun) {
-            audit.record(tenant, key == null ? "anonymous" : Authorization.hash(key), "storage.purge",
+            audit.record(tenant, key == null ? "anonymous" : Authorization.hash(key), AuditActions.STORAGE_PURGE,
                     namespace + " (" + report.get().objects() + " objects, " + report.get().bytes() + " bytes)");
         }
         List<SpaceView> spaces = new ArrayList<>();

@@ -179,12 +179,12 @@
             <!--/* What the closure reaches that is held for review or carries findings, as the closure pass last looked:
                  the state this version inherits from the copies it relies on, with no lookup of its own. */-->
             <th:block th:if="${detail.exposure != null}">
-                <p th:if="${detail.exposure.reached().isEmpty()}"><small
-                        th:text="|Nothing it reaches is held for review or carries findings, as of ${detail.exposureAt()}.|">Nothing
-                    it reaches is held for review or carries findings.</small></p>
+                <p th:if="${detail.exposure.reached().isEmpty()}"><small>Nothing it reaches is held for review or
+                    carries findings, as of <time th:replace="~{base :: time(${detail.exposure.derived()})}">when</time>.</small></p>
                 <th:block th:unless="${detail.exposure.reached().isEmpty()}">
-                    <p><small th:text="|It relies on ${detail.exposure.held()} version(s) held for review and ${detail.exposure.vulnerable()} carrying findings, as of ${detail.exposureAt()}.|">It
-                        relies on 1 version held for review and 1 carrying findings.</small></p>
+                    <p><small>It relies on <span th:text="${detail.exposure.held()}">1</span> version(s) held for review
+                        and <span th:text="${detail.exposure.vulnerable()}">1</span> carrying findings, as of
+                        <time th:replace="~{base :: time(${detail.exposure.derived()})}">when</time>.</small></p>
                     <table class="app-list" aria-label="Versions it relies on that are held or carry findings">
                         <thead>
                         <tr>
