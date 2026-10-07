@@ -29,6 +29,11 @@ public final class FeatureGatedWalkConsumer implements WalkConsumer {
     }
 
     @Override
+    public String description() {
+        return "a consumer a test drives";
+    }
+
+    @Override
     public boolean enabled() {
         return Features.enabled(FEATURE, false);
     }

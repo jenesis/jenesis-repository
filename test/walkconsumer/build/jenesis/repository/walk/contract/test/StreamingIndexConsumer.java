@@ -31,6 +31,11 @@ public final class StreamingIndexConsumer implements WalkConsumer {
     }
 
     @Override
+    public String description() {
+        return "a consumer a test drives";
+    }
+
+    @Override
     public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) throws IOException {
         // An upsert, not an append: the same artifact delivered twice (the at-least-once tail after a crash-resume)
         // must leave exactly the state one delivery leaves.

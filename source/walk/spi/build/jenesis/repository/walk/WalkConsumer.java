@@ -265,11 +265,8 @@ public interface WalkConsumer {
         return true;
     }
 
-    /** One sentence for the operator: what this consumer repairs when it rides a walk, and what that costs. The
-     *  default is the name, which is what a consumer that has not yet described itself shows. */
-    default String description() {
-        return name();
-    }
+    /** One sentence for the operator: what this consumer repairs when it rides a walk, and what that costs. */
+    String description();
 
     /** The settings keys (bare, without the {@code jenrepo.} prefix) of the dials that govern what this consumer
      *  does with what it is handed, for the walks screen to show beside it; none by default. */

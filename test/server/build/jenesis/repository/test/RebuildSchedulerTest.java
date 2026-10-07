@@ -75,6 +75,11 @@ class RebuildSchedulerTest {
             }
 
             @Override
+            public String description() {
+                return "a consumer a test drives";
+            }
+
+            @Override
             public void onRetained(ArtifactDescriptor artifact, ArtifactStore scoped) {
                 seen.add(artifact.path());
             }
@@ -106,6 +111,11 @@ class RebuildSchedulerTest {
                     @Override
                     public String name() {
                         return "idle";
+                    }
+
+                    @Override
+                    public String description() {
+                        return "a consumer a test drives";
                     }
 
                     @Override

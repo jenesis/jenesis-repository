@@ -49,6 +49,11 @@ class RebuildPassCostTest {
             }
 
             @Override
+            public String description() {
+                return "a consumer a test drives";
+            }
+
+            @Override
             public void onRetained(ArtifactDescriptor artifact, ArtifactStore store) {
                 delivered.add(artifact.path());
             }
