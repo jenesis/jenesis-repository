@@ -131,6 +131,8 @@ public class CliRequestShapeTest {
                             + " [--applicability applies|not-applicable|unknown]",
                     "vulnerabilities releases --reachability reachable --applicability applies",
                     get("/api/vulnerabilities", "repo", "reachability", "applicability")),
+            action("vulnerabilities rescan <repo>", "vulnerabilities rescan releases",
+                    get("/api/vulnerabilities", "repo", "refresh"), get("/api/vulnerabilities", "repo")),
             action("findings <repo> [--coordinate C] [--kind K] [--source S] [--category C] [--severity S]",
                     "findings releases --coordinate c --kind k --source s --category g --severity HIGH",
                     get("/api/findings", "repo", "coordinate", "kind", "source", "category", "severity")),
