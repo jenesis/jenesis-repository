@@ -20,9 +20,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * Contributes to the server's own deny-by-default security chain through {@link SecurityChainCustomizer} rather
  * than replacing it.
  *
- * <p>The authorization manager is not declared here: the server's own is the one manager, and a richer policy
- * arrives through {@code AuthorizationManagerProvider}, so it applies in every composition carrying it. Overriding the
- * bean by name would couple two modules by a string that fails silently when it stops matching.
+ * <p>The authorization manager is not declared here: the server's own is the one manager. Overriding the bean by name
+ * would couple two modules by a string that fails silently when it stops matching.
  *
  * <p>The {@link RateLimitFilter} is declared here so its ceiling resolves through the pin-aware runtime-settings
  * chain; the chain's own filter backs off in its favour.
