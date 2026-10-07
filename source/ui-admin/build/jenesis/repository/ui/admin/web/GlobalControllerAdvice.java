@@ -331,7 +331,13 @@ public class GlobalControllerAdvice {
     }
 
     @ExceptionHandler(IllegalStateException.class)
-    public String noTenant(HttpServletRequest request, Model model) {
+    public String noTenant(IllegalStateException e, HttpServletRequest request, Model model) {
+        // With a tenant selected the state is not a missing tenant - a module not installed, a key not configured - and
+        // is said on the error page; bouncing to the router would land the operator elsewhere with the reason lost.
+        if (current.name() != null) {
+            model.addAttribute("error", e.getMessage());
+            return "error";
+        }
         // A missing tenant bounces back through the router at /ui/, except from the router itself, which would loop.
         String path = request == null ? null : request.getRequestURI();
         if (path != null && (path.equals("/ui") || path.equals("/ui/"))) {
