@@ -21,6 +21,8 @@ open module build.jenesis.repository.ui.store {
     requires transitive build.jenesis.repository.audit;
     requires transitive build.jenesis.repository.store;
     requires transitive build.jenesis.repository.cleanup;
+    // The cleanup panel runs the API's own sweep and dry run, and hands their view to the screen.
+    requires transitive build.jenesis.repository.cleanup.web;
     requires transitive build.jenesis.repository.inventory;
     requires build.jenesis.repository.scope;
     requires build.jenesis.repository.walk;

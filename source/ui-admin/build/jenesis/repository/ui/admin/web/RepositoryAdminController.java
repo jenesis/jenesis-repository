@@ -363,9 +363,8 @@ public class RepositoryAdminController {
                 .filter(group -> group.settings().stream()
                         .anyMatch(setting -> RetentionPolicy.KEYS.contains(setting.key())))
                 .toList());
-        model.addAttribute("plan", lifecycle.retentionAvailable() ? lifecycle.plan(repo).orElse(null) : null);
-        model.addAttribute("lastCleanup", lifecycle.retentionAvailable() ? lifecycle.lastCleanup(repo).orElse(null)
-                : null);
+        model.addAttribute("plan", lifecycle.retentionAvailable() ? lifecycle.plan(repo) : null);
+        model.addAttribute("lastCleanup", lifecycle.retentionAvailable() ? lifecycle.lastCleanup(repo) : null);
         return "repository-retention";
     }
 

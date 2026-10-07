@@ -85,30 +85,76 @@ final class LifecycleCommands {
         return 0;
     }
 
+    /** How long a sweep takes to move: a judgment of every release, so seconds on a small repository and minutes on a
+     *  large one - the cadence a bare {@code --refresh} watches it at. */
+    private static final Duration CLEANUP = Duration.ofSeconds(5);
+
     static int cleanup(String[] args, Path home) throws Exception {
-        // The action comes before the repository, as on every other noun: 'cleanup plan <repo>' is the dry run, and
-        // a line that does not have exactly that shape is refused rather than read as a sweep of some repository.
-        boolean plan = args.length > 1 && args[1].equals("plan");
-        if (args.length != (plan ? 3 : 2)) {
-            throw new IllegalArgumentException("Usage: cleanup <repo> | cleanup plan <repo>");
+        // The action comes before the repository, as on every other noun: 'cleanup plan <repo>' starts the dry run,
+        // 'cleanup status <repo>' reads the last sweep, and a line that does not have exactly that shape is refused
+        // rather than read as a sweep of some repository.
+        String action = args.length > 1 && (args[1].equals("plan") || args[1].equals("status")) ? args[1] : "";
+        if (args.length != (action.isEmpty() ? 2 : 3)) {
+            throw new IllegalArgumentException("Usage: cleanup <repo> | cleanup plan <repo> | cleanup status <repo>");
         }
-        String repo = args[plan ? 2 : 1];
-        RepositoryClient client = CliSupport.client(home);
-        LifecycleClient.CleanupReport report = plan
-                ? client.lifecycle().cleanupPlan(repo) : client.lifecycle().cleanup(repo);
-        if (report.evicted().isEmpty()) {
-            System.out.println(plan ? "Nothing would be evicted." : "Nothing was evicted.");
-        } else {
-            System.out.println(plan ? "would evict:" : "evicted:");
-            report.evicted().forEach(line -> System.out.println("  " + line));
-            if (report.evictedCount() > report.evicted().size()) {
-                System.out.println("  ... and " + (report.evictedCount() - report.evicted().size()) + " more");
+        String repo = args[action.isEmpty() ? 1 : 2];
+        boolean plan = action.equals("plan");
+        LifecycleClient lifecycle = CliSupport.client(home).lifecycle();
+        // The first reading starts the run unless only its status was asked for, so a watched run and a single answer
+        // are the same sequence of requests, and under --json the start call's answer is forgotten like any other.
+        AtomicBoolean start = new AtomicBoolean(!action.equals("status"));
+        Refresh.Poll poll = () -> {
+            if (start.getAndSet(false)) {
+                LifecycleClient.CleanupStart started = plan ? lifecycle.startCleanupPlan(repo) : lifecycle.cleanup(repo);
+                String what = plan ? "a cleanup preview of " : "a cleanup of ";
+                System.out.println(started.started() ? "Started " + what + repo + "."
+                        : Character.toUpperCase(what.charAt(0)) + what.substring(1) + repo + " was already running.");
+                return cleanupState(repo, started.report());
+            }
+            return cleanupState(repo, plan ? lifecycle.cleanupPlan(repo) : lifecycle.cleanupStatus(repo));
+        };
+        return Refresh.on() ? Refresh.until(CLEANUP, poll) : poll.once().code();
+    }
+
+    /** Print one reading of a sweep or its dry run, and say whether it is still going. */
+    private static Refresh.Poll.State cleanupState(String repo, LifecycleClient.CleanupReport report) {
+        String what = report.plan() ? "cleanup preview" : "cleanup";
+        switch (report.state()) {
+            case "not-run" -> {
+                System.out.println("No " + what + " of " + repo + " has run.");
+                return Refresh.Poll.State.done(0);
+            }
+            case "running" -> System.out.println("A " + what + " of " + repo + " is running, started "
+                    + report.startedAt() + (report.finishedAt() == null ? "." : "; the last one follows."));
+            case "failed" -> System.out.println("The last " + what + " of " + repo + " stopped: " + report.failure());
+            default -> System.out.println("As of " + report.finishedAt() + ".");
+        }
+        if (report.finishedAt() != null) {
+            if (report.evicted().isEmpty()) {
+                System.out.println(report.plan() ? "Nothing would be evicted." : "Nothing was evicted.");
+            } else {
+                System.out.println(report.plan() ? "would evict:" : "evicted:");
+                report.evicted().forEach(line -> System.out.println("  " + line));
+                if (report.evictedCount() > report.evicted().size()) {
+                    System.out.println("  ... and " + (report.evictedCount() - report.evicted().size()) + " more");
+                }
+            }
+            LifecycleClient.CleanupGc gc = report.gc();
+            if (gc == null || !gc.installed()) {
+                System.out.println("Garbage collection is off: nothing " + (report.plan() ? "would be" : "was")
+                        + " reclaimed.");
+            } else if (!gc.refusal().isEmpty()) {
+                System.out.println("Collection declined: " + gc.refusal());
+            } else {
+                System.out.println(report.plan() ? gc.condemned() + " blob(s) would be reclaimed."
+                        : gc.collected() + " blob(s) reclaimed.");
             }
         }
-        if (!plan) {
-            System.out.println(report.blobsReclaimed() + " blob(s) reclaimed.");
-        }
-        return 0;
+        return switch (report.state()) {
+            case "running" -> Refresh.Poll.State.running();
+            case "failed" -> Refresh.Poll.State.done(1);
+            default -> Refresh.Poll.State.done(0);
+        };
     }
 
     /** The removed-module reclamation, dry-run first by design: {@code purge} alone prints the orphaned-data report,

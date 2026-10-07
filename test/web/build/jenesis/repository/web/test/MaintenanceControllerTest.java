@@ -3,7 +3,9 @@ package build.jenesis.repository.web.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.audit.AuditActions;
+import build.jenesis.repository.cleanup.StoredReport;
 import build.jenesis.repository.cleanup.web.MaintenanceController;
+import build.jenesis.repository.cleanup.web.RepositoryCleanup;
 import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.server.kernel.Repositories;
 import build.jenesis.repository.store.ArtifactStore;
@@ -58,6 +60,14 @@ class MaintenanceControllerTest {
         audit = Web.audit();
         controller = new MaintenanceController(repositories, Web.routing(store, repositories), repositories.live(),
                 Web.editor(repositories, audit), ObservationRegistry.NOOP, audit, Web.scheduler(repositories, store));
+    }
+
+    /** The sweep - or, with {@code plan}, the dry run - once its run off the request has finished. */
+    private RepositoryCleanup.View settled(boolean plan) throws IOException {
+        StoredReport.awaitSettled(repositories.store("default", REPO),
+                plan ? RepositoryCleanup.PLAN : RepositoryCleanup.RUN, Duration.ofSeconds(30)).orElseThrow();
+        return plan ? controller.cleanupPlan(REPO, false, request(), Servlets.response().servlet())
+                : controller.lastCleanup(REPO, request(), Servlets.response().servlet());
     }
 
     private StoreRepositoryInventory inventory() {
@@ -190,9 +200,14 @@ class MaintenanceControllerTest {
         recordThreeVersions();
         controller.setRetention(REPO, "1", "", "", "", null, request(), Servlets.response().servlet());
 
-        MaintenanceController.CleanupReport plan = controller.cleanupPlan(REPO, null, request(),
-                Servlets.response().servlet());
+        assertThat(controller.cleanupPlan(REPO, false, request(), Servlets.response().servlet()).state())
+                .as("a read never runs the dry run, which judges every release").isEqualTo("not-run");
+        Servlets.Response started = Servlets.response();
+        controller.cleanupPlan(REPO, true, request(), started.servlet());
+        assertThat(started.servlet().getHeader("Jenesis-Refresh")).isEqualTo("started");
+        RepositoryCleanup.View plan = settled(true);
 
+        assertThat(plan.state()).isEqualTo("done");
         assertThat(plan.evictedCount()).isEqualTo(2);
         assertThat(plan.evicted()).hasSize(2).allSatisfy(row -> assertThat(row).startsWith(COORDINATE + ":1."));
         assertThat(plan.blobsReclaimed()).isZero();
@@ -207,16 +222,17 @@ class MaintenanceControllerTest {
         controller.setRetention(REPO, "1", "", "", "", null, request(), Servlets.response().servlet());
         controller.pin(REPO, ECOSYSTEM, COORDINATE, "1.0.0", null, request(), Servlets.response().servlet());
 
-        MaintenanceController.CleanupReport report = controller.cleanup(REPO, "key", request(),
-                Servlets.response().servlet());
+        controller.cleanup(REPO, "key", request(), Servlets.response().servlet());
+        RepositoryCleanup.View report = settled(false);
 
+        assertThat(report.state()).isEqualTo("done");
         assertThat(report.evictedCount()).as("the pinned oldest version is spared").isEqualTo(1);
         assertThat(inventory().publishedAt(ECOSYSTEM, COORDINATE, "1.0.0")).as("pinned").isPresent();
         assertThat(inventory().publishedAt(ECOSYSTEM, COORDINATE, "1.1.0")).as("evicted").isEmpty();
         assertThat(inventory().publishedAt(ECOSYSTEM, COORDINATE, "1.2.0")).as("the newest is kept").isPresent();
         assertThat(audit.rows()).last().satisfies(row -> {
             assertThat(row.action()).isEqualTo(AuditActions.REPOSITORY_CLEANUP);
-            assertThat(row.target()).isEqualTo(REPO + " (1 evicted, GC off)");
+            assertThat(row.target()).isEqualTo(REPO + " (started)");
         });
     }
 
@@ -225,13 +241,16 @@ class MaintenanceControllerTest {
         recordThreeVersions(UNPLACED);
         controller.setRetention(REPO, "1", "", "", "", null, request(), Servlets.response().servlet());
 
-        assertThatThrownBy(() -> controller.cleanup(REPO, null, request(), Servlets.response().servlet()))
-                .isInstanceOf(IOException.class).hasMessageContaining("no installed format can place");
+        controller.cleanup(REPO, null, request(), Servlets.response().servlet());
+        RepositoryCleanup.View refused = settled(false);
+        assertThat(refused.state()).as("the run stops rather than deleting").isEqualTo("failed");
+        assertThat(refused.failure()).contains("no installed format can place");
 
         assertThat(inventory().publishedAt(UNPLACED, COORDINATE, "1.0.0")).as("nothing was evicted").isPresent();
-        assertThat(audit.actions()).as("the retention change names all four rules, one set and three cleared")
+        assertThat(audit.actions()).as("the retention change names all four rules, one set and three cleared, and "
+                        + "the sweep is recorded as started though it went on to refuse")
                 .containsExactly(AuditActions.SETTING_SET, AuditActions.SETTING_CLEAR, AuditActions.SETTING_CLEAR,
-                        AuditActions.SETTING_CLEAR);
+                        AuditActions.SETTING_CLEAR, AuditActions.REPOSITORY_CLEANUP);
     }
 
     @Test
