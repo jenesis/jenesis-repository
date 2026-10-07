@@ -12,6 +12,7 @@ import build.jenesis.repository.maintenance.MaintenanceTask;
 import build.jenesis.repository.maintenance.RepositoryContext;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Names;
 import build.jenesis.repository.store.Publication;
 
 /**
@@ -41,9 +42,6 @@ public final class PendingScreenTask implements MaintenanceTask {
 
     /** The task name - also the {@code locks/pending-rescreen} object the pass locks on. */
     public static final String NAME = "pending-rescreen";
-
-    /** How many markers one listing page reads. */
-    private static final int PAGE = 500;
 
     private final Duration interval;
     private final Function<UnaryOperator<String>, ComplianceGate> gates;
@@ -76,18 +74,11 @@ public final class PendingScreenTask implements MaintenanceTask {
     @Override
     public void repository(RepositoryContext context) throws IOException {
         ArtifactStore store = context.store();
-        List<String> markers = new ArrayList<>();
-        String after = "";
-        while (true) {
-            List<String> page = new ArrayList<>();
-            store.page(ScreeningMode.PENDING_ROOT, after, PAGE, page::add);
-            markers.addAll(page);
-            if (page.size() < PAGE) {
-                break;
-            }
-            after = page.getLast();
-        }
-        if (markers.isEmpty()) {
+        // One page of markers held at a time, however many a long outage left: each is deleted once decided, which
+        // moves nothing under the drain's cursor.
+        Names markers = Names.over(store, ScreeningMode.PENDING_ROOT);
+        String marker = markers.next();
+        if (marker == null) {
             return;
         }
         UnaryOperator<String> config = context.config();
@@ -97,7 +88,7 @@ public final class PendingScreenTask implements MaintenanceTask {
         StoreRepositoryInventory inventory = new StoreRepositoryInventory(store);
         long pending = 0;
         long held = 0;
-        for (String marker : markers) {
+        for (; marker != null; marker = markers.next()) {
             String key = ScreeningMode.PENDING_ROOT + "/" + marker;
             Optional<String> path = path(store, key);
             Optional<String> blob = path.isEmpty() ? Optional.empty() : publication.located(path.get());
