@@ -371,13 +371,33 @@ public final class ComplianceGate {
          * signed jar beside an unsigned POM is the interesting case, since the POM is what carries the dependency
          * graph. Then {@link Outcome#UNREADABLE}, then {@link Outcome#UNTRUSTED}, and {@link Outcome#VALID} only when
          * every file reached it.
+         *
+         * <p>Within one file, a trusted signature answers for another beside it: a Maven release on Central carries an
+         * OpenPGP signature and a Sigstore bundle of the same bytes, and a deployment trusting the one signer and not the
+         * other has a file vouched for by someone it trusts. So a file a {@link Outcome#VALID} signature covers reads as
+         * valid whatever {@link Outcome#UNTRUSTED} or {@link Outcome#UNREADABLE} signature lies beside it - and never
+         * over an {@link Outcome#INVALID} one, since bytes some signature says were altered are altered whoever else
+         * vouches for them, nor over an {@link Outcome#ABSENT} one, which is the format's own expectation unmet.
          */
         public static Outcome worst(Collection<Signature> signatures) {
             Outcome worst = null;
-            for (Signature signature : signatures) {
+            for (Signature signature : effective(signatures)) {
                 worst = worse(worst, signature.outcome());
             }
             return worst;
+        }
+
+        /** Whether a {@link Outcome#VALID} signature beside this one, over {@code signatures}' same file, answers for
+         *  it: it is {@link Outcome#UNTRUSTED} or {@link Outcome#UNREADABLE}, and one beside it is valid. */
+        public boolean vouchedBeside(Collection<Signature> signatures) {
+            return (outcome == Outcome.UNTRUSTED || outcome == Outcome.UNREADABLE) && signatures.stream()
+                    .anyMatch(other -> other.outcome() == Outcome.VALID
+                            && Objects.equals(other.coveredPath(), coveredPath));
+        }
+
+        /** {@code signatures} less every one a valid signature beside it answers for. */
+        private static List<Signature> effective(Collection<Signature> signatures) {
+            return signatures.stream().filter(signature -> !signature.vouchedBeside(signatures)).toList();
         }
 
         /** The worse of two outcomes in the order {@link #worst} states; a {@code null} is no outcome, so the other
@@ -396,7 +416,7 @@ public final class ComplianceGate {
          *  names the signer of the thing that went wrong rather than of whichever file was inspected first. */
         public static Optional<Signature> summarising(Collection<Signature> signatures) {
             Outcome worst = worst(signatures);
-            return signatures.stream().filter(signature -> signature.outcome() == worst).findFirst();
+            return effective(signatures).stream().filter(signature -> signature.outcome() == worst).findFirst();
         }
     }
 
