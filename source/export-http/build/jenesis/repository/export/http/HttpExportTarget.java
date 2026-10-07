@@ -24,7 +24,17 @@ public final class HttpExportTarget implements ExportTarget {
     public Response send(Request request) throws IOException {
         Map<String, String> headers = new LinkedHashMap<>(request.headers());
         authorize(headers);
-        return push.send(HttpPush.under(base, request.path()), request.method(), headers, request.body());
+        Response response = push.send(HttpPush.under(base, request.path()), request.method(), headers,
+                request.body());
+        return new Response(response.status(), response.body(), response.location().flatMap(this::relative));
+    }
+
+    /** {@code absolute} as a path under this target's URL, or empty when it is not under it. */
+    private Optional<String> relative(String absolute) {
+        String root = base.toString().endsWith("/") ? base.toString() : base + "/";
+        return absolute.startsWith(root) && absolute.length() > root.length()
+                ? Optional.of(absolute.substring(root.length()))
+                : Optional.empty();
     }
 
     @Override

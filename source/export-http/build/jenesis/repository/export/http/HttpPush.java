@@ -47,7 +47,9 @@ public final class HttpPush {
         return resolved;
     }
 
-    /** Send one request and answer its status and the first {@value #RESPONSE_CAP} bytes of what came back. */
+    /** Send one request and answer its status, the first {@value #RESPONSE_CAP} bytes of what came back, and the
+     *  {@code Location} it named, resolved against {@code url} - absolute here, since only a caller that knows the
+     *  target's URL can say what is under it. */
     public ExportTarget.Response send(URI url, String method, Map<String, String> headers, ExportTarget.Body body)
             throws IOException {
         HttpRequest.Builder builder = HttpRequest.newBuilder(url).timeout(timeout);
@@ -56,7 +58,8 @@ public final class HttpPush {
         HttpResponse<InputStream> response = call(builder.build());
         try (InputStream in = response.body()) {
             return new ExportTarget.Response(response.statusCode(),
-                    new String(in.readNBytes(RESPONSE_CAP), StandardCharsets.UTF_8));
+                    new String(in.readNBytes(RESPONSE_CAP), StandardCharsets.UTF_8),
+                    response.headers().firstValue("Location").map(location -> url.resolve(location).toString()));
         }
     }
 
