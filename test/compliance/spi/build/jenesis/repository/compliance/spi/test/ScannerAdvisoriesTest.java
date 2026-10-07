@@ -71,6 +71,8 @@ class ScannerAdvisoriesTest {
                         Severity.MEDIUM, "other", null));
         assertThat(ScannerAdvisories.ratings(map.path("absent"))).isEmpty();
         assertThat(ScannerAdvisories.ratings(null)).isEmpty();
+        assertThat(Stream.of("4.0", "3.1", "3.0", "2.0", "", null).map(VulnerabilityRecord.Rating::methodOfVersion))
+                .containsExactly("CVSSv4", "CVSSv31", "CVSSv3", "CVSSv2", "other", "other");
     }
 
     @Test
