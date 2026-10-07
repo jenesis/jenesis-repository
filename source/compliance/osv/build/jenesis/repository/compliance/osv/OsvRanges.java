@@ -28,8 +28,7 @@ final class OsvRanges {
         if (!record.path("withdrawn").asString("").isBlank()) {
             return false;
         }
-        int release = ecosystem.indexOf(':');
-        String product = release < 0 ? ecosystem : ecosystem.substring(0, release);
+        String product = OsvQuery.base(ecosystem);
         String asked = OsvQuery.osvName(ecosystem);
         String key = key(product, name);
         String placed = version(product, version);
@@ -62,10 +61,8 @@ final class OsvRanges {
         Set<String> packages = new LinkedHashSet<>();
         for (JsonNode affected : record.path("affected")) {
             JsonNode named = affected.path("package");
-            String ecosystem = named.path("ecosystem").asString("");
-            int release = ecosystem.indexOf(':');
             String name = named.path("name").asString("");
-            if ((release < 0 ? ecosystem : ecosystem.substring(0, release)).equals(osvEcosystem) && !name.isBlank()) {
+            if (OsvQuery.base(named.path("ecosystem").asString("")).equals(osvEcosystem) && !name.isBlank()) {
                 packages.add(key(product, name));
             }
         }

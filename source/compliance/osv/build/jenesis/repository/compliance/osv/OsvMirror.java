@@ -321,9 +321,7 @@ final class OsvMirror {
         ArrayNode affected = kept.putArray("affected");
         for (JsonNode entry : record.path("affected")) {
             JsonNode named = entry.path("package");
-            String ecosystem = named.path("ecosystem").asString("");
-            int release = ecosystem.indexOf(':');
-            if ((release < 0 ? ecosystem : ecosystem.substring(0, release)).equals(osvName)
+            if (OsvQuery.base(named.path("ecosystem").asString("")).equals(osvName)
                     && key.equals(OsvRanges.key(product, named.path("name").asString("")))) {
                 ObjectNode copy = affected.addObject();
                 copy.set("package", named);
