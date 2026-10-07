@@ -181,19 +181,13 @@ final class OsvMirror {
         if (answered.get().exhausted()) {
             return Optional.empty();
         }
-        Instant reached = state.position();
-        int left = budget;
-        for (OsvChangeList.Line line : answered.get().lines().reversed()) {
-            if (left <= 0 && !line.modified().equals(reached)) {
-                break;
-            }
-            Optional<JsonNode> record = fetch(osvName, line.id());
-            changed.addAll(refile(osvName, product, state.generation(), line.id(), record));
-            left--;
-            reached = line.modified();
-        }
-        writeState(osvName, new State(state.generation(), state.built(), clock.instant(), reached, state.previous()));
-        return Optional.of(new Update(changed, budget - left));
+        OsvChangeList.Drained drained = answered.get().drain(state.position(), budget, line -> {
+            changed.addAll(refile(osvName, product, state.generation(), line.id(), fetch(osvName, line.id())));
+            return true;
+        });
+        writeState(osvName, new State(state.generation(), state.built(), clock.instant(), drained.reached(),
+                state.previous()));
+        return Optional.of(new Update(changed, drained.taken()));
     }
 
     /** Have the next refresh build {@code osvName} again, its copy {@code state} serving until it does. */
