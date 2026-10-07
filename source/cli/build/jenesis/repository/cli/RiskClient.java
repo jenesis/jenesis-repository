@@ -64,6 +64,35 @@ public final class RiskClient extends ClientCalls {
 
     /** The answer {@code GET /api/health} gives: the scored coordinates, when the scores were last refreshed, and
      *  whether a refresh is running now. */
+    /** One page of the images a repository has had scanned, resumed after {@code cursor} (a previous page's
+     *  {@code next}, {@code null} for the first). */
+    public ImageScans imageScans(String repo, String cursor) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/image-scans?repo=" + enc(repo)
+                + (cursor == null ? "" : "&after=" + enc(cursor)), null, null);
+        require(response, 200, "read the image scans of " + repo);
+        return JSON.readValue(response.body(), ImageScans.class);
+    }
+
+    /** A page of image scans and the cursor of the next, {@code null} on the last. */
+    public record ImageScans(List<ImageScan> scans, String next) {
+    }
+
+    /** One image's scan: its digest and name, its state ({@code covered}, {@code pending} or {@code failed}), when it
+     *  was requested, where it was published or proxied, and each scanner's run. */
+    public record ImageScan(String digest, String name, String state, String requested, List<ImageScanTarget> targets,
+                            List<ImageScanRun> runs) {
+    }
+
+    /** Where the image is: its coordinate and version, and whether the copy is cached from an upstream. */
+    public record ImageScanTarget(String path, String ecosystem, String coordinate, String version, boolean cached) {
+    }
+
+    /** One scanner's run: {@code completed}, {@code failed}, {@code submitted} or {@code not-asked}, with what its
+     *  report found and why its last attempt failed. */
+    public record ImageScanRun(String scanner, String state, String submitted, String completed, int advisories,
+                               Integer packages, String failure) {
+    }
+
     public record HealthReport(boolean available, boolean ranked, List<HealthEntry> entries, String next,
                                int total, String lastScanned, boolean refreshing) {
     }

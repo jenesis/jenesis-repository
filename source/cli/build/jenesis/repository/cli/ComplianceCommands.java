@@ -18,6 +18,41 @@ final class ComplianceCommands {
      *  minutes on a large one - the cadence a bare {@code --refresh} watches it at. */
     private static final Duration HEALTH_REFRESH = Duration.ofSeconds(5);
 
+    /** A page of the images a repository has had scanned, each with its state and every scanner's run. */
+    static int imageScans(String[] args, Path home) throws Exception {
+        if (args.length < 2) {
+            throw new IllegalArgumentException("Usage: image-scans <repo> [--cursor C]");
+        }
+        RiskClient.ImageScans page = CliSupport.client(home).risk().imageScans(args[1], CliSupport.cursorOf(args, 2));
+        if (page.scans() == null || page.scans().isEmpty()) {
+            System.out.println("No image has been scanned in " + args[1] + ".");
+            return 0;
+        }
+        for (RiskClient.ImageScan scan : page.scans()) {
+            System.out.println(scan.name() + "@" + scan.digest() + "  " + scan.state() + "  requested "
+                    + scan.requested());
+            for (RiskClient.ImageScanTarget target : scan.targets() == null ? List.<RiskClient.ImageScanTarget>of()
+                    : scan.targets()) {
+                System.out.println("  " + (target.cached() ? "cached as " : "published as ") + target.coordinate()
+                        + ":" + target.version());
+            }
+            for (RiskClient.ImageScanRun run : scan.runs() == null ? List.<RiskClient.ImageScanRun>of()
+                    : scan.runs()) {
+                String said = switch (run.state()) {
+                    case "completed" -> "reported " + run.advisories() + " advisories"
+                            + (run.packages() == null ? "" : ", a bill of " + run.packages() + " packages")
+                            + ", " + run.completed();
+                    case "failed" -> "failed: " + run.failure();
+                    case "submitted" -> "scanning, submitted " + run.submitted();
+                    default -> "not asked yet";
+                };
+                System.out.println("  " + run.scanner() + ": " + said);
+            }
+        }
+        CliSupport.more(page.next());
+        return 0;
+    }
+
     static int health(String[] args, Path home) throws Exception {
         // A re-score is an action rather than a flag: --refresh belongs to the whole command line, which watches
         // work that outlives a request, and takes it off the line before any handler reads it.
