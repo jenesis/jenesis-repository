@@ -37,7 +37,7 @@ class OsvChangesTest {
     }
 
     private OsvAdvisorySource source() {
-        return OsvAdvisorySource.responding(request -> {
+        return OsvAdvisorySource.responding((request, _) -> {
             String path = request.uri().getPath();
             if (path.endsWith("/modified_id.csv")) {
                 String ecosystem = URLDecoder.decode(path.substring(1, path.indexOf('/', 1)), StandardCharsets.UTF_8);

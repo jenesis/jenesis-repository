@@ -6,10 +6,10 @@ import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.AdvisorySource.Advisory;
 import build.jenesis.repository.compliance.Freshness;
 import build.jenesis.repository.compliance.FeedCache;
+import build.jenesis.repository.compliance.FeedChanges;
 import build.jenesis.repository.feed.FeedClient;
 import build.jenesis.repository.feed.FeedException;
 import build.jenesis.repository.feed.FeedPolicy;
-import build.jenesis.repository.feed.FeedRequest;
 import build.jenesis.repository.feed.FeedResponse;
 import build.jenesis.repository.feed.FeedTransport;
 import build.jenesis.repository.store.ArtifactStore;
@@ -62,10 +62,8 @@ public final class OsvAdvisorySource implements AdvisorySource.Batched, Advisory
     /** Where OSV publishes its export, each ecosystem's change list among it. */
     public static final URI DEFAULT_EXPORT = URI.create("https://osv-vulnerabilities.storage.googleapis.com/");
 
-    /** The space of a source built with none: a draw or a read of the log is a wiring error there. */
-    private static final Supplier<ArtifactStore> NO_SPACE = () -> {
-        throw new IllegalStateException("This OSV source was built without a signal space to keep its change log in");
-    };
+    /** The space of a source built with none. */
+    private static final Supplier<ArtifactStore> NO_SPACE = FeedChanges.unbound(FEED);
 
     /** A connect timeout, so a black-holed host (a dropped SYN, no RST) fails the fetch rather than parking the gate
      *  thread. */
@@ -74,12 +72,6 @@ public final class OsvAdvisorySource implements AdvisorySource.Batched, Advisory
     /** A gating feed, so the client's fail-closed defaults unchanged: 30 s per request, a 5 min whole-fetch deadline,
      *  50 pages, 3 attempts with backoff honouring {@code Retry-After}, a capped body, and a same-origin cursor. */
     private static final FeedPolicy POLICY = FeedPolicy.closed();
-
-    /** A test's stand-in for OSV's endpoints: the body of the answer to {@code request}. */
-    @FunctionalInterface
-    public interface Exchange {
-        String answer(FeedRequest request) throws IOException;
-    }
 
     private final FeedClient client;
     private final URI query;
@@ -112,35 +104,28 @@ public final class OsvAdvisorySource implements AdvisorySource.Batched, Advisory
         this.changes = new OsvChanges(client, export, vulns, space, clock);
     }
 
-    /** A source answering every request through {@code exchange}, as a 200 the client bounds and pages as a live
-     *  one. */
-    public static OsvAdvisorySource exchanging(Exchange exchange) {
+    /** A source answering every request through {@code exchange}. */
+    public static OsvAdvisorySource exchanging(FeedTransport.Exchange exchange) {
         return exchanging(exchange, NO_SPACE, Clock.systemUTC());
     }
 
-    /** As {@link #exchanging(Exchange)}, keeping its change log in {@code space} on {@code clock}. */
-    public static OsvAdvisorySource exchanging(Exchange exchange, Supplier<ArtifactStore> space, Clock clock) {
-        return responding(request -> FeedResponse.of(200, exchange.answer(request)), space, clock);
+    /** As {@link #exchanging(FeedTransport.Exchange)}, keeping its change log in {@code space} on {@code clock}. */
+    public static OsvAdvisorySource exchanging(FeedTransport.Exchange exchange, Supplier<ArtifactStore> space,
+                                               Clock clock) {
+        return responding(FeedTransport.exchanging(exchange), space, clock);
     }
 
-    /** A test's stand-in for OSV's endpoints that answers a whole response, its status among it. */
-    @FunctionalInterface
-    public interface Responder {
-        FeedResponse answer(FeedRequest request) throws IOException;
-    }
-
-    /** A source answering every request through {@code responder}, keeping its change log in {@code space} on
+    /** A source sending every request through {@code transport}, keeping its change log in {@code space} on
      *  {@code clock}. */
-    public static OsvAdvisorySource responding(Responder responder, Supplier<ArtifactStore> space, Clock clock) {
-        return new OsvAdvisorySource(FeedClient.of(FEED, (request, timeout) -> responder.answer(request), POLICY),
-                DEFAULT_ENDPOINT, DEFAULT_EXPORT, space, clock, OsvQuery.Shared.none());
+    public static OsvAdvisorySource responding(FeedTransport transport, Supplier<ArtifactStore> space, Clock clock) {
+        return new OsvAdvisorySource(FeedClient.of(FEED, transport, POLICY), DEFAULT_ENDPOINT, DEFAULT_EXPORT, space,
+                clock, OsvQuery.Shared.none());
     }
 
-    /** As {@link #exchanging(Exchange)}, sharing its answers through {@code shared}. */
-    public static OsvAdvisorySource exchanging(Exchange exchange, OsvQuery.Shared shared) {
-        return new OsvAdvisorySource(FeedClient.of(FEED, (request, timeout) -> FeedResponse.of(200,
-                exchange.answer(request)), POLICY), DEFAULT_ENDPOINT, DEFAULT_EXPORT, NO_SPACE, Clock.systemUTC(),
-                shared);
+    /** As {@link #exchanging(FeedTransport.Exchange)}, sharing its answers through {@code shared}. */
+    public static OsvAdvisorySource exchanging(FeedTransport.Exchange exchange, OsvQuery.Shared shared) {
+        return new OsvAdvisorySource(FeedClient.of(FEED, FeedTransport.exchanging(exchange), POLICY),
+                DEFAULT_ENDPOINT, DEFAULT_EXPORT, NO_SPACE, Clock.systemUTC(), shared);
     }
 
     /** The production form, over the deployment clock the reading's retry window is measured on. */

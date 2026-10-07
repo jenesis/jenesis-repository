@@ -251,7 +251,7 @@ class OsvMirrorSourceTest {
     }
 
     private OsvMirrorSource source(Duration rebuild, ArtifactStore over) {
-        return OsvMirrorSource.responding(request -> {
+        return OsvMirrorSource.responding((request, _) -> {
             String path = request.uri().getPath();
             asked.add(path);
             String ecosystem = path.substring(1, path.indexOf('/', 1));
