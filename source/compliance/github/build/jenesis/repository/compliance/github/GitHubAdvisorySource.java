@@ -156,7 +156,7 @@ public final class GitHubAdvisorySource implements AdvisorySource.Changes {
         if (ECOSYSTEMS.of(ecosystem) == null) {
             return List.of();                                   // an ecosystem GitHub does not track is never queried
         }
-        return cache.get(ecosystem + " " + coordinate + " " + version);
+        return cache.get(FeedCache.versionKey(ecosystem, coordinate, version));
     }
 
     /** One coordinate version's query, the cache's loader; the key joins the three coordinates by spaces, which none
@@ -232,9 +232,7 @@ public final class GitHubAdvisorySource implements AdvisorySource.Changes {
 
     @Override
     public void forget(Set<AdvisorySource.Package> packages) {
-        Set<String> stale = new HashSet<>();
-        packages.forEach(named -> stale.add(named.ecosystem() + " " + named.coordinate()));
-        cache.forget(key -> stale.contains(key.substring(0, Math.max(0, key.lastIndexOf(' ')))));
+        cache.forgetVersions(packages);
     }
 
     /** The product's ecosystem per GitHub name, the inverse of {@link #ECOSYSTEMS}. */

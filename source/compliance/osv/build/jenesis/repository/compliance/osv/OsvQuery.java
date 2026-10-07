@@ -159,9 +159,32 @@ public final class OsvQuery {
         return FeedRequest.get(vulns.resolve(URLEncoder.encode(id, StandardCharsets.UTF_8)));
     }
 
+    /**
+     * Ask OSV, through {@code client}, the queries at the positions {@code asked} of {@code queries}, in
+     * {@code /v1/querybatch} exchanges of at most {@link #BATCH_LIMIT}: each position and what OSV listed for its query
+     * is handed to {@code answered}, in order. An exchange that fails hands its positions to {@code failed} and raises,
+     * so a batched source fails closed as a single query does.
+     */
+    public static void ask(FeedClient client, URI querybatch, List<AdvisorySource.Query> queries, List<Integer> asked,
+                           Consumer<List<Integer>> failed, BiConsumer<Integer, Listed> answered) {
+        for (int from = 0; from < asked.size(); from += BATCH_LIMIT) {
+            List<Integer> chunk = asked.subList(from, Math.min(asked.size(), from + BATCH_LIMIT));
+            List<Listed> listed;
+            try {
+                listed = ask(client, querybatch, chunk.stream().map(queries::get).toList());
+            } catch (RuntimeException e) {
+                failed.accept(chunk);
+                throw e;
+            }
+            for (int i = 0; i < chunk.size(); i++) {
+                answered.accept(chunk.get(i), listed.get(i));
+            }
+        }
+    }
+
     /** One {@code /v1/querybatch} exchange through {@code client}: what OSV lists for each of {@code queries}, in
-     *  their order. A failed exchange raises, so a batched source fails closed as a single query does. */
-    public static List<Listed> ask(FeedClient client, URI querybatch, List<AdvisorySource.Query> queries) {
+     *  their order. A failed exchange raises. */
+    private static List<Listed> ask(FeedClient client, URI querybatch, List<AdvisorySource.Query> queries) {
         try {
             JsonNode body = client.fetch(batch(querybatch, queries), FeedClient.Reader.document(JSON::readTree))
                     .value().orElseThrow();
