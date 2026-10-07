@@ -47,11 +47,15 @@ public final class Dependents {
     /**
      * One page of each half, {@code tenant} being the tenant's store, {@code after} and {@code declaredAfter} each
      * half's cursor ({@code ""} from the start), {@code limit} the rows of each, and {@code readable} the repositories
-     * whose resolved dependents the caller may see.
+     * whose resolved dependents the caller may see. A cursor is the name of a row, so one holding a {@code /} - which
+     * would resume inside another key's level - is refused with an {@link IllegalArgumentException}.
      */
     public static View read(ArtifactStore tenant, String repository, String ecosystem, String coordinate,
                             String version, String after, String declaredAfter, int limit,
                             Predicate<String> readable) throws IOException {
+        if (after.contains("/") || declaredAfter.contains("/")) {
+            throw new IllegalArgumentException("Not a cursor: " + (after.contains("/") ? after : declaredAfter));
+        }
         int rows = Math.max(1, Math.min(limit, MAX_PAGE));
         ArtifactStore store = tenant.scope(repository);
         Resolved resolved = null;
