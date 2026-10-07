@@ -28,6 +28,16 @@ package build.jenesis.repository.format;
  * declares it through that namespace's layout contract. A consumer that wants "which installed format owns this
  * ecosystem" asks for this interface and gets both, which is what keeps a console from telling an operator that an
  * installed format is not installed merely because it stores differently.
+ *
+ * <h2>Contract</h2>
+ * <ol>
+ *   <li><b>Absence sentinel.</b> {@link #ecosystem()} is never {@code null} or blank.</li>
+ *   <li><b>Read purity.</b> {@link #ecosystem()} is a declaration: the same constant on every call, from any thread,
+ *       with no I/O.</li>
+ *   <li><b>Ordering / determinism.</b> A consumer mapping an ecosystem back to a format fans out over every format
+ *       declaring it and unions their answers; an answer that has to be singular derives from the ecosystem, never
+ *       from whichever format discovery yielded first.</li>
+ * </ol>
  */
 public interface EcosystemLayout {
 

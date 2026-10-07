@@ -19,6 +19,22 @@ import module java.base;
  * overrides {@link #onMarked} with an empty body <em>and the reason</em> - the OCI, raw, Conan and Hugging Face
  * observers each carry one, of the shape "a lifecycle mark changes nothing a Conan client reads". An empty
  * override with no reason is indistinguishable from a forgotten one.
+ *
+ * <h2>Contract</h2>
+ * <p>{@link PublicationObserver}'s contract holds; this role adds:
+ * <ol>
+ *   <li><b>Idempotency / replay.</b> {@link #transition} re-decides its entry from what the store says now - held,
+ *       marked, removed - rather than applying the transition as a change, so a repeated or reordered transition
+ *       converges on the same listing.</li>
+ *   <li><b>Error visibility.</b> Contained, as every observer leg is: a transition that fails leaves the listing
+ *       stale until the rebuild walk regenerates it through this format's {@link StoredListing.Rebuilder}, and never
+ *       fails the transition that reached it.</li>
+ *   <li><b>Tenant scoping.</b> The store handed in is the repository's, and a subject of another format's ecosystem
+ *       is not this observer's to act on.</li>
+ *   <li><b>Bounded work.</b> A subject naming a coordinate or a path changes that one entry; only a subject naming
+ *       nothing but a content hash regenerates the format's documents, in place ({@link StoredListing#rebuildUnder}),
+ *       and never by deleting them under a reader.</li>
+ * </ol>
  */
 public interface ListingObserver extends PublicationObserver, StoredListing.Rebuilder {
 
