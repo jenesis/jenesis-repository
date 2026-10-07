@@ -1,6 +1,7 @@
 package build.jenesis.repository.closure;
 
 import module java.base;
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.closure.spi.ClosureSection;
 import build.jenesis.repository.closure.spi.Reliance;
 import build.jenesis.repository.closure.spi.ClosureWalk;
@@ -139,8 +140,8 @@ public final class ReliedOn {
 
     /** The row recording that {@code dependent} relies on {@code coordinate} at {@code version}. */
     static String key(String ecosystem, String coordinate, String version, Row dependent) {
-        return level(ecosystem, coordinate, version) + "/" + HexFormat.of().formatHex(sha256((dependent.repository()
-                + "\n" + dependent.coordinate() + "\n" + dependent.version()).getBytes(StandardCharsets.UTF_8)));
+        return level(ecosystem, coordinate, version) + "/" + Checksums.sha256(dependent.repository() + "\n"
+                + dependent.coordinate() + "\n" + dependent.version());
     }
 
     /**
@@ -482,13 +483,5 @@ public final class ReliedOn {
 
     private static String decode(String segment) {
         return URLDecoder.decode(segment, StandardCharsets.UTF_8);
-    }
-
-    private static byte[] sha256(byte[] bytes) {
-        try {
-            return MessageDigest.getInstance("SHA-256").digest(bytes);
-        } catch (NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException("SHA-256 is a required JDK algorithm", impossible);
-        }
     }
 }

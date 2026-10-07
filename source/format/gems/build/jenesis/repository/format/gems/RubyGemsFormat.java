@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.gems;
 
 import module java.base;
+import build.jenesis.repository.store.Checksums;
 import module org.apache.commons.compress;
 import module org.yaml.snakeyaml;
 import module tools.jackson.databind;
@@ -793,11 +794,7 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
     }
 
     private static String md5(byte[] bytes) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("MD5").digest(bytes));
-        } catch (NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException("MD5 is a required JDK algorithm", impossible);
-        }
+        return Checksums.hex("MD5", bytes);
     }
 
     /** The largest {@code /info/<gem>} read to resolve a proxied gem's checksum, far past a gem of thousands of
