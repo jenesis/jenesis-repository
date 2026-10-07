@@ -21,7 +21,7 @@ import build.jenesis.repository.store.Checksums;
  * screens its cached copies all the same, and a scan costs no request per version.
  *
  * <p>A lookup reads the ecosystem's copy - its {@code current} document and the package's, two point reads, the first
- * held for {@link #STATE_TTL} - and decides each record against the version as {@link OsvRanges} does; each record
+ * held for {@link OsvMirror#STATE_TTL} - and decides each record against the version as {@link OsvRanges} does; each record
  * makes the {@link OsvRecords advisory} the API feed makes of it. An ecosystem the copy does not hold yet raises, so the
  * screen decides it as an outage, never as clean.
  *
@@ -36,10 +36,6 @@ public final class OsvMirrorSource implements AdvisorySource.Mirror, AdvisorySou
 
     /** The feed's name - the attribution key its provider answers to and the client names in every failure. */
     static final String FEED = "osv-mirror";
-
-    /** How long an ecosystem's {@code current} document is held before a lookup reads it again: a lookup sees a
-     *  rebuilt copy within it. */
-    static final Duration STATE_TTL = Duration.ofSeconds(30);
 
     /** How often a copy is drawn whole again when nothing else asks for it: the backstop for an update a draw could not
      *  apply. */
@@ -69,11 +65,6 @@ public final class OsvMirrorSource implements AdvisorySource.Mirror, AdvisorySou
     private final Supplier<ArtifactStore> space;
     private final Clock clock;
     private final Supplier<Duration> rebuild;
-    private final Map<String, Held> states = new ConcurrentHashMap<>();
-
-    /** A state as a lookup last read it. */
-    private record Held(Optional<OsvMirror.State> state, Instant read) {
-    }
 
     private OsvMirrorSource(FeedClient client, URI export, Supplier<ArtifactStore> space, Clock clock,
                             Supplier<Duration> rebuild) {
@@ -105,7 +96,7 @@ public final class OsvMirrorSource implements AdvisorySource.Mirror, AdvisorySou
         }
         String osvName = base(ecosystem);
         try {
-            Optional<OsvMirror.State> state = state(osvName);
+            Optional<OsvMirror.State> state = mirror.heldState(osvName);
             if (state.isEmpty()) {
                 throw new UncheckedIOException(new IOException("The OSV mirror holds no copy of " + osvName
                         + " yet: a repository selecting it holds the ecosystem, and its first draw has not landed"));
@@ -164,7 +155,6 @@ public final class OsvMirrorSource implements AdvisorySource.Mirror, AdvisorySou
                         state.isPresent() ? "the copy built at " + state.get().built() + " keeps serving"
                                 : "it is screened as an outage until a draw lands", e);
             }
-            states.remove(osvName);
         }
         return freshness();
     }
@@ -215,7 +205,6 @@ public final class OsvMirrorSource implements AdvisorySource.Mirror, AdvisorySou
                         + ")", e);
             }
             mirror.state(osvName).ifPresent(updated -> positions.put(osvName, updated.position().toString()));
-            states.remove(osvName);
         }
         return FeedChanges.commit(store, log, new FeedChanges.Draw(positions, named, gap), clock.instant());
     }
@@ -237,7 +226,7 @@ public final class OsvMirrorSource implements AdvisorySource.Mirror, AdvisorySou
         try {
             List<Freshness> parts = new ArrayList<>();
             for (String product : mirror.wanted()) {
-                parts.add(state(OsvQuery.osvName(product)).map(state -> Freshness.at(state.drawn()))
+                parts.add(mirror.heldState(OsvQuery.osvName(product)).map(state -> Freshness.at(state.drawn()))
                         .orElse(Freshness.NEVER));
             }
             return Freshness.merged(parts);
@@ -245,18 +234,6 @@ public final class OsvMirrorSource implements AdvisorySource.Mirror, AdvisorySou
             LOGGER.warn("Could not read the OSV mirror's state", e);
             return Freshness.NEVER;
         }
-    }
-
-    /** The ecosystem's state, read again once it has been held for {@link #STATE_TTL}. */
-    private Optional<OsvMirror.State> state(String osvName) throws IOException {
-        Instant now = clock.instant();
-        Held held = states.get(osvName);
-        if (held != null && held.read().plus(STATE_TTL).isAfter(now)) {
-            return held.state();
-        }
-        Optional<OsvMirror.State> state = mirror.state(osvName);
-        states.put(osvName, new Held(state, now));
-        return state;
     }
 
     /** OSV's name of {@code ecosystem}'s copy: a distribution's whole, without a release. */
