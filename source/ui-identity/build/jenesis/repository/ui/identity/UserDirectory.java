@@ -151,17 +151,43 @@ public class UserDirectory {
         }
     }
 
-    /** One bounded page of members after {@code cursor} ({@code null} starts at the beginning). Each member's grants
-     *  are read once; a subject holding no rights (a torn write, a racing removal) is skipped rather than shown
-     *  role-less. */
+    /**
+     * One bounded page of members after {@code cursor} ({@code null} starts at the beginning). Each subject's grants
+     * are read once, and one that is no member is skipped rather than shown role-less: a principal only a group names,
+     * a torn write, a racing removal. The page reads on past them until it holds {@code limit} members, so a tenant
+     * whose groups name many principals still shows its members; it stops after examining {@link #EXAMINED} ids,
+     * answering what it found with the cursor to resume after the last one examined.
+     */
     public Page page(String cursor, int limit) {
-        Authorization.SubjectPage found = authorization.subjects(name(), Authorization.Kind.PRINCIPAL, cursor, limit);
-        List<User> users = new ArrayList<>(found.ids().size());
-        for (String id : found.ids()) {
-            read(id).ifPresent(users::add);
+        List<User> users = new ArrayList<>();
+        String after = cursor;
+        int examined = 0;
+        while (true) {
+            Authorization.SubjectPage found = authorization.subjects(name(), Authorization.Kind.PRINCIPAL, after,
+                    limit);
+            List<String> ids = found.ids();
+            for (int i = 0; i < ids.size(); i++) {
+                after = ids.get(i);
+                examined++;
+                read(after).ifPresent(users::add);
+                if (users.size() == limit || examined >= EXAMINED) {
+                    boolean more = i < ids.size() - 1 || found.next() != null;
+                    return page(users, more ? after : null);
+                }
+            }
+            if (found.next() == null) {
+                return page(users, null);
+            }
+            after = found.next();
         }
+    }
+
+    /** The most subject ids one {@link #page} examines, members or not. */
+    static final int EXAMINED = 2000;
+
+    private static Page page(List<User> users, String next) {
         users.sort(Comparator.comparing(User::id));         // within the page only: a display nicety, page-bounded
-        return new Page(users, Optional.ofNullable(found.next()));
+        return new Page(users, Optional.ofNullable(next));
     }
 
     /** One offset-addressed window of members and the tenant's total - the shape SCIM's
