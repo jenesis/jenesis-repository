@@ -33,8 +33,6 @@ open module build.jenesis.repository.application {
     requires build.jenesis.repository.ui;
     requires jakarta.servlet;
     // Claims the import edge, so the server's own import controller is not created beside ImportController.
-    provides build.jenesis.repository.server.spi.ImportEdgeProvider
-            with build.jenesis.repository.application.RoutedImportEdge;
     requires micrometer.observation;
     requires micrometer.core;
     requires build.jenesis.repository.store.metering;

@@ -4,7 +4,6 @@ import module org.slf4j;
 
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.CapabilityContributor;
-import build.jenesis.repository.server.spi.ImportEdgeProvider;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -39,10 +38,7 @@ import org.springframework.web.util.DisconnectedClientHelper;
  * repository that holds no format, or one this deployment does not install, does not answer, and a path its formats
  * do not claim is a {@code 404}. When an upstream is configured for the
  * matched format and the format is a {@link ProxyFormat}, a local miss is served through the {@link PullThroughCache}
- * from that upstream and cached, so a later read is a local hit. The single-tenant import edge
- * ({@code POST /api/repository/import} and {@code GET /api/repository/import/<id>}) is served by the separate
- * {@link ImportEdgeController} bean - a bean of its own so a richer distribution can OWN the import edge through the
- * {@link ImportEdgeProvider} SPI without a cross-layer mapping override. Authorization is not done here:
+ * from that upstream and cached, so a later read is a local hit. Authorization is not done here:
  * {@link RepositorySecurityAutoConfiguration} gates the wire through the {@link Authorization} credential model.
  */
 @RestController

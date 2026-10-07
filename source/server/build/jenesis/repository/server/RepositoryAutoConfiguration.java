@@ -15,7 +15,6 @@ import build.jenesis.repository.scope.AnonymousGrants;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.RateLimiter;
 import build.jenesis.repository.server.spi.RateLimiterProvider;
-import build.jenesis.repository.server.spi.ImportEdgeProvider;
 import build.jenesis.repository.format.FetcherProvider;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -36,13 +35,9 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Condition;
-import org.springframework.context.annotation.ConditionContext;
-import org.springframework.context.annotation.Conditional;
 import org.springframework.core.env.Environment;
 import org.springframework.security.authorization.AuthorizationManager;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
-import org.springframework.core.type.AnnotatedTypeMetadata;
 import io.micrometer.observation.ObservationRegistry;
 
 /**
@@ -582,42 +577,5 @@ public class RepositoryAutoConfiguration {
                 // A deployment's own capability contributions are beans, so they read this deployment's state rather
                 // than whatever a process-wide holder was last handed.
                 contributed.orderedStream().toList());
-    }
-
-    /**
-     * The single-tenant import edge ({@code POST /api/repository/import}, {@code GET /api/repository/import/<id>}),
-     * registered as its own controller bean so a richer distribution can OWN the import edge without a cross-layer
-     * mapping override. It is registered only when {@link FreeImportEdgeCondition no ImportEdgeProvider is
-     * installed}: when a distribution ships an {@link ImportEdgeProvider} - a tenant-scoped, audited import edge,
-     * say - this bean is not created, so its mapping never joins the handler mapping and the
-     * distribution's own controller is the only import edge, with no {@code WebMvcRegistrations} mapping
-     * suppression. With no provider installed (the product) this bean serves the edge.
-     * Named so an embedder can still contribute its own {@code importEdgeController} bean and have this back off.
-     */
-    @Bean
-    @ConditionalOnMissingBean(name = "importEdgeController")
-    @Conditional(FreeImportEdgeCondition.class)
-    public ImportEdgeController importEdgeController(RepositoryRouting routing,
-                                                    List<ImportSourceProvider> importSources,
-                                                    ProxyFormat.Fetcher fetcher,
-                                                    Environment environment) {
-        return new ImportEdgeController(routing, importSources, fetcher,
-                key -> environment.getProperty(Features.key(key)));
-    }
-
-    /**
-     * Matches when <em>no</em> {@link ImportEdgeProvider} is installed, so the {@link ImportEdgeController} is
-     * registered only while a richer distribution has not claimed the import edge. Installs the shared
-     * {@link Features} lookup against the effective {@link Environment} first, so the same {@code jenrepo.*}
-     * enable/disable toggles gate the provider discovery here as everywhere else (and a provider missing its required
-     * config is inert - the edge is then served).
-     */
-    static final class FreeImportEdgeCondition implements Condition {
-
-        @Override
-        public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
-            Features.configure(context.getEnvironment()::getProperty);
-            return !ImportEdgeProvider.installed();
-        }
     }
 }
