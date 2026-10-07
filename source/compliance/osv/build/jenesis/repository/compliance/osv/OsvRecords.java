@@ -26,19 +26,8 @@ final class OsvRecords {
         }
         boolean malicious = id.startsWith("MAL-");
         return Optional.of(new Advisory(id, severityOf(vuln, malicious), malicious,
-                Osv.fixedVersions(vuln, coordinate), cvesOf(vuln, id), descriptionOf(vuln), aliasesOf(vuln)));
-    }
-
-    /** Every alias the record names, whatever its namespace - what two feeds' records of one flaw are merged on. */
-    static List<String> aliasesOf(JsonNode vuln) {
-        List<String> aliases = new ArrayList<>();
-        for (JsonNode alias : vuln.path("aliases")) {
-            String value = alias.asString(null);
-            if (value != null && !value.isBlank() && !aliases.contains(value)) {
-                aliases.add(value);
-            }
-        }
-        return aliases;
+                Osv.fixedVersions(vuln, coordinate), OsvQuery.cvesOf(vuln, id), descriptionOf(vuln),
+                OsvQuery.aliasesOf(vuln)));
     }
 
     // The summary, else a bounded prefix of the details, so the findings ledger keeps what the advisory says without
@@ -47,20 +36,6 @@ final class OsvRecords {
         return Advisory.description(vuln.path("summary").asString(null), vuln.path("details").asString(""));
     }
 
-    // The advisory's CVE aliases (and its own id when that is a CVE), the keys the known-exploited catalogue uses.
-    private static List<String> cvesOf(JsonNode vuln, String id) {
-        List<String> cves = new ArrayList<>();
-        if (id.startsWith("CVE-")) {
-            cves.add(id);
-        }
-        for (JsonNode alias : vuln.path("aliases")) {
-            String value = alias.asString(null);
-            if (value != null && value.startsWith("CVE-") && !cves.contains(value)) {
-                cves.add(value);
-            }
-        }
-        return cves;
-    }
 
     private static Severity severityOf(JsonNode vuln, boolean malicious) {
         double highest = -1.0;

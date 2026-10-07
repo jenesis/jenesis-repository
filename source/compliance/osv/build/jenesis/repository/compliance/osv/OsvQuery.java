@@ -59,10 +59,20 @@ public final class OsvQuery {
         return OSV_NAMES.values().stream().sorted().toList();
     }
 
+    /** The product's name of each ecosystem OSV names, the reverse of {@link #OSV_NAMES}. */
+    private static final Map<String, String> PRODUCT_NAMES = OSV_NAMES.entrySet().stream()
+            .collect(Collectors.toUnmodifiableMap(Map.Entry::getValue, Map.Entry::getKey));
+
     /** The product's ecosystem OSV's {@code osvName} is, or empty for one the product does not ask about. */
     public static Optional<String> ecosystem(String osvName) {
-        return OSV_NAMES.entrySet().stream().filter(entry -> entry.getValue().equals(osvName))
-                .map(Map.Entry::getKey).findFirst();
+        return Optional.ofNullable(PRODUCT_NAMES.get(osvName));
+    }
+
+    /** {@code ecosystem} without the release a distribution's name may carry ({@code Debian:12} is {@code Debian}),
+     *  in whichever spelling it is given. */
+    static String base(String ecosystem) {
+        int release = ecosystem.indexOf(':');
+        return release < 0 ? ecosystem : ecosystem.substring(0, release);
     }
 
     /** Every ecosystem OSV publishes that the product asks it about, in the product's spelling. */
@@ -285,5 +295,25 @@ public final class OsvQuery {
         public List<JsonNode> complete() {
             return List.copyOf(vulns);
         }
+    }
+
+    /** Every alias an OSV-schema record names, whatever its namespace and in its order, each once - what two feeds'
+     *  records of one flaw are merged on. */
+    public static List<String> aliasesOf(JsonNode record) {
+        Set<String> aliases = new LinkedHashSet<>();
+        for (JsonNode alias : record.path("aliases")) {
+            String value = alias.asString(null);
+            if (value != null && !value.isBlank()) {
+                aliases.add(value);
+            }
+        }
+        return List.copyOf(aliases);
+    }
+
+    /** The CVE identifiers an OSV-schema record {@code id} goes by - its own where it is one, then its CVE aliases -
+     *  the keys the known-exploited catalogue uses. */
+    public static List<String> cvesOf(JsonNode record, String id) {
+        return Stream.concat(Stream.of(id), aliasesOf(record).stream()).filter(name -> name.startsWith("CVE-"))
+                .distinct().toList();
     }
 }
