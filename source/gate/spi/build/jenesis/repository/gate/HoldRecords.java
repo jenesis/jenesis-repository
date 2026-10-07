@@ -21,7 +21,7 @@ import build.jenesis.repository.inventory.StoreRepositoryInventory;
  *
  * <p>The keys are composed, the kind index enumerated and the coordinate-keyed read answered by {@link HoldMarkers} in
  * the inventory, which the inventory's own name-enumeration screen also reads; this class adds what needs discovery.
- * {@link HoldReleaseObserver#kind()} is the second segment of every key, so that segment is an enumerable index of
+ * {@link HoldKindObserver#kind()} is the second segment of every key, so that segment is an enumerable index of
  * kinds ({@link #kinds}) and the rest a constructible probe ({@link #key}).
  *
  * <p><b>Fail-closed.</b> Every read propagates its {@link IOException}, and probes use
@@ -59,11 +59,16 @@ public final class HoldRecords {
         return HoldMarkers.kinds(store);
     }
 
-    /** The kinds of the installed providers: what can be explained and released, never what counts as held. */
+    /** The kinds of the installed hold kinds: what can be explained and released, never what counts as held. The
+     *  discovery refuses two hooks of one kind, which a set would silently merge. */
     public static SortedSet<String> installedKinds() {
-        // The primitive refuses two observers of one kind, which a set would silently merge.
-        return Providers.installedNames("hold-release", ServiceLoader.load(HoldReleaseObserver.class),
-                HoldReleaseObserver::kind, _ -> true);
+        SortedSet<String> kinds = new TreeSet<>();
+        for (HoldReleaseObserver observer : HoldReleaseObserver.discovered()) {
+            if (observer instanceof HoldKindObserver kind) {
+                kinds.add(kind.kind());
+            }
+        }
+        return Collections.unmodifiableSortedSet(kinds);
     }
 
     /** The kinds holding {@code (ecosystem, coordinate, version)}, from the durable records alone, with no

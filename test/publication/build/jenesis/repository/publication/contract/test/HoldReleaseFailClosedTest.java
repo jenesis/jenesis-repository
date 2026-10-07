@@ -3,6 +3,7 @@ package build.jenesis.repository.publication.contract.test;
 import module org.junit.jupiter.api;
 import module java.base;
 
+import build.jenesis.repository.gate.HoldKindObserver;
 import build.jenesis.repository.gate.HoldReleaseObserver;
 import build.jenesis.repository.hooks.testkit.Coordinates;
 import build.jenesis.repository.hooks.testkit.HookTestFormat;
@@ -45,7 +46,7 @@ class HoldReleaseFailClosedTest {
     }
 
     /** A hold kind whose every leg fails, the way a module with a broken backend behind it does. */
-    private record Hostile(String kind) implements HoldReleaseObserver {
+    private record Hostile(String kind) implements HoldKindObserver {
 
         @Override
         public void onReleased(ArtifactStore store, String path) throws IOException {
@@ -111,6 +112,10 @@ class HoldReleaseFailClosedTest {
             @Override
             public void onReleased(ArtifactStore store, String path) {
                 released.add(path);
+            }
+
+            @Override
+            public void onDiscarded(ArtifactStore store, String path) {
             }
         };
 

@@ -2,6 +2,7 @@ package build.jenesis.repository.gate.store;
 
 import module java.base;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.gate.HoldKindObserver;
 import build.jenesis.repository.gate.HoldReleaseObserver;
 import build.jenesis.repository.gate.ManualHold;
 
@@ -10,7 +11,7 @@ import build.jenesis.repository.gate.ManualHold;
  * {@link ManualHold} record of the path's coordinate version. A thin adapter so the review surfaces discover the hook
  * rather than naming {@code ManualHold} directly.
  */
-public final class ManualHoldReleaseObserver implements HoldReleaseObserver {
+public final class ManualHoldReleaseObserver implements HoldKindObserver {
 
     @Override
     public void onReleased(ArtifactStore store, String path) throws IOException {
