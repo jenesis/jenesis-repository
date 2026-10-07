@@ -33,9 +33,12 @@ public final class GroupMembership {
 
     private final PrincipalTenants tenants;
 
-    GroupMembership(CredentialSpace space, PrincipalTenants tenants) {
+    private final TenantMembers members;
+
+    GroupMembership(CredentialSpace space, PrincipalTenants tenants, TenantMembers members) {
         this.space = space;
         this.tenants = tenants;
+        this.members = members;
     }
 
     /**
@@ -204,6 +207,11 @@ public final class GroupMembership {
      * document is a well-formed one; so it is recomputed on a cadence rather than checked. Every principal, not
      * every member of every group, because a principal whose last group dropped them has a derived document
      * nothing else would ever revisit.
+     *
+     * <p>Each principal's membership marker is reconciled on the same visit, here rather than in every derivation:
+     * what a group confers never makes a member, so only a walk over every principal has a marker to repair - one
+     * left behind by a crash or a lapsed grant, or one never written because the grant predates the markers - and
+     * then over the markers themselves, for the one a crash left behind a subject removed whole.
      */
     public void rederive(String tenant) throws IOException {
         for (String cursor = null;;) {
@@ -211,6 +219,19 @@ public final class GroupMembership {
                     CredentialSpace.kindPrefix(tenant, Authorization.Kind.PRINCIPAL), cursor, DERIVE_PAGE);
             for (String principal : page.ids()) {
                 rederive(tenant, principal);
+                members.reconcile(tenant, Authorization.Subject.principal(principal));
+            }
+            if (page.next() == null) {
+                break;
+            }
+            cursor = page.next();
+        }
+        // And every marker, since one a crash left behind a removed subject names a principal the walk above no
+        // longer finds.
+        for (String cursor = null;;) {
+            Authorization.SubjectPage page = members.page(tenant, cursor, DERIVE_PAGE);
+            for (String principal : page.ids()) {
+                members.reconcile(tenant, Authorization.Subject.principal(principal));
             }
             if (page.next() == null) {
                 return;
@@ -240,7 +261,8 @@ public final class GroupMembership {
      *
      * <p>It is also what builds a principal's tenant index where none has been kept yet: every principal of every
      * tenant is reconciled as it is re-derived, so a start-up leaves every index naming each tenant its principal
-     * holds a grant in.
+     * holds a grant in - and every tenant's member markers naming exactly the principals holding a live grant of
+     * their own there.
      */
     public void repairDerivedGrants() {
         if (!space.enforcing()) {
@@ -258,8 +280,8 @@ public final class GroupMembership {
             // until the next start - not a node that will not come up.
             LOGGER.log(System.Logger.Level.WARNING, "Could not repair group-derived grants at start-up; a member "
                     + "whose derivation was interrupted may hold what their group used to grant, and a principal "
-                    + "granted before the tenant index was kept may be missing tenants from it, until this "
-                    + "succeeds", failed);
+                    + "granted before the tenant index was kept may be missing tenants from it, and a tenant's "
+                    + "member list may miss a member granted before it was kept, until this succeeds", failed);
         }
     }
 
