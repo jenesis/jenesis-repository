@@ -55,22 +55,6 @@ public class RedirectFallbackTest {
         // The redirect parse-availability is process-global (a module registers it at boot); reset after every test so
         // the module-absent refusal test sees the default (off) state independent of execution order.
         RepositoryDefinition.redirectHandlerInstalled(false);
-        RepositoryDefinition.dnsDirectoryInstalled(false);
-    }
-
-    @Test
-    public void a_store_or_screening_option_on_a_dns_fallback_is_refused_at_parse_not_a_class_cast() {
-        // A DNS-directory leg emits a 307 and owns no store or screening policy, so a store/screening token on it is a
-        // configuration error. It must be refused at parse with a clear IllegalArgumentException naming the option -
-        // never reach the Source.Upstream cast in the 'unscreened' warning and throw a raw ClassCastException.
-        RepositoryDefinition.redirectHandlerInstalled(true);
-        RepositoryDefinition.dnsDirectoryInstalled(true);
-        assertThatThrownBy(() -> RepositoryDefinition.parse("fallback dns redirect unscreened"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("not allowed on a 'dns' fallback");
-        assertThatThrownBy(() -> RepositoryDefinition.parse("fallback dns redirect harden"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("not allowed on a 'dns' fallback");
     }
 
     // ---- match= : parse + MISS-composable routing -----------------------------------------------------------------

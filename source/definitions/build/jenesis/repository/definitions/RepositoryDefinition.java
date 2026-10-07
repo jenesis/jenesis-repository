@@ -108,8 +108,7 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
         }
     }
 
-    /** Where a fallback's content comes from: an external upstream, another repository resolved by recursion, or the
-     *  DNS directory, whose upstream the DNS walk resolves per request. */
+    /** Where a fallback's content comes from: an external upstream, or another repository resolved by recursion. */
     public sealed interface Source {
         /** An external upstream URL (the source token contains a scheme, {@code "://"}). */
         record Upstream(URI url) implements Source {
@@ -123,14 +122,6 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
             public Repository {
                 Objects.requireNonNull(name, "name");
             }
-        }
-
-        /** The DNS directory: a {@code fallback dns redirect} leg whose upstream the {@code redirect-dns} module's walk
-         *  ({@code DnsDirectory.locate}) resolves per request, through the same
-         *  {@code RepositoryRouter.RedirectHandler} seam an {@link Upstream} redirect uses. The keyword {@code dns}
-         *  takes precedence over a repository named {@code dns}; the leg is served only as a {@link Serve#REDIRECT} and
-         *  carries no URL of its own. */
-        record DnsDirectory() implements Source {
         }
     }
 
@@ -215,8 +206,8 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
                     if (source instanceof Source.Upstream upstream && plaintextUpstream(upstream.url())) {
                         warnPlaintext(upstream.url());
                     }
-                    // Caching applies to an Upstream fallback; a Repository or DnsDirectory target owns its own bytes,
-                    // so false there.
+                    // Caching applies to an Upstream fallback; a Repository target owns its own bytes, so false
+                    // there.
                     boolean store = source instanceof Source.Upstream;
                     fallbacks.add(new Fallback(source, store, Screening.DEFAULT));
                     current = fallbacks.size() - 1;
@@ -230,16 +221,6 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
                     }
                     fallbacks.set(current, applyOption(token, fallbacks.get(current), specification));
                 }
-            }
-        }
-        // A DNS-directory leg is served only as a redirect, its target resolved per request. A `fallback dns` without
-        // `redirect` is the reserved-keyword collision with a repository named dns: refuse it, asking for a rename.
-        for (Fallback fallback : fallbacks) {
-            if (fallback.source() instanceof Source.DnsDirectory && fallback.serve() != Serve.REDIRECT) {
-                throw new IllegalArgumentException("The source keyword 'dns' is reserved for the DNS directory "
-                        + "(the 'redirect-dns' module), which is served only as a redirect: write 'fallback dns "
-                        + "redirect'. A repository literally named 'dns' collides with this reserved keyword and "
-                        + "can never be addressed as a fallback source - rename that repository: " + specification);
             }
         }
         if (mixedStrength(fallbacks)) {
@@ -269,11 +250,6 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
                         + "fallback '" + repository.name() + "': a 'redirect' serve policy emits a 307 to an "
                         + "upstream URL, which a repository-name view does not have. " + specification);
             }
-            if (fallback.source() instanceof Source.DnsDirectory) {
-                // The redirect-dns handler serves a DNS-directory leg, and parseSource already required that module, so
-                // redirect is the leg's mandatory serve policy here.
-                return fallback.withServe(Serve.REDIRECT);
-            }
             if (!redirectHandlerInstalled) {
                 // Without the redirect-directory module a redirect clause is refused at every write site rather than
                 // degrading to fetching the very bytes the operator asked to redirect.
@@ -289,12 +265,6 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
             throw new IllegalArgumentException("Option '" + token + "' is not allowed on the "
                     + "repository-name fallback '" + repository.name() + "': the fallback repository "
                     + "owns its own store and screening policy. " + specification);
-        }
-        // A DNS-directory leg emits a redirect and owns no store or screening policy.
-        if (fallback.source() instanceof Source.DnsDirectory) {
-            throw new IllegalArgumentException("Option '" + token + "' is not allowed on a 'dns' fallback: a "
-                    + "DNS-directory leg emits a 307 redirect and owns no store or screening policy. "
-                    + specification);
         }
         return switch (token) {
             case "nocache" -> fallback.withStore(false);
@@ -335,23 +305,11 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
                 fallback.source() instanceof Source.Upstream && fallback.screening() == Screening.HARDEN);
     }
 
-    /** Resolve a {@code fallback} source token: a {@code "://"}-bearing token is a {@link Source.Upstream}, the keyword
-     *  {@code dns} the {@link Source.DnsDirectory}, anything else a {@link Source.Repository}. {@code dns} needs the
-     *  {@code redirect-dns} module, so without it the keyword is refused at parse, naming the module, rather than read
-     *  as a repository name. */
+    /** Resolve a {@code fallback} source token: a {@code "://"}-bearing token is a {@link Source.Upstream}, anything
+     *  else a {@link Source.Repository}. */
     private static Source parseSource(String token, String specification) {
         if (token.contains("://")) {
             return new Source.Upstream(upstreamUri(token, specification));
-        }
-        if (token.equals("dns")) {
-            if (!dnsDirectoryInstalled) {
-                throw new IllegalArgumentException("A 'fallback dns redirect' clause needs the 'redirect-dns' module "
-                        + "installed to resolve the upstream by DNS walk, but it is not present on this deployment; "
-                        + "the 'dns' source keyword is refused rather than silently taken as a repository named "
-                        + "'dns'. Install the 'redirect-dns' module, or drop 'dns' from the definition: "
-                        + specification);
-            }
-            return new Source.DnsDirectory();
         }
         return new Source.Repository(token);
     }
@@ -444,21 +402,5 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
     /** Whether the {@code redirect} serve token currently parses (a redirect handler is installed). */
     public static boolean redirectHandlerInstalled() {
         return redirectHandlerInstalled;
-    }
-
-    /** Whether the {@code redirect-dns} module is installed. It gates the {@code dns} source keyword at parse
-     *  ({@code parseSource}); {@code false} by default. Volatile and process-wide, as {@link #redirectHandlerInstalled}
-     *  is. */
-    private static volatile boolean dnsDirectoryInstalled = false;
-
-    /** Register or clear the {@code redirect-dns} module's presence, so the {@code dns} keyword parses. Injecting the
-     *  DNS-capable handler into a router is the separate {@code RepositoryRouter#redirecting} step. */
-    public static void dnsDirectoryInstalled(boolean installed) {
-        dnsDirectoryInstalled = installed;
-    }
-
-    /** Whether the {@code dns} source keyword currently parses (the {@code redirect-dns} module is installed). */
-    public static boolean dnsDirectoryInstalled() {
-        return dnsDirectoryInstalled;
     }
 }

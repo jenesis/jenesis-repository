@@ -129,31 +129,27 @@ public class ServingConfig {
                 credentials.getIfAvailable(() -> UpstreamCredentialSource.NONE), downloads.getIfAvailable());
     }
 
-    /** Registers which redirect tokens parse, for the boot-time definition sweep that runs before the router exists:
-     *  a {@code redirect} or {@code dns} token parses exactly when an installed provider serves it. */
+    /** Registers whether the redirect token parses, for the boot-time definition sweep that runs before the router
+     *  exists: a {@code redirect} token parses exactly when an installed provider serves it. */
     static void registerRedirectTokens() {
         boolean upstream = false;
-        boolean dns = false;
         for (RedirectHandlerProvider provider : RedirectHandlerProvider.installed()) {
             upstream |= provider.servesUpstream();
-            dns |= provider.servesDnsDirectory();
         }
         RepositoryDefinition.redirectHandlerInstalled(upstream);
-        RepositoryDefinition.dnsDirectoryInstalled(dns);
     }
 
     /**
      * Builds every installed {@link RedirectHandlerProvider} from this deployment's configuration and the guards this
      * layer owns - the policy floor and withheld probe, the private-host and credential guards, download accounting -
-     * chains them into the router, and registers which tokens parse. With none installed both tokens stay a parse
-     * refusal and the router is returned unchanged.
+     * chains them into the router, and registers whether the redirect token parses. With none installed it stays a
+     * parse refusal and the router is returned unchanged.
      */
     static RepositoryRouter redirecting(RepositoryRouter router, UnaryOperator<String> config, LiveConfig liveConfig,
                                         Repositories repositories, RepositoryRouter.WithheldGuard withheld,
                                         UpstreamCredentialSource credentialSource, DownloadTracker downloadTracker) {
         List<RedirectHandlerProvider> providers = RedirectHandlerProvider.installed();
         boolean upstream = false;
-        boolean dns = false;
         List<RepositoryRouter.RedirectHandler> handlers = new ArrayList<>();
         if (!providers.isEmpty()) {
             RedirectHandlerProvider.Screen screen = (tenant, repository, descriptor, path) ->
@@ -180,16 +176,14 @@ public class ServingConfig {
                 }
                 handlers.add(handler.get());
                 upstream |= provider.servesUpstream();
-                dns |= provider.servesDnsDirectory();
             }
         }
         RepositoryDefinition.redirectHandlerInstalled(upstream);
-        RepositoryDefinition.dnsDirectoryInstalled(dns);
         if (handlers.isEmpty()) {
             return router;
         }
-        LOGGER.info("redirect serve path wired: {} handler(s); 'fallback <url> redirect' {}, 'fallback dns redirect' {}",
-                handlers.size(), upstream ? "parses" : "is refused", dns ? "parses" : "is refused");
+        LOGGER.info("redirect serve path wired: {} handler(s); 'fallback <url> redirect' {}", handlers.size(),
+                upstream ? "parses" : "is refused");
         return router.redirecting(RedirectHandlerProvider.chain(handlers));
     }
 

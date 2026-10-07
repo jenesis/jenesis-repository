@@ -115,7 +115,6 @@ public class CliBindingTest {
             Map.entry("spi", Binding.of("/api/admin/spi", "spi")),
             Map.entry("config", Binding.of("/api/config", "config")),
             Map.entry("webhook", Binding.of("/api/webhook", "webhook", "releases")),
-            Map.entry("redirect-dns", Binding.of("/api/admin/redirect-dns/check", "redirect-dns", "check", "a:b")),
             Map.entry("tests", Binding.of("/api/tests/flaky", "tests", "flaky")),
             Map.entry("capabilities", Binding.of("/api/capabilities", "capabilities")),
             Map.entry("setup", Binding.of("/api/setup", "setup")),
