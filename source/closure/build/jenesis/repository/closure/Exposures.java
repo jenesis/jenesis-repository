@@ -56,19 +56,15 @@ final class Exposures {
                                            Severity risk, Instant now, String own, Tenant tenant,
                                            Optional<FindingsProvider> findings) throws IOException {
         List<ClosureWalk.Member> members = walk.members();
-        Map<String, ClosureWalk.Member> byRepository = new HashMap<>();
-        for (int i = 1; i < members.size(); i++) {
-            byRepository.putIfAbsent(members.get(i).repository(), members.get(i));
-        }
         List<ExposureSection.Reached> reached = new ArrayList<>();
         ClosureSection.Paths paths = ClosureSection.paths(closure);
         int examined = 0;
         for (ClosureSection.Component component : closure.components()) {
-            ClosureWalk.Member holder = component.elsewhere() ? byRepository.get(component.repository())
-                    : members.getFirst();
-            if (holder == null) {
+            Optional<ClosureWalk.Member> found = walk.holder(component.repository());
+            if (found.isEmpty()) {
                 continue;
             }
+            ClosureWalk.Member holder = found.get();
             examined++;
             boolean held = Holdings.of(holder.store()).withheld(ecosystem, component.coordinate(),
                     component.version());
