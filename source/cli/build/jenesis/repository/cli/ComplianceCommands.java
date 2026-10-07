@@ -14,6 +14,10 @@ final class ComplianceCommands {
     private ComplianceCommands() {
     }
 
+    /** How long a health refresh takes to move: a probe per held coordinate, so seconds on a small repository and
+     *  minutes on a large one - the cadence a bare {@code --refresh} watches it at. */
+    private static final Duration HEALTH_REFRESH = Duration.ofSeconds(5);
+
     static int health(String[] args, Path home) throws Exception {
         // A re-score is an action rather than a flag: --refresh belongs to the whole command line, which watches
         // work that outlives a request, and takes it off the line before any handler reads it.
@@ -21,20 +25,46 @@ final class ComplianceCommands {
         if (args.length != (refresh ? 3 : 2)) {
             throw new IllegalArgumentException("Usage: health <repo> | health refresh <repo>");
         }
-        RiskClient.HealthReport report = CliSupport.client(home).risk().health(args[refresh ? 2 : 1], refresh);
+        String repo = args[refresh ? 2 : 1];
+        RiskClient risk = CliSupport.client(home).risk();
+        // The first reading starts the refresh when asked to, so a watched refresh and a single answer are the same
+        // sequence of requests, and under --json the start call's answer is forgotten like any other poll.
+        AtomicBoolean start = new AtomicBoolean(refresh);
+        Refresh.Poll poll = () -> {
+            if (start.getAndSet(false)) {
+                RiskClient.HealthRefreshStart started = risk.refreshHealth(repo);
+                System.out.println(started.started() ? "Started a health refresh of " + repo + "."
+                        : "A health refresh of " + repo + " was already running.");
+                return healthState(repo, started.report());
+            }
+            return healthState(repo, risk.health(repo));
+        };
+        return Refresh.on() ? Refresh.until(HEALTH_REFRESH, poll) : poll.once().code();
+    }
+
+    /** Print one reading of the health report, and say whether a refresh is still running behind it. */
+    private static Refresh.Poll.State healthState(String repo, RiskClient.HealthReport report) {
         if (!report.available()) {
             System.out.println("No health source is configured on this deployment.");
-            return 0;
+            return Refresh.Poll.State.done(0);
         }
-        for (RiskClient.HealthEntry entry : report.entries()) {
-            System.out.printf(Locale.ROOT, "%5.1f  %s %s (maintenance %s, review %s, provenance %s)%n",
-                    entry.overall(), entry.ecosystem(), entry.coordinate(), score(entry.maintenance()),
-                    score(entry.review()), score(entry.provenance()));
+        String running = report.refreshing() ? "; a refresh is running, and --refresh watches it finish" : "";
+        if (!report.ranked()) {
+            // Not a failure: the ranking is built by a pass or a refresh, and until then there is nothing to rank by.
+            System.out.println("The health of " + repo + " has not been ranked yet"
+                    + (report.lastScanned() == null ? "" : " (last scored " + report.lastScanned() + ")")
+                    + (report.refreshing() ? running : "; health refresh " + repo + " scores and ranks it") + ".");
+        } else {
+            for (RiskClient.HealthEntry entry : report.entries()) {
+                System.out.printf(Locale.ROOT, "%5.1f  %s %s (maintenance %s, review %s, provenance %s)%n",
+                        entry.overall(), entry.ecosystem(), entry.coordinate(), score(entry.maintenance()),
+                        score(entry.review()), score(entry.provenance()));
+            }
+            System.out.println(report.entries().size() + " of " + report.total() + " scored"
+                    + (report.lastScanned() == null ? ", never refreshed" : ", as of " + report.lastScanned())
+                    + running + ".");
         }
-        System.out.println(report.entries().size() + " of " + report.total() + " scored"
-                + (report.lastScanned() == null ? ", never refreshed" : ", as of " + report.lastScanned())
-                + (refresh ? "; a refresh has been started" : "") + ".");
-        return 0;
+        return report.refreshing() ? Refresh.Poll.State.running() : Refresh.Poll.State.done(0);
     }
 
     /** A component score, or {@code unknown} for the {@code -1} a source could not evaluate. */
