@@ -129,7 +129,7 @@ public class RepositoryClientTest {
     private static final String PURGE = "{\"namespace\":\"build.jenesis.repository.phantom\",\"dryRun\":true,"
             + "\"spaces\":[{\"prefix\":\"default/releases/phantomspace\",\"objects\":3,\"bytes\":42}],"
             + "\"objects\":3,\"bytes\":42}";
-    private static final String RETRO = "{\"mode\":\"denied\",\"count\":2,\"held\":[{\"ecosystem\":\"maven\","
+    private static final String RETRO = "{\"mode\":\"denied\",\"state\":\"done\",\"count\":2,\"held\":[{\"ecosystem\":\"maven\","
             + "\"coordinate\":\"org.gnu:x\",\"version\":\"1.0\",\"reasons\":[\"GPL-3.0 denied\"]}]}";
     private static final String PROV_MATERIAL = "{\"envelope\":\"{\\\"payload\\\":\\\"e\\\"}\","
             + "\"certificateChain\":\"-----BEGIN CERTIFICATE-----\","

@@ -126,7 +126,10 @@ public final class Commands {
                                     + "the scores as they stand; --refresh watches it finish")),
                     noun("enforcement-preview", "what enabling licence enforcement would newly hold",
                             ComplianceCommands::enforcementPreview,
-                            act("enforcement-preview <repo> [--unknown]", "a dry run over what is already published")),
+                            act("enforcement-preview <repo> [--unknown]", "the last dry run over what is already "
+                                    + "published"),
+                            act("enforcement-preview compute <repo> [--unknown]", "run the dry run in the background, "
+                                    + "and answer the last one as it stands; --refresh watches it finish")),
                     noun("licenses", "how many versions declare each license",
                             ComplianceCommands::licenses,
                             act("licenses <repo> [--count]", "the per-category and per-SPDX-id counts of versions as "

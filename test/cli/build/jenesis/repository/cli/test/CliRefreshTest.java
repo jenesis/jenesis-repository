@@ -66,6 +66,11 @@ public class CliRefreshTest {
     private static final String UNRANKED = "{\"available\":true,\"ranked\":false,\"entries\":null,\"total\":0,"
             + "\"lastScanned\":\"2026-01-01T00:00:00Z\",\"refreshing\":false}";
 
+    private static final String PLANNING = "{\"mode\":\"denied\",\"state\":\"running\",\"count\":0,\"held\":[]}";
+    private static final String PLANNED = "{\"mode\":\"denied\",\"state\":\"done\",\"count\":1,\"held\":[{"
+            + "\"ecosystem\":\"Maven\",\"coordinate\":\"org.gnu:x\",\"version\":\"1.0\",\"reasons\":[\"GPL denied\"]}],"
+            + "\"computedAt\":\"2026-01-01T00:00:09Z\"}";
+
     @TempDir
     private static Path home;
 
@@ -149,6 +154,20 @@ public class CliRefreshTest {
         server.stubFor(get(urlPathEqualTo(health)).withQueryParam("repo", equalTo("fresh"))
                 .willReturn(aResponse().withStatus(503)
                         .withHeader("Content-Type", "application/json").withBody(UNRANKED)));
+        // The enforcement preview: started by the first request, running when read once more, landed the time after.
+        String retro = "/api/licenses/retro/plan";
+        server.stubFor(get(urlPathEqualTo(retro)).withQueryParam("refresh", equalTo("true")).atPriority(1)
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withHeader("Jenesis-Refresh", "started").withBody(PLANNING)));
+        server.stubFor(get(urlPathEqualTo(retro)).withQueryParam("refresh", absent()).inScenario("retro")
+                .whenScenarioStateIs(com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED)
+                .willSetStateTo("planned")
+                .willReturn(aResponse().withStatus(200)
+                        .withHeader("Content-Type", "application/json").withBody(PLANNING)));
+        server.stubFor(get(urlPathEqualTo(retro)).withQueryParam("refresh", absent()).inScenario("retro")
+                .whenScenarioStateIs("planned")
+                .willReturn(aResponse().withStatus(200)
+                        .withHeader("Content-Type", "application/json").withBody(PLANNED)));
         System.setProperty("JENREPO_CLI_HOME", home.toString());
         Cli.run(new String[] {"login", "http://127.0.0.1:" + server.port() + "/", "--key-file",
                 Files.writeString(home.resolve("key"), "test-key").toString()});
@@ -255,6 +274,21 @@ public class CliRefreshTest {
 
         assertThat(out).contains("has not been ranked yet (last scored 2026-01-01T00:00:00Z); health refresh fresh "
                 + "scores and ranks it.");
+    }
+
+    @Test
+    void an_enforcement_preview_is_computed_in_the_background_and_watched_until_it_lands() throws Exception {
+        server.resetRequests();
+        String out = capture(() -> assertThat(Cli.run(new String[] {
+                "enforcement-preview", "compute", "releases", "--refresh=1s"})).isZero());
+
+        assertThat(out).contains("Started the enforcement preview of releases.")
+                .contains("The enforcement preview of releases is running.");
+        assertThat(out).as("the watch stops on the landed plan").contains("As of 2026-01-01T00:00:09Z.")
+                .contains("org.gnu:x:1.0").contains("GPL denied");
+        server.verify(1, getRequestedFor(urlPathEqualTo("/api/licenses/retro/plan"))
+                .withQueryParam("refresh", equalTo("true")));
+        server.verify(3, getRequestedFor(urlPathEqualTo("/api/licenses/retro/plan")));
     }
 
     @Test
