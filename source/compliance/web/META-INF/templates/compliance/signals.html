@@ -23,8 +23,8 @@
 
     <th:block th:if="${signals.state() == 'recorded'}">
         <p><small>As of <time th:replace="~{base :: time(${signals.recorded()})}">when</time>.</small></p>
-        <div th:if="${signals.sources().isEmpty()}"
-             th:replace="~{base :: empty('No refreshable signal source is switched on.')}"></div>
+        <th:block th:if="${signals.sources().isEmpty()}"><div
+             th:replace="~{base :: empty('No refreshable signal source is switched on.')}"></div></th:block>
         <table th:unless="${signals.sources().isEmpty()}" class="app-list">
             <caption class="app-sr-only">Signal sources</caption>
             <thead>
@@ -35,7 +35,7 @@
                 <tr>
                     <td class="app-list__lead"><code th:text="${s.name()}">osv</code></td>
                     <td>
-                        <time th:if="${s.refreshed() != null}" th:replace="~{base :: time(${s.refreshed()})}">when</time>
+                        <th:block th:if="${s.refreshed() != null}"><time th:replace="~{base :: time(${s.refreshed()})}">when</time></th:block>
                         <span th:if="${s.refreshed() == null}">never</span>
                     </td>
                     <td>

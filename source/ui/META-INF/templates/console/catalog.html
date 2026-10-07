@@ -14,7 +14,7 @@
         is read-only: switching a module and purging what a removed one left behind are on the by-module
         view.</small></p>
 
-    <div th:if="${spis.isEmpty()}" th:replace="~{base :: empty('No SPIs are installed.')}"></div>
+    <th:block th:if="${spis.isEmpty()}"><div th:replace="~{base :: empty('No SPIs are installed.')}"></div></th:block>
 
     <article th:each="spi : ${spis}">
         <div class="module-head">
