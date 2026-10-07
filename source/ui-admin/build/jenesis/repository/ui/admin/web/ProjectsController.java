@@ -6,7 +6,6 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Documents;
 import build.jenesis.repository.ui.identity.UiProperties;
 import build.jenesis.repository.ui.store.CacheService;
-import build.jenesis.repository.ui.store.Eviction;
 import build.jenesis.repository.ui.store.VolumeReclaim;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Controller;
@@ -31,15 +30,13 @@ public class ProjectsController {
     private final CacheService service;
     private final Documents rootStorage;
     private final UiProperties properties;
-    private final Format format;
     private final VolumeReclaim volumeReclaim;
 
     public ProjectsController(CacheService service, @Qualifier("rootStorage") Documents rootStorage,
-                              UiProperties properties, Format format, VolumeReclaim volumeReclaim) {
+                              UiProperties properties, VolumeReclaim volumeReclaim) {
         this.service = service;
         this.rootStorage = rootStorage;
         this.properties = properties;
-        this.format = format;
         this.volumeReclaim = volumeReclaim;
     }
 
@@ -66,6 +63,7 @@ public class ProjectsController {
         model.addAttribute("totalSpace", capacity.map(ArtifactStore.Capacity::total).orElse(0L));
         model.addAttribute("minFreeBytes", properties.getMinFreeBytes());
         model.addAttribute("minFreePercent", properties.getMinFreePercent());
+        model.addAttribute("reclaim", volumeReclaim.last());
         return "cache-volume";
     }
 
@@ -74,14 +72,12 @@ public class ProjectsController {
     @PostMapping("/ui/projects/volume-reclaim")
     public String reclaim(@RequestParam(name = "minFreeBytes", required = false) Long minFreeBytes,
                           @RequestParam(name = "minFreePercent", required = false) Integer minFreePercent,
-                          RedirectAttributes redirect) {
+                          RedirectAttributes redirect) throws IOException {
         long bytes = minFreeBytes != null ? minFreeBytes : properties.getMinFreeBytes();
         int percent = minFreePercent != null ? minFreePercent : properties.getMinFreePercent();
-        // The reclaim and its operator-scope audit live in VolumeReclaim.
-        Eviction.Result result = volumeReclaim.reclaim(bytes, percent);
-        String suffix = result.entriesDeleted() == 0 ? " (target already met or no thresholds set)" : "";
-        redirect.addFlashAttribute("message", "Volume reclaim: deleted " + result.entriesDeleted()
-                + " entries, freed " + format.bytes(result.bytesFreed()) + suffix + ".");
+        // A sweep of every project, so it starts here and runs off the request; the screen reads it back.
+        redirect.addFlashAttribute("message", volumeReclaim.start(bytes, percent)
+                ? "Volume reclaim started." : "A volume reclaim is already running.");
         return "redirect:/ui/projects/cache-volume";
     }
 

@@ -121,4 +121,58 @@ public final class AuditActions {
 
     /** An import started into a repository. */
     public static final String REPOSITORY_IMPORT = action("repository.import");
+
+    /** A credential minted for a tenant. */
+    public static final String CREDENTIAL_MINT = action("credential.mint");
+
+    /** A credential rotated: a new key issued with the old one's grants, the old one kept for an overlap. */
+    public static final String CREDENTIAL_ROTATE = action("credential.rotate");
+
+    /** A credential's expiry set or cleared. */
+    public static final String CREDENTIAL_EXPIRY = action("credential.expiry");
+
+    /** A credential's allowed source addresses set or cleared. */
+    public static final String CREDENTIAL_ALLOWED_IPS = action("credential.allowed-ips");
+
+    /** A credential revoked. */
+    public static final String CREDENTIAL_REVOKE = action("credential.revoke");
+
+    /** A right granted to a credential on a scope. */
+    public static final String GRANT_SET = action("grant.set");
+
+    /** A credential's right on a scope withdrawn. */
+    public static final String GRANT_REMOVE = action("grant.remove");
+
+    /** A member removed: every right granted to them directly, and their metadata. */
+    public static final String PRINCIPAL_REMOVE = action("principal.remove");
+
+    /** A right granted to a group on a scope. */
+    public static final String GROUP_GRANT_SET = action("group.grant.set");
+
+    /** A group's right on a scope withdrawn. */
+    public static final String GROUP_GRANT_REMOVE = action("group.grant.remove");
+
+    /** A member added to a group. */
+    public static final String GROUP_MEMBER_ADD = action("group.member.add");
+
+    /** A member taken out of a group. */
+    public static final String GROUP_MEMBER_REMOVE = action("group.member.remove");
+
+    /** A group removed, with its rights. */
+    public static final String GROUP_REMOVE = action("group.remove");
+
+    /** A tenant's SCIM token minted, replacing any before it. */
+    public static final String SCIM_TOKEN_SET = action("scim.token.set");
+
+    /** A tenant's SCIM token revoked. */
+    public static final String SCIM_TOKEN_CLEAR = action("scim.token.clear");
+
+    /** A staged release promoted into its repository. */
+    public static final String STAGING_PROMOTE = action("staging.promote");
+
+    /** A staged release dropped. */
+    public static final String STAGING_DROP = action("staging.drop");
+
+    /** A removed module's leftover key-spaces purged across every tenant. */
+    public static final String STORAGE_PURGE = action("storage.purge");
 }

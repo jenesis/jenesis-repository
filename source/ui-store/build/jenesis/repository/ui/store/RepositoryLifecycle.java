@@ -211,7 +211,7 @@ public class RepositoryLifecycle extends TenantScope {
 
     public void promote(String repository, String id) throws IOException {
         // Recorded as the API's staging promotion is.
-        audit("staging.promote", repository + "/" + id);
+        audit(AuditActions.STAGING_PROMOTE, repository + "/" + id);
         observe("promote", repository, _ -> {
             staged(repository).promote(id);
             return null;
@@ -219,7 +219,7 @@ public class RepositoryLifecycle extends TenantScope {
     }
 
     public void drop(String repository, String id) throws IOException {
-        audit("staging.drop", repository + "/" + id);
+        audit(AuditActions.STAGING_DROP, repository + "/" + id);
         observe("drop", repository, _ -> {
             staged(repository).drop(id);
             return null;

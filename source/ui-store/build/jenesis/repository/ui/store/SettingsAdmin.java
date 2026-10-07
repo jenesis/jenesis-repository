@@ -335,7 +335,7 @@ public class SettingsAdmin {
     public Optional<StorageNamespaces.Report> purgeOrphanedData(String module) throws IOException {
         Optional<StorageNamespaces.Report> report = new StorageNamespaces(root).purge(module, tenants.get());
         if (report.isPresent()) {
-            audit("storage.purge", module + " (" + report.get().objects() + " objects, "
+            audit(AuditActions.STORAGE_PURGE, module + " (" + report.get().objects() + " objects, "
                     + report.get().bytes() + " bytes)");
             synchronized (orphanLock) {
                 orphanSnapshot = null;

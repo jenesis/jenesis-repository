@@ -1,6 +1,7 @@
 package build.jenesis.repository.server;
 
 import module java.base;
+import build.jenesis.repository.audit.AuditActions;
 
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.CredentialLifetimes;
@@ -95,7 +96,7 @@ public final class GroupsController {
         authorization.setGrant(tenant, Authorization.Subject.group(group(name)),
                 request.scope(), String.join(",", request.tokens()),
                 CredentialLifetimes.expiry(request.expires()));
-        context.audit(tenant, key, "group.grant.set", name + " " + request.scope());
+        context.audit(tenant, key, AuditActions.GROUP_GRANT_SET, name + " " + request.scope());
         response.setStatus(200);
     }
 
@@ -105,7 +106,7 @@ public final class GroupsController {
         String key = PresentedKey.from(http);
         String tenant = routing.tenant(http);
         authorization.removeGrant(tenant, Authorization.Subject.group(group(name)), scope);
-        context.audit(tenant, key, "group.grant.remove", name + " " + scope);
+        context.audit(tenant, key, AuditActions.GROUP_GRANT_REMOVE, name + " " + scope);
         response.setStatus(200);
     }
 
@@ -119,7 +120,7 @@ public final class GroupsController {
         String key = PresentedKey.from(http);
         String tenant = routing.tenant(http);
         authorization.groups().addMember(tenant, group(name), request.id());
-        context.audit(tenant, key, "group.member.add", name + " " + request.id());
+        context.audit(tenant, key, AuditActions.GROUP_MEMBER_ADD, name + " " + request.id());
         response.setStatus(200);
     }
 
@@ -135,7 +136,7 @@ public final class GroupsController {
             throw new IllegalArgumentException("A member is removed by id: pass ?id=<provider-qualified id>");
         }
         authorization.groups().removeMember(tenant, group(name), id);
-        context.audit(tenant, key, "group.member.remove", name + " " + id);
+        context.audit(tenant, key, AuditActions.GROUP_MEMBER_REMOVE, name + " " + id);
         response.setStatus(200);
     }
 
@@ -147,7 +148,7 @@ public final class GroupsController {
         String key = PresentedKey.from(http);
         String tenant = routing.tenant(http);
         authorization.removeSubject(tenant, Authorization.Subject.group(group(name)));
-        context.audit(tenant, key, "group.remove", name);
+        context.audit(tenant, key, AuditActions.GROUP_REMOVE, name);
         response.setStatus(200);
     }
 

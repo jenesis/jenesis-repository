@@ -1,6 +1,7 @@
 package build.jenesis.repository.server;
 
 import module java.base;
+import build.jenesis.repository.audit.AuditActions;
 
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.CredentialLifetimes;
@@ -108,7 +109,7 @@ public final class CredentialsController {
                 request == null ? null : CredentialLifetimes.expiry(request.expires()),
                 request != null && Boolean.TRUE.equals(request.nonExpiring()));
         authorization.provision(tenant, hash, request == null ? null : request.label(), expires);
-        context.audit(tenant, key, "credential.mint", hash);
+        context.audit(tenant, key, AuditActions.CREDENTIAL_MINT, hash);
         response.setStatus(201);
         return new Minted(hash, minted, expires == null ? null : expires.toString());
     }
@@ -125,7 +126,7 @@ public final class CredentialsController {
         // a surface accepts and drops is worse than one it never offered.
         authorization.setGrant(tenant, Authorization.Subject.credential(hashId(id)),
                 request.scope(), String.join(",", request.tokens()), CredentialLifetimes.expiry(request.expires()));
-        context.audit(tenant, key, "grant.set", id + " " + request.scope());
+        context.audit(tenant, key, AuditActions.GRANT_SET, id + " " + request.scope());
         response.setStatus(200);
     }
 
@@ -136,7 +137,7 @@ public final class CredentialsController {
         String key = PresentedKey.from(http);
         String tenant = routing.tenant(http);
         authorization.removeGrant(tenant, hashId(id), scope);
-        context.audit(tenant, key, "grant.remove", id + " " + scope);
+        context.audit(tenant, key, AuditActions.GRANT_REMOVE, id + " " + scope);
         response.setStatus(200);
     }
 
@@ -149,7 +150,7 @@ public final class CredentialsController {
         String tenant = routing.tenant(http);
         authorization.setExpiry(tenant, hashId(id),
                 request == null ? null : CredentialLifetimes.expiry(request.expires()));
-        context.audit(tenant, key, "credential.expiry", id);
+        context.audit(tenant, key, AuditActions.CREDENTIAL_EXPIRY, id);
         response.setStatus(200);
     }
 
@@ -160,7 +161,7 @@ public final class CredentialsController {
         String key = PresentedKey.from(http);
         String tenant = routing.tenant(http);
         authorization.revoke(tenant, hashId(id));
-        context.audit(tenant, key, "credential.revoke", id);
+        context.audit(tenant, key, AuditActions.CREDENTIAL_REVOKE, id);
         response.setStatus(200);
     }
 
@@ -178,7 +179,7 @@ public final class CredentialsController {
         String tenant = routing.tenant(http);
         Authorization.Rotated rotated = authorization.rotate(tenant, hashId(id),
                 request == null ? null : CredentialLifetimes.lifetime(request.overlap()));
-        context.audit(tenant, key, "credential.rotate", id + " -> " + Authorization.hash(rotated.key()));
+        context.audit(tenant, key, AuditActions.CREDENTIAL_ROTATE, id + " -> " + Authorization.hash(rotated.key()));
         response.setStatus(201);
         return new Minted(Authorization.hash(rotated.key()), rotated.key(),
                 rotated.expires() == null ? null : rotated.expires().toString());
@@ -197,7 +198,7 @@ public final class CredentialsController {
         String tenant = routing.tenant(http);
         authorization.setAllowedAddresses(tenant, hashId(id),
                 request == null ? null : request.addresses());
-        context.audit(tenant, key, "credential.allowed-ips", id);
+        context.audit(tenant, key, AuditActions.CREDENTIAL_ALLOWED_IPS, id);
         response.setStatus(200);
     }
 

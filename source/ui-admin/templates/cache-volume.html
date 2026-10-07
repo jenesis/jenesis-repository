@@ -16,6 +16,16 @@
     <p><small>A reclaim runs a least-recently-used sweep across every project<th:block th:if="${multiTenant}"> of every
         tenant</th:block> until the target is
         met.</small></p>
+    <p th:if="${reclaim.running()}"
+       th:replace="~{base :: running('A reclaim is running; this screen refreshes when it lands.')}"></p>
+    <p th:if="${reclaim.failure() != null}"
+       th:replace="~{base :: alert(|The last reclaim stopped: ${reclaim.failure()}|, 'danger')}"></p>
+    <p th:if="${reclaim.finishedAt() != null}"><small>The last reclaim finished
+        <time th:replace="~{base :: time(${reclaim.finishedAt()})}">when</time>: deleted
+        <span th:text="${reclaim.entriesDeleted()}">0</span> entries, freed
+        <span th:text="${@format.bytes(reclaim.bytesFreed())}">0 B</span><th:block
+                th:if="${reclaim.entriesDeleted() == 0}"> - the target was already met, or no threshold is
+            set</th:block>.</small></p>
     <form method="post" th:action="@{/ui/projects/volume-reclaim}">
         <div class="grid">
             <label>Min free bytes <small>(blank = configured)</small>
@@ -25,7 +35,8 @@
                 <input name="minFreePercent" inputmode="numeric">
             </label>
         </div>
-        <button th:replace="~{base :: cautionButton('Reclaim now', 'Evict the least recently used cache entries across every project until the target is met?')}">Reclaim now</button>
+        <button th:unless="${reclaim.running()}"
+                th:replace="~{base :: cautionButton('Reclaim now', 'Evict the least recently used cache entries across every project until the target is met?')}">Reclaim now</button>
     </form>
 </main>
 </body>
