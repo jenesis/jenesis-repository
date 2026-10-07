@@ -51,7 +51,7 @@ public class DependentsController {
         if (tenant == null) {
             return null;
         }
-        if (ecosystem.isBlank() || coordinate.isBlank() || after.contains("/")) {
+        if (ecosystem.isBlank() || coordinate.isBlank()) {
             response.setStatus(400);
             return null;
         }
