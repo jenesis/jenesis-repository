@@ -342,9 +342,7 @@ public final class ProxyScreen {
         if (screening.verdict() != Verdict.QUARANTINE || versioned(path)) {
             return screening;
         }
-        List<String> reasons = new ArrayList<>(screening.reasons());
-        reasons.add(UNVERSIONED_REASON);
-        return new Screening(Verdict.REJECT, screening.coordinate(), reasons, screening.rules(), screening.complete());
+        return screening.adding(UNVERSIONED_REASON).judged(Verdict.REJECT, Verdict.REJECT, false, false);
     }
 
     /**
@@ -364,13 +362,10 @@ public final class ProxyScreen {
                 subject.ecosystem(), subject.coordinate(), subject.version(), path)) {
             return screening;
         }
-        List<String> reasons = new ArrayList<>(screening.reasons());
-        reasons.add(subject.coordinate() + ":" + subject.version()
-                + " is held for review, so a file fetched for it is held with it");
-        List<String> rules = new ArrayList<>(screening.rules());
-        rules.add(ComplianceGate.VERSION_HELD_RULE);
-        return new Screening(Verdict.QUARANTINE, screening.coordinate(), reasons, rules, screening.complete(),
-                Verdict.QUARANTINE, false, screening.pending());
+        return screening.adding(subject.coordinate() + ":" + subject.version()
+                        + " is held for review, so a file fetched for it is held with it")
+                .ruled(ComplianceGate.VERSION_HELD_RULE)
+                .judged(Verdict.QUARANTINE, Verdict.QUARANTINE, false, screening.pending());
     }
 
     /** Why a withheld document naming no version was refused rather than held for review. */
@@ -494,10 +489,7 @@ public final class ProxyScreen {
         }
         LOGGER.warn("Screening the proxied " + path + " without the advisory feeds, one of which cannot answer ("
                 + ScreeningMode.outage(failure) + "); the repository's screening mode is " + mode, failure);
-        List<String> reasons = new ArrayList<>(decided.reasons());
-        reasons.add(ScreeningMode.admitted(failure));
-        return new Screening(decided.verdict(), decided.coordinate(), reasons, decided.rules(), decided.complete(),
-                decided.floor(), true, true);
+        return decided.adding(ScreeningMode.admitted(failure)).judged(decided.verdict(), decided.floor(), true, true);
     }
 
     /** {@link ScreeningMode#RECORD}'s rule over a reached decision: it is lowered to its {@link Screening#floor} -
@@ -509,10 +501,8 @@ public final class ProxyScreen {
         }
         LOGGER.warn("Serving the proxied " + path + " the screen would have answered " + screening.verdict()
                 + ": the repository's screening mode is RECORD - " + String.join("; ", screening.reasons()));
-        List<String> reasons = new ArrayList<>(screening.reasons());
-        reasons.add(ScreeningMode.RECORDED_REASON);
-        return new Screening(screening.floor(), screening.coordinate(), reasons, screening.rules(),
-                screening.complete(), screening.floor(), true, screening.pending());
+        return screening.adding(ScreeningMode.RECORDED_REASON)
+                .judged(screening.floor(), screening.floor(), true, screening.pending());
     }
 
     /**
@@ -676,6 +666,24 @@ public final class ProxyScreen {
          *  about the fetch rather than about how far an inspector read. */
         Screening(Verdict verdict, String coordinate, List<String> reasons, List<String> rules) {
             this(verdict, coordinate, reasons, rules, true);
+        }
+
+        /** This screening with {@code reason} said last. */
+        Screening adding(String reason) {
+            return new Screening(verdict, coordinate, Stream.concat(reasons.stream(), Stream.of(reason)).toList(),
+                    rules, complete, floor, governed, pending);
+        }
+
+        /** This screening with {@code rule} among the rules it was decided under. */
+        Screening ruled(String rule) {
+            return new Screening(verdict, coordinate, reasons, Stream.concat(rules.stream(), Stream.of(rule)).toList(),
+                    complete, floor, governed, pending);
+        }
+
+        /** This screening decided {@code verdict} over {@code floor}, {@code governed} by a mode or not, and
+         *  {@code pending} a second screen or not. */
+        Screening judged(Verdict verdict, Verdict floor, boolean governed, boolean pending) {
+            return new Screening(verdict, coordinate, reasons, rules, complete, floor, governed, pending);
         }
     }
 
