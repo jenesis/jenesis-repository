@@ -75,47 +75,62 @@ public final class RiskClient extends ClientCalls {
      *  and nothing stored changes. */
     public VulnerabilityReport vulnerabilities(String repo, String reachability, String applicability)
             throws IOException, InterruptedException {
-        return pagedVulnerabilities(repo, reachability, applicability, false);
+        return pagedVulnerabilities(repo, reachability, applicability);
     }
 
-    /** The explicit re-scan (the write path that refreshes): query the enabled feeds for every published coordinate,
-     *  persist the findings, and return the refreshed report - the read-only {@link #vulnerabilities(String)}
-     *  renders the durable ledger only, so a vulnerability declared after the last sweep appears here first. */
-    public VulnerabilityReport rescanVulnerabilities(String repo) throws IOException, InterruptedException {
-        return pagedVulnerabilities(repo, null, null, true);
+    /** Start the explicit re-scan (the write path): the enabled feeds are asked again for every cached copy and the
+     *  findings persisted, off the request path, so the answer says whether this request started it or found one
+     *  running, with the first page of the report as it stood. The read-only {@link #vulnerabilities(String)} then
+     *  says {@code scanning} until the re-scan lands. */
+    public RescanStart rescanVulnerabilities(String repo) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/vulnerabilities?repo=" + enc(repo) + "&refresh=true",
+                null, null);
+        require(response, 200, "rescan " + repo);
+        return new RescanStart(!"running".equals(response.headers().firstValue("Jenesis-Refresh").orElse("")),
+                JSON.readValue(response.body(), VulnerabilityReport.class));
+    }
+
+    /** What starting a re-scan answered: whether this request started it, and the first page of the report. */
+    public record RescanStart(boolean started, VulnerabilityReport report) {
     }
 
     /** Accumulate every worst-first page the server serves into one report: the server bounds each response to a page
      *  (so it never buffers the whole vulnerable set in heap) and hands back a {@code nextCursor}; the client follows it
-     *  to the last page, so a caller still receives the whole ranked report. A refresh is requested only on the first
-     *  page - it triggers the (single) live re-scan and reindex, after which the remaining pages read the fresh index -
-     *  and the reachability/applicability facets ride every page so each is narrowed identically. */
-    private VulnerabilityReport pagedVulnerabilities(String repo, String reachability, String applicability,
-                                                     boolean refresh) throws IOException, InterruptedException {
+     *  to the last page, so a caller still receives the whole ranked report. The reachability/applicability facets
+     *  ride every page so each is narrowed identically, and what describes the scan rather than a page of rows - the
+     *  feed warnings, the count, whether it is partial, when it was taken and whether a re-scan is running - is the
+     *  first page's. */
+    private VulnerabilityReport pagedVulnerabilities(String repo, String reachability, String applicability)
+            throws IOException, InterruptedException {
         List<VulnerableArtifact> vulnerable = new ArrayList<>();
         boolean scanned = false;
         List<Signal> signals = null;
         List<String> feedWarnings = List.of();
+        int total = 0;
+        boolean partial = false;
+        String lastScanned = null;
+        boolean scanning = false;
         String cursor = null;
         boolean first = true;
         do {
             StringBuilder path = new StringBuilder("/api/vulnerabilities?repo=").append(enc(repo));
             appendFilter(path, "reachability", reachability);
             appendFilter(path, "applicability", applicability);
-            if (refresh && first) {
-                path.append("&refresh=true");                   // the single live re-scan + reindex, on the first page only
-            }
             if (cursor != null) {
                 path.append("&after=").append(enc(cursor));
             }
             HttpResponse<String> response = send("GET", path.toString(), null, null);
-            require(response, 200, (refresh ? "rescan " : "scan ") + repo);
+            require(response, 200, "scan " + repo);
             VulnerabilityReport page = JSON.readValue(response.body(), VulnerabilityReport.class);
             if (first) {
                 scanned = page.scanned();
                 signals = page.signals();
                 // Only the first page's: it is a property of the scan behind the report, not of a page of rows.
                 feedWarnings = page.feedWarnings() == null ? List.of() : page.feedWarnings();
+                total = page.total();
+                partial = page.partial();
+                lastScanned = page.lastScanned();
+                scanning = page.scanning();
                 first = false;
             }
             if (page.vulnerable() != null) {
@@ -123,7 +138,8 @@ public final class RiskClient extends ClientCalls {
             }
             cursor = page.nextCursor();
         } while (cursor != null && !cursor.isBlank());
-        return new VulnerabilityReport(scanned, signals, vulnerable, null, feedWarnings);
+        return new VulnerabilityReport(scanned, signals, vulnerable, null, feedWarnings, total, partial, lastScanned,
+                scanning);
     }
 
     /** The persisted findings ledger of a repository, filterable by coordinate (bare or {@code coordinate:version}),
@@ -230,9 +246,13 @@ public final class RiskClient extends ClientCalls {
     /** {@code signals} lists the report columns the server's installed signal modules contribute; {@code null} when
      *  an older server answers without them. {@code nextCursor} is the server's paging cursor - the client follows it
      *  to accumulate every worst-first page, so the report a caller receives is the whole set even though the server
-     *  serves it a bounded page at a time; it is {@code null} on a fully-accumulated report. */
+     *  serves it a bounded page at a time; it is {@code null} on a fully-accumulated report. {@code total} counts the
+     *  ranked lines, {@code partial} says they were ranked from a bounded window because the index is not built yet,
+     *  {@code lastScanned} is when the scan behind them was taken ({@code null} before the first), and
+     *  {@code scanning} says a re-scan is running, so the report is the one it will replace. */
     public record VulnerabilityReport(boolean scanned, List<Signal> signals, List<VulnerableArtifact> vulnerable,
-                                      String nextCursor, List<String> feedWarnings) {
+                                      String nextCursor, List<String> feedWarnings, int total, boolean partial,
+                                      String lastScanned, boolean scanning) {
     }
 
     /** One vulnerable coordinate, how its dependents are said ({@code Used by 3}, empty where none is known), and

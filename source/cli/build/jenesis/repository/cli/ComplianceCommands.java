@@ -42,22 +42,49 @@ final class ComplianceCommands {
         return value < 0 ? "unknown" : String.format(Locale.ROOT, "%.1f", value);
     }
 
+    /** How long a re-scan takes to move: a feed query per cached copy, so seconds on a small repository and minutes
+     *  on a large one - the cadence a bare {@code --refresh} watches it at. */
+    private static final Duration RESCAN = Duration.ofSeconds(5);
+
     static int vulnerabilities(String[] args, Path home) throws Exception {
-        if (args.length < 2) {
-            throw new IllegalArgumentException("Usage: vulnerabilities <repo> [--reachability "
+        // A re-scan is an action, as a health re-score is: --refresh belongs to the whole command line and watches it.
+        boolean rescan = args.length > 1 && args[1].equals("rescan");
+        int first = rescan ? 2 : 1;
+        if (args.length <= first) {
+            throw new IllegalArgumentException("Usage: vulnerabilities [rescan] <repo> [--reachability "
                     + "reachable|not-reachable|unknown] [--applicability applies|not-applicable|unknown]");
         }
+        String repo = args[first];
         String reachability = null;
         String applicability = null;
-        for (int i = 2; i < args.length; i++) {
+        for (int i = first + 1; i < args.length; i++) {
             switch (args[i]) {
                 case "--reachability" -> reachability = CliSupport.flag(args, ++i);
                 case "--applicability" -> applicability = CliSupport.flag(args, ++i);
                 default -> throw new IllegalArgumentException("Unknown option: " + args[i]);
             }
         }
-        RiskClient.VulnerabilityReport report = CliSupport.client(home).risk().vulnerabilities(args[1], reachability,
-                applicability);
+        RiskClient risk = CliSupport.client(home).risk();
+        String reached = reachability;
+        String applies = applicability;
+        boolean filtered = (reachability != null && !reachability.isBlank())
+                || (applicability != null && !applicability.isBlank());
+        // The first reading starts the re-scan when asked to, so a watched re-scan and a single answer are the same
+        // sequence of requests, and under --json the start call's answer is forgotten like any other poll.
+        AtomicBoolean start = new AtomicBoolean(rescan);
+        Refresh.Poll poll = () -> {
+            if (start.getAndSet(false)) {
+                System.out.println(risk.rescanVulnerabilities(repo).started() ? "Started a re-scan of " + repo + "."
+                        : "A re-scan of " + repo + " was already running.");
+            }
+            return vulnerabilityState(repo, risk.vulnerabilities(repo, reached, applies), filtered);
+        };
+        return Refresh.on() ? Refresh.until(RESCAN, poll) : poll.once().code();
+    }
+
+    /** Print one reading of the vulnerability report, and say whether a re-scan is still running behind it. */
+    private static Refresh.Poll.State vulnerabilityState(String repo, RiskClient.VulnerabilityReport report,
+                                                         boolean filtered) {
         // Before anything reassuring: an empty result prints "No known vulnerabilities" below, and a feed that
         // never answered produces exactly that empty result. A script reads the same fact out of --json, where the
         // field rides the server's own answer.
@@ -66,15 +93,29 @@ final class ComplianceCommands {
         }
         if (!report.scanned()) {
             System.out.println("Vulnerability scanning is off (no advisory feed installed or enabled).");
-            return 0;
+            return Refresh.Poll.State.done(0);
         }
+        // What the report is of, said before the rows: when it was taken, whether a re-scan will replace it, and
+        // whether it is the bounded ranking a repository gets before its index is first built.
+        if (report.scanning()) {
+            System.out.println("A re-scan of " + repo + " is running; this is the report as it stood"
+                    + (report.lastScanned() == null ? "" : " at " + report.lastScanned())
+                    + ", and --refresh watches the re-scan finish.");
+        } else {
+            System.out.println(report.lastScanned() == null ? "Never re-scanned; vulnerabilities rescan " + repo
+                    + " asks the feeds." : "As of " + report.lastScanned() + ".");
+        }
+        if (report.partial()) {
+            System.out.println("Partial: the ranking index is not built yet, so this ranks a bounded window of "
+                    + "findings and more may match.");
+        }
+        Refresh.Poll.State state = report.scanning() ? Refresh.Poll.State.running() : Refresh.Poll.State.done(0);
         if (report.vulnerable().isEmpty()) {
-            System.out.println((reachability == null || reachability.isBlank())
-                            && (applicability == null || applicability.isBlank())
-                    ? "No known vulnerabilities."
-                    : "No known vulnerabilities match this view (the filters narrow the view only; run without "
-                            + "them for everything).");
-            return 0;
+            System.out.println(filtered
+                    ? "No known vulnerabilities match this view (the filters narrow the view only; run without "
+                            + "them for everything)."
+                    : "No known vulnerabilities.");
+            return state;
         }
         for (RiskClient.VulnerableArtifact artifact : report.vulnerable()) {
             System.out.println(artifact.coordinate() + (artifact.usedByText() == null
@@ -112,7 +153,7 @@ final class ComplianceCommands {
                 System.out.println(line.append(") - ").append(fix));
             }
         }
-        return 0;
+        return state;
     }
 
     /**
