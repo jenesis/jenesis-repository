@@ -116,6 +116,9 @@ public final class Commands {
                                     + "justification"),
                             act("findings waiver revoke <repo> <ecosystem> <coordinate> <version> <source> <id>",
                                     "withdraw a waiver"),
+                            act("findings export <repo> <ecosystem> <coordinate> <version> [--output F]",
+                                    "one version's standing findings as a CycloneDX document, each with what its "
+                                    + "source said: where it was published, its ratings, aliases and weaknesses"),
                             act("findings report <repo> <file>", "hand a scanner's findings about a stored version to "
                                     + "the gate: recorded under the scanner's name as its whole answer, superseding "
                                     + "what it said before, and withheld for review if the gate would not admit them")),

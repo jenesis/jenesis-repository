@@ -243,6 +243,41 @@
 <th:block th:fragment="artifactLink(label, href)"><a th:if="${href != null}" th:href="${href}"><code
         th:text="${label}">org.acme:lib:1.0</code></a><code th:if="${href == null}" th:text="${label}">org.acme:lib:1.0</code></th:block>
 
+<!--/* vulnerabilityDetail(detail): what a vulnerability's source said beyond its identifier and severity, as every
+     screen shows it - who published it, linking to its record there; each rating with who gave it, its method, score
+     and vector; the other identifiers it is published under, each linking to its own record; its weaknesses, linking to
+     their definitions; the advisories that discuss it; when it was published and updated. Each is a small line of the
+     detail it sits in, and a part the source did not state is left out. Every address it links is a web address,
+     the only kind the record keeps. */-->
+<th:block th:fragment="vulnerabilityDetail(detail)"><th:block th:if="${detail != null and !detail.isEmpty()}">
+    <small th:if="${detail.source() != null}">Published by <a th:if="${detail.source().url() != null}"
+            th:href="${detail.source().url()}" rel="noopener noreferrer"
+            th:text="${detail.source().name() != null} ? ${detail.source().name()} : ${detail.source().url()}">NVD</a><span
+            th:if="${detail.source().url() == null}" th:text="${detail.source().name()}">NVD</span></small>
+    <small th:each="rating : ${detail.ratings()}"><span th:if="${rating.source() != null}"
+            th:text="${rating.source().name()}">NVD</span>
+        <span th:if="${rating.method() != null}" th:text="${rating.method()}">CVSSv31</span>
+        <span th:if="${rating.score() != null}" th:text="${rating.score()}">9.8</span>
+        <th:block th:if="${rating.severity() != null}"><span th:replace="~{base :: severity(${rating.severity()})}">Critical</span></th:block>
+        <code th:if="${rating.vector() != null}" th:text="${rating.vector()}">CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H</code></small>
+    <small th:unless="${detail.references().isEmpty()}">Also <th:block th:each="reference, i : ${detail.references()}"><th:block
+            th:if="${i.index > 0}">, </th:block><a th:if="${reference.source() != null and reference.source().url() != null}"
+            th:href="${reference.source().url()}" rel="noopener noreferrer"><code th:text="${reference.id()}">CVE-2021-44228</code></a><code
+            th:unless="${reference.source() != null and reference.source().url() != null}"
+            th:text="${reference.id()}">CVE-2021-44228</code></th:block></small>
+    <small th:unless="${detail.cwes().isEmpty()}"><th:block th:each="cwe, i : ${detail.cwes()}"><th:block
+            th:if="${i.index > 0}">, </th:block><a th:href="|https://cwe.mitre.org/data/definitions/${cwe}.html|"
+            rel="noopener noreferrer" th:text="|CWE-${cwe}|">CWE-79</a></th:block></small>
+    <small th:each="advisory : ${detail.advisories()}"><a th:href="${advisory.url()}" rel="noopener noreferrer"
+            th:text="${advisory.title() != null} ? ${advisory.title()} : ${advisory.url()}">advisory</a></small>
+    <!--/* Each date through the time fragment, by a block rather than a time element: the fragment's selector
+         matches every time element in this file. */-->
+    <small th:if="${detail.published() != null}">Published <th:block
+            th:replace="~{base :: time(${detail.published()})}"></th:block></small>
+    <small th:if="${detail.updated() != null}">Updated <th:block
+            th:replace="~{base :: time(${detail.updated()})}"></th:block></small>
+</th:block></th:block>
+
 <!--/* The two views of the installed modules - one card per module, or grouped by the contract each implements -
      reached as one screen, so the navigation does not list the same inventory twice under two names. */-->
 <nav th:fragment="moduleViews(current)" class="app-views" aria-label="Views of the modules">

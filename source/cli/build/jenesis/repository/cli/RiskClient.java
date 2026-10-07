@@ -374,11 +374,22 @@ public final class RiskClient extends ClientCalls {
 
     /** One persisted finding: its coordinate, identity, attribution, categorization, the persisted description and
      *  references, kind-specific attributes (e.g. {@code fixed}), sighting instants, the supersession mark
-     *  ({@code null} while it stands) and any attached labels. */
+     *  ({@code null} while it stands), any attached labels, and what its source said beyond these as
+     *  {@code vulnerability}, CycloneDX's {@code vulnerability} object ({@code null} where it said nothing more). */
     public record FindingRow(String ecosystem, String coordinate, String version, String id, String source,
                              String kind, String category, String severity, double confidence, String description,
                              List<String> references, String provenance, Map<String, String> attributes,
-                             String firstSeen, String lastSeen, String supersededBy, List<FindingLabel> labels) {
+                             String firstSeen, String lastSeen, String supersededBy, List<FindingLabel> labels,
+                             JsonNode vulnerability) {
+    }
+
+    /** One version's standing vulnerability and malware findings as a CycloneDX document, as the server writes it. */
+    public String findingsCycloneDx(String repo, String ecosystem, String coordinate, String version)
+            throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/findings/cyclonedx?repo=" + enc(repo) + "&ecosystem="
+                + enc(ecosystem) + "&coordinate=" + enc(coordinate) + "&version=" + enc(version), null, null);
+        require(response, 200, "export the findings of " + coordinate + " " + version);
+        return response.body();
     }
 
     public record FindingLabel(String source, String name, String value, double confidence, String when) {

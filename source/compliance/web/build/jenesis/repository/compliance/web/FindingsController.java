@@ -2,12 +2,16 @@ package build.jenesis.repository.compliance.web;
 
 import module java.base;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 import build.jenesis.repository.server.RepositoryRouting;
 import build.jenesis.repository.audit.AuditActions;
 import build.jenesis.repository.audit.AuditTrail;
 import build.jenesis.repository.compliance.AdvisorySource;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.ContentScanner;
+import build.jenesis.repository.compliance.PackageUrls;
 import build.jenesis.repository.compliance.Severity;
 import build.jenesis.repository.compliance.VulnerabilityRecord;
 import build.jenesis.repository.gate.store.ReportedFindings;
@@ -37,7 +41,14 @@ import org.springframework.web.bind.annotation.RestController;
  * {@code coordinate:version}), kind, source, category and severity, superseded rows included with their mark and
  * every row with its labels. An empty ledger means nothing was recorded yet, not clean; {@code /api/vulnerabilities}
  * back-fills it. Gated {@code manage:read}; an unsafe name or unknown spelling is a {@code 400}, and without the
- * findings module the answer is {@code 501}.
+ * findings module the answer is {@code 501}. A row a source said more of carries it as {@code vulnerability},
+ * CycloneDX's {@code vulnerability} object.
+ *
+ * <p>{@code GET /api/findings/cyclonedx?repo=&ecosystem=&coordinate=&version=} is one version's standing
+ * vulnerability and malware findings as a CycloneDX document: the version as its component, and each finding as a
+ * {@code vulnerability} affecting it, with everything its source said, the fix as its recommendation and the source
+ * that recorded it as a property. It is one bounded page of the ledger, and says so with a
+ * {@code jenesis:findings:partial} property where more stand than it carries. Gated {@code manage:read}.
  *
  * <p>{@code POST /api/findings/review} confirms or dismisses an AI-produced finding through {@link ReviewLabels}, and
  * {@code POST /api/findings/waiver} and {@code /waiver/revoke} record or withdraw a time-boxed accept-risk waiver
@@ -196,6 +207,70 @@ public class FindingsController {
                 page.more() ? Integer.toString(offset + page.located().size()) : null, lastScanned);
     }
 
+    /** The most findings one CycloneDX document carries, bounding the read that answers it. */
+    static final int MAX_EXPORTED = 1000;
+
+    /** CycloneDX's media type for the JSON encoding of the specification version written. */
+    static final String CYCLONEDX_JSON = "application/vnd.cyclonedx+json; version=1.6";
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    @GetMapping("/api/findings/cyclonedx")
+    public void cyclonedx(@RequestParam("repo") String repo, @RequestParam("ecosystem") String ecosystem,
+                          @RequestParam("coordinate") String coordinate, @RequestParam("version") String version,
+                          HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String tenant = routing.tenant(request);
+        if (!Repositories.valid(repo) || !Repositories.valid(tenant) || ecosystem.isBlank() || coordinate.isBlank()
+                || version.isBlank()) {
+            response.setStatus(400);
+            return;
+        }
+        if (findings.isEmpty()) {
+            response.setStatus(501);
+            return;
+        }
+        Findings.Page page = findings.get().over(repositories.store(tenant, repo)).all(new Findings.Filter(
+                coordinate + ":" + version, null, null, null, null, ecosystem), 0, MAX_EXPORTED);
+        String purl = PackageUrls.of(ecosystem, coordinate, version);
+        String ref = purl != null ? purl : ecosystem + ":" + coordinate + "@" + version;
+        ObjectNode bom = JSON.createObjectNode().put("bomFormat", "CycloneDX").put("specVersion", "1.6")
+                .put("version", 1);
+        ObjectNode metadata = bom.putObject("metadata").put("timestamp", Instant.now().toString());
+        ObjectNode component = metadata.putObject("component").put("type", "library").put("bom-ref", ref)
+                .put("name", coordinate).put("version", version);
+        if (purl != null) {
+            component.put("purl", purl);
+        }
+        if (page.more()) {
+            metadata.putArray("properties").addObject().put("name", "jenesis:findings:partial").put("value", "true");
+        }
+        ArrayNode vulnerabilities = bom.putArray("vulnerabilities");
+        for (Findings.Located located : page.located()) {
+            Finding finding = located.finding();
+            if (finding.supersededBy() != null || !located.version().equals(version)
+                    || (finding.kind() != Finding.Kind.VULNERABILITY && finding.kind() != Finding.Kind.MALWARE)) {
+                continue;
+            }
+            ObjectNode vulnerability = finding.detail().toCycloneDx(JSON, finding.id(), finding.description());
+            if (vulnerability.path("ratings").isEmpty()) {
+                vulnerability.putArray("ratings").addObject()
+                        .put("severity", VulnerabilityRecord.severity(finding.severity()));
+            }
+            String fixed = finding.attributes().get("fixed");
+            if (fixed != null && !fixed.isBlank()) {
+                vulnerability.put("recommendation", "Upgrade to " + fixed);
+            }
+            vulnerability.putArray("affects").addObject().put("ref", ref);
+            vulnerability.putArray("properties").addObject().put("name", "jenesis:finding:source")
+                    .put("value", finding.source());
+            vulnerabilities.add(vulnerability);
+        }
+        response.setStatus(200);
+        response.setContentType(CYCLONEDX_JSON);
+        response.setCharacterEncoding("UTF-8");
+        JSON.writeValue(response.getOutputStream(), bom);
+    }
+
     /**
      * Records a review decision ({@code confirmed} or {@code dismissed}, with an optional note) through
      * {@link ReviewLabels#apply}; a refusal is a {@code 400}.
@@ -342,11 +417,14 @@ public class FindingsController {
     public record FindingsView(boolean available, List<FindingView> findings, String next, Instant lastScanned) {
     }
 
-    /** One located finding, every field the ledger keeps - kind in its wire spelling ({@code ai-candidate}). */
+    /** One located finding, every field the ledger keeps - kind in its wire spelling ({@code ai-candidate}) and what
+     *  its source said beyond the rest as {@code vulnerability}, CycloneDX's object, {@code null} where it said
+     *  nothing more. */
     public record FindingView(String ecosystem, String coordinate, String version, String id, String source,
                               String kind, String category, String severity, double confidence, String description,
                               List<String> references, String provenance, Map<String, String> attributes,
-                              String firstSeen, String lastSeen, String supersededBy, List<LabelView> labels) {
+                              String firstSeen, String lastSeen, String supersededBy, List<LabelView> labels,
+                              JsonNode vulnerability) {
 
         private static FindingView of(Findings.Located located) {
             Finding finding = located.finding();
@@ -359,7 +437,8 @@ public class FindingsController {
                     finding.source(), finding.kind().wire(), finding.category(), finding.severity().name(),
                     finding.confidence(), finding.description(), finding.references(), finding.provenance(),
                     finding.attributes(), finding.firstSeen().toString(), finding.lastSeen().toString(),
-                    finding.supersededBy(), labels);
+                    finding.supersededBy(), labels, finding.detail().isEmpty() ? null
+                    : finding.detail().toCycloneDx(JSON, finding.id(), finding.description()));
         }
     }
 

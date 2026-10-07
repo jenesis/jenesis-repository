@@ -87,7 +87,11 @@
                 </tr>
                 </thead>
                 <tbody>
-                <tr th:each="row : ${panel.rows()}">
+                <!--/* A finding whose source said more than its identifier and severity has it beneath, across the
+                     table's whole width: who published it, its ratings, the names it also goes by, its weaknesses,
+                     its advisories and its dates. */-->
+                <th:block th:each="row : ${panel.rows()}">
+                <tr th:class="${row.detail().isEmpty()} ? null : 'app-list__lead'">
                     <td><th:block th:replace="~{base :: artifactLink(${row.coordinate()}, @{/ui/repositories/{repo}/coordinate(repo=${repo},ecosystem=${row.ecosystem()},coordinate=${row.bareCoordinate()})})}"></th:block></td>
                     <td>
                         <code th:text="${row.id()}">FINDING-1</code>
@@ -153,6 +157,10 @@
                         <span th:unless="${row.reviewable()}">&mdash;</span>
                     </td>
                 </tr>
+                <tr th:unless="${row.detail().isEmpty()}" class="app-list__detail">
+                    <td colspan="10"><th:block th:replace="~{base :: vulnerabilityDetail(${row.detail()})}"></th:block></td>
+                </tr>
+                </th:block>
                 </tbody>
             </table>
         </figure>
