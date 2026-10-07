@@ -253,7 +253,7 @@ final class LifecycleCommands {
 
     static int forwarding(String[] args, Path home) throws Exception {
         if (args.length < 2) {
-            throw new IllegalArgumentException("Usage: forwarding <repo> | forwarding retry <repo> <path>"
+            throw new IllegalArgumentException("Usage: forwarding <repo> [--cursor C] | forwarding retry <repo> <path>"
                     + " | forwarding internal [remove] <repo> <dest-tenant> <dest-repo>");
         }
         RepositoryClient client = CliSupport.client(home);
@@ -288,12 +288,13 @@ final class LifecycleCommands {
             System.out.println("Nothing parked is queued at " + args[3] + ".");
             return 1;
         }
-        List<LifecycleClient.ForwardingEntry> entries = client.lifecycle().forwarding(args[1]);
-        if (entries.isEmpty()) {
+        RepositoryClient.Page<LifecycleClient.ForwardingEntry> entries =
+                client.lifecycle().forwarding(args[1], CliSupport.cursorOf(args, 2));
+        if (entries.items().isEmpty()) {
             System.out.println("The forwarding outbox is empty.");
             return 0;
         }
-        for (LifecycleClient.ForwardingEntry entry : entries) {
+        for (LifecycleClient.ForwardingEntry entry : entries.items()) {
             StringBuilder line = new StringBuilder(String.format(Locale.ROOT, "%-8s %s (attempts=%d, delivered=%d)",
                     entry.status(), entry.path(), entry.attempts(), entry.delivered()));
             if (entry.error() != null && !entry.error().isEmpty()) {
@@ -301,6 +302,7 @@ final class LifecycleCommands {
             }
             System.out.println(line);
         }
+        CliSupport.more(entries.next());
         return 0;
     }
 

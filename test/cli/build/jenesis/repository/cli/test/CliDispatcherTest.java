@@ -302,9 +302,33 @@ public class CliDispatcherTest {
     public void quarantine_lists_held_events_with_what_they_are_held_for_and_their_reasons() throws Exception {
         quarantineBody = "{\"events\":[{\"when\":\"2026-01-01T00:00:00Z\",\"path\":\"/maven/x/y/1/y-1.jar\","
                 + "\"coordinate\":\"x:y\",\"verdict\":\"QUARANTINE\",\"reasons\":[\"malware\"],"
-                + "\"rules\":[\"Malicious package\"]}]}";
+                + "\"rules\":[\"Malicious package\"]}],\"refusals\":[{\"when\":\"2026-01-02T00:00:00Z\","
+                + "\"path\":\"/maven/x/z/1/z-1.jar\",\"verdict\":\"REJECT\",\"reasons\":[\"denied license\"]}],"
+                + "\"next\":\"q2\"}";
         String out = capture(() -> assertThat(Cli.run(new String[] {"quarantine", "releases"})).isZero());
         assertThat(out).contains("/maven/x/y/1/y-1.jar").contains("held for Malicious package").contains("malware");
+        assertThat(out).as("the queue says how to continue, rather than reading as all of it").contains("more: --cursor q2");
+        assertThat(out).as("a refusal left nothing to release, and is listed apart rather than dropped")
+                .contains("Recently refused:").contains("/maven/x/z/1/z-1.jar  denied license");
+    }
+
+    @Test
+    public void an_audit_page_says_how_to_read_on_from_the_trails_header() throws Exception {
+        String out = capture(() -> assertThat(Cli.run(new String[] {"audit"})).isZero());
+        assertThat(out).contains("publish").contains("more: --cursor a2");
+    }
+
+    @Test
+    public void a_findings_page_says_where_the_next_one_starts() throws Exception {
+        findingsStatus = 200;
+        findingsBody = "{\"available\":true,\"more\":true,\"findings\":[{\"ecosystem\":\"npm\",\"coordinate\":\"a\","
+                + "\"version\":\"1\",\"id\":\"GHSA-1\",\"source\":\"osv\",\"kind\":\"vulnerability\","
+                + "\"severity\":\"HIGH\"}]}";
+        String out = capture(() -> assertThat(Cli.run(new String[] {"findings", "releases", "--cursor", "500"}))
+                .isZero());
+        assertThat(findingsQueries.getLast()).contains("offset=500");
+        assertThat(out).as("the next page starts after the rows this one showed").contains("more: --cursor 501");
+        findingsBody = "{\"available\":true,\"findings\":[]}";
     }
 
     @Test
@@ -440,6 +464,12 @@ public class CliDispatcherTest {
             if (matches(path, "/api/vulnerabilities")) {
                 vulnerabilityQueries.add(query);
                 return respond(200, vulnerabilitiesBody);
+            }
+            if (matches(path, "/api/audit")) {
+                // The trail's cursor rides a header, its body being a bare array.
+                return aResponse().withStatus(200).withHeader("Jenesis-Next-Cursor", "a2")
+                        .withBody("[{\"at\":\"2026-01-01T00:00:00Z\",\"actor\":\"ci\",\"action\":\"publish\","
+                                + "\"target\":\"releases\"}]").build();
             }
             if (matches(path, "/api/quarantine")) {
                 return respond(200, quarantineBody);

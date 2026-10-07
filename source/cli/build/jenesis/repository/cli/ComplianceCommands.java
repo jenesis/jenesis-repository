@@ -22,10 +22,11 @@ final class ComplianceCommands {
         // A re-score is an action rather than a flag: --refresh belongs to the whole command line, which watches
         // work that outlives a request, and takes it off the line before any handler reads it.
         boolean refresh = args.length > 1 && args[1].equals("refresh");
-        if (args.length != (refresh ? 3 : 2)) {
-            throw new IllegalArgumentException("Usage: health <repo> | health refresh <repo>");
+        if (args.length < (refresh ? 3 : 2) || (refresh && args.length != 3)) {
+            throw new IllegalArgumentException("Usage: health <repo> [--cursor C] | health refresh <repo>");
         }
         String repo = args[refresh ? 2 : 1];
+        String cursor = refresh ? null : CliSupport.cursorOf(args, 2);
         RiskClient risk = CliSupport.client(home).risk();
         // The first reading starts the refresh when asked to, so a watched refresh and a single answer are the same
         // sequence of requests, and under --json the start call's answer is forgotten like any other poll.
@@ -37,7 +38,7 @@ final class ComplianceCommands {
                         : "A health refresh of " + repo + " was already running.");
                 return healthState(repo, started.report());
             }
-            return healthState(repo, risk.health(repo));
+            return healthState(repo, risk.health(repo, cursor));
         };
         return Refresh.on() ? Refresh.until(HEALTH_REFRESH, poll) : poll.once().code();
     }
@@ -63,6 +64,7 @@ final class ComplianceCommands {
             System.out.println(report.entries().size() + " of " + report.total() + " scored"
                     + (report.lastScanned() == null ? ", never refreshed" : ", as of " + report.lastScanned())
                     + running + ".");
+            CliSupport.more(report.nextCursor());
         }
         return report.refreshing() ? Refresh.Poll.State.running() : Refresh.Poll.State.done(0);
     }
@@ -191,10 +193,12 @@ final class ComplianceCommands {
      * dismissed - the console's page of the same name reads the same ledger through the same filter.
      */
     static int aiReview(String[] args, Path home) throws Exception {
-        if (args.length != 2) {
-            throw new IllegalArgumentException("Usage: ai-review <repo>");
+        if (args.length != 2 && !(args.length == 4 && args[2].equals("--cursor"))) {
+            throw new IllegalArgumentException("Usage: ai-review <repo> [--cursor C]");
         }
-        return findings(new String[] {"findings", args[1], "--kind", "ai-candidate"}, home);
+        List<String> forwarded = new ArrayList<>(List.of("findings", args[1], "--kind", "ai-candidate"));
+        forwarded.addAll(List.of(args).subList(2, args.length));
+        return findings(forwarded.toArray(String[]::new), home);
     }
 
     static int findings(String[] args, Path home) throws Exception {
@@ -206,9 +210,11 @@ final class ComplianceCommands {
         }
 
         if (args.length < 2) {
-            throw new IllegalArgumentException("Usage: findings <repo> [--coordinate C] [--kind K] [--source S] "
-                    + "[--category C] [--severity S]");
+            throw new IllegalArgumentException("Usage: findings <repo> [--ecosystem E] [--coordinate C] [--kind K] "
+                    + "[--source S] [--category C] [--severity S] [--cursor C]");
         }
+        String ecosystem = null;
+        int offset = 0;
         String coordinate = null;
         String kind = null;
         String source = null;
@@ -216,6 +222,9 @@ final class ComplianceCommands {
         String severity = null;
         for (int i = 2; i < args.length; i++) {
             switch (args[i]) {
+                case "--ecosystem" -> ecosystem = CliSupport.flag(args, ++i);
+                // The ledger pages by row offset, so the cursor this command prints and takes is that offset.
+                case "--cursor" -> offset = Integer.parseInt(CliSupport.flag(args, ++i));
                 case "--coordinate" -> coordinate = CliSupport.flag(args, ++i);
                 case "--kind" -> kind = CliSupport.flag(args, ++i);
                 case "--source" -> source = CliSupport.flag(args, ++i);
@@ -224,8 +233,8 @@ final class ComplianceCommands {
                 default -> throw new IllegalArgumentException("Unknown option: " + args[i]);
             }
         }
-        RiskClient.FindingsReport report = CliSupport.client(home).risk().findings(args[1], coordinate, kind, source,
-                category, severity);
+        RiskClient.FindingsReport report = CliSupport.client(home).risk().findings(args[1], ecosystem, coordinate,
+                kind, source, category, severity, offset);
         if (report.findings().isEmpty()) {
             System.out.println("No recorded findings match.");
             return 0;
@@ -262,6 +271,7 @@ final class ComplianceCommands {
                 }
             }
         }
+        CliSupport.more(report.more() ? String.valueOf(offset + report.findings().size()) : null);
         return 0;
     }
 
@@ -354,34 +364,46 @@ final class ComplianceCommands {
 
     static int signers(String[] args, Path home) throws Exception {
         if (args.length < 2) {
-            throw new IllegalArgumentException("Usage: signers <repo> [<signer>]");
+            throw new IllegalArgumentException("Usage: signers <repo> [<signer>] [--cursor C]");
+        }
+        List<String> positional = new ArrayList<>();
+        String cursor = null;
+        for (int i = 1; i < args.length; i++) {
+            if (args[i].equals("--cursor")) {
+                cursor = CliSupport.flag(args, ++i);
+            } else {
+                positional.add(args[i]);
+            }
         }
         RepositoryClient client = CliSupport.client(home);
-        if (args.length >= 3) {
-            List<ProvenanceClient.SignedCoordinate> signed = client.provenance().signedBy(args[1], args[2]);
-            if (signed.isEmpty()) {
-                System.out.println("This signer signed nothing that was accepted in " + args[1] + ".");
+        if (positional.size() >= 2) {
+            RepositoryClient.Page<ProvenanceClient.SignedCoordinate> signed =
+                    client.provenance().signedBy(positional.get(0), positional.get(1), cursor);
+            if (signed.items().isEmpty()) {
+                System.out.println("This signer signed nothing that was accepted in " + positional.get(0) + ".");
                 return 0;
             }
-            for (ProvenanceClient.SignedCoordinate coordinate : signed) {
+            for (ProvenanceClient.SignedCoordinate coordinate : signed.items()) {
                 System.out.printf("%-10s %s  %d version%s, last %s%s%n", coordinate.ecosystem(), coordinate.coordinate(),
                         coordinate.versions(), coordinate.versions() == 1 ? "" : "s", coordinate.last(),
                         coordinate.since() == null ? "" : ", since " + coordinate.since());
             }
+            CliSupport.more(signed.next());
             return 0;
         }
-        List<ProvenanceClient.Signer> signers = client.provenance().signers(args[1]);
-        if (signers.isEmpty()) {
-            System.out.println("No signed version has been accepted in " + args[1] + " yet.");
+        RepositoryClient.Page<ProvenanceClient.Signer> signers = client.provenance().signers(positional.get(0), cursor);
+        if (signers.items().isEmpty()) {
+            System.out.println("No signed version has been accepted in " + positional.get(0) + " yet.");
             return 0;
         }
-        for (ProvenanceClient.Signer signer : signers) {
+        for (ProvenanceClient.Signer signer : signers.items()) {
             System.out.println(signer.signer());
             if (signer.issuer() != null || signer.subject() != null) {
                 System.out.println("    issuer  " + signer.issuer());
                 System.out.println("    subject " + signer.subject());
             }
         }
+        CliSupport.more(signers.next());
         return 0;
     }
 
@@ -524,7 +546,7 @@ final class ComplianceCommands {
     static int quarantine(String[] args, Path home) throws Exception {
         if (args.length < 2) {
             throw new IllegalArgumentException(
-                    "Usage: quarantine <repo> | quarantine release|discard <repo> <path>...");
+                    "Usage: quarantine <repo> [--cursor C] | quarantine release|discard <repo> <path>...");
         }
         RepositoryClient client = CliSupport.client(home);
         switch (args[1]) {
@@ -563,10 +585,18 @@ final class ComplianceCommands {
                 return 0;
             }
             default -> {
-                List<ReviewClient.QuarantineEvent> events = client.review().quarantine(args[1]);
+                String cursor = null;
+                for (int i = 2; i < args.length; i++) {
+                    if (args[i].equals("--cursor")) {
+                        cursor = CliSupport.flag(args, ++i);
+                    } else {
+                        throw new IllegalArgumentException("Unknown option: " + args[i]);
+                    }
+                }
+                ReviewClient.QuarantineView queue = client.review().quarantine(args[1], cursor);
+                List<ReviewClient.QuarantineEvent> events = queue.events();
                 if (events.isEmpty()) {
                     System.out.println("Nothing is held for review.");
-                    return 0;
                 }
                 // A version's files are reviewed together, as the console shows them: the version once, the reasons
                 // each file was held for under its path.
@@ -593,6 +623,17 @@ final class ComplianceCommands {
                                 System.out.println("        " + reason);
                             }
                         }
+                    }
+                }
+                CliSupport.more(queue.next());
+                // A refusal left nothing to release, so it is listed apart from the queue, as the console lists it.
+                List<ReviewClient.QuarantineEvent> refusals = queue.refusals() == null ? List.of() : queue.refusals();
+                if (!refusals.isEmpty()) {
+                    System.out.println("Recently refused:");
+                    for (ReviewClient.QuarantineEvent refusal : refusals) {
+                        System.out.println("  " + refusal.when() + "  " + refusal.path()
+                                + (refusal.reasons() == null || refusal.reasons().isEmpty() ? ""
+                                        : "  " + String.join("; ", refusal.reasons())));
                     }
                 }
                 return 0;

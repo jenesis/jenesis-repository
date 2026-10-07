@@ -17,11 +17,13 @@ public final class ReviewClient extends ClientCalls {
     }
 
     /** The compliance-gate holds for a repository - what was quarantined on the publish or proxy path, with the
-     *  verdict and the reasons - so a reviewer can release or discard each. */
-    public List<QuarantineEvent> quarantine(String repo) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET", "/api/quarantine?repo=" + enc(repo), null, null);
+     *  verdict and the reasons - so a reviewer can release or discard each - one page resumed after {@code cursor},
+     *  with the recent refusals beside it. */
+    public QuarantineView quarantine(String repo, String cursor) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/quarantine?repo=" + enc(repo)
+                + (cursor == null ? "" : "&after=" + enc(cursor)), null, null);
         require(response, 200, "read the quarantine of " + repo);
-        return JSON.readValue(response.body(), QuarantineView.class).events();
+        return JSON.readValue(response.body(), QuarantineView.class);
     }
 
     /** Release held files - one, or every file of a version - into the repository's layout. */
@@ -61,6 +63,9 @@ public final class ReviewClient extends ClientCalls {
                                   List<String> rules, List<String> notes) {
     }
 
-    private record QuarantineView(List<QuarantineEvent> events) {
+    /** The review queue: {@code events}, one page of what is held, releasable or discardable; {@code refusals}, the
+     *  recent refusals of every leg, read-only, since a refusal left no bytes to release; {@code next}, the queue's
+     *  cursor, {@code null} on the last page. */
+    public record QuarantineView(List<QuarantineEvent> events, List<QuarantineEvent> refusals, String next) {
     }
 }

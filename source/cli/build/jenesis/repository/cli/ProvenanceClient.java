@@ -32,21 +32,28 @@ public final class ProvenanceClient extends ClientCalls {
     private record SignedView(String signer, List<SignedCoordinate> coordinates, String next) {
     }
 
-    /** The signers whose trusted signatures the gate accepted on a repository's versions - the first page of the
-     *  index, as the console lists them. */
-    public List<Signer> signers(String repo) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET", "/api/signers?repo=" + enc(repo), null, null);
+    /** The signers whose trusted signatures the gate accepted on a repository's versions, one page of the index
+     *  resumed after {@code cursor}. */
+    public RepositoryClient.Page<Signer> signers(String repo, String cursor) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/signers?repo=" + enc(repo) + after(cursor), null, null);
         require(response, 200, "read the signers of " + repo);
-        return JSON.readValue(response.body(), SignersView.class).signers();
+        SignersView view = JSON.readValue(response.body(), SignersView.class);
+        return new RepositoryClient.Page<>(view.signers(), view.next());
     }
 
-    /** Everything one signer signed in a repository - a key's reach before it is revoked; {@code signer} is the
-     *  wire form, {@code <scheme>:<value>}. */
-    public List<SignedCoordinate> signedBy(String repo, String signer) throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET", "/api/signers/signed?repo=" + enc(repo) + "&signer=" + enc(signer),
-                null, null);
+    /** Everything one signer signed in a repository - a key's reach before it is revoked - one page resumed after
+     *  {@code cursor}; {@code signer} is the wire form, {@code <scheme>:<value>}. */
+    public RepositoryClient.Page<SignedCoordinate> signedBy(String repo, String signer, String cursor)
+            throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/signers/signed?repo=" + enc(repo) + "&signer=" + enc(signer)
+                + after(cursor), null, null);
         require(response, 200, "read what " + signer + " signed in " + repo);
-        return JSON.readValue(response.body(), SignedView.class).coordinates();
+        SignedView view = JSON.readValue(response.body(), SignedView.class);
+        return new RepositoryClient.Page<>(view.coordinates(), view.next());
+    }
+
+    private static String after(String cursor) {
+        return cursor == null ? "" : "&after=" + enc(cursor);
     }
 
     /** What depends on {@code coordinate} of {@code ecosystem} in {@code repo} - given a {@code version}, the
@@ -269,8 +276,9 @@ public final class ProvenanceClient extends ClientCalls {
 
     /** The tenant's recorded VEX documents: a statement is about a product, not a repository, so there is no
      *  repository to narrow them to. */
-    public String vexStatements() throws IOException, InterruptedException {
-        HttpResponse<String> response = send("GET", "/api/vex", null, null);
+    public String vexStatements(String cursor) throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/vex" + (cursor == null ? "" : "?after=" + enc(cursor)),
+                null, null);
         require(response, 200, "read the VEX statements");
         return response.body();
     }

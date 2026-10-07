@@ -38,7 +38,13 @@ public final class RiskClient extends ClientCalls {
      *  server answers {@code 503} with {@code ranked} false and no entries, which is a state of the report rather than
      *  a failure to read it. */
     public HealthReport health(String repo) throws IOException, InterruptedException {
-        return healthReport(send("GET", "/api/health?repo=" + enc(repo), null, null), repo);
+        return health(repo, null);
+    }
+
+    /** One page of the {@link #health(String) health report}, resumed after {@code cursor}. */
+    public HealthReport health(String repo, String cursor) throws IOException, InterruptedException {
+        return healthReport(send("GET", "/api/health?repo=" + enc(repo)
+                + (cursor == null ? "" : "&after=" + enc(cursor)), null, null), repo);
     }
 
     /** Start a re-score of every coordinate off the request path: whether this request started it or found one
@@ -164,7 +170,20 @@ public final class RiskClient extends ClientCalls {
      *  kind, source, category and severity - superseded findings included with their mark. */
     public FindingsReport findings(String repo, String coordinate, String kind, String source, String category,
                                    String severity) throws IOException, InterruptedException {
+        return findings(repo, null, coordinate, kind, source, category, severity, 0);
+    }
+
+    /** One page of {@link #findings(String, String, String, String, String, String) the findings ledger}, narrowed
+     *  by {@code ecosystem} too and starting {@code offset} rows in; {@code more} on the answer says another page
+     *  follows. */
+    public FindingsReport findings(String repo, String ecosystem, String coordinate, String kind, String source,
+                                   String category, String severity, int offset)
+            throws IOException, InterruptedException {
         StringBuilder path = new StringBuilder("/api/findings?repo=").append(enc(repo));
+        appendFilter(path, "ecosystem", ecosystem);
+        if (offset > 0) {
+            path.append("&offset=").append(offset);
+        }
         appendFilter(path, "coordinate", coordinate);
         appendFilter(path, "kind", kind);
         appendFilter(path, "source", source);
@@ -307,8 +326,9 @@ public final class RiskClient extends ClientCalls {
     public record Cell(String name, String label, String value, double rank) {
     }
 
-    /** The findings ledger's answer: every persisted finding matching the query, each fully attributed. */
-    public record FindingsReport(boolean available, List<FindingRow> findings) {
+    /** The findings ledger's answer: one page of the persisted findings matching the query, each fully attributed,
+     *  and whether more match. */
+    public record FindingsReport(boolean available, List<FindingRow> findings, boolean more) {
     }
 
     /** One persisted finding: its coordinate, identity, attribution, categorization, the persisted description and

@@ -64,6 +64,37 @@ final class CliSupport {
         return settings;
     }
 
+    /** The {@code --cursor} of a listing whose options start at {@code from}; anything else is refused. */
+    static String cursorOf(String[] args, int from) {
+        String cursor = null;
+        for (int i = from; i < args.length; i++) {
+            if (args[i].equals("--cursor")) {
+                cursor = flag(args, ++i);
+            } else {
+                throw new IllegalArgumentException("Unknown option: " + args[i]);
+            }
+        }
+        return cursor;
+    }
+
+    /** Say how to read the next page of a listing, in the one spelling every listing uses; nothing on the last. */
+    static void more(String next) {
+        if (next != null && !next.isBlank()) {
+            System.out.println("more: --cursor " + next);
+        }
+    }
+
+    /** The {@code next} cursor of a listing the command prints as the server answered it, or {@code null}. */
+    static String nextOf(String document) {
+        int key = document.indexOf("\"next\":\"");
+        if (key < 0) {
+            return null;
+        }
+        int start = key + "\"next\":\"".length();
+        int end = document.indexOf('"', start);
+        return end < 0 ? null : document.substring(start, end);
+    }
+
     static String orDash(String value) {
         return value == null || value.isEmpty() ? "-" : value;
     }

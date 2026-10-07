@@ -85,7 +85,7 @@ public final class Commands {
             new Section("Review", List.of(
                     noun("quarantine", "what the compliance gate held for review",
                             ComplianceCommands::quarantine,
-                            act("quarantine <repo>", "the review queue"),
+                            act("quarantine <repo> [--cursor C]", "the review queue"),
                             act("quarantine hold <repo> <ecosystem> <coordinate> <version>",
                                     "hold a version for review by hand - every file of it"),
                             act("quarantine release <repo> <path>...",
@@ -93,7 +93,7 @@ public final class Commands {
                             act("quarantine discard <repo> <path>...", "discard held files")),
                     noun("ai-review", "the findings a code audit proposed, waiting for a person to confirm or dismiss "
                                     + "them", ComplianceCommands::aiReview,
-                            act("ai-review <repo>", "the proposed findings, as the findings ledger records them")))),
+                            act("ai-review <repo> [--cursor C]", "the proposed findings, as the findings ledger records them")))),
 
             new Section("Risk", List.of(
                     noun("vulnerabilities", "re-scan against the installed advisory feeds",
@@ -105,8 +105,9 @@ public final class Commands {
                                     + "background, and answer the report as it stands; --refresh watches it "
                                     + "finish")),
                     noun("findings", "the persisted findings ledger", ComplianceCommands::findings,
-                            act("findings <repo> [--coordinate C] [--kind K] [--source S] [--category C]"
-                                    + " [--severity S]", "the durable, attributed findings"),
+                            act("findings <repo> [--ecosystem E] [--coordinate C] [--kind K] [--source S]"
+                                    + " [--category C] [--severity S] [--cursor C]",
+                                    "the durable, attributed findings"),
                             act("findings review <repo> <ecosystem> <coordinate> <version> <source> <id>"
                                     + " <confirmed|dismissed> [--note N]",
                                     "confirm or dismiss an AI-produced finding, as the listing names it"),
@@ -120,7 +121,7 @@ public final class Commands {
                                     + "gate would not admit them")),
                     noun("health", "the maintainer health of what a repository holds",
                             ComplianceCommands::health,
-                            act("health <repo>", "the stored scores, lowest first where ranked"),
+                            act("health <repo> [--cursor C]", "the stored scores, lowest first where ranked"),
                             act("health refresh <repo>", "re-score every coordinate in the background, and answer "
                                     + "the scores as they stand; --refresh watches it finish")),
                     noun("enforcement-preview", "what enabling licence enforcement would newly hold",
@@ -138,8 +139,8 @@ public final class Commands {
             new Section("Provenance", List.of(
                     noun("signers", "who signed the accepted versions, and everything each signed",
                             ComplianceCommands::signers,
-                            act("signers <repo>", "the signers seen on accepted versions"),
-                            act("signers <repo> <signer>", "the coordinates one signer signed - a key's reach before it is revoked")),
+                            act("signers <repo> [--cursor C]", "the signers seen on accepted versions"),
+                            act("signers <repo> <signer> [--cursor C]", "the coordinates one signer signed - a key's reach before it is revoked")),
                     noun("signature", "what was made of a version's publisher signature",
                             ComplianceCommands::signature,
                             act("signature <repo> <path>", "the recorded outcome, signer, trust source, log entry and grade")),
@@ -173,7 +174,7 @@ public final class Commands {
                                     "the assembled third-party attribution document")),
                     noun("vex", "VEX statements: what an advisory means for this product",
                             ScanCommands::vex,
-                            act("vex", "the tenant's recorded statements"),
+                            act("vex [--cursor C]", "the tenant's recorded statements"),
                             act("vex show <id>", "one statement"),
                             act("vex add <file>", "record a statement from an OpenVEX / CSAF document"),
                             act("vex remove <id>", "withdraw a statement"),
@@ -202,7 +203,7 @@ public final class Commands {
                             act("lifecycle clear <repo> <coordinate> <version>", "remove a mark")),
                     noun("forwarding", "the publish-through outbox", 
                             LifecycleCommands::forwarding,
-                            act("forwarding <repo>", "the outbox"),
+                            act("forwarding <repo> [--cursor C]", "the outbox"),
                             act("forwarding retry <repo> <path>", "unpark a parked forward"),
                             act("forwarding internal <repo> <dest-tenant> <dest-repo>",
                                     "forward every accepted publish into another tenant's repository"),
@@ -210,7 +211,7 @@ public final class Commands {
                                     "stop forwarding into it")),
                     noun("webhook", "the outbound webhook deliveries", 
                             OperationsCommands::webhook,
-                            act("webhook <repo>", "recent deliveries and their state"),
+                            act("webhook <repo> [--cursor C]", "recent deliveries and their state"),
                             act("webhook retry <repo> <id>", "redeliver a failed webhook")),
                     noun("import", "import from another repository manager", AdminCommands::importRepo,
                             act("import <repo> --source S --url U --source-repo R [--format F]"
@@ -247,7 +248,7 @@ public final class Commands {
                                     + "in the background, after typing 'delete <project>' - or --yes, for a script")),
                     noun("scans", "build scans: what a build ran, and what the cache saved it",
                             ScanCommands::scans,
-                            act("scans", "the tenant's ingested build scans"),
+                            act("scans [--cursor C]", "the tenant's ingested build scans"),
                             act("scans show <id>", "one build scan"),
                             act("scans report <id>", "one build scan, rendered"),
                             act("scans ingest <file>", "ingest a build scan document"),
@@ -257,7 +258,7 @@ public final class Commands {
                             ScanCommands::tests,
                             act("tests ingest <file>", "ingest a test run"),
                             act("tests show <id>", "one ingested run"),
-                            act("tests flaky", "the tests seen to flake"),
+                            act("tests flaky [--limit N]", "the tests seen to flake"),
                             act("tests select [--changed F]",
                                     "the tests worth running for a change")))),
 
@@ -299,7 +300,7 @@ public final class Commands {
                             act("policy set [--default D] [--max D]", "set the default and maximum lifetimes")),
                     noun("audit", "the tenant's audit trail", 
                             AdminCommands::audit,
-                            act("audit [--from I] [--to I] [--action A] [--csv]", "query the trail")),
+                            act("audit [--from I] [--to I] [--action A] [--csv] [--cursor C]", "query the trail")),
                     noun("scim", "the token an identity provider presents to provision this tenant",
                             AuthCommands::scim,
                             act("scim token", "mint a token and print it once; the store keeps only its hash"),
