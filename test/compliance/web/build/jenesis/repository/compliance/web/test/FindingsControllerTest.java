@@ -134,6 +134,46 @@ class FindingsControllerTest {
                             assertThat(rating.vector()).isEqualTo("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"));
                     assertThat(finding.detail().cwes()).containsExactly(79);
                 });
+
+        FindingsController.FindingsView listed = reporting.findings("releases", "org.example:app", null, null, null,
+                null, null, null, 10, Servlets.request("GET", "/api/findings"), Servlets.response().servlet());
+        assertThat(listed.findings()).singleElement().satisfies(row -> {
+            assertThat(row.vulnerability().path("source").path("name").asString()).isEqualTo("NVD");
+            assertThat(row.vulnerability().path("ratings").get(0).path("vector").asString())
+                    .isEqualTo("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N");
+            assertThat(row.vulnerability().path("description").asString()).isEqualTo("reflected");
+        });
+
+        Servlets.Response exported = Servlets.response();
+        reporting.cyclonedx("releases", "Maven", "org.example:app", "1.0", Servlets.request("GET",
+                "/api/findings/cyclonedx"), exported.servlet());
+        assertThat(exported.status()).isEqualTo(200);
+        assertThat(exported.contentType()).startsWith("application/vnd.cyclonedx+json");
+        JsonNode bom = JsonMapper.builder().build().readTree(exported.body());
+        assertThat(bom.path("bomFormat").asString()).isEqualTo("CycloneDX");
+        String purl = "pkg:maven/org.example/app@1.0";
+        assertThat(bom.path("metadata").path("component").path("purl").asString()).isEqualTo(purl);
+        assertThat(bom.path("vulnerabilities")).singleElement().satisfies(entry -> {
+            assertThat(entry.path("id").asString()).isEqualTo("CVE-2026-1");
+            assertThat(entry.path("affects").get(0).path("ref").asString()).isEqualTo(purl);
+            assertThat(VulnerabilityRecord.fromCycloneDx(entry).cwes()).as("read back as what was recorded")
+                    .containsExactly(79);
+            assertThat(entry.path("properties").get(0).path("value").asString()).isEqualTo("scanner");
+        });
+    }
+
+    @Test
+    void a_version_with_no_findings_exports_an_empty_document_and_a_blank_name_is_refused() throws IOException {
+        Servlets.Response exported = Servlets.response();
+        controller.cyclonedx("releases", "Maven", "org.example:none", "1.0", Servlets.request("GET",
+                "/api/findings/cyclonedx"), exported.servlet());
+        assertThat(exported.status()).isEqualTo(200);
+        assertThat(JsonMapper.builder().build().readTree(exported.body()).path("vulnerabilities")).isEmpty();
+
+        Servlets.Response refused = Servlets.response();
+        controller.cyclonedx("releases", "Maven", " ", "1.0", Servlets.request("GET", "/api/findings/cyclonedx"),
+                refused.servlet());
+        assertThat(refused.status()).isEqualTo(400);
     }
 
     private static FindingsController.ReportRequest report(String completeness, List<String> gaps) {

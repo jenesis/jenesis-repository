@@ -1,6 +1,7 @@
 package build.jenesis.repository.cli;
 
 import module java.base;
+import module tools.jackson.databind;
 
 /**
  * The compliance and governance verbs: {@code vulnerabilities} and {@code findings} read the advisory and findings
@@ -243,6 +244,9 @@ final class ComplianceCommands {
         if (args.length > 1 && args[1].equals("report")) {
             return report(args, home);
         }
+        if (args.length > 1 && args[1].equals("export")) {
+            return export(args, home);
+        }
 
         if (args.length < 2) {
             throw new IllegalArgumentException("Usage: findings <repo> [--ecosystem E] [--coordinate C] [--kind K] "
@@ -299,6 +303,9 @@ final class ComplianceCommands {
                 line.append(" (fixed in ").append(fixed).append(")");
             }
             System.out.println(line);
+            for (String detail : detail(row.vulnerability())) {
+                System.out.println("    " + detail);
+            }
             if (row.labels() != null) {
                 for (RiskClient.FindingLabel label : row.labels()) {
                     System.out.println("    label " + label.source() + "/" + label.name() + ": " + label.value());
@@ -825,6 +832,97 @@ final class ComplianceCommands {
 
     /** Post a scanner's report - the file is the API's own request document, sent as it is, so the CLI adds
      *  nothing a CI job could get out of step with - and say what it did. */
+    /**
+     * What a finding's source said beyond its identifier and severity, a line each, from CycloneDX's
+     * {@code vulnerability} object the API answers: who published it and where, each rating with who gave it, its
+     * method, score and vector, the other identifiers it goes by, its weaknesses, its advisories and its dates.
+     */
+    static List<String> detail(JsonNode vulnerability) {
+        List<String> lines = new ArrayList<>();
+        if (vulnerability == null || !vulnerability.isObject()) {
+            return lines;
+        }
+        String published = named(vulnerability.path("source"));
+        if (published != null) {
+            lines.add("published by " + published);
+        }
+        for (JsonNode rating : vulnerability.path("ratings")) {
+            StringJoiner line = new StringJoiner(" ", "rated ", "");
+            for (String part : new String[]{rating.path("source").path("name").asString(null),
+                    rating.path("method").asString(null), rating.path("score").isNumber()
+                    ? rating.path("score").asString() : null, rating.path("severity").asString(null),
+                    rating.path("vector").asString(null)}) {
+                if (part != null && !part.isBlank()) {
+                    line.add(part);
+                }
+            }
+            lines.add(line.toString());
+        }
+        List<String> aliases = new ArrayList<>();
+        for (JsonNode reference : vulnerability.path("references")) {
+            String where = named(reference.path("source"));
+            aliases.add(reference.path("id").asString("") + (where == null ? "" : " (" + where + ")"));
+        }
+        if (!aliases.isEmpty()) {
+            lines.add("also " + String.join(", ", aliases));
+        }
+        List<String> cwes = new ArrayList<>();
+        vulnerability.path("cwes").forEach(cwe -> cwes.add("CWE-" + cwe.asString()));
+        if (!cwes.isEmpty()) {
+            lines.add("weakness " + String.join(", ", cwes));
+        }
+        for (JsonNode advisory : vulnerability.path("advisories")) {
+            String title = advisory.path("title").asString(null);
+            lines.add("advisory " + (title == null ? "" : title + " ") + advisory.path("url").asString(""));
+        }
+        for (String date : new String[]{"published", "updated"}) {
+            String when = vulnerability.path(date).asString(null);
+            if (when != null) {
+                lines.add(date + " " + when);
+            }
+        }
+        return lines;
+    }
+
+    // A source as a line names it: its name and its address, either alone, or null for neither.
+    private static String named(JsonNode source) {
+        String name = source.path("name").asString(null);
+        String url = source.path("url").asString(null);
+        return name == null ? url : url == null ? name : name + " " + url;
+    }
+
+    /** One version's standing vulnerability and malware findings as a CycloneDX document, printed or written to
+     *  {@code --output}. */
+    private static int export(String[] args, Path home) throws Exception {
+        String output = null;
+        List<String> positional = new ArrayList<>();
+        for (int i = 2; i < args.length; i++) {
+            switch (args[i]) {
+                case "--output", "-o" -> output = CliSupport.flag(args, ++i);
+                default -> {
+                    if (args[i].startsWith("--")) {
+                        throw new IllegalArgumentException("Unknown option: " + args[i]);
+                    }
+                    positional.add(args[i]);
+                }
+            }
+        }
+        if (positional.size() != 4) {
+            throw new IllegalArgumentException(
+                    "Usage: findings export <repo> <ecosystem> <coordinate> <version> [--output F]");
+        }
+        String bom = CliSupport.client(home).risk().findingsCycloneDx(positional.get(0), positional.get(1),
+                positional.get(2), positional.get(3));
+        if (output != null) {
+            Files.writeString(Path.of(output), bom, StandardCharsets.UTF_8);
+            System.out.println("Wrote the findings of " + positional.get(2) + " " + positional.get(3) + " to "
+                    + output + ".");
+        } else {
+            System.out.print(bom);
+        }
+        return 0;
+    }
+
     private static int report(String[] args, Path home) throws Exception {
         if (args.length != 4) {
             throw new IllegalArgumentException("Usage: findings report <repo> <file>");
