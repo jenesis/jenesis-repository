@@ -54,7 +54,8 @@ final class OsvRecords {
             if (vector != null && !vector.isBlank()) {
                 double score = cvss(vector);
                 ratings.add(new VulnerabilityRecord.Rating(source, score < 0 ? null : score,
-                        score < 0 ? null : Severity.ofScore(score), method(vector), vector.strip()));
+                        score < 0 ? null : Severity.ofScore(score), VulnerabilityRecord.Rating.method(vector),
+                        vector.strip()));
             }
         }
         String word = vuln.path("database_specific").path("severity").asString(null);
@@ -82,21 +83,6 @@ final class OsvRecords {
         for (JsonNode id : ids) {
             AdvisoryDatabases.cwe(id.asString(null)).ifPresent(into::add);
         }
-    }
-
-    // CycloneDX's name for the CVSS version a vector is written in.
-    private static String method(String vector) {
-        String trimmed = vector.strip();
-        if (trimmed.startsWith("CVSS:4.0")) {
-            return "CVSSv4";
-        }
-        if (trimmed.startsWith("CVSS:3.1")) {
-            return "CVSSv31";
-        }
-        if (trimmed.startsWith("CVSS:3.0")) {
-            return "CVSSv3";
-        }
-        return trimmed.startsWith("CVSS:") ? "other" : "CVSSv2";
     }
 
     private static Instant instant(String text) {

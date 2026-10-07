@@ -7,6 +7,7 @@ import build.jenesis.repository.compliance.AdvisorySource.Advisory;
 import build.jenesis.repository.compliance.Ecosystems;
 import build.jenesis.repository.compliance.github.GitHubAdvisorySource;
 import build.jenesis.repository.compliance.Severity;
+import build.jenesis.repository.compliance.VulnerabilityRecord;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 
@@ -20,7 +21,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * The GitHub Advisory Database source's parsing against a fixed endpoint, and its composition with another feed: an
  * advisory maps to its CVSS-scored severity, fixed version and CVE aliases; a {@code malware} advisory is flagged; an
  * ecosystem GitHub does not track is not queried; and {@link AdvisorySource#combined} reports a vulnerability both
- * feeds carry only once.
+ * feeds carry only once. What GitHub says beyond these - its page of the advisory, the advisory's other identifiers,
+ * each CVSS rating with its vector, its CWEs and its dates - reaches the advisory structured, attributed to the GitHub
+ * Advisory Database.
  */
 class GitHubAdvisorySourceTest {
 
@@ -48,6 +51,43 @@ class GitHubAdvisorySourceTest {
             assertThat(advisory.fixed()).isEqualTo("4.17.12");
             assertThat(advisory.cves()).containsExactly("CVE-2019-10744");
         });
+    }
+
+    @Test
+    void what_github_says_beyond_the_severity_is_attributed_to_its_database() {
+        GitHubAdvisorySource source = new GitHubAdvisorySource((ecosystem, affects, next) ->
+                new GitHubAdvisorySource.Endpoint.Page("""
+                        [{
+                          "ghsa_id": "GHSA-jf85-cpcp-j695",
+                          "cve_id": "CVE-2019-10744",
+                          "html_url": "https://github.com/advisories/GHSA-jf85-cpcp-j695",
+                          "severity": "critical",
+                          "published_at": "2019-07-10T19:45:23Z",
+                          "updated_at": "2024-03-01T00:00:00Z",
+                          "cvss_severities": {
+                            "cvss_v3": {"vector_string": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", "score": 9.1},
+                            "cvss_v4": {"vector_string": null, "score": 0.0}},
+                          "cwes": [{"cwe_id": "CWE-1321", "name": "Prototype Pollution"}],
+                          "identifiers": [{"type": "CVE", "value": "CVE-2019-10744"}],
+                          "vulnerabilities": [{"package": {"ecosystem": "npm", "name": "lodash"},
+                            "first_patched_version": {"identifier": "4.17.12"}}]
+                        }]""", null));
+
+        VulnerabilityRecord detail = source.advisories("npm", "lodash", "4.17.11").getFirst().detail();
+
+        assertThat(detail.source()).isEqualTo(new VulnerabilityRecord.Source("GitHub Advisory Database",
+                "https://github.com/advisories/GHSA-jf85-cpcp-j695"));
+        assertThat(detail.references()).containsExactly(new VulnerabilityRecord.Reference("CVE-2019-10744",
+                new VulnerabilityRecord.Source("NVD", "https://nvd.nist.gov/vuln/detail/CVE-2019-10744")));
+        assertThat(detail.ratings()).as("a rating GitHub states neither a vector nor a score for is left out")
+                .singleElement().satisfies(rating -> {
+                    assertThat(rating.method()).isEqualTo("CVSSv31");
+                    assertThat(rating.score()).isEqualTo(9.1);
+                    assertThat(rating.severity()).isEqualTo(Severity.CRITICAL);
+                });
+        assertThat(detail.cwes()).containsExactly(1321);
+        assertThat(detail.published()).isEqualTo(Instant.parse("2019-07-10T19:45:23Z"));
+        assertThat(detail.updated()).isEqualTo(Instant.parse("2024-03-01T00:00:00Z"));
     }
 
     @Test

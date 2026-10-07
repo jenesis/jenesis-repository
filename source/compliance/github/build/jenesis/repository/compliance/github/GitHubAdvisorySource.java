@@ -3,7 +3,9 @@ package build.jenesis.repository.compliance.github;
 import module java.base;
 import module tools.jackson.databind;
 import build.jenesis.repository.compliance.AdvisorySource;
+import build.jenesis.repository.compliance.AdvisoryDatabases;
 import build.jenesis.repository.compliance.AdvisorySource.Advisory;
+import build.jenesis.repository.compliance.VulnerabilityRecord;
 import build.jenesis.repository.compliance.Freshness;
 import build.jenesis.repository.compliance.FeedCache;
 import build.jenesis.repository.compliance.Ecosystems;
@@ -335,7 +337,7 @@ public final class GitHubAdvisorySource implements AdvisorySource.Changes {
                     advisories.add(new Advisory(id, severityOf(advisory),
                             "malware".equals(advisory.path("type").asString(null)),
                             fixedOf(advisory, coordinate), cvesOf(advisory), descriptionOf(advisory),
-                            aliasesOf(advisory, id)));
+                            aliasesOf(advisory, id), detailOf(advisory, id)));
                 }
             }
             String next = nextLink(response.header("Link").orElse(null));
@@ -362,6 +364,65 @@ public final class GitHubAdvisorySource implements AdvisorySource.Changes {
             }
         }
         return null;
+    }
+
+    /** What GitHub says of the advisory beyond its identifier, severity and description: its page in the GitHub
+     *  Advisory Database, every other identifier as a reference to where it is published, each CVSS rating GitHub gives
+     *  with its vector and score, its CWEs and its dates. */
+    static VulnerabilityRecord detailOf(JsonNode advisory, String id) {
+        String page = advisory.path("html_url").asString(null);
+        VulnerabilityRecord.Source github = new VulnerabilityRecord.Source(GITHUB_DATABASE, page != null ? page
+                : AdvisoryDatabases.source(id).map(VulnerabilityRecord.Source::url).orElse(null));
+        List<VulnerabilityRecord.Reference> references = new ArrayList<>();
+        for (String alias : aliasesOf(advisory, id)) {
+            references.add(AdvisoryDatabases.reference(alias));
+        }
+        List<VulnerabilityRecord.Rating> ratings = new ArrayList<>();
+        for (String version : List.of("cvss_v3", "cvss_v4")) {
+            rating(github, advisory.path("cvss_severities").path(version)).ifPresent(ratings::add);
+        }
+        if (ratings.isEmpty()) {
+            rating(github, advisory.path("cvss")).ifPresent(ratings::add);
+        }
+        String word = advisory.path("severity").asString(null);
+        if (ratings.isEmpty() && word != null) {
+            ratings.add(new VulnerabilityRecord.Rating(github, null, Severity.ofWord(word, Severity.UNKNOWN), "other",
+                    null));
+        }
+        List<Integer> cwes = new ArrayList<>();
+        for (JsonNode cwe : advisory.path("cwes")) {
+            AdvisoryDatabases.cwe(cwe.path("cwe_id").asString(null)).ifPresent(cwes::add);
+        }
+        return new VulnerabilityRecord(github, references, ratings, cwes, List.of(),
+                instant(advisory.path("published_at").asString(null)),
+                instant(advisory.path("updated_at").asString(null)));
+    }
+
+    /** The name the GitHub Advisory Database is attributed by. */
+    static final String GITHUB_DATABASE = "GitHub Advisory Database";
+
+    // One CVSS rating GitHub states - a vector, a score or both - or empty where it states neither.
+    private static Optional<VulnerabilityRecord.Rating> rating(VulnerabilityRecord.Source github, JsonNode cvss) {
+        String vector = cvss.path("vector_string").asString(null);
+        JsonNode score = cvss.path("score");
+        boolean scored = score.isNumber() && score.asDouble() > 0;
+        if ((vector == null || vector.isBlank()) && !scored) {
+            return Optional.empty();
+        }
+        return Optional.of(new VulnerabilityRecord.Rating(github, scored ? score.asDouble() : null,
+                scored ? Severity.ofScore(score.asDouble()) : null,
+                vector == null || vector.isBlank() ? "other" : VulnerabilityRecord.Rating.method(vector), vector));
+    }
+
+    private static Instant instant(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        try {
+            return Instant.parse(text.strip());
+        } catch (DateTimeException notInstant) {
+            return null;
+        }
     }
 
     // The advisory's summary, else a bounded prefix of its description, so the findings ledger keeps what the advisory

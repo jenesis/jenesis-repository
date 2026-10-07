@@ -256,7 +256,8 @@ public final class OpenSsfMaliciousSource implements AdvisorySource.Batched, Adv
             return Optional.empty();
         }
         return Optional.of(new Advisory(id, severityOf(vuln), true, Osv.fixedVersions(vuln, coordinate),
-                OsvQuery.cvesOf(vuln, id), descriptionOf(vuln), OsvQuery.aliasesOf(vuln)));
+                OsvQuery.cvesOf(vuln, id), descriptionOf(vuln), OsvQuery.aliasesOf(vuln),
+                OsvQuery.detailOf(vuln, id)));
     }
 
     // The record's one-line summary, falling back to a bounded prefix of the long-form details - carried so the
