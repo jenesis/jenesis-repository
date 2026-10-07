@@ -62,18 +62,8 @@ class ApkProxyTest {
     }
 
     @Test
-    void a_screen_judges_the_package_and_never_the_index_read_beside_it() throws IOException {
-        byte[] apk = Packages.apk("widget", "1.0.0-r0", "x86_64");
-        JudgingScreen screen = new JudgingScreen(upstream(apk, entry(checksum(apk))));
-        ContractExchange exchange = ContractExchange.of("GET", REQUEST);
-        ((ProxyFormat) apk()).proxy(exchange, store("screened"), ROOT, screen);
-
-        assertThat(exchange.status()).isEqualTo(200);
-        assertThat(screen.judged).containsExactly(ROOT.resolve("x86_64/" + FILE));
-    }
-
-    @Test
     void an_unpublished_repository_misses_so_its_index_can_be_proxied() throws IOException {
+        // The compressed twin a client fetches, which the kit's empty-enumeration property does not probe.
         assertThat(get(store("empty"), "/apk/main/x86_64/APKINDEX.tar.gz").status()).isEqualTo(404);
     }
 

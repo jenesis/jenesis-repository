@@ -87,6 +87,8 @@ final class JenesisFormatFixture implements FormatFixture {
                 FormatContract.Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY,
                 "JenesisFormat implements no ProxyFormat: the module layout is publish-only, with no upstream to "
                         + "mirror, so there is no fetched body to verify",
+                FormatContract.Property.PROXY_SCREEN_JUDGES_ONLY_THE_ARTIFACT,
+                "JenesisFormat implements no ProxyFormat, so no fill runs under a screen",
                 FormatContract.Property.PROXY_STREAMS_UPSTREAM_BODY,
                 "JenesisFormat implements no ProxyFormat, so it has no pull-through leg to stream. Its publish path "
                         + "streams through the same Publication.storeBlob the Maven and raw legs stream through",
