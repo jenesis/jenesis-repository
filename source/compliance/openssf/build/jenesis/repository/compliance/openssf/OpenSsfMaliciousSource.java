@@ -167,7 +167,7 @@ public final class OpenSsfMaliciousSource implements AdvisorySource.Batched, Adv
         if (!OsvQuery.covers(ecosystem)) {
             return List.of();
         }
-        String key = ecosystem + '|' + coordinate + '|' + version;
+        String key = key(ecosystem, coordinate, version);
         try {
             List<Advisory> advisories = new ArrayList<>();
             for (JsonNode vuln : shared.answered(client, query, ecosystem, coordinate, version)) {
@@ -192,34 +192,23 @@ public final class OpenSsfMaliciousSource implements AdvisorySource.Batched, Adv
             }
         }
         Map<String, JsonNode> fetched = new HashMap<>();
-        for (int from = 0; from < asked.size(); from += OsvQuery.BATCH_LIMIT) {
-            List<Integer> chunk = asked.subList(from, Math.min(asked.size(), from + OsvQuery.BATCH_LIMIT));
-            List<AdvisorySource.Query> batch = chunk.stream().map(queries::get).toList();
-            List<OsvQuery.Listed> listed;
-            try {
-                listed = OsvQuery.ask(client, querybatch, batch);
-            } catch (RuntimeException failed) {
-                batch.forEach(query -> fetches.failed(query.ecosystem() + '|' + query.coordinate() + '|'
-                        + query.version()));
-                throw failed;
-            }
-            for (int i = 0; i < chunk.size(); i++) {
-                AdvisorySource.Query query = batch.get(i);
-                if (listed.get(i).more()) {
-                    // More records than a batch answer carries: the query's own pages are drawn instead.
-                    answers.set(chunk.get(i), advisories(query.ecosystem(), query.coordinate(), query.version()));
-                    continue;
-                }
-                List<Advisory> found = new ArrayList<>();
-                for (OsvQuery.Record named : listed.get(i).records()) {
-                    if (named.id().startsWith("MAL-")) {
-                        malicious(record(fetched, named, query), query.coordinate()).ifPresent(found::add);
+        OsvQuery.ask(client, querybatch, queries, asked,
+                failed -> failed.forEach(at -> fetches.failed(key(queries.get(at)))), (at, listed) -> {
+                    AdvisorySource.Query query = queries.get(at);
+                    if (listed.more()) {
+                        // More records than a batch answer carries: the query's own pages are drawn instead.
+                        answers.set(at, advisories(query.ecosystem(), query.coordinate(), query.version()));
+                        return;
                     }
-                }
-                fetches.fetched(query.ecosystem() + '|' + query.coordinate() + '|' + query.version());
-                answers.set(chunk.get(i), List.copyOf(found));
-            }
-        }
+                    List<Advisory> found = new ArrayList<>();
+                    for (OsvQuery.Record named : listed.records()) {
+                        if (named.id().startsWith("MAL-")) {
+                            malicious(record(fetched, named, query), query.coordinate()).ifPresent(found::add);
+                        }
+                    }
+                    fetches.fetched(key(query));
+                    answers.set(at, List.copyOf(found));
+                });
         return List.copyOf(answers);
     }
 
@@ -231,13 +220,22 @@ public final class OpenSsfMaliciousSource implements AdvisorySource.Batched, Adv
             try {
                 record = OsvQuery.fetch(client, vulns, named.id());
             } catch (IOException e) {
-                fetches.failed(query.ecosystem() + '|' + query.coordinate() + '|' + query.version());
+                fetches.failed(key(query));
                 throw new UncheckedIOException("Failed to fetch the malicious-package record " + named.id()
                         + " for " + query.ecosystem() + " " + query.coordinate() + " " + query.version(), e);
             }
             fetched.put(key, record);
         }
         return record;
+    }
+
+    /** The key a coordinate version's fetches are stamped under. */
+    private static String key(String ecosystem, String coordinate, String version) {
+        return ecosystem + '|' + coordinate + '|' + version;
+    }
+
+    private static String key(AdvisorySource.Query query) {
+        return key(query.ecosystem(), query.coordinate(), query.version());
     }
 
     /** The ecosystems OSV serves the curated dataset in. */
