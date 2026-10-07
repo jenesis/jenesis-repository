@@ -3,6 +3,7 @@ package build.jenesis.repository.gateway;
 import module java.base;
 
 import build.jenesis.repository.definitions.RepositoryDefinition;
+import build.jenesis.repository.discovery.RepositoryDiscovery;
 import build.jenesis.repository.store.ArtifactDescriptor;
 
 /**
@@ -80,9 +81,10 @@ public interface RedirectHandlerProvider {
         return URI.create(base + suffix);
     }
 
-    /** What the wiring layer hands every provider. */
+    /** What the wiring layer hands every provider; {@code discovery} is where a discovered leg's files are, read from
+     *  the domain each coordinate's name reverses into. */
     record Context(UnaryOperator<String> config, Screen screen, Predicate<URI> privateHost,
-                   Predicate<URI> credentialed, Downloads downloads) {
+                   Predicate<URI> credentialed, Downloads downloads, RepositoryDiscovery discovery) {
 
         public Context {
             Objects.requireNonNull(config, "config");
@@ -90,6 +92,7 @@ public interface RedirectHandlerProvider {
             Objects.requireNonNull(privateHost, "privateHost");
             Objects.requireNonNull(credentialed, "credentialed");
             Objects.requireNonNull(downloads, "downloads");
+            Objects.requireNonNull(discovery, "discovery");
         }
     }
 

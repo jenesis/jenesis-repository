@@ -3,6 +3,8 @@ package build.jenesis.repository.gateway;
 import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.definitions.RepositoryDefinition;
+import build.jenesis.repository.discovery.DiscoveryException;
+import build.jenesis.repository.discovery.RepositoryDiscovery;
 import build.jenesis.repository.server.PullThroughCache;
 import build.jenesis.repository.server.PullThroughHooks;
 import build.jenesis.repository.compliance.ComplianceGate;
@@ -145,6 +147,10 @@ public final class RepositoryRouter {
      *  mode - until a deployment wires its settings through {@link #repositorySettings}. */
     private final BiFunction<String, String, UnaryOperator<String>> repositorySettings;
 
+    /** Where a {@link RepositoryDefinition.Source.Discovered} leg's files are, as each name's domain says; {@code null}
+     *  until a deployment wires one through {@link #discovering}, and a discovered leg misses until then. */
+    private final RepositoryDiscovery discovery;
+
     /** The origin-refresh coalescing gate: the day each {@code (tenant|repo|path|sha256)} key last had its
      *  {@code origin} row's {@code lastServed}/{@code serves} durably refreshed, so a hot no-copy pass-through
      *  refreshes a key at most once per day rather than CAS-storming one doc key on every serve (the
@@ -176,7 +182,7 @@ public final class RepositoryRouter {
         // injects one via tracking(...).
         this(definitions, stores, fetcher, (_, _) -> null, () -> 0, () -> false,
                 new SpoolStore(SpoolStore.Budget.standard())::acquire, HardenedScreen.Bounds.standard(),
-                WithheldGuard.NONE, INSTALLED_METADATA, REDIRECT_ABSENT, (_, _) -> _ -> null);
+                WithheldGuard.NONE, INSTALLED_METADATA, REDIRECT_ABSENT, (_, _) -> _ -> null, null);
     }
 
     /** Resolve the consolidated metadata store bound to a repository's scoped store from the discovered persistence
@@ -192,7 +198,8 @@ public final class RepositoryRouter {
                              Supplier<ArtifactStore> passThrough, HardenedScreen.Bounds hardeningBounds,
                              WithheldGuard withheld, Function<ArtifactStore, MetadataStore> metadataOver,
                              RedirectHandler redirect,
-                             BiFunction<String, String, UnaryOperator<String>> repositorySettings) {
+                             BiFunction<String, String, UnaryOperator<String>> repositorySettings,
+                             RepositoryDiscovery discovery) {
         this.definitions = definitions;
         this.stores = stores;
         this.fetcher = fetcher;
@@ -205,6 +212,7 @@ public final class RepositoryRouter {
         this.metadataOver = metadataOver;
         this.redirect = redirect;
         this.repositorySettings = repositorySettings;
+        this.discovery = discovery;
     }
 
     /** Screen every proxied artifact through the gate before caching or serving it, so a router-configured proxy
@@ -226,7 +234,7 @@ public final class RepositoryRouter {
     public RepositoryRouter gating(BiFunction<String, GatePolicyProvider.Path, ComplianceGate> gate,
                                    IntSupplier holdDays, BooleanSupplier withholdIncomplete) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
-                hardeningBounds, withheld, metadataOver, redirect, repositorySettings);
+                hardeningBounds, withheld, metadataOver, redirect, repositorySettings, discovery);
     }
 
     /** Screen a repository's fallback fetches as its effective settings say, read per fetch so a change applies
@@ -235,7 +243,7 @@ public final class RepositoryRouter {
     public RepositoryRouter repositorySettings(BiFunction<String, String, UnaryOperator<String>> repositorySettings) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
                 hardeningBounds, withheld, metadataOver, redirect,
-                Objects.requireNonNull(repositorySettings, "repositorySettings"));
+                Objects.requireNonNull(repositorySettings, "repositorySettings"), discovery);
     }
 
     /** A tenant's proxy-flavour gate - the null-check every "is this tenant gated at all?" test reads. */
@@ -265,7 +273,7 @@ public final class RepositoryRouter {
      *  without installing the persistence module for every gateway test. */
     public RepositoryRouter tracking(Function<ArtifactStore, MetadataStore> metadataOver) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
-                hardeningBounds, withheld, metadataOver, redirect, repositorySettings);
+                hardeningBounds, withheld, metadataOver, redirect, repositorySettings, discovery);
     }
 
     /** Supply the scratch {@link ArtifactStore} the {@code nocache} pass-through leg fetches through, so a test can
@@ -276,7 +284,7 @@ public final class RepositoryRouter {
      *  uses to reclaim its scratch. */
     public RepositoryRouter passingThrough(Supplier<ArtifactStore> passThrough) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
-                hardeningBounds, withheld, metadataOver, redirect, repositorySettings);
+                hardeningBounds, withheld, metadataOver, redirect, repositorySettings, discovery);
     }
 
     /** Set the untrusted-upstream fetch {@link HardenedScreen.Bounds} the hardened leg enforces (the per-artifact
@@ -284,7 +292,7 @@ public final class RepositoryRouter {
      *  the default is {@link HardenedScreen.Bounds#standard()}. */
     public RepositoryRouter hardening(HardenedScreen.Bounds hardeningBounds) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
-                hardeningBounds, withheld, metadataOver, redirect, repositorySettings);
+                hardeningBounds, withheld, metadataOver, redirect, repositorySettings, discovery);
     }
 
     /** Wire the read-side {@link WithheldGuard} (the discovered publication-interceptor {@code withheld} chain), so a
@@ -293,7 +301,7 @@ public final class RepositoryRouter {
      *  content). */
     public RepositoryRouter withholding(WithheldGuard withheld) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
-                hardeningBounds, withheld, metadataOver, redirect, repositorySettings);
+                hardeningBounds, withheld, metadataOver, redirect, repositorySettings, discovery);
     }
 
     /** Inject the {@link RedirectHandler} a {@link RepositoryDefinition.Serve#REDIRECT} upstream leg delegates to (the
@@ -303,7 +311,16 @@ public final class RepositoryRouter {
      *  {@code redirect} token parses at all. */
     public RepositoryRouter redirecting(RedirectHandler redirect) {
         return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
-                hardeningBounds, withheld, metadataOver, redirect, repositorySettings);
+                hardeningBounds, withheld, metadataOver, redirect, repositorySettings, discovery);
+    }
+
+    /** Inject the {@link RepositoryDiscovery} a {@link RepositoryDefinition.Source.Discovered} leg reads its locations
+     *  from: production wires one over the screened client and the deployment's private-host dial; a test injects one
+     *  over a table. */
+    public RepositoryRouter discovering(RepositoryDiscovery discovery) {
+        return new RepositoryRouter(definitions, stores, fetcher, gate, holdDays, withholdIncomplete, passThrough,
+                hardeningBounds, withheld, metadataOver, redirect, repositorySettings,
+                Objects.requireNonNull(discovery, "discovery"));
     }
 
     /** The explicit definition of a repository as {@code tenant} sees it, or {@code null} when it is not configured
@@ -433,7 +450,13 @@ public final class RepositoryRouter {
                 // upstream) instead of fetch-screen-serving it; PROXY is the plain pull-through walk.
                 case RepositoryDefinition.Source.Upstream upstream -> fallback.serve() == RepositoryDefinition.Serve.REDIRECT
                         ? redirect.redirect(tenant, repository, fallback, upstream.url(), format, exchange)
-                        : fetchScreenServe(tenant, repository, fallbackIndex, fallback, upstream.url(), format, exchange);
+                        : fetchScreenServe(tenant, repository, fallbackIndex, fallback, upstream.url(), format, exchange,
+                                UnaryOperator.identity());
+                // A discovered leg reads where its file is from the domain the coordinate's name reverses into, and
+                // is then served as an upstream leg is - redirected, or fetched, screened and kept.
+                case RepositoryDefinition.Source.Discovered discovered -> fallback.serve() == RepositoryDefinition.Serve.REDIRECT
+                        ? redirect.redirect(tenant, repository, fallback, null, format, exchange)
+                        : discovered(tenant, repository, fallbackIndex, fallback, format, exchange);
             };
             if (outcome == Outcome.MISS) {
                 continue;                 // genuine 404 from this fallback - try the next
@@ -464,7 +487,7 @@ public final class RepositoryRouter {
      *  itself. */
     private static boolean hasOwnStore(RepositoryDefinition definition) {
         return definition.writable() || definition.fallbacks().stream()
-                .anyMatch(fallback -> fallback.source() instanceof RepositoryDefinition.Source.Upstream && fallback.store());
+                .anyMatch(fallback -> RepositoryDefinition.fetching(fallback.source()) && fallback.store());
     }
 
     /** Whether a fallback's {@code match=} coordinate predicate admits this request, derived from the path
@@ -488,6 +511,45 @@ public final class RepositoryRouter {
         return fallback.matches(described.get());
     }
 
+    /** The address a discovered template leg's format composes its requests under: a placeholder the
+     *  {@link DiscoveredFetcher} maps each request from onto the file's own address, never reached itself. */
+    static final URI DISCOVERED = URI.create("https://discovered.invalid/");
+
+    /**
+     * Serve one {@link RepositoryDefinition.Source.Discovered} fallback as a proxy leg: where the request's file is,
+     * read from the domain its coordinate's name reverses into, then fetched, screened and kept exactly as an
+     * upstream leg's - under the root a file names, with the request's own path, or at each file's own address where
+     * it names a template ({@link DiscoveredFetcher}). A request no domain's file names misses, so the walk goes on to
+     * the next leg; a file that cannot be honoured - refused by the proposal's grammar, a misleading latest link, a
+     * location at a private host - answers {@code 502} naming nothing of it, and is logged.
+     */
+    private Outcome discovered(String tenant, String repository, int fallbackIndex,
+                               RepositoryDefinition.Fallback fallback, RepositoryFormat format, FormatExchange exchange)
+            throws IOException {
+        if (discovery == null) {
+            return Outcome.MISS;
+        }
+        Optional<RepositoryDiscovery.Located> located;
+        try {
+            located = discovery.locate(exchange.path());
+        } catch (DiscoveryException refused) {
+            LOGGER.warn("The discovered leg of repository {} cannot serve {}: {}", repository, exchange.path(),
+                    refused.getMessage());
+            exchange.respond(502);
+            return Outcome.ERROR;
+        }
+        if (located.isEmpty()) {
+            return Outcome.MISS;
+        }
+        if (located.get() instanceof RepositoryDiscovery.Located.Relayed relayed) {
+            return fetchScreenServe(tenant, repository, fallbackIndex, fallback, relayed.root(), format, exchange,
+                    UnaryOperator.identity());
+        }
+        String route = exchange.path().substring(0, exchange.path().indexOf('/', 1) + 1);
+        return fetchScreenServe(tenant, repository, fallbackIndex, fallback, DISCOVERED, format, exchange,
+                probe -> new DiscoveredFetcher(probe, discovery, DISCOVERED, route));
+    }
+
     /**
      * Serve one {@link RepositoryDefinition.Source.Upstream} fallback: fetch-screen-serve honouring the fallback's own
      * {@code store} (cache-or-not) and {@code screening} (DEFAULT tenant-gate / HARDEN full-body / UNSCREENED opt-out)
@@ -497,9 +559,13 @@ public final class RepositoryRouter {
      * a {@link Outcome#MISS} (the upstream itself had nothing) - the distinction a 404-sniff cannot make.
      */
     private Outcome fetchScreenServe(String tenant, String repository, int fallbackIndex, RepositoryDefinition.Fallback fallback,
-                                     URI upstream, RepositoryFormat format, FormatExchange exchange) throws IOException {
+                                     URI upstream, RepositoryFormat format, FormatExchange exchange,
+                                     UnaryOperator<ProxyFormat.Fetcher> located) throws IOException {
         Deferred leg = new Deferred(exchange);
         UpstreamProbe probe = new UpstreamProbe(fetcher);
+        // What the format fetches through: the probe itself, or - for a discovered template - the probe beneath the
+        // mapping onto each file's own address, so the probe sees, and the origin row names, where bytes came from.
+        ProxyFormat.Fetcher through = located.apply(probe);
         boolean harden = fallback.screening() == RepositoryDefinition.Screening.HARDEN;
         boolean store = fallback.store();
         // The durable per-repository store the origin record (and the screen's own quarantine records) land in,
@@ -526,7 +592,7 @@ public final class RepositoryRouter {
             ArtifactStore spool = passThrough.get();
             ArtifactStore body = store ? durable : passThrough.get();
             try {
-                pullThrough(tenant, repository, format, fallback, upstream, leg, body, durable, spool, probe);
+                pullThrough(tenant, repository, format, fallback, upstream, leg, body, durable, spool, through);
                 digest = located(body, exchange.path());   // the verified copy the leg cached (durable) or spooled
             } catch (SpoolStore.BudgetExhausted exhausted) {
                 LOGGER.warn("Spool budget exhausted screening hardened "
@@ -541,7 +607,7 @@ public final class RepositoryRouter {
         } else if (store) {
             ArtifactStore durable = stores.apply(tenant, repository);
             records = durable;
-            pullThrough(tenant, repository, format, fallback, upstream, leg, durable, durable, null, probe);
+            pullThrough(tenant, repository, format, fallback, upstream, leg, durable, durable, null, through);
             digest = located(durable, exchange.path());
         } else {
             // A pass-through: the fetched bytes are served once and discarded, so they never touch the repository's
@@ -554,7 +620,7 @@ public final class RepositoryRouter {
             ArtifactStore scratch = passThrough.get();
             records = proxyGate(tenant) == null ? scratch : stores.apply(tenant, repository);
             try {
-                pullThrough(tenant, repository, format, fallback, upstream, leg, scratch, records, null, probe);
+                pullThrough(tenant, repository, format, fallback, upstream, leg, scratch, records, null, through);
                 digest = located(scratch, exchange.path());   // the transient scratch copy, read before it is reclaimed
             } catch (SpoolStore.BudgetExhausted exhausted) {
                 LOGGER.warn("Spool budget exhausted serving " + repository
@@ -688,7 +754,8 @@ public final class RepositoryRouter {
      *  format handles the request against the body store. */
     private void pullThrough(String tenant, String repository, RepositoryFormat format,
                              RepositoryDefinition.Fallback fallback, URI upstream, FormatExchange exchange,
-                             ArtifactStore body, ArtifactStore records, ArtifactStore spool, UpstreamProbe probe)
+                             ArtifactStore body, ArtifactStore records, ArtifactStore spool,
+                             ProxyFormat.Fetcher probe)
             throws IOException {
         if (format instanceof ProxyFormat proxy) {
             // Unify both pull-through legs through the seam: the raw probe is handed to the cache, and
