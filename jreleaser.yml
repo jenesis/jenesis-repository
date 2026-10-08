@@ -57,9 +57,15 @@ distributions:
     # SDKMAN is published from release.yml against state.sdkman.io once the candidate exists, since JReleaser speaks
     # only SDKMAN's retired vendor API; the step there is commented out until then.
 
+checksum:
+  individual: true
+
 files:
   artifacts:
     - path: 'sdk/jenrepo-{{projectVersion}}.jar'
+  globs:
+    - pattern: '**/*-{{projectVersion}}.{jar,pom}'
+      directory: 'target/stage/maven/output'
 
 deploy:
   maven:
