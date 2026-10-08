@@ -76,6 +76,10 @@ public final class Ecosystems {
     /** RPM packages. */
     public static final String RPM = "RPM";
 
+    /** Alpine packages, as an apk coordinate names its ecosystem. Not {@link #canonical()}: the advisory feeds publish
+     *  Alpine only per release ({@code Alpine:v3.19}), so no feed's vocabulary is keyed on the bare name. */
+    public static final String ALPINE = "Alpine";
+
     /** Hugging Face models and datasets. */
     public static final String HUGGING_FACE = "Hugging Face";
 

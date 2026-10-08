@@ -19,10 +19,12 @@ import tools.jackson.databind.node.ObjectNode;
  * {@code {"status":<RESOLVED|PARTIAL|UNDECLARED>,
  * "components":[{"coordinate","version","cached","depth","repository","via":{"coordinate","version"}}],
  * "cuts":[{"coordinate","requirement","reason"}], "truncated":<bool>, "kind":<a {@link ClosureSource.Kind}>,
- * "source":<the producing source's name>, "foreign":[{"ecosystem","coordinate","version","depth","via"}]}}, every
- * component in the version's own ecosystem; a component's {@code repository} is present only where a fallback's
- * repository holds it, and its {@code via} only where it was reached through another dependency rather than named by
- * the version. {@code foreign} is present only where a carried bill names packages of other ecosystems.
+ * "source":<the producing source's name>,
+ * "foreign":[{"ecosystem","coordinate","version","depth","via","purl","qualifiers":{...}}]}}, every component in the
+ * version's own ecosystem; a component's {@code repository} is present only where a fallback's repository holds it,
+ * and its {@code via} only where it was reached through another dependency rather than named by the version.
+ * {@code foreign} is present only where a carried bill names packages of other ecosystems, each with the package URL
+ * the bill named it by and that URL's qualifiers where it had them.
  */
 public final class ClosureSection {
 
@@ -172,11 +174,19 @@ public final class ClosureSection {
      * copy of it the tenant holds reaches the version.
      */
     public record Foreign(String ecosystem, String coordinate, String version, int depth, String viaCoordinate,
-                          String viaVersion) {
+                          String viaVersion, String purl, Map<String, String> qualifiers) {
 
         public Foreign {
             viaCoordinate = viaCoordinate == null ? "" : viaCoordinate;
             viaVersion = viaVersion == null ? "" : viaVersion;
+            purl = purl == null ? "" : purl;
+            qualifiers = qualifiers == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(qualifiers));
+        }
+
+        /** A package the bill named by its coordinate alone, with no package URL to keep. */
+        public Foreign(String ecosystem, String coordinate, String version, int depth, String viaCoordinate,
+                       String viaVersion) {
+            this(ecosystem, coordinate, version, depth, viaCoordinate, viaVersion, "", Map.of());
         }
 
         /** Whether the version resolved names this package itself. */
@@ -287,9 +297,13 @@ public final class ClosureSection {
         };
         List<Foreign> foreign = new ArrayList<>();
         for (JsonNode entry : data.path("foreign")) {
+            Map<String, String> qualifiers = new LinkedHashMap<>();
+            entry.path("qualifiers").properties().forEach(qualifier ->
+                    qualifiers.put(qualifier.getKey(), qualifier.getValue().asString("")));
             foreign.add(new Foreign(entry.path("ecosystem").asString(""), entry.path("coordinate").asString(""),
                     entry.path("version").asString(""), entry.path("depth").asInt(0),
-                    entry.path("via").path("coordinate").asString(""), entry.path("via").path("version").asString("")));
+                    entry.path("via").path("coordinate").asString(""), entry.path("via").path("version").asString(""),
+                    entry.path("purl").asString(""), qualifiers));
         }
         ClosureSource.Kind kind;
         try {
@@ -336,6 +350,13 @@ public final class ClosureSection {
                     if (!entry.direct()) {
                         written.putObject("via").put("coordinate", entry.viaCoordinate())
                                 .put("version", entry.viaVersion());
+                    }
+                    if (!entry.purl().isEmpty()) {
+                        written.put("purl", entry.purl());
+                    }
+                    if (!entry.qualifiers().isEmpty()) {
+                        ObjectNode qualifiers = written.putObject("qualifiers");
+                        entry.qualifiers().forEach(qualifiers::put);
                     }
                 }
             }

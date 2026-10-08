@@ -106,26 +106,36 @@ public sealed interface ClosureSource permits ClosureSource.Carried, ClosureSour
      * One package a carried document names: where it can be placed, its ecosystem, coordinate and version at
      * {@code depth} from the root, and the package {@code viaCoordinate} at {@code viaVersion} whose dependencies named
      * it - none where the root named it itself; where it cannot, {@code unplaced} says why and the rest is what the
-     * document wrote.
+     * document wrote. {@code purl} is the package URL the document named it by, empty where it named none, kept so
+     * what the coordinate leaves out of it - a distribution package's release and architecture - is not lost.
      */
     record Entry(String ecosystem, String coordinate, String version, int depth, String viaCoordinate,
-                 String viaVersion, String unplaced) {
+                 String viaVersion, String unplaced, String purl) {
+
+        public Entry {
+            purl = purl == null ? "" : purl;
+        }
 
         /** A package the root names itself, placed at {@code depth}. */
         public static Entry placed(String ecosystem, String coordinate, String version, int depth) {
-            return new Entry(ecosystem, coordinate, version, depth, "", "", null);
+            return new Entry(ecosystem, coordinate, version, depth, "", "", null, "");
         }
 
         /** A package placed at {@code depth}, named by the dependencies of {@code viaCoordinate} at
          *  {@code viaVersion}. */
         public static Entry placed(String ecosystem, String coordinate, String version, int depth,
                                    String viaCoordinate, String viaVersion) {
-            return new Entry(ecosystem, coordinate, version, depth, viaCoordinate, viaVersion, null);
+            return new Entry(ecosystem, coordinate, version, depth, viaCoordinate, viaVersion, null, "");
         }
 
         /** A package named in a form no repository can place, for {@code reason}. */
         public static Entry unplaced(String coordinate, String version, String reason) {
-            return new Entry(null, coordinate, version == null ? "" : version, 0, "", "", reason);
+            return new Entry(null, coordinate, version == null ? "" : version, 0, "", "", reason, "");
+        }
+
+        /** This entry as the package URL {@code purl} named it, kept beside the coordinate it was read as. */
+        public Entry named(String purl) {
+            return new Entry(ecosystem, coordinate, version, depth, viaCoordinate, viaVersion, unplaced, purl);
         }
     }
 

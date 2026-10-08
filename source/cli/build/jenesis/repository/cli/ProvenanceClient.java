@@ -139,8 +139,10 @@ public final class ProvenanceClient extends ClientCalls {
         }
     }
 
-    /** A package the version's bill names in another ecosystem, followed by coordinate across the tenant. */
-    public record ClosureForeign(String ecosystem, String coordinate, String version, int depth) {
+    /** A package the version's bill names in another ecosystem, followed by coordinate across the tenant, with the
+     *  package URL the bill named it by and that URL's qualifiers ({@code null} where it named none). */
+    public record ClosureForeign(String ecosystem, String coordinate, String version, int depth, String purl,
+                                 Map<String, String> qualifiers) {
     }
 
     /** A version's closure as the API answers it: {@code state} is {@code RESOLVED}, {@code PARTIAL},
