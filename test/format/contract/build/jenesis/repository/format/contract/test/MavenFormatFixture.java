@@ -176,7 +176,11 @@ final class MavenFormatFixture implements FormatFixture {
 
     @Override
     public Map<FormatContract.Property, String> unsupported() {
-        return Map.of(FormatContract.Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY,
+        return Map.of(
+                FormatContract.Property.LISTING_MERGE_STREAMS,
+                "maven-metadata.xml is one coordinate's document, bounded by that coordinate's versions, and its "
+                        + "codec reads it whole to recompute <latest>, <release> and <lastUpdated> from them all",
+                FormatContract.Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY,
                 "a Maven checksum is the publisher's sidecar: it is relayed beside the artifact for the client to "
                         + "check and never held against the bytes here, so a proxied artifact is cached as the "
                         + "upstream serves it. OCI's content-addressed reference proves the property where the "

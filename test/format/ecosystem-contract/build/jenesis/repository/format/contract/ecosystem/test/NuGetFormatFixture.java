@@ -130,7 +130,10 @@ final class NuGetFormatFixture implements EcosystemFormatFixture {
     @Override
     public Map<FormatContract.Property, String> unsupported() {
         return Map.of(
-
+                FormatContract.Property.LISTING_MERGE_STREAMS,
+                "a package's registration index computes its lower and upper bounds and its count from every leaf "
+                        + "on join, so its codec collects one package's versions to write it; the repository-wide "
+                        + "search document and the version lists append entry by entry",
                 FormatContract.Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE, "audited 2026-08-24: the service index, registration and flat-container pages are ENUMERATIONs already "
                         + "refused as 502s, and the .nupkg is a named version's artifact whose absence the client reports. ",
                 FormatContract.Property.PUBLISH_PATHS_ARE_DESCRIBED,
