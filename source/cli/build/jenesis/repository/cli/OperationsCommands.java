@@ -82,10 +82,58 @@ final class OperationsCommands {
                 return Refresh.Poll.State.done(print(seen));
             });
         }
+        if (args.length >= 2 && args[1].equals("kit")) {
+            return kit(args, client);
+        }
         if (args.length != 1) {
-            throw new IllegalArgumentException("usage: scanners [refresh]");
+            throw new IllegalArgumentException("usage: scanners [refresh | kit [export --output F | import <file>]]");
         }
         return print(client.operations().scanners());
+    }
+
+    /** {@code scanners kit}: what the kit would carry, the kit downloaded into a file, or a kit file imported. */
+    private static int kit(String[] args, RepositoryClient client) throws Exception {
+        if (args.length == 2) {
+            OperationsClient.KitManifest manifest = client.operations().scannersKit();
+            if (manifest.binaries().isEmpty() && manifest.databases().isEmpty()) {
+                System.out.println("This deployment holds no scanner binary and no database snapshot to export yet.");
+                return 0;
+            }
+            for (OperationsClient.KitBinary binary : manifest.binaries()) {
+                System.out.println(binary.tool() + " " + binary.version() + " " + binary.platform() + "  "
+                        + binary.size() + " bytes  sha256:" + binary.sha256());
+            }
+            for (OperationsClient.KitDatabase database : manifest.databases()) {
+                System.out.println(database.tool() + " databases built " + database.built() + "  " + database.size()
+                        + " bytes  sha256:" + database.sha256());
+            }
+            return 0;
+        }
+        if (args[2].equals("export")) {
+            String output = null;
+            for (int i = 3; i < args.length; i++) {
+                switch (args[i]) {
+                    case "--output", "-o" -> output = CliSupport.flag(args, ++i);
+                    default -> throw new IllegalArgumentException("Unknown option: " + args[i]);
+                }
+            }
+            if (output == null) {
+                throw new IllegalArgumentException("usage: scanners kit export --output <file>");
+            }
+            long written = client.operations().scannersKitExport(Path.of(output));
+            System.out.println("Wrote the scanner kit to " + output + " (" + written + " bytes).");
+            return 0;
+        }
+        if (args[2].equals("import") && args.length == 4) {
+            OperationsClient.KitImported imported = client.operations().scannersKitImport(Path.of(args[3]));
+            System.out.println("Kept " + imported.binaries().size() + " binaries and made "
+                    + imported.databases().size() + " database snapshots current.");
+            for (String passed : imported.passed()) {
+                System.out.println("  passed over " + passed);
+            }
+            return 0;
+        }
+        throw new IllegalArgumentException("usage: scanners kit [export --output F | import <file>]");
     }
 
     /** {@code scanners} as a person reads it. */

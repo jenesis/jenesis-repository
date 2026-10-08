@@ -133,7 +133,8 @@ public class CliRequestShapeTest {
     /** Run {@code action}'s command line against the stand-in and hold what arrived to the requests it states. */
     private static void sends(Case action) throws Exception {
         String[] args = Arrays.stream(action.line().split(" "))
-                .map(arg -> arg.equals("@FILE") ? payload.toString() : arg)
+                .map(arg -> arg.equals("@FILE") ? payload.toString()
+                        : arg.equals("@OUT") ? payload.resolveSibling("written.out").toString() : arg)
                 .toArray(String[]::new);
         server.resetRequests();
         try {
