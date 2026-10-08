@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.contract.ecosystem.test;
 
 import module java.base;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.testkit.ContractExchange;
@@ -130,6 +131,13 @@ final class ComposerFormatFixture implements EcosystemFormatFixture {
                 // resolves a metadata-url for and then 404s on.
                 List.of(new Probe(P2, "1.0.0"), new Probe(LIST, COORDINATE)),
                 target -> hold(target, COORDINATE, "1.0.0")));
+    }
+
+    @Override
+    public Optional<Marked> marked(ArtifactStore store) throws IOException {
+        push(store, "1.0.0");
+        return Optional.of(new Marked(COORDINATE, "1.0.0",
+                Map.of(LifecycleMark.DEPRECATED, Signal.flagged(P2, "\"abandoned\""))));
     }
 
     @Override

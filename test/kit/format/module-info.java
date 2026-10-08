@@ -30,5 +30,7 @@
 module build.jenesis.repository.format.testkit {
     requires transitive build.jenesis.repository.format;
     requires build.jenesis.repository.metadata;
+    // The lifecycle primitive the mark property sets and clears, as the operator's surfaces do.
+    requires build.jenesis.repository.format.lifecycle;
     exports build.jenesis.repository.format.testkit;
 }

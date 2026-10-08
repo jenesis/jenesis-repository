@@ -7,6 +7,7 @@ import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.format.testkit.ContractHold;
 import build.jenesis.repository.format.testkit.FormatContract;
 import build.jenesis.repository.format.ArtifactSignatures;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.testkit.FormatFixture;
 import build.jenesis.repository.format.testkit.GeneratedBody;
 import build.jenesis.repository.store.ArtifactStore;
@@ -92,6 +93,15 @@ final class MavenFormatFixture implements FormatFixture {
         // appear there, nor survive in the <latest>/<release> the same document names.
         return Optional.of(new Enumerated(held, List.of(new Probe(METADATA, "2.0.0-held")),
                 target -> ContractHold.mark(target, held)));
+    }
+
+    @Override
+    public Optional<Marked> marked(ArtifactStore store) throws IOException {
+        put(store, jar("1.0.0"), "kept".getBytes(StandardCharsets.UTF_8));
+        put(store, jar("1.1.0"), "marked".getBytes(StandardCharsets.UTF_8));
+        // Maven has no flag for a yank, so the version leaves the <versions> list a range resolves against.
+        return Optional.of(new Marked("org.example:lib", "1.1.0",
+                Map.of(LifecycleMark.YANKED, Signal.unlisted(METADATA, "<version>1.1.0</version>"))));
     }
 
     @Override

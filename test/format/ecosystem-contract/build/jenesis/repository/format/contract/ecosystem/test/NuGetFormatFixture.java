@@ -8,6 +8,7 @@ import build.jenesis.repository.format.testkit.FormatContract;
 import build.jenesis.repository.format.testkit.GeneratedBody;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.format.ArtifactSignatures;
+import build.jenesis.repository.format.LifecycleMark;
 
 /**
  * The NuGet v3 format's leg of the shared contract - the format with the most enumeration surfaces here: a held
@@ -97,6 +98,17 @@ final class NuGetFormatFixture implements EcosystemFormatFixture {
                         new Probe("/nuget/v3/registrations/" + ID + "/index.json", "2.0.0"),
                         new Probe("/nuget/v3/search", "2.0.0")),
                 target -> hold(target, ID, "2.0.0")));
+    }
+
+    @Override
+    public Optional<Marked> marked(ArtifactStore store) throws IOException {
+        push(store, "1.0.0");
+        push(store, "2.0.0");
+        // Both marks are the registration leaf's own fields; a package's marks name its id in lower case.
+        String registration = "/nuget/v3/registrations/" + ID + "/index.json";
+        return Optional.of(new Marked(ID.toLowerCase(Locale.ROOT), "2.0.0", Map.of(
+                LifecycleMark.DEPRECATED, Signal.flagged(registration, "\"deprecation\""),
+                LifecycleMark.YANKED, Signal.flagged(registration, "\"listed\":false"))));
     }
 
     @Override
