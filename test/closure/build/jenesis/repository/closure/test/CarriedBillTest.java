@@ -159,6 +159,41 @@ class CarriedBillTest {
                 .isEqualTo(closure.foreign());
     }
 
+    @Test
+    void the_rpms_an_image_carries_are_followed_by_name_and_build() throws IOException {
+        // An RPM repository keys a build as its file names it, <version>-<release>.<arch>, and qualifies the name by the
+        // repository it was published into, which a bill cannot know - so the purl yields the bare name and the build.
+        String scanned = """
+                {"bomFormat":"CycloneDX","specVersion":"1.5",
+                 "metadata":{"component":{"bom-ref":"root","name":"rocky","version":"9.3"}},
+                 "components":[
+                   {"bom-ref":"o","name":"openssl-libs","version":"1:3.0.7-27.el9",
+                    "purl":"pkg:rpm/rocky/openssl-libs@3.0.7-27.el9?arch=x86_64&epoch=1&distro=rocky-9.3"},
+                   {"bom-ref":"t","name":"tzdata","version":"2024a-1.el9",
+                    "purl":"pkg:rpm/rocky/tzdata@2024a-1.el9?arch=noarch&distro=rocky-9.3"},
+                   {"bom-ref":"b","name":"bash","version":"5.1.8-9.el9",
+                    "purl":"pkg:rpm/rocky/bash@5.1.8-9.el9.x86_64?arch=x86_64"}]}""";
+        inventory.record("OCI", "rocky", "9.3", NOW);
+        VersionBills.attach(store, "OCI", "rocky", "9.3", scanned.getBytes(StandardCharsets.UTF_8));
+
+        ClosureSection.Closure closure = CarriedClosure.resolve(new CarriedBill(), ClosureWalk.of(store),
+                "OCI", "rocky", "9.3", NOW).orElseThrow();
+
+        assertThat(closure.foreign()).as("each by its name and its build, the architecture added once")
+                .extracting(ClosureSection.Foreign::ecosystem, ClosureSection.Foreign::coordinate,
+                        ClosureSection.Foreign::version)
+                .containsExactlyInAnyOrder(
+                        tuple("RPM", "openssl-libs", "3.0.7-27.el9.x86_64"),
+                        tuple("RPM", "tzdata", "2024a-1.el9.noarch"),
+                        tuple("RPM", "bash", "5.1.8-9.el9.x86_64"));
+        assertThat(closure.foreign()).filteredOn(foreign -> foreign.coordinate().equals("openssl-libs"))
+                .singleElement().as("what the coordinate leaves out is kept with the purl, the release as one "
+                        + "spelling whatever the scanner wrote")
+                .satisfies(foreign -> assertThat(foreign.qualifiers()).containsEntry("epoch", "1")
+                        .containsEntry("distro", "9.3"));
+        assertThat(closure.cuts()).as("every purl names a package a format here publishes").isEmpty();
+    }
+
     private void release(String path, byte[] body) throws IOException {
         publication.link(path, publication.storeBlob(new ByteArrayInputStream(body)));
         inventory.record(path, NOW);
