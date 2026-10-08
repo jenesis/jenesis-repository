@@ -3,10 +3,9 @@ name: Release jenesis-repository
 # Releases are dispatched by hand from the Actions tab, so any commit is releasable:
 # the sha input picks the commit (the head this runs on by default) and the tag input
 # picks the tag (the next minor of the latest tag by default). Staging re-runs the build with strict
-# dependency pinning and the Maven Central POM metadata from project.properties, which the build reads at the root;
-# JReleaser then signs, deploys every staged module to Maven Central and cuts the
-# GitHub release + tag. The Maven staging repository under target/stage/maven/output
-# carries all modules, each with sources and javadoc as Central requires.
+# dependency pinning, which writes the command-line client's launcher; JReleaser then signs the release's files,
+# cuts the GitHub release + tag and publishes the client to Homebrew and Scoop. No module is deployed to Maven
+# Central.
 
 on:
   workflow_dispatch:
@@ -78,8 +77,6 @@ jobs:
           # commit builds the same archives.
           java -Djenesis.project.version=${VERSION} \
                -Djenesis.archive.timestamp="$(git log -1 --format=%cI)" \
-               -Djenesis.project.sources=true \
-               -Djenesis.project.documentation=true \
                -Djenesis.dependency.pin=strict \
                build/jenesis/Make.java stage
 
@@ -118,8 +115,6 @@ jobs:
           JRELEASER_PROJECT_VERSION: ${{ steps.version.outputs.version }}
           JRELEASER_REPRODUCIBLE: "true"
           JRELEASER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          JRELEASER_MAVENCENTRAL_SONATYPE_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
-          JRELEASER_MAVENCENTRAL_SONATYPE_TOKEN: ${{ secrets.MAVEN_CENTRAL_TOKEN }}
           JRELEASER_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
           JRELEASER_GPG_PUBLIC_KEY: ${{ secrets.GPG_PUBLIC_KEY }}
           JRELEASER_GPG_SECRET_KEY: ${{ secrets.GPG_SECRET_KEY }}
