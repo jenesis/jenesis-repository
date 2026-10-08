@@ -58,7 +58,7 @@
                                           th:text="'qualifiers ' + ${#strings.listJoin(entry.value.suffixes(), ', ')}">none</span>
                                     <span th:if="${entry.value.latest() != null}">latest <code
                                             th:text="${entry.value.latest()}">link</code></span></small></li>
-                                <li th:unless="${asked.file().stop()}"><small>its subdomains' files are read too</small></li>
+                                <li th:if="${asked.file().delegate()}"><small>its subdomains' files are read too</small></li>
                             </ul>
                         </td>
                     </tr>

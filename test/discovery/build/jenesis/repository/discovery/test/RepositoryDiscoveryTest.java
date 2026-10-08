@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Where a request path's file is, as the domain its name reverses into says: through the file Jenesis publishes for
  * itself a Maven file, a module file and the Maven view of a module land on its GitHub releases, each file checked
  * against the checksum beside it, and a request without a version reads the newest from the latest link's redirect. The
- * shortest domain answers for its subdomains unless it says {@code stop=false}, a key restricted by {@code .since} or
+ * shortest domain answers for its subdomains unless it says {@code delegate=true}, a key restricted by {@code .since} or
  * {@code .suffixes} leaves other versions to the other legs, each file is asked for once per period - its absence and
  * its refusal too - and a private host is never asked.
  */
@@ -124,7 +124,7 @@ class RepositoryDiscoveryTest {
         table.file("bytebuddy.net", """
                 maven=https://maven.bytebuddy.net/releases/
                 module=https://modules.bytebuddy.net/
-                stop=false
+                delegate=true
                 """);
         table.file("agent.bytebuddy.net", "module=https://agent.bytebuddy.net/modules/\n");
         RepositoryDiscovery discovery = discovery();
@@ -241,7 +241,7 @@ class RepositoryDiscoveryTest {
 
     @Test
     void a_check_asks_each_domain_afresh_and_says_what_answers_and_where_a_path_goes() {
-        table.file("bytebuddy.net", "maven=https://maven.bytebuddy.net/releases/\nstop=false\n");
+        table.file("bytebuddy.net", "maven=https://maven.bytebuddy.net/releases/\ndelegate=true\n");
         table.file("agent.bytebuddy.net", "maven=http://agent.bytebuddy.net/plain/\n");
         RepositoryDiscovery discovery = discovery();
         discovery.locate("/maven/build/jenesis/build.jenesis/0.20.0/build.jenesis-0.20.0.jar");

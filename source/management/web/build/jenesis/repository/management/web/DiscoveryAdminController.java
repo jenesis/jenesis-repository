@@ -93,8 +93,8 @@ public class DiscoveryAdminController {
 
     /** One domain as asked: {@code found}, {@code absent}, {@code refused} or {@code not-reached}, and what its file
      *  holds key by key, or why it is refused. */
-    public record DomainView(String domain, String address, String state, Boolean stop, Map<String, EntryView> entries,
-                             String refusal) {
+    public record DomainView(String domain, String address, String state, Boolean delegate,
+                             Map<String, EntryView> entries, String refusal) {
 
         static DomainView of(RepositoryDiscovery.Asked asked) {
             Map<String, EntryView> entries = new TreeMap<>();
@@ -102,7 +102,7 @@ public class DiscoveryAdminController {
                 asked.file().entries().forEach((key, entry) -> entries.put(key.spelled(), EntryView.of(entry)));
             }
             return new DomainView(asked.domain(), asked.address().toString(), asked.state(),
-                    asked.file() == null ? null : asked.file().stop(), entries, asked.refusal());
+                    asked.file() == null ? null : asked.file().delegate(), entries, asked.refusal());
         }
     }
 
