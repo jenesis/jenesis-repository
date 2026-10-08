@@ -6,15 +6,15 @@ import module java.base;
  * One domain's {@code /.well-known/java-repository.properties}, read and checked as the discovery proposal defines it:
  * a {@code java.util.Properties} document in UTF-8 whose keys are {@code module} and {@code maven} - where a module's or
  * a Maven group's files are, a location - and {@code moduletomaven} - which Maven artifact a module is, a
- * coordinate - each optionally with {@code .since}, {@code .suffixes} and {@code .latest} beside it, and {@code stop}.
+ * coordinate - each optionally with {@code .since}, {@code .suffixes} and {@code .latest} beside it, and {@code delegate}.
  *
  * <p>Every refusal the proposal lists fails the read with a {@link DiscoveryException} naming the file: a key without
- * a value, a suffix that is not one word of letters and digits, a {@code stop} other than {@code true} or
+ * a value, a suffix that is not one word of letters and digits, a {@code delegate} other than {@code true} or
  * {@code false}, a placeholder the key does not know, a coordinate naming no artifact, a coordinate in {@code module} or
  * {@code maven} and a location in {@code moduletomaven}, a latest link beside a root or a coordinate, and a location or
  * a link that is not {@code https}. A key the proposal does not name is ignored, so the format can grow.
  */
-public record DiscoveryFile(String domain, Map<Key, Entry> entries, boolean stop) {
+public record DiscoveryFile(String domain, Map<Key, Entry> entries, boolean delegate) {
 
     /** Where the file of {@code domain} is published: a convention, never a setting. */
     public static URI address(String domain) {
@@ -102,13 +102,13 @@ public record DiscoveryFile(String domain, Map<Key, Entry> entries, boolean stop
                 throw refused(domain, "the key '" + name + "' has no value");
             }
         }
-        boolean stop = true;
-        String stopping = properties.getProperty("stop");
-        if (stopping != null) {
-            switch (stopping.strip()) {
-                case "true" -> stop = true;
-                case "false" -> stop = false;
-                default -> throw refused(domain, "stop is '" + stopping.strip() + "', neither true nor false");
+        boolean delegate = false;
+        String delegating = properties.getProperty("delegate");
+        if (delegating != null) {
+            switch (delegating.strip()) {
+                case "true" -> delegate = true;
+                case "false" -> delegate = false;
+                default -> throw refused(domain, "delegate is '" + delegating.strip() + "', neither true nor false");
             }
         }
         Map<Key, Entry> entries = new EnumMap<>(Key.class);
@@ -125,7 +125,7 @@ public record DiscoveryFile(String domain, Map<Key, Entry> entries, boolean stop
             }
             entries.put(key, entry(domain, key, value.strip(), properties));
         }
-        return new DiscoveryFile(domain, entries, stop);
+        return new DiscoveryFile(domain, entries, delegate);
     }
 
     private static Entry entry(String domain, Key key, String value, Properties properties) {
@@ -179,7 +179,7 @@ public record DiscoveryFile(String domain, Map<Key, Entry> entries, boolean stop
     }
 
     private static boolean known(String name) {
-        if (name.equals("stop")) {
+        if (name.equals("delegate")) {
             return true;
         }
         for (Key key : Key.values()) {

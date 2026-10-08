@@ -30,7 +30,7 @@ class DiscoveryFileTest {
     void the_file_jenesis_publishes_reads_key_by_key() {
         DiscoveryFile file = DiscoveryFile.parse("jenesis.build", JENESIS);
 
-        assertThat(file.stop()).as("stop is true unless the file says otherwise").isTrue();
+        assertThat(file.delegate()).as("a file answers alone unless it says otherwise").isFalse();
         assertThat(file.entry(DiscoveryFile.Key.MODULE)).hasValueSatisfying(entry -> {
             assertThat(entry.template()).isTrue();
             assertThat(entry.suffixes()).containsExactly("none");
@@ -50,13 +50,13 @@ class DiscoveryFileTest {
                 maven=https://maven.example.com/releases/
                 maven.since=1.2.0
                 gradle=https://plugins.example.com/
-                stop=false
+                delegate=true
                 """);
 
         assertThat(file.entries()).containsOnlyKeys(DiscoveryFile.Key.MAVEN);
         assertThat(file.entry(DiscoveryFile.Key.MAVEN).orElseThrow().template()).isFalse();
         assertThat(file.entry(DiscoveryFile.Key.MAVEN).orElseThrow().since()).isEqualTo("1.2.0");
-        assertThat(file.stop()).isFalse();
+        assertThat(file.delegate()).isTrue();
     }
 
     @TestFactory
@@ -64,7 +64,7 @@ class DiscoveryFileTest {
         Map<String, String> refused = new LinkedHashMap<>();
         refused.put("a key without a value", "maven=");
         refused.put("a suffix that is not one word", "maven=https://m.example.com/\nmaven.suffixes=none,r-c");
-        refused.put("a stop that is neither", "stop=maybe");
+        refused.put("a delegate that is neither", "delegate=maybe");
         refused.put("an unknown placeholder", "maven=https://m.example.com/{group}/{version}");
         refused.put("a placeholder of another key", "maven=https://m.example.com/{module}/{version}");
         refused.put("a coordinate naming no artifact", "moduletomaven=com.example");

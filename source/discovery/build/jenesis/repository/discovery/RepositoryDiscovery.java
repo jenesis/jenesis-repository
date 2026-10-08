@@ -19,7 +19,7 @@ import org.eclipse.aether.version.VersionScheme;
  *
  * <p><b>Which file answers.</b> A name is asked of the domains {@link Domains#of} lists, shortest first, and the first
  * file found speaks for every name below its domain: a key it does not hold is absent rather than asked of a
- * subdomain. A file saying {@code stop=false} lets the files of its subdomains be read as well - down to the first
+ * subdomain. A file saying {@code delegate=true} lets the files of its subdomains be read as well - down to the first
  * subdomain without one - and then the most specific file holding a key answers for it. Each domain's file is read
  * once per {@link #ttl()} on this node, an absent
  * one remembered as absent for as long, so a busy leg costs a domain one request an hour; at most {@link #MOST_DOMAINS}
@@ -195,7 +195,7 @@ public final class RepositoryDiscovery {
                 continue;
             }
             found = true;
-            if (file.get().stop()) {
+            if (!file.get().delegate()) {
                 break;
             }
         }
@@ -310,7 +310,7 @@ public final class RepositoryDiscovery {
             for (Map.Entry<Key, Entry> entry : file.get().entries().entrySet()) {
                 answering.put(entry.getKey(), new Answering(entry.getValue(), domain));
             }
-            if (file.get().stop()) {
+            if (!file.get().delegate()) {
                 break;
             }
         }
