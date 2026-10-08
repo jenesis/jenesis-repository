@@ -393,6 +393,91 @@ public class CacheTest {
         }
     }
 
+    /**
+     * A read racing eviction gets the entry's own bytes or a miss, never other bytes and never a failure: two nodes'
+     * caches over one store, each with its reaper running, take writes and reads at once against a project capped far
+     * below what is written, so entries are evicted while they are being read. Every payload is derived from its key,
+     * so a read is checked by regenerating what it should have been; and the project ends under its cap.
+     */
+    @Test
+    public void a_read_racing_eviction_is_its_own_bytes_or_a_miss_and_the_project_ends_under_its_cap() throws Exception {
+        Path project = project("acme", "racing", "size=20000\n");
+        credential("acme", ACME_RW, "*=cache:read,cache:write");
+        List<Cache> nodes = new ArrayList<>();
+        for (int node = 0; node < 2; node++) {
+            Cache cache = new Cache(CacheStorages.filesystem(root), authorization(), 1L << 31, 256,
+                    Duration.ofMillis(50), 0, 0, "default", false, null, "default", new SimpleMeterRegistry())
+                    .policies(policies());
+            cache.start();
+            nodes.add(cache);
+        }
+        try {
+            Queue<String> wrong = new ConcurrentLinkedQueue<>();
+            AtomicInteger hits = new AtomicInteger();
+            List<Thread> threads = new ArrayList<>();
+            for (int writer = 0; writer < 3; writer++) {
+                int id = writer;
+                threads.add(Thread.ofPlatform().start(() -> {
+                    for (int i = 0; i < 60; i++) {
+                        String inputs = String.format(Locale.ROOT, "%02x%02x", id, i);
+                        try {
+                            put(nodes.get(i % 2), "racing", ACME_RW, "aa", inputs, payload(inputs));
+                        } catch (IOException | RuntimeException failed) {
+                            wrong.add("the write of " + inputs + " failed: " + failed);
+                        }
+                    }
+                }));
+            }
+            for (int reader = 0; reader < 3; reader++) {
+                int id = reader;
+                threads.add(Thread.ofPlatform().start(() -> {
+                    for (int i = 0; i < 400; i++) {
+                        String inputs = String.format(Locale.ROOT, "%02x%02x", i % 3, (i * 7 + id) % 60);
+                        Resolution resolution = nodes.get((i + id) % 2).resolve("racing", ACME_RW, "aa", inputs, false);
+                        if (!(resolution instanceof Allowed allowed)) {
+                            wrong.add("the read of " + inputs + " was refused: " + resolution);
+                            continue;
+                        }
+                        ByteArrayOutputStream body = new ByteArrayOutputStream();
+                        try {
+                            nodes.get((i + id) % 2).read(allowed, body);
+                        } catch (IOException miss) {
+                            continue;                            // absent or reaped: the controller's 404
+                        } catch (RuntimeException failed) {
+                            wrong.add("the read of " + inputs + " failed: " + failed);
+                            continue;
+                        }
+                        hits.incrementAndGet();
+                        if (!Arrays.equals(body.toByteArray(), payload(inputs))) {
+                            wrong.add("the read of " + inputs + " returned " + body.size() + " other bytes");
+                        }
+                    }
+                }));
+            }
+            for (Thread thread : threads) {
+                thread.join();
+            }
+            assertThat(wrong).as("every read is its own bytes or a miss, every write lands").isEmpty();
+            assertThat(hits.get()).as("some reads hit, or the race was never run").isPositive();
+            await("the reapers to bring the project under its cap", () -> size(project) <= 20000);
+        } finally {
+            nodes.forEach(Cache::stop);
+        }
+    }
+
+    /** What an entry's bytes are: its inputs repeated to a kilobyte, so any other entry's bytes differ. */
+    private static byte[] payload(String inputs) {
+        return (inputs + "|").repeat(200).getBytes(UTF_8);
+    }
+
+    private static long size(Path project) {
+        try (Stream<Path> files = Files.walk(project)) {
+            return files.filter(Files::isRegularFile).mapToLong(file -> file.toFile().length()).sum();
+        } catch (IOException | UncheckedIOException walkedDuringAReap) {
+            return Long.MAX_VALUE;
+        }
+    }
+
     @Test
     public void reaper_re_applies_a_lowered_size_cap_to_an_idle_project() throws Exception {
         // The cap was generous when the entries were written, so no write evicted them; then it was lowered - the
