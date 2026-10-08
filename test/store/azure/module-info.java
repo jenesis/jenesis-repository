@@ -23,6 +23,7 @@
 open module build.jenesis.repository.store.azure.test {
     requires build.jenesis.repository.store.azure;
     requires build.jenesis.repository.store;
+    requires build.jenesis.repository.store.testkit;
     requires com.azure.storage.blob;
     requires org.junit.jupiter;
     requires org.assertj.core;
