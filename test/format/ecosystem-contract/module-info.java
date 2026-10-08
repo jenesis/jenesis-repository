@@ -62,6 +62,8 @@ open module build.jenesis.repository.format.contract.ecosystem.test {
 
     // The blobs-namespace seam the coordinate suite drives.
     requires build.jenesis.repository.blobs;
+    // The router a repository that hosts and proxies is served through, local first and then its upstream.
+    requires build.jenesis.repository.gateway;
 
     // The inventory's canonical spelling, which asks every installed layout.
     requires build.jenesis.repository.inventory;
