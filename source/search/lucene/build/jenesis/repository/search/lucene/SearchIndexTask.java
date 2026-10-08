@@ -70,9 +70,6 @@ public final class SearchIndexTask implements MaintenanceTask {
     /** The task's pass-state scope under {@code walks/}. */
     public static final String CONSUMER = "search";
 
-    /** How many generations survive a cutover, so an in-flight reader finishes: the current and the one replaced. */
-    private static final int KEEP_GENERATIONS = 2;
-
     /** The setting that makes the pass reconcile by itself once this long has passed since the last reconcile; unset,
      *  the walk's {@link SearchRebuildConsumer} reconciles. */
     static final String RECONCILE = "search-reconcile-interval";
@@ -196,9 +193,17 @@ public final class SearchIndexTask implements MaintenanceTask {
                             }
                         }
                     });
-                } finally {
-                    writer.close();
+                } catch (IOException | RuntimeException failed) {
+                    // Rolled back rather than closed, since closing commits: the next generation's directory keeps
+                    // exactly the files of the generation it was opened from.
+                    try {
+                        writer.rollback();
+                    } catch (IOException | RuntimeException unwound) {
+                        failed.addSuppressed(unwound);
+                    }
+                    throw failed;
                 }
+                writer.close();
             }
             if (applied.isEmpty()) {
                 return true;              // every pending marker was skipped by the guard - keep the current generation
@@ -395,7 +400,7 @@ public final class SearchIndexTask implements MaintenanceTask {
 
     private static void gcSuperseded(SearchIndex index, int generation) throws IOException {
         for (int superseded : index.generations()) {
-            if (superseded != generation && superseded <= generation - KEEP_GENERATIONS) {
+            if (superseded != generation && superseded <= generation - SearchIndex.KEEP_GENERATIONS) {
                 index.deleteSnapshot(superseded);
             }
         }

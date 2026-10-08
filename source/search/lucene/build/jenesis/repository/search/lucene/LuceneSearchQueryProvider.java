@@ -17,7 +17,11 @@ import build.jenesis.repository.store.ArtifactStore;
 public final class LuceneSearchQueryProvider implements SearchQueryProvider {
 
     /** How long a loaded index serves before the reader re-checks the manifest generation: short, so a new snapshot is
-     *  visible within a query or two without re-downloading an unchanged one. */
+     *  visible within a query or two without re-downloading an unchanged one. A publish is searchable once the pass
+     *  has applied it and this window has run, so the pass's cadence ({@code search-index-interval}, ten minutes by
+     *  default) is what an operator dials for freshness; the window adds at most this much to it, for one manifest
+     *  read per window per searched scope on each node. The index has no writer outside the pass, which may hold its
+     *  lease on another node, so there is none for a reader to reopen near-real-time over. */
     private static final Duration TTL = Duration.ofSeconds(30);
 
     /** The most repository scopes kept resident, so the heap cannot grow with the number of repositories ever
