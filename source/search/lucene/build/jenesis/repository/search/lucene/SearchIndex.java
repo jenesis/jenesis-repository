@@ -23,8 +23,16 @@ import build.jenesis.repository.store.Names;
  *
  * <p>Segment files are cached under the JVM's temporary directory by digest, one tree per store identity, and a
  * generation opens as a directory of hard links onto them (a copy where links are refused). Nothing durable lives in
- * the cache; it is rebuilt from the store when missing, and a generation's link directory is removed when it is
- * superseded.
+ * the cache; it is rebuilt from the store when missing. The node holding the pass removes a superseded generation's
+ * link directory and every segment no stored generation names; every other node {@linkplain #pruneNode prunes} its
+ * own as it opens a newer generation, so a node that only reads keeps two generations' files rather than every one it
+ * ever served.
+ *
+ * <p>A generation is opened from files at every size rather than read into the heap, which an in-memory directory
+ * would do: the resident indexes a node keeps are bounded by their bytes, up to half a gigabyte across its scopes, and
+ * held in heap that bound would exceed the whole heap of a node given no {@code -Xmx} under a 512 MiB limit, where the
+ * files cost page cache the kernel gives back under pressure. The open itself is a handful of local file opens; what
+ * a small index would save is the fetch, which the cache already saves.
  *
  * <h2>Layout</h2>
  *
@@ -43,6 +51,14 @@ final class SearchIndex {
      *  first pass after an upgrade rebuilds fully. 6: documents carry the manifest's description, keywords and authors,
      *  and when the index was last reconciled. */
     static final int FORMAT = 6;
+
+    /** How many generations survive a cutover, so an in-flight reader finishes: the current and the one replaced. */
+    static final int KEEP_GENERATIONS = 2;
+
+    /** How long a cached segment no link directory names is left before {@link #pruneNode} removes it: a full
+     *  rebuild caches its files moments before a reader links them, and a fetch writes one moments before linking
+     *  it. */
+    private static final Duration SETTLED = Duration.ofMinutes(1);
 
     private final ArtifactStore store;
 
@@ -245,6 +261,51 @@ final class SearchIndex {
         }
     }
 
+    /**
+     * Prune this node's cache once it serves {@code served}: every link directory of a generation at least
+     * {@link #KEEP_GENERATIONS} older goes, and then every cached segment no link directory names any more and that has
+     * {@linkplain #SETTLED settled}. What a running query still reads stays readable, since an open file outlives its
+     * last link. A segment pruned under another reader's open of a newer generation fails that open, which the reader
+     * retries and refetches. Where the file system reports no link count, the segments are left.
+     */
+    void pruneNode(int served) throws IOException {
+        Path root = cacheRoot();
+        try (Stream<Path> entries = Files.list(root)) {
+            for (Path entry : entries.toList()) {
+                String name = entry.getFileName().toString();
+                if (name.startsWith(GENERATION)) {
+                    try {
+                        if (Integer.parseInt(name.substring(GENERATION.length())) <= served - KEEP_GENERATIONS) {
+                            deleteTree(entry);
+                        }
+                    } catch (NumberFormatException _) {
+                    }
+                }
+            }
+        }
+        Path segments = root.resolve("segments");
+        if (!Files.isDirectory(segments)) {
+            return;
+        }
+        Instant settled = Instant.now().minus(SETTLED);
+        try (Stream<Path> files = Files.list(segments)) {
+            for (Path file : files.toList()) {
+                Object links;
+                try {
+                    links = Files.getAttribute(file, "unix:nlink", LinkOption.NOFOLLOW_LINKS);
+                } catch (UnsupportedOperationException | IllegalArgumentException unsupported) {
+                    return;
+                } catch (NoSuchFileException gone) {
+                    continue;
+                }
+                if (links instanceof Integer count && count == 1
+                        && Files.getLastModifiedTime(file).toInstant().isBefore(settled)) {
+                    Files.deleteIfExists(file);
+                }
+            }
+        }
+    }
+
     long snapshotSize(int generation) throws IOException {
         long total = 0;
         for (Segment segment : parse(readAll(generationKey(generation)))) {
@@ -328,8 +389,11 @@ final class SearchIndex {
         return cacheRoot().resolve("segments").resolve(digest);
     }
 
+    /** The prefix of a generation's link directory in the node's cache. */
+    private static final String GENERATION = "generation-";
+
     private Path generationDirectory(int generation) throws IOException {
-        return cacheRoot().resolve("generation-" + generation);
+        return cacheRoot().resolve(GENERATION + generation);
     }
 
     private void fetch(String digest, Path target) throws IOException {
