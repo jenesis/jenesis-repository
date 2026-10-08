@@ -64,6 +64,8 @@ open module build.jenesis.repository.format.contract.ecosystem.test {
     requires build.jenesis.repository.blobs;
     // The router a repository that hosts and proxies is served through, local first and then its upstream.
     requires build.jenesis.repository.gateway;
+    // The signing key a format signs its own index with, seeded near expiry so a publish rotates it.
+    requires build.jenesis.repository.format.signing;
 
     // The inventory's canonical spelling, which asks every installed layout.
     requires build.jenesis.repository.inventory;
