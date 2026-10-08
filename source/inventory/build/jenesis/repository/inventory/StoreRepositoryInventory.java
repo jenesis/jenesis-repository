@@ -1446,6 +1446,17 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return rollUp.subtreeSize(path);
     }
 
+    /** Every ecosystem an installed format declares ({@link EcosystemLayout}), in the spelling its versions carry. */
+    public static SortedSet<String> installedEcosystems() {
+        SortedSet<String> ecosystems = new TreeSet<>();
+        for (RepositoryFormat format : formats()) {
+            if (format instanceof EcosystemLayout layout) {
+                ecosystems.add(layout.ecosystem());
+            }
+        }
+        return Collections.unmodifiableSortedSet(ecosystems);
+    }
+
     /** Every installed format that maps this ecosystem's coordinates back to layout paths, matched on the format's
      *  own {@link ArtifactLayout#ecosystem()}. Package-private so the subsystem collaborators judge pointer liveness
      *  through the same discovered-format lookup.
@@ -1460,17 +1471,6 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
      *  {@code RepositoryFormat.installed} returns a list. The paths returned here are what an eviction DELETES under,
      *  so a discovery-order winner would let two nodes sweep one store differently. Unioning is what makes that
      *  impossible. */
-    /** Every ecosystem an installed format declares ({@link EcosystemLayout}), in the spelling its versions carry. */
-    public static SortedSet<String> installedEcosystems() {
-        SortedSet<String> ecosystems = new TreeSet<>();
-        for (RepositoryFormat format : formats()) {
-            if (format instanceof EcosystemLayout layout) {
-                ecosystems.add(layout.ecosystem());
-            }
-        }
-        return Collections.unmodifiableSortedSet(ecosystems);
-    }
-
     static List<ArtifactLayout> layoutsFor(String ecosystem) {
         List<ArtifactLayout> layouts = new ArrayList<>();
         for (RepositoryFormat format : formats()) {

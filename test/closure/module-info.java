@@ -22,6 +22,8 @@ open module build.jenesis.repository.closure.test {
     requires build.jenesis.repository.dependents.requirements;
     requires build.jenesis.repository.dependents.spi;
     requires build.jenesis.repository.format;
+    // An ecosystem outside the advisory feeds' vocabulary, whose releases the declaration walk still resolves.
+    requires build.jenesis.repository.format.apk;
     requires build.jenesis.repository.format.maven;
     // A format that keeps its files in the shared Blobs namespace, whose cached copy the walk reads a manifest of.
     requires build.jenesis.repository.format.npm;
