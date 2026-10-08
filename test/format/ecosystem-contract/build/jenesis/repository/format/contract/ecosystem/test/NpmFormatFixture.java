@@ -8,6 +8,7 @@ import build.jenesis.repository.format.testkit.FormatContract;
 import build.jenesis.repository.format.testkit.GeneratedBody;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.format.ArtifactSignatures;
+import build.jenesis.repository.format.LifecycleMark;
 
 /**
  * The npm registry's leg of the shared contract. npm carries the whole contract bar the coordinate seam: its publish
@@ -96,6 +97,16 @@ final class NpmFormatFixture implements EcosystemFormatFixture {
         return Optional.of(new Enumerated(tarball("2.0.0-held"),
                 List.of(new Probe(PACKUMENT, "2.0.0-held")),
                 target -> hold(target, PACKAGE, "2.0.0-held")));
+    }
+
+    @Override
+    public Optional<Marked> marked(ArtifactStore store) throws IOException {
+        publish(store, "1.0.0", "kept".getBytes(StandardCharsets.UTF_8));
+        publish(store, "2.0.0", "marked".getBytes(StandardCharsets.UTF_8));
+        // npm has one word for both: the version's deprecated message, which the client prints on install.
+        return Optional.of(new Marked(PACKAGE, "2.0.0", Map.of(
+                LifecycleMark.DEPRECATED, Signal.flagged(PACKUMENT, "\"deprecated\""),
+                LifecycleMark.YANKED, Signal.flagged(PACKUMENT, "\"deprecated\""))));
     }
 
     @Override

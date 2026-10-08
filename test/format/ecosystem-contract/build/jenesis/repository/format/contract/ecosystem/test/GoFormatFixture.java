@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.contract.ecosystem.test;
 
 import module java.base;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.testkit.ContractExchange;
@@ -86,6 +87,14 @@ final class GoFormatFixture implements EcosystemFormatFixture {
                 List.of(new Probe("/go/" + MODULE + "/@v/list", "v2.0.0"),
                         new Probe("/go/" + MODULE + "/@latest", "v2.0.0")),
                 target -> hold(target, MODULE, "v2.0.0")));
+    }
+
+    @Override
+    public Optional<Marked> marked(ArtifactStore store) throws IOException {
+        version(store, "v1.0.0");
+        version(store, "v2.0.0");
+        return Optional.of(new Marked(MODULE, "v2.0.0",
+                Map.of(LifecycleMark.YANKED, Signal.unlisted("/go/" + MODULE + "/@v/list", "v2.0.0"))));
     }
 
     @Override

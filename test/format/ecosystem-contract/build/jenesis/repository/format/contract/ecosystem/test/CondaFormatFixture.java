@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.contract.ecosystem.test;
 
 import module java.base;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.testkit.ContractExchange;
@@ -118,6 +119,14 @@ final class CondaFormatFixture implements EcosystemFormatFixture {
                 List.of(new Probe(REPODATA, tarBz2("2.0.0", "py311_0")),
                         new Probe(REPODATA, conda("2.0.0", "py311_1"))),
                 target -> hold(target, PACKAGE, "2.0.0")));
+    }
+
+    @Override
+    public Optional<Marked> marked(ArtifactStore store) throws IOException {
+        put(store, tarBz2("1.0.0", "py311_0"), Packages.condaTarBz2(PACKAGE, "1.0.0", "py311_0"));
+        put(store, tarBz2("2.0.0", "py311_0"), Packages.condaTarBz2(PACKAGE, "2.0.0", "py311_0"));
+        return Optional.of(new Marked(PACKAGE, "2.0.0",
+                Map.of(LifecycleMark.YANKED, Signal.unlisted(REPODATA, tarBz2("2.0.0", "py311_0")))));
     }
 
     @Override

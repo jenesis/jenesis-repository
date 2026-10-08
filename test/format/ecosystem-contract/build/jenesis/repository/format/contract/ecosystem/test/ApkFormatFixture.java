@@ -8,6 +8,7 @@ import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.format.testkit.FormatContract;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.format.ArtifactSignatures;
+import build.jenesis.repository.format.LifecycleMark;
 
 /**
  * The Alpine {@code apk} format's leg of the shared contract.
@@ -115,6 +116,14 @@ final class ApkFormatFixture implements EcosystemFormatFixture {
         return Optional.of(new Enumerated(download("2.0.0-r0"),
                 List.of(new Probe(INDEX, "V:2.0.0-r0")),
                 target -> hold(target, PACKAGE, "2.0.0-r0")));
+    }
+
+    @Override
+    public Optional<Marked> marked(ArtifactStore store) throws IOException {
+        push(store, "1.0.0-r0");
+        push(store, "2.0.0-r0");
+        return Optional.of(new Marked(PACKAGE, "2.0.0-r0",
+                Map.of(LifecycleMark.YANKED, Signal.unlisted(INDEX, "V:2.0.0-r0"))));
     }
 
     @Override

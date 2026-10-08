@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.contract.ecosystem.test;
 
 import module java.base;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.testkit.ContractExchange;
@@ -107,6 +108,15 @@ final class CargoFormatFixture implements EcosystemFormatFixture {
         return Optional.of(new Enumerated(download("2.0.0-held"),
                 List.of(new Probe(INDEX, "2.0.0-held")),
                 target -> hold(target, CRATE, "2.0.0-held")));
+    }
+
+    @Override
+    public Optional<Marked> marked(ArtifactStore store) throws IOException {
+        publish(store, "1.0.0", "kept".getBytes(StandardCharsets.UTF_8));
+        publish(store, "2.0.0", "marked".getBytes(StandardCharsets.UTF_8));
+        // A crate's marks are its registry's, and the index line carries the yank as its own flag.
+        return Optional.of(new Marked(REGISTRY + "/" + CRATE, "2.0.0",
+                Map.of(LifecycleMark.YANKED, Signal.flagged(INDEX, "\"yanked\":true"))));
     }
 
     @Override
