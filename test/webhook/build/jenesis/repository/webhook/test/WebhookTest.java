@@ -218,6 +218,48 @@ public class WebhookTest {
     }
 
     /**
+     * The takeover leg: a drain that dies part way through a batch - its node gone between one delivery and the
+     * next - leaves the rest queued, and the drain that takes the lease over delivers them. Every event reaches the
+     * receiver at least once, and the queue is empty once the second drain is done: what the first delivered it had
+     * dropped as it went, and what it had not is not lost with it.
+     */
+    @Test
+    void a_drain_that_dies_mid_batch_is_taken_over_and_every_event_is_delivered_at_least_once() throws IOException {
+        WebhookOutbox outbox = new WebhookOutbox(store);
+        int events = 10;
+        for (int i = 0; i < events; i++) {
+            outbox.record(RepositoryEvent.publish("maven", "c" + i, "1.0.0", PATH,
+                    Instant.parse("2026-07-05T00:00:00Z").plusSeconds(i)));
+        }
+        Set<String> delivered = ConcurrentHashMap.newKeySet();
+        AtomicInteger sent = new AtomicInteger();
+        WebhookDelivery dying = new WebhookDelivery((_, _, headers) -> {
+            if (sent.incrementAndGet() > 4) {
+                throw new NodeDied();
+            }
+            delivered.add(headers.get(WebhookDelivery.ID_HEADER));
+            return 200;
+        });
+        Instant now = Instant.parse("2026-07-06T00:00:00Z");
+        assertThatThrownBy(() -> drain(dying).repository(context("http://localhost:1/hook", now)))
+                .isInstanceOf(NodeDied.class);
+        assertThat(delivered).as("the first drain delivered part of the batch before it died").hasSize(4);
+
+        drain(new WebhookDelivery((_, _, headers) -> {
+            delivered.add(headers.get(WebhookDelivery.ID_HEADER));
+            return 200;
+        })).repository(context("http://localhost:1/hook", now));
+
+        assertThat(delivered).as("every queued event was delivered by one drain or the other").hasSize(events);
+        assertThat(outbox.entries()).as("and nothing is left queued").isEmpty();
+    }
+
+    /** A node's death part way through a pass: not a delivery failure the drain records, but the end of the pass. */
+    private static final class NodeDied extends Error {
+        private static final long serialVersionUID = 1L;
+    }
+
+    /**
      * The write-back leg: the drain commits its progress with the compare-and-set token it read the entry at,
      * so a rival that replaced the entry mid-pass - a concurrent unpark from {@code POST /api/webhook/retry}, which
      * runs off the drain's lease, or a producer's re-emit - is never overwritten by this pass's stale bookkeeping.
