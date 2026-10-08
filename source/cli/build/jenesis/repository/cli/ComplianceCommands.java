@@ -541,8 +541,9 @@ final class ComplianceCommands {
             System.out.println("  its bill names " + foreign.size() + " package(s) of other ecosystems, followed by "
                     + "coordinate across the tenant:");
             for (ProvenanceClient.ClosureForeign entry : foreign) {
-                System.out.printf(Locale.ROOT, "    %s %s  %s, depth %d%n", entry.coordinate(), entry.version(),
-                        entry.ecosystem(), entry.depth());
+                System.out.printf(Locale.ROOT, "    %s %s  %s, depth %d%s%n", entry.coordinate(), entry.version(),
+                        entry.ecosystem(), entry.depth(),
+                        entry.purl() == null || entry.purl().isBlank() ? "" : "  " + entry.purl());
             }
         }
         if (closure.truncated()) {

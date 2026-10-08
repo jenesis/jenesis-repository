@@ -2,6 +2,7 @@ package build.jenesis.repository.closure;
 
 import module java.base;
 import build.jenesis.repository.closure.spi.ClosureSection;
+import build.jenesis.repository.compliance.PackageUrls;
 import build.jenesis.repository.closure.spi.ClosureSource;
 import build.jenesis.repository.closure.spi.ClosureWalk;
 
@@ -71,7 +72,8 @@ public final class CarriedClosure {
             }
             if (!ecosystem.equals(entry.ecosystem())) {
                 foreign.add(new ClosureSection.Foreign(entry.ecosystem(), entry.coordinate(), entry.version(),
-                        entry.depth(), entry.viaCoordinate(), entry.viaVersion()));
+                        entry.depth(), entry.viaCoordinate(), entry.viaVersion(), entry.purl(),
+                        PackageUrls.qualifiers(entry.purl())));
                 continue;
             }
             Optional<Holdings.Placed> placed = Holdings.place(holdings, ecosystem, entry.coordinate(),

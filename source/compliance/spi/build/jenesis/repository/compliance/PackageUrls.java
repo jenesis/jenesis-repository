@@ -9,11 +9,17 @@ import module java.base;
  * both key on {@link Ecosystems}, so the ecosystem-to-scheme mapping and the two schemes' escaping rules exist once
  * rather than once per feed.
  *
- * <p>The Linux distribution ecosystems are left out of the purl mapping deliberately - their purls carry distro
- * namespaces and release qualifiers this product's coordinates do not record - and so are two whose purl names a
- * thing the coordinate is not: an OCI purl is keyed by the manifest digest where the coordinate carries a tag, and a
+ * <p>The Linux distribution ecosystems are left out of the purl a coordinate is queried by - their purls carry a
+ * distro namespace and release qualifiers this product's coordinates do not record - and so are two whose purl names
+ * a thing the coordinate is not: an OCI purl is keyed by the manifest digest where the coordinate carries a tag, and a
  * Swift purl by the source repository's URL where the coordinate is the registry's {@code scope.name}. An ecosystem
  * absent from a scheme yields {@code null} there, which every feed reads as "no identifier exists, do not query".
+ *
+ * <p>Read the other way, a distribution package's purl does name a coordinate: an {@code apk}, {@code deb} or
+ * {@code rpm} purl names a package of {@link Ecosystems#ALPINE}, {@link Ecosystems#DEBIAN} or {@link Ecosystems#RPM}
+ * by its name and version, as those formats key what they publish, its distro namespace aside. What the coordinate
+ * leaves out - the release, the architecture, the source package, the epoch - is in the purl's
+ * {@link #qualifiers}, so a reader that keeps both keeps everything the purl said.
  */
 public final class PackageUrls {
 
@@ -31,6 +37,12 @@ public final class PackageUrls {
             Map.entry(Ecosystems.CONAN, "conan"),
             Map.entry(Ecosystems.CONDA, "conda"),
             Map.entry(Ecosystems.HUGGING_FACE, "huggingface")));
+
+    /** Distribution purl types to the ecosystem their packages are published under, read by {@link #parse} alone. */
+    private static final Map<String, String> DISTRIBUTIONS = Map.of(
+            "apk", Ecosystems.ALPINE,
+            "deb", Ecosystems.DEBIAN,
+            "rpm", Ecosystems.RPM);
 
     /** The ecosystems a package URL is made for, so a purl-keyed feed covers exactly these. */
     public static Set<String> covered() {
@@ -67,8 +79,9 @@ public final class PackageUrls {
     /**
      * The coordinate {@code purl} names - the inverse of {@link #of}: its type's ecosystem, its namespace and name
      * joined as that ecosystem writes a coordinate (a Maven {@code group:artifact}, a slashed name otherwise) and
-     * percent-decoded, and its version; qualifiers and a subpath are dropped. Empty for a purl of a type no ecosystem
-     * here is named by, or one without a name or a version.
+     * percent-decoded, and its version; qualifiers and a subpath are dropped, and {@link #qualifiers} reads them. A
+     * distribution package's purl names its package by its name alone, the distro namespace being no part of the
+     * coordinate. Empty for a purl of a type no ecosystem here is named by, or one without a name or a version.
      */
     public static Optional<Named> parse(String purl) {
         if (purl == null || !purl.startsWith("pkg:")) {
@@ -88,6 +101,11 @@ public final class PackageUrls {
             return Optional.empty();
         }
         String type = segments[0].toLowerCase(Locale.ROOT);
+        String distribution = DISTRIBUTIONS.get(type);
+        if (distribution != null) {
+            return Optional.of(new Named(distribution, decoded(segments[segments.length - 1]),
+                    decoded(body.substring(version + 1))));
+        }
         Optional<String> ecosystem = TYPES.covered().stream().filter(named -> type.equals(TYPES.of(named))).findFirst();
         if (ecosystem.isEmpty()) {
             return Optional.empty();
@@ -98,6 +116,42 @@ public final class PackageUrls {
         }
         String coordinate = String.join(Ecosystems.MAVEN.equals(ecosystem.get()) ? ":" : "/", parts);
         return Optional.of(new Named(ecosystem.get(), coordinate, decoded(body.substring(version + 1))));
+    }
+
+    /**
+     * Every qualifier {@code purl} carries, in the order it writes them: each key lower-cased, as the specification
+     * makes them, and each value percent-decoded. A {@code distro} qualifier is written without a leading
+     * {@code <namespace>-}, which some scanners prefix and others do not ({@code alpine-3.10.0} and {@code 3.10.0} name
+     * one release of {@code pkg:apk/alpine}). Empty for a purl with none, or a text that is not one.
+     */
+    public static SequencedMap<String, String> qualifiers(String purl) {
+        SequencedMap<String, String> qualifiers = new LinkedHashMap<>();
+        if (purl == null || !purl.startsWith("pkg:")) {
+            return qualifiers;
+        }
+        String body = purl.substring("pkg:".length());
+        int hash = body.indexOf('#');
+        body = hash < 0 ? body : body.substring(0, hash);
+        int question = body.indexOf('?');
+        if (question < 0) {
+            return qualifiers;
+        }
+        String[] path = body.substring(0, question).split("/");
+        String namespace = path.length > 2 ? decoded(path[1]).toLowerCase(Locale.ROOT) : "";
+        for (String pair : body.substring(question + 1).split("&")) {
+            int equals = pair.indexOf('=');
+            if (equals <= 0 || equals == pair.length() - 1) {
+                continue;
+            }
+            String key = pair.substring(0, equals).toLowerCase(Locale.ROOT);
+            String value = decoded(pair.substring(equals + 1));
+            if (key.equals("distro") && !namespace.isEmpty()
+                    && value.toLowerCase(Locale.ROOT).startsWith(namespace + "-")) {
+                value = value.substring(namespace.length() + 1);
+            }
+            qualifiers.putIfAbsent(key, value);
+        }
+        return qualifiers;
     }
 
     /**
