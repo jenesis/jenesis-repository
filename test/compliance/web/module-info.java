@@ -14,6 +14,7 @@ open module build.jenesis.repository.compliance.web.test {
     requires build.jenesis.repository.compliance.web;
     requires build.jenesis.repository.compliance.scan;
     requires build.jenesis.repository.store;
+    requires build.jenesis.repository.maintenance;
     requires spring.context;
     requires build.jenesis.repository.audit;
     requires build.jenesis.repository.findings;
