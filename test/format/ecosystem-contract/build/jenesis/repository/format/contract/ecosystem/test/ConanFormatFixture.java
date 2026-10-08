@@ -131,6 +131,10 @@ final class ConanFormatFixture implements EcosystemFormatFixture {
     @Override
     public Map<FormatContract.Property, String> unsupported() {
         return Map.of(
+                FormatContract.Property.LISTING_MERGE_STREAMS,
+                "a recipe's revisions document is ordered newest first by a time each entry carries, so its codec "
+                        + "collects it to order it; it holds one recipe's revisions, bounded by a publisher rather than "
+                        + "by the repository",
                 FormatContract.Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE, "audited 2026-08-24: the revisions listings are ENUMERATIONs already refused as 502s. Each file of a "
                         + "revision is named by the files document the client just read, so a miss is a broken revision it reports "
                         + "rather than a fact it resolves around - conanmanifest.txt included, which the client reads to verify "

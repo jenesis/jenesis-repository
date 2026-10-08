@@ -32,5 +32,7 @@ module build.jenesis.repository.format.testkit {
     requires build.jenesis.repository.metadata;
     // The lifecycle primitive the mark property sets and clears, as the operator's surfaces do.
     requires build.jenesis.repository.format.lifecycle;
+    // The listing counters the merge property reads, as an operator's observability report reads them.
+    requires build.jenesis.repository.observation;
     exports build.jenesis.repository.format.testkit;
 }
