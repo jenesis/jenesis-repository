@@ -186,15 +186,12 @@ final class DebianFormatFixture implements EcosystemFormatFixture {
                         + "coordinates by BlobLayoutCoordinateSeamTest in this module; the request seam is covered by "
                         + "REQUEST_PATH_TRAVERSAL_REFUSED",
                 FormatContract.Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY,
-                "Debian does publish a per-.deb SHA-256 - but only inside a signed Packages index, keyed by "
-                        + "`Filename: pool/.../x.deb` under one specific dists/<suite>/<component>/binary-<arch>/ "
-                        + "path, while the pool GET this leg serves carries no suite, component or architecture at "
-                        + "all. There is no reliable mapping from the requested pool path back to the (large) index "
-                        + "that declares its checksum, so the digest is not addressable at this seam. It is not lost: "
-                        + "the proxy relays the signed Release -> InRelease -> Packages chain through BYTE FOR BYTE, "
-                        + "so apt itself verifies every .deb against the signed index we forwarded. Fabricating a "
-                        + "second, weaker check here would be the kit's refusal case; npm, PyPI, NuGet and RubyGems "
-                        + "prove the property where the artifact URL maps directly to a checksum-bearing document");
+                "Debian publishes a .deb's SHA-256 only inside a Packages index, and the pool GET this leg serves "
+                        + "names no suite, component or architecture to find that index by. The format holds a pool "
+                        + "fetch to the digest an index it has relayed declared for that pool path, so the check "
+                        + "needs the index relayed first, which this leg's lone upstream fetch does not do; the "
+                        + "relay-then-fetch sequence, its refusal leaving nothing and a repaired upstream then "
+                        + "serving, is DebianIndexCoverageTest's in the enterprise gateway suite");
     }
 
     private static String file(String version) {
