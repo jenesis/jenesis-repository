@@ -367,6 +367,11 @@ public final class FormatContract {
         equal(head.responseHeader("Content-Length"), Long.toString(body.length), fixture,
                 "a HEAD advertises the artifact's length, read from the store's metadata - a client sizing an "
                         + "artifact before pulling it must get the same answer a GET would give");
+        ContractExchange served = get(fixture, published.servedPath());
+        fixture.serving().handle(served, store);
+        equal(head.responseHeader("Content-Type"), served.responseHeader("Content-Type"), fixture,
+                "a HEAD names the content type a GET serves, so a client deciding how to handle the artifact before "
+                        + "pulling it decides as it would after");
 
         // ... and the seal is not vacuous: the same store really does refuse the blob, so the HEAD above passed
         // because it never needed the bytes rather than because nothing was sealed.
