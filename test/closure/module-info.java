@@ -25,6 +25,8 @@ open module build.jenesis.repository.closure.test {
     requires build.jenesis.repository.format.maven;
     // A format that keeps its files in the shared Blobs namespace, whose cached copy the walk reads a manifest of.
     requires build.jenesis.repository.format.npm;
+    // An RPM's coordinate names the repository it was published into, which a bill naming the package cannot know.
+    requires build.jenesis.repository.format.rpm;
     requires build.jenesis.repository.findings;
     requires build.jenesis.repository.findings.store;
     requires build.jenesis.repository.inventory;

@@ -424,6 +424,28 @@ public final class StoreRepositoryInventory implements RepositoryInventory {
         return copies;
     }
 
+    /**
+     * The versions held here of the package named {@code name} at {@code version} of {@code ecosystem}, where its
+     * format names a package by more than that ({@link PackageNameIndex}) - an RPM {@code openssl} held as
+     * {@code updates/openssl} and {@code base/openssl} - at most {@code limit}. A row whose version is no longer held is
+     * passed over. One listing of the name's level and two reads a row.
+     */
+    public List<Coordinate> named(String ecosystem, String name, String version, int limit) throws IOException {
+        String level = PackageNameIndex.level(ecosystem, name, version);
+        List<String> rows = new ArrayList<>();
+        store.page(level, "", limit, rows::add);
+        List<Coordinate> held = new ArrayList<>();
+        for (String row : rows) {
+            Optional<Coordinate> copy = store.readVersioned(level + "/" + row)
+                    .flatMap(versioned -> VersionRows.decode(versioned.content()));
+            if (copy.isPresent() && holding(copy.get().ecosystem(), copy.get().coordinate(), copy.get().version())
+                    .isPresent()) {
+                held.add(copy.get());
+            }
+        }
+        return held;
+    }
+
     /** What the repository holds of {@code coordinate} at {@code version} - a release or a cached copy, with what its
      *  document records beside it - or empty where it holds neither. One read of the version's document. */
     public Optional<Holding> holding(String ecosystem, String coordinate, String version) throws IOException {
