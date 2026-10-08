@@ -215,6 +215,43 @@ class QuotaArtifactStoreTest {
                 .isInstanceOf(QuotaExceededException.class);
     }
 
+    /**
+     * Two writers over one tenant - two nodes, each with its own decorator over the same store - converge on the bytes
+     * stored: the counter is maintained by compare-and-set, so a delta neither overwrites the other's. And a delta that
+     * is lost outright, a write that reached the store and never the counter, is what the reconcile's recount corrects:
+     * the counter decides refusals, so it must return to what the blobs hold whichever way it drifted.
+     */
+    @Test
+    void two_writers_over_one_tenant_converge_and_a_lost_delta_is_recounted() throws Exception {
+        ArtifactStore tenant = delegate().scope("acme");
+        List<Thread> writers = new ArrayList<>();
+        for (int node = 0; node < 2; node++) {
+            QuotaArtifactStore writer = new QuotaArtifactStore(tenant, 1_000_000);
+            String name = "node" + node;
+            writers.add(Thread.ofPlatform().start(() -> {
+                try {
+                    for (int i = 0; i < 50; i++) {
+                        writer.write("blobs/" + name + "-" + i, bytes(100));
+                    }
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }));
+        }
+        for (Thread writer : writers) {
+            writer.join();
+        }
+        StoredCounter.settle();
+        assertThat(new QuotaArtifactStore(tenant, 1_000_000).used()).as("both nodes' deltas, neither overwritten")
+                .isEqualTo(100 * 100);
+
+        tenant.write("blobs/unmetered", bytes(250));          // stored, and the counter never told
+        QuotaArtifactStore reconcile = new QuotaArtifactStore(tenant, 1_000_000);
+        assertThat(reconcile.used()).as("the drift a lost delta leaves").isEqualTo(100 * 100);
+        assertThat(reconcile.recompute()).isEqualTo(100 * 100 + 250);
+        assertThat(reconcile.used()).as("the recount is the counter now").isEqualTo(100 * 100 + 250);
+    }
+
     @Test
     void recompute_seeds_usage_from_the_live_blobs() throws IOException {
         ArtifactStore raw = delegate();

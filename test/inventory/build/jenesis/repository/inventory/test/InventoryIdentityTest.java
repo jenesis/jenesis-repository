@@ -325,6 +325,47 @@ class InventoryIdentityTest {
                 .isNotEqualTo(hex(settled));
     }
 
+    /**
+     * A burst of readers against an absent rollup costs about one rebuild, not one each: twenty conditional reads
+     * arriving at once share the first reader's rebuild rather than each streaming the whole coordinate set. Counted
+     * as store reads against a quiet rebuild's, with room for each reader's own probe of the rollup.
+     */
+    @Test
+    void a_burst_of_readers_against_an_absent_rollup_shares_one_rebuild() throws Exception {
+        for (int i = 0; i < 200; i++) {
+            inventory().record(ECO, COORD, "1." + i + ".0", NOW);
+        }
+        String expected = quietRebuild();
+        AtomicLong reads = new AtomicLong();
+        FaultInjectingStore traced = FaultInjectingStore.wrap(store).tracing((op, key) -> {
+            if (op == Op.READ || op == Op.READ_VERSIONED || op == Op.OPEN || op == Op.PAGE || op == Op.LIST) {
+                reads.incrementAndGet();
+            }
+        });
+        store.delete("identity/rollup");
+        new StoreRepositoryInventory(traced).rebuildIdentity();
+        long oneRebuild = reads.getAndSet(0);
+        store.delete("identity/rollup");
+
+        int readers = 20;
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<String>> answers = new ArrayList<>();
+        try (ExecutorService pool = Executors.newFixedThreadPool(readers)) {
+            for (int i = 0; i < readers; i++) {
+                answers.add(pool.submit(() -> {
+                    start.await();
+                    return new StoreRepositoryInventory(traced).identity();
+                }));
+            }
+            start.countDown();
+            for (Future<String> answer : answers) {
+                assertThat(answer.get()).isEqualTo(expected);
+            }
+        }
+        assertThat(reads.get()).as("reads for %d readers against an absent rollup, one rebuild being %d", readers,
+                oneRebuild).isLessThanOrEqualTo(2 * oneRebuild + 2L * readers);
+    }
+
     @Test
     void a_stale_rebuild_stamp_is_taken_over_rather_than_waited_for() throws IOException {
         inventory().record(ECO, COORD, "1.0.0", NOW);
