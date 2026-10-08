@@ -2,6 +2,8 @@ package build.jenesis.repository.test;
 
 import module org.junit.jupiter.api;
 import module java.base;
+import jakarta.servlet.http.HttpServletRequest;
+import org.mockito.Mockito;
 
 import build.jenesis.repository.server.PresentedKey;
 import build.jenesis.repository.server.RepositoryAuthorizationManager;
@@ -30,6 +32,28 @@ class PresentedKeyTest {
     Path root;
 
     private static final String KEY = Authorization.mint("acme");
+
+    @Test
+    void a_nuget_api_key_is_the_key_a_nuget_client_presents_and_the_native_forms_win_over_it() {
+        // dotnet nuget push and delete send the key in NuGet's own header and nowhere else.
+        assertThat(PresentedKey.fromAnyClient(request(Map.of(PresentedKey.NUGET_API_KEY, KEY)))).isEqualTo(KEY);
+        assertThat(PresentedKey.fromAnyClient(request(Map.of(PresentedKey.NUGET_API_KEY, "not-a-key"))))
+                .as("a malformed NuGet key is no key at all, so a foreign value there never becomes a principal")
+                .isNull();
+        String other = Authorization.mint("other");
+        assertThat(PresentedKey.fromAnyClient(request(Map.of(PresentedKey.NUGET_API_KEY, other,
+                PresentedKey.HEADER, KEY)))).as("the native header wins").isEqualTo(KEY);
+        assertThat(PresentedKey.fromAnyClient(request(Map.of(PresentedKey.NUGET_API_KEY, other,
+                "Authorization", "Bearer " + KEY)))).as("and so does Authorization").isEqualTo(KEY);
+        assertThat(PresentedKey.from(request(Map.of(PresentedKey.NUGET_API_KEY, KEY))))
+                .as("only the routes every client reaches read NuGet's header").isNull();
+    }
+
+    private static HttpServletRequest request(Map<String, String> headers) {
+        HttpServletRequest request = Mockito.mock(HttpServletRequest.class);
+        Mockito.when(request.getHeader(Mockito.anyString())).thenAnswer(asked -> headers.get(asked.<String>getArgument(0)));
+        return request;
+    }
 
     @Test
     void the_native_header_wins_and_is_returned_as_presented() {
