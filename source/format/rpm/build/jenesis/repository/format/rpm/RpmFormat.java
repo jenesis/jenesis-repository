@@ -4,6 +4,7 @@ import module java.base;
 import module java.xml;
 import module org.slf4j;
 
+import build.jenesis.repository.format.PackageNaming;
 import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.walk.BoundedChildren;
 import build.jenesis.repository.format.Listings;
@@ -68,7 +69,7 @@ import build.jenesis.repository.walk.TraversalException;
  * empty and a coordinate is reached through {@link #blobKeys} and {@link #servedPaths}, which walk the pool for a
  * version's {@code .rpm} pointers; {@link #describe} resolves a {@code .rpm} path to its NEVRA coordinate.
  */
-public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout,
+public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyLeg, BlobLayout, PackageNaming,
         RepositoryImporter.Delegating, ArtifactSignatures, RepositoryExporter {
 
     /** The ecosystem name this format's artifacts report, distinct from {@link #name()}, the routing id. */
@@ -689,6 +690,14 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
     public Optional<String> servingKey(String requestPath, ArtifactStore store) throws IOException {
         return describedVersion(requestPath).isEmpty() ? Optional.empty()
                 : BlobLayout.stored(requestPath.substring(1), store);
+    }
+
+    /** The package's name: its coordinate without the repository it was published into, which a bill of materials
+     *  cannot know - {@code updates/openssl} goes by {@code openssl}. */
+    @Override
+    public String packageName(String coordinate) {
+        int slash = coordinate.indexOf('/');
+        return slash < 0 ? coordinate : coordinate.substring(slash + 1);
     }
 
     /** The coordinate a package path carries: the repository-qualified name, and as version the build -

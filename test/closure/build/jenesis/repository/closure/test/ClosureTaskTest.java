@@ -584,6 +584,50 @@ class ClosureTaskTest {
                 .singleElement().satisfies(key -> assertThat(key).contains("right-pad"));
     }
 
+    @Test
+    void an_rpm_a_bill_names_reaches_its_copies_under_every_repository_its_format_keeps_it_in() throws IOException {
+        // One RPM build in two of the repository's RPM repositories - cached into base, published into updates - the
+        // one in updates carrying a finding.
+        String build = "3.0.7-27.el9.x86_64";
+        ArtifactStore rpm = tenant.scope("rpm-proxy");
+        StoreRepositoryInventory copies = new StoreRepositoryInventory(rpm);
+        copies.cache("RPM", "base/openssl", build, "https://mirror.example/", NOW);
+        copies.record("RPM", "updates/openssl", build, NOW);
+        FindingsProvider.installed().orElseThrow().over(rpm).record("RPM", "updates/openssl", build, Finding.of(
+                "CVE-2026-0010", "osv", Finding.Kind.VULNERABILITY, "advisory", Severity.HIGH, "recorded", NOW));
+        assertThat(copies.named("RPM", "openssl", build, 10)).as("each copy found by the name it goes by")
+                .extracting(StoreRepositoryInventory.Coordinate::coordinate)
+                .containsExactlyInAnyOrder("base/openssl", "updates/openssl");
+
+        // The image's bill names the package as its own metadata does, which knows no repository.
+        String purl = "pkg:rpm/redhat/openssl@3.0.7-27.el9?arch=x86_64&distro=rhel-9.4";
+        passNaming(new ClosureSection.Foreign("RPM", "openssl", build, 1, "", "", purl,
+                Map.of("arch", "x86_64", "distro", "9.4")), NOW);
+
+        assertThat(exposure("1.0").orElseThrow().reached()).as("the copy with the finding reached, by its coordinate")
+                .extracting(ExposureSection.Reached::coordinate, ExposureSection.Reached::ecosystem,
+                        ExposureSection.Reached::repository)
+                .containsExactly(tuple("updates/openssl", "RPM", "rpm-proxy"));
+        assertThat(ReliedOn.pageAcross(rpm, "rpm-proxy", Optional.of(tenant), named -> Optional.of(tenant.scope(named)),
+                _ -> true, "RPM", "updates/openssl", build, "", 50).dependents())
+                .as("and the copy's page names the image's release, which relies on it by the package's name")
+                .extracting(Reliance.Dependent::coordinate).containsExactly("org.acme:app");
+
+        copies.evict(copies.versions("RPM", "updates/openssl").getFirst());
+        assertThat(copies.named("RPM", "openssl", build, 10)).as("a copy no longer held is no longer found")
+                .extracting(StoreRepositoryInventory.Coordinate::coordinate).containsExactly("base/openssl");
+    }
+
+    /** A pass over the releases whose only source answers a closure naming {@code foreign} alone. */
+    private void passNaming(ClosureSection.Foreign foreign, Instant now) throws IOException {
+        UnitFailures failures = new UnitFailures("the closure pass", "nothing");
+        new ClosureTask(Duration.ofMinutes(5), List.of(source("bill", ClosureSource.Kind.BILL, Set.of("Maven"),
+                Optional.of(new ClosureSection.Closure(ClosureSection.Status.RESOLVED, List.of(), List.of(), false, NOW,
+                        ClosureSource.Kind.BILL, "bill", List.of(foreign))), new ArrayList<>())))
+                .repository(context("releases", Map.of(), null, now, failures));
+        failures.rethrow();
+    }
+
     /** A closure of app 1.0 whose bill names each of {@code names} of npm at 1.3.0, and nothing in its own
      *  ecosystem. */
     private static ClosureSection.Closure named(List<String> names) {
@@ -764,7 +808,7 @@ class ClosureTaskTest {
 
                     @Override
                     public List<String> repositories() {
-                        return List.of("group", "npm-proxy", "releases");
+                        return List.of("group", "npm-proxy", "releases", "rpm-proxy");
                     }
                 };
             }

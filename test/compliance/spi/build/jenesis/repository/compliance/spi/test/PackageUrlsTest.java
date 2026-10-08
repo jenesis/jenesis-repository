@@ -66,7 +66,10 @@ class PackageUrlsTest {
         assertThat(PackageUrls.parse("pkg:deb/debian/libc6@2.36-9%2Bdeb12u4?arch=amd64&upstream=glibc&distro=debian-12"))
                 .hasValue(new PackageUrls.Named(Ecosystems.DEBIAN, "libc6", "2.36-9+deb12u4"));
         assertThat(PackageUrls.parse("pkg:rpm/redhat/openssl@3.0.7-27.el9?arch=x86_64&epoch=1"))
-                .hasValue(new PackageUrls.Named(Ecosystems.RPM, "openssl", "3.0.7-27.el9"));
+                .as("an RPM's version is its build, as its file names it")
+                .hasValue(new PackageUrls.Named(Ecosystems.RPM, "openssl", "3.0.7-27.el9.x86_64"));
+        assertThat(PackageUrls.parse("pkg:rpm/redhat/tzdata@2024a-1.el9?arch=noarch"))
+                .hasValue(new PackageUrls.Named(Ecosystems.RPM, "tzdata", "2024a-1.el9.noarch"));
         assertThat(PackageUrls.covered()).as("no purl-keyed feed is asked about a distribution package by name")
                 .doesNotContain(Ecosystems.ALPINE, Ecosystems.DEBIAN, Ecosystems.RPM);
     }

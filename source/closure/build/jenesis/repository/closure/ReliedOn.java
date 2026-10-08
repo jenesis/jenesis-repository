@@ -1,6 +1,7 @@
 package build.jenesis.repository.closure;
 
 import module java.base;
+import build.jenesis.repository.format.PackageNaming;
 import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.closure.spi.ClosureSection;
 import build.jenesis.repository.closure.spi.Reliance;
@@ -298,7 +299,9 @@ public final class ReliedOn {
         int[] counted = {0};
         holder.page(level, "", cap, _ -> counted[0]++);
         if (counted[0] < cap && tenant.isPresent()) {
-            tenant.get().scope(SPACE).page(level, "", cap - counted[0], _ -> counted[0]++);
+            // A bill names a package by the name it goes by, which a format may qualify further in its coordinate.
+            tenant.get().scope(SPACE).page(level(ecosystem, PackageNaming.of(ecosystem, coordinate), version), "",
+                    cap - counted[0], _ -> counted[0]++);
         }
         return Math.min(counted[0], cap);
     }
@@ -332,8 +335,10 @@ public final class ReliedOn {
             examined = own.examined();
             resume = ACROSS;
         }
-        Reliance.Page across = page(space.get(), SPACE, repositories, readable, ecosystem, coordinate, version,
-                resume.substring(ACROSS.length()), Math.max(1, bound - examined));
+        // A bill names a package by the name it goes by, which a format may qualify further in its coordinate.
+        Reliance.Page across = page(space.get(), SPACE, repositories, readable, ecosystem,
+                PackageNaming.of(ecosystem, coordinate), version, resume.substring(ACROSS.length()),
+                Math.max(1, bound - examined));
         dependents.addAll(across.dependents());
         return new Reliance.Page(dependents, examined + across.examined(), across.next().map(next -> ACROSS + next));
     }

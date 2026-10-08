@@ -120,6 +120,8 @@ final class InventoryRecording {
      * says - a client re-running a publish it already made - writes nothing.
      */
     void commit(Recording recording) throws IOException {
+        // The name index's row first: a row whose version is not held yet is passed over by the reader.
+        PackageNameIndex.record(store, recording.ecosystem, recording.coordinate, recording.version);
         Instant now = Clocks.now();
         String documentKey = MetadataKey.version(recording.ecosystem, recording.coordinate, recording.version);
         Committed committed = DocumentTurns.decide(store, documentKey, current -> {
@@ -211,6 +213,8 @@ final class InventoryRecording {
      *  the {@code published} section - one CAS, no extra round-trip. A {@code null} sha records no origin. */
     void record(String ecosystem, String coordinate, String version, boolean prerelease, Instant published,
                 String originSha256) throws IOException {
+        // The name index's row first: a row whose version is not held yet is passed over by the reader.
+        PackageNameIndex.record(store, ecosystem, coordinate, version);
         // The publish facts land in the document's published section (its presence is membership of the published
         // set). Edge-triggered on the absent -> present transition, followed by the rollup fold-in on a first publish.
         // On a hand upload the local-upload origin row rides that SAME doc mutate.
@@ -314,6 +318,7 @@ final class InventoryRecording {
      */
     boolean cache(String ecosystem, String coordinate, String version, String upstream, Instant at)
             throws IOException {
+        PackageNameIndex.record(store, ecosystem, coordinate, version);
         String key = MetadataKey.version(ecosystem, coordinate, version);
         boolean recorded = DocumentTurns.decide(store, key, current -> {
             MetadataDocument document = current.map(versioned -> MetadataDocument.read(versioned.content()))

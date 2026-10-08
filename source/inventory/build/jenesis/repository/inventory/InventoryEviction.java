@@ -139,6 +139,7 @@ final class InventoryEviction {
         AdvisedSection.forget(store, inventory.holding(release.ecosystem(), release.coordinate(), release.version())
                 .map(StoreRepositoryInventory.Holding::advised), release.ecosystem(), release.coordinate(),
                 release.version());
+        PackageNameIndex.forget(store, release.ecosystem(), release.coordinate(), release.version());
         Mailbox.CHANGED.forget(store, release.ecosystem(), release.coordinate(), release.version());
         // Capture the version's rollup contribution before its document is removed, so the maintained identity can be
         // folded out once the eviction completes (the whole-repository SBOM / NOTICE ETag then revalidates). Read here,
@@ -333,6 +334,7 @@ final class InventoryEviction {
                 CachedSection.facts(document.section(CachedSection.TAG)).map(CachedSection.Facts::at).orElse(null));
         AdvisedSection.forget(store, AdvisedSection.advised(document.section(AdvisedSection.TAG)), ecosystem,
                 coordinate, version);
+        PackageNameIndex.forget(store, ecosystem, coordinate, version);
         Mailbox.CHANGED.forget(store, ecosystem, coordinate, version);
         // The trim above dropped every served-fact section, the findings section among them, so this version's ranked
         // line must drop too - bump the findings eviction epoch so the vulnerability rank index rebuilds on its next
