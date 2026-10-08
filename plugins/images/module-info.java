@@ -28,7 +28,7 @@
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
- * @jenesis.pin tool/module/build.jenesis 0.15.3 SHA-256/a453285c6286a13f5a7989340aaa5e34346673a5a59fda804b4b821a8732ee80
+ * @jenesis.pin tool/module/build.jenesis 0.15.5 SHA-256/d173c2873e61c7c5d506bd11fe6a872d6fcc6dd4dde5bf0aba51f7e295cbecce
  */
 module build.jenesis.images {
     requires build.jenesis;
