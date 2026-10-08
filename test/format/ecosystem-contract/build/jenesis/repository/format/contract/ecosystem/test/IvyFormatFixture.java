@@ -125,6 +125,7 @@ final class IvyFormatFixture implements EcosystemFormatFixture {
     @Override
     public Map<FormatContract.Property, String> unsupported() {
         return Map.of(
+                FormatContract.Property.LISTING_MERGE_STREAMS, STORED_NOT_GENERATED,
                 FormatContract.Property.GENERATED_INDEX_IS_REVALIDATABLE, STORED_NOT_GENERATED,
                 FormatContract.Property.GENERATED_INDEX_CARRIES_THE_REQUEST_SCHEME, STORED_NOT_GENERATED,
                 FormatContract.Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY,

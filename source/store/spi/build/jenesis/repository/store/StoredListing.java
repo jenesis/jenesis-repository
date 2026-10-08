@@ -96,6 +96,7 @@ public final class StoredListing {
     private static final LongAdder MATERIALISED = new LongAdder();
     private static final LongAdder FORGOTTEN = new LongAdder();
     static final LongAdder SUPERSEDED = new LongAdder();
+    private static final LongAdder BUFFERED = new LongAdder();
 
     private StoredListing() {
     }
@@ -119,7 +120,8 @@ public final class StoredListing {
          *
          * <p>The counterpart of {@link #join}: same document, without holding the entries that produced it. The
          * default buffers into a map and joins at close, which is correct for any codec that has not implemented
-         * streaming - so a codec is never wrong for lacking this, only slower.
+         * streaming - so a codec is never wrong for lacking this, only slower, and counted as
+         * {@code jenrepo.listing.buffered} so the cost is visible.
          */
         default Appender append(OutputStream out) {
             SortedMap<String, byte[]> entries = new TreeMap<>();
@@ -131,6 +133,7 @@ public final class StoredListing {
 
                 @Override
                 public void close() throws IOException {
+                    BUFFERED.increment();
                     out.write(join(entries));
                 }
             };
@@ -148,12 +151,13 @@ public final class StoredListing {
          *
          * <p>The counterpart of {@link #split}: the same entries, in the same order, without the document. The
          * default reads the stream whole and splits it, so a codec that has not implemented streaming is never wrong
-         * for it, only heavier.
+         * for it, only heavier, and counted as {@code jenrepo.listing.buffered}.
          *
          * <p>{@code length} is the document's stored size. A framed codec needs it to know where its footer
          * begins, since a stream cannot be read from the end; a codec that does not need it ignores it.
          */
         default Reader read(InputStream in, long length) throws IOException {
+            BUFFERED.increment();
             Iterator<Map.Entry<String, byte[]>> entries = split(in.readAllBytes()).entrySet().iterator();
             return new Reader() {
                 @Override
@@ -1894,7 +1898,11 @@ public final class StoredListing {
                     Metric.counter("jenrepo.listing.superseded",
                             "Listing entries a write would have put from a source the stored entry had already "
                                     + "moved past - a rebuild's snapshot meeting a publish - kept as stored",
-                            SUPERSEDED.sum(), "entries"));
+                            SUPERSEDED.sum(), "entries"),
+                    Metric.counter("jenrepo.listing.buffered",
+                            "Listing documents a codec read or wrote whole, holding every entry, because it decodes "
+                                    + "or encodes none at a time",
+                            BUFFERED.sum(), "documents"));
         }
     }
 }

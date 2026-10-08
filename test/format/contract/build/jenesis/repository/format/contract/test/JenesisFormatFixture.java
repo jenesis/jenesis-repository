@@ -92,6 +92,9 @@ final class JenesisFormatFixture implements FormatFixture {
                 FormatContract.Property.PROXY_STREAMS_UPSTREAM_BODY,
                 "JenesisFormat implements no ProxyFormat, so it has no pull-through leg to stream. Its publish path "
                         + "streams through the same Publication.storeBlob the Maven and raw legs stream through",
+                FormatContract.Property.LISTING_MERGE_STREAMS,
+                "the module layout keeps no generated document a publish merges into - every response is stored "
+                        + "bytes streamed back",
                 FormatContract.Property.GENERATED_INDEX_IS_REVALIDATABLE,
                 "the module layout renders nothing on read - every /module/ and /artifact/ response is stored bytes "
                         + "streamed back - so it has no generated document to revalidate",

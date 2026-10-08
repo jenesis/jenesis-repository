@@ -8,6 +8,7 @@ import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.metadata.MetadataKey;
+import build.jenesis.repository.observation.Metric;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.Known;
@@ -157,7 +158,12 @@ public final class FormatContract {
          *  flags a version, or the version leaving the listing where the ecosystem signals a yank by absence. A mark
          *  the format offers and its document does not show reads as done to the operator and is seen by no client;
          *  one it does not offer is refused, so a fixture describing it describes nothing. */
-        LIFECYCLE_MARK_SURFACES_NATIVELY
+        LIFECYCLE_MARK_SURFACES_NATIVELY,
+        /** A publish that changes a generated document merges its one entry into the stored document entry by entry:
+         *  the document's codec decodes and encodes it a piece at a time, so no write holds the whole of it. A codec
+         *  left on the buffering defaults holds every entry of the document on every publish into it - fine for a
+         *  document of one coordinate's versions, and a heap ceiling for one that lists a whole repository. */
+        LISTING_MERGE_STREAMS
     }
 
     /** One named, independently runnable contract check. */
@@ -238,7 +244,10 @@ public final class FormatContract {
                         FormatContract::generatedIndexCarriesTheRequestScheme),
                 new Check(Property.LIFECYCLE_MARK_SURFACES_NATIVELY,
                         "every lifecycle mark the format offers shows in its client's document and clears again",
-                        FormatContract::lifecycleMarkSurfacesNatively));
+                        FormatContract::lifecycleMarkSurfacesNatively),
+                new Check(Property.LISTING_MERGE_STREAMS,
+                        "a publish into a generated document merges it without holding the whole of it",
+                        FormatContract::listingMergeStreams));
     }
 
     /**
@@ -674,6 +683,35 @@ public final class FormatContract {
             isTrue(shows(fixture, store, signal) != signal.present(), fixture, "once the " + mark + " mark is "
                     + "cleared, " + signal.path() + " " + unshown + " again");
         }
+    }
+
+    private static void listingMergeStreams(FormatFixture fixture, ArtifactStore store) throws Exception {
+        FormatFixture.Index index = fixture.index(store).orElseThrow(() -> failure(fixture,
+                "this fixture seeds no generated document. Either seed one, or exclude "
+                        + Property.LISTING_MERGE_STREAMS + " with a reason saying the format generates none."));
+        ContractExchange first = get(fixture, index.path());
+        fixture.serving().handle(first, store);
+        equal(first.status(), 200, fixture, "the generated document renders");
+        StoredListing.settle();
+
+        double before = buffered();
+        index.change().apply(store);
+        StoredListing.settle();
+        double held = buffered() - before;
+        ContractExchange after = get(fixture, index.path());
+        fixture.serving().handle(after, store);
+        equal(after.status(), 200, fixture, "the changed document renders");
+        isTrue(!Arrays.equals(after.responseBytes(), first.responseBytes()), fixture,
+                "the change reached " + index.path() + ", or the merge below was never exercised");
+        equal(held, 0.0, fixture, "a publish into " + index.path() + " merged the document by holding every entry of "
+                + "it (jenrepo.listing.buffered) - its codec decodes or encodes no entry at a time");
+    }
+
+    /** The node's count of listing documents a codec read or wrote whole. */
+    private static double buffered() {
+        return new StoredListing.Observability().metrics().stream()
+                .filter(metric -> metric.name().equals("jenrepo.listing.buffered"))
+                .mapToDouble(Metric::value).sum();
     }
 
     /** Whether {@code signal}'s document carries its token, a document that answers no body carrying nothing. */
