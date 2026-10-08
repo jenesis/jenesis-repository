@@ -60,6 +60,9 @@ public final class AuditActions {
     /** The scanner tools asked by an operator to refresh - a standing request for the scanner-tools pass. */
     public static final String SCANNERS_REFRESH = action("scanners.refresh");
 
+    /** A scanner kit - pinned binaries and database snapshots - imported into a deployment. */
+    public static final String SCANNERS_KIT_IMPORT = action("scanners.kit.import");
+
     /** A repository created before anything was published into it. */
     public static final String REPOSITORY_CREATE = action("repository.create");
 

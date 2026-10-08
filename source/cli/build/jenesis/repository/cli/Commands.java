@@ -371,7 +371,13 @@ public final class Commands {
                                     + "its version, each database with when it was built, fetched and next due, and "
                                     + "why it is unfit or could not be asked"),
                             act("scanners refresh [--refresh]", "ask every tool to fetch a database that is no longer "
-                                    + "current and say what state it is in; --refresh watches until the pass has run")),
+                                    + "current and say what state it is in; --refresh watches until the pass has run"),
+                            act("scanners kit", "what the scanner kit would carry: each pinned binary this deployment "
+                                    + "holds and each tool's current database snapshot"),
+                            act("scanners kit export --output F", "download the scanner kit, for a deployment that "
+                                    + "cannot reach the scanners' upstreams"),
+                            act("scanners kit import <file>", "import a scanner kit: a binary is kept only where a "
+                                    + "pin names its digest, a snapshot made current only where it is newer")),
                     noun("consistency", "agreement between the nodes of a cluster",
                             OperationsCommands::consistency,
                             act("consistency", "per-node fingerprints and any divergence")),

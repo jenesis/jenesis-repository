@@ -102,6 +102,45 @@ public final class OperationsClient extends ClientCalls {
                                   String digest, String source, boolean current) {
     }
 
+    /** What the scanner kit would carry now: each pinned binary held and each tool's current database snapshot. */
+    public KitManifest scannersKit() throws IOException, InterruptedException {
+        HttpResponse<String> response = send("GET", "/api/admin/scanners/kit/manifest", null, null);
+        require(response, 200, "read the scanner kit's manifest");
+        return JSON.readValue(response.body(), KitManifest.class);
+    }
+
+    /** Download the scanner kit into {@code file}; answers its size in bytes. */
+    public long scannersKitExport(Path file) throws IOException, InterruptedException {
+        return download("/api/admin/scanners/kit", file, "export the scanner kit");
+    }
+
+    /** Import the scanner kit {@code file} holds; answers what the deployment kept and passed over. */
+    public KitImported scannersKitImport(Path file) throws IOException, InterruptedException {
+        HttpResponse<String> response = upload("PUT", "/api/admin/scanners/kit", file, "application/x-tar");
+        if (response.statusCode() == 400) {
+            throw new IOException("The scanner kit was refused: "
+                    + JSON.readTree(response.body()).path("error").asString(response.body()));
+        }
+        require(response, 200, "import the scanner kit");
+        return JSON.readValue(response.body(), KitImported.class);
+    }
+
+    /** A scanner kit's manifest as the API reports it: when it was made, its binaries and its database snapshots. */
+    public record KitManifest(int schema, String created, List<KitBinary> binaries, List<KitDatabase> databases) {
+    }
+
+    /** One binary a kit carries: the tool, its pinned version and platform, and the binary's digest and size. */
+    public record KitBinary(String tool, String version, String platform, String sha256, long size) {
+    }
+
+    /** One database snapshot a kit carries: the tool, the snapshot's digest and size, and when it was built. */
+    public record KitDatabase(String tool, String sha256, long size, String built) {
+    }
+
+    /** What an import did: the binaries kept, the snapshots made current, and each entry passed over with why. */
+    public record KitImported(List<KitBinary> binaries, List<KitDatabase> databases, List<String> passed) {
+    }
+
     /** Ask for a walk of the store now; answers the standing requests. */
     public String walksRun() throws IOException, InterruptedException {
         HttpResponse<String> response = send("POST", "/api/admin/walks/run", null, null);
