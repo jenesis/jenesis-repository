@@ -252,6 +252,7 @@
                         <th scope="col">Version</th>
                         <th scope="col">Ecosystem</th>
                         <th scope="col">Depth</th>
+                        <th scope="col">Package URL</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -260,6 +261,7 @@
                         <td><code th:text="${entry.version()}">2.14.1</code></td>
                         <td th:text="${entry.ecosystem()}">Maven</td>
                         <td th:text="${entry.depth()}">1</td>
+                        <td><code th:unless="${entry.purl().isEmpty()}" th:text="${entry.purl()}">pkg:apk/alpine/musl@1.1.22-r2?distro=3.10.0</code></td>
                     </tr>
                     </tbody>
                 </table>

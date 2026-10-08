@@ -67,12 +67,14 @@ public final class CarriedBill implements ClosureSource.Carried {
         for (DependencyComponent component : graph.dependencies()) {
             // The component whose dependencies name this one, where the bill's graph says so and it is not the root.
             PackageUrls.Named via = names.get(tree.parents().get(component.ref()));
+            String purl = component.purl() == null ? "" : component.purl().strip();
             entries.add(named(component, ecosystem)
-                    .map(at -> via == null
+                    .map(at -> (via == null
                             ? ClosureSource.Entry.placed(at.ecosystem(), at.coordinate(), at.version(),
                                     tree.depths().getOrDefault(component.ref(), 1))
                             : ClosureSource.Entry.placed(at.ecosystem(), at.coordinate(), at.version(),
                                     tree.depths().getOrDefault(component.ref(), 1), via.coordinate(), via.version()))
+                            .named(purl))
                     .orElseGet(() -> ClosureSource.Entry.unplaced(component.coordinate(), versionOf(component),
                             "named by the version's bill in a form this repository cannot place")));
         }

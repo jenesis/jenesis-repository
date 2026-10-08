@@ -121,6 +121,44 @@ class CarriedBillTest {
                 .extracting(ClosureSection.Cut::coordinate).containsExactly("org.dep:built");
     }
 
+    @Test
+    void the_distribution_packages_an_image_carries_are_followed_by_coordinate_and_keep_what_the_scanner_said()
+            throws IOException {
+        // Two scanners' spellings of one release: Harbor's Trivy writes it bare, Syft with the distribution's name.
+        String scanned = """
+                {"bomFormat":"CycloneDX","specVersion":"1.5",
+                 "metadata":{"component":{"bom-ref":"root","name":"alpine","version":"3.10.0"}},
+                 "components":[
+                   {"bom-ref":"m","name":"musl","version":"1.1.22-r2",
+                    "purl":"pkg:apk/alpine/musl@1.1.22-r2?arch=x86_64&distro=3.10.0"},
+                   {"bom-ref":"b","name":"busybox","version":"1.30.1-r2",
+                    "purl":"pkg:apk/alpine/busybox@1.30.1-r2?arch=x86_64&upstream=busybox&distro=alpine-3.10.0"},
+                   {"bom-ref":"g","name":"tool","version":"1.0","purl":"pkg:bitbucket/acme/tool@1.0"}]}""";
+        inventory.record("OCI", "alpine", "3.10.0", NOW);
+        VersionBills.attach(store, "OCI", "alpine", "3.10.0", scanned.getBytes(StandardCharsets.UTF_8));
+
+        ClosureSection.Closure closure = CarriedClosure.resolve(new CarriedBill(), ClosureWalk.of(store),
+                "OCI", "alpine", "3.10.0", NOW).orElseThrow();
+
+        assertThat(closure.foreign()).as("each by the coordinate its format publishes it under, with its purl")
+                .extracting(ClosureSection.Foreign::ecosystem, ClosureSection.Foreign::coordinate,
+                        ClosureSection.Foreign::version, ClosureSection.Foreign::purl)
+                .containsExactlyInAnyOrder(
+                        tuple("Alpine", "musl", "1.1.22-r2", "pkg:apk/alpine/musl@1.1.22-r2?arch=x86_64&distro=3.10.0"),
+                        tuple("Alpine", "busybox", "1.30.1-r2",
+                                "pkg:apk/alpine/busybox@1.30.1-r2?arch=x86_64&upstream=busybox&distro=alpine-3.10.0"));
+        assertThat(closure.foreign()).as("one release, however the scanner spelled it")
+                .allSatisfy(foreign -> assertThat(foreign.qualifiers()).containsEntry("distro", "3.10.0")
+                        .containsEntry("arch", "x86_64"));
+        assertThat(closure.cuts()).as("a purl no format here publishes is kept as written")
+                .extracting(ClosureSection.Cut::coordinate).containsExactly("pkg:bitbucket/acme/tool@1.0");
+
+        ClosureSection.Closure read = ClosureSection.closure(
+                Optional.of(ClosureSection.record(closure).apply(Optional.empty()))).orElseThrow();
+        assertThat(read.foreign()).as("the purl and its qualifiers survive the stored document")
+                .isEqualTo(closure.foreign());
+    }
+
     private void release(String path, byte[] body) throws IOException {
         publication.link(path, publication.storeBlob(new ByteArrayInputStream(body)));
         inventory.record(path, NOW);
