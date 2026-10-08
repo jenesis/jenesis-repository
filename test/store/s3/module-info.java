@@ -20,6 +20,7 @@
 open module build.jenesis.repository.store.s3.test {
     requires build.jenesis.repository.store.s3;
     requires build.jenesis.repository.store;
+    requires build.jenesis.repository.store.testkit;
     requires software.amazon.awssdk.services.s3;
     requires software.amazon.awssdk.regions;
     requires software.amazon.awssdk.auth;

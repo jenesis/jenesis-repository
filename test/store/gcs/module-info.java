@@ -21,6 +21,7 @@
 open module build.jenesis.repository.store.gcs.test {
     requires build.jenesis.repository.store.gcs;
     requires build.jenesis.repository.store;
+    requires build.jenesis.repository.store.testkit;
     requires org.junit.jupiter;
     requires org.assertj.core;
     requires wiremock.core;
