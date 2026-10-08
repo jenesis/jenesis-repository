@@ -20,7 +20,7 @@
             </label>
             <label>Request path (optional)
                 <input type="text" name="path" th:value="${path}"
-                       placeholder="/maven/build/jenesis/build.jenesis/0.15.4/build.jenesis-0.15.4.jar">
+                       placeholder="/maven/build/jenesis/build.jenesis/0.15.5/build.jenesis-0.15.5.jar">
             </label>
             <button th:replace="~{base :: secondaryButton('Ask the domains')}">Ask the domains</button>
         </div>
@@ -50,14 +50,14 @@
                             <small th:if="${asked.refusal() != null}" th:text="${asked.refusal()}">why</small>
                             <ul th:if="${asked.file() != null}" class="app-reasons">
                                 <li th:each="entry : ${asked.file().entries()}"><small><code
-                                        th:text="${entry.key.spelled()}">maven</code> <code
-                                        th:text="${entry.value.value()}">https://...</code>
-                                    <span th:if="${entry.value.since() != null}"
-                                          th:text="'from ' + ${entry.value.since()}">from 1.0</span>
-                                    <span th:unless="${entry.value.suffixes().isEmpty()}"
-                                          th:text="'qualifiers ' + ${#strings.listJoin(entry.value.suffixes(), ', ')}">none</span>
-                                    <span th:if="${entry.value.latest() != null}">latest <code
-                                            th:text="${entry.value.latest()}">link</code></span></small></li>
+                                        th:text="${entry.spelled()}">maven</code> <code
+                                        th:text="${entry.value()}">https://...</code>
+                                    <span th:if="${entry.since() != null}"
+                                          th:text="'from ' + ${entry.since()}">from 1.0</span>
+                                    <span th:unless="${entry.suffixes().isEmpty()}"
+                                          th:text="'qualifiers ' + ${#strings.listJoin(entry.suffixes(), ', ')}">none</span>
+                                    <span th:if="${entry.latest() != null}">latest <code
+                                            th:text="${entry.latest()}">link</code></span></small></li>
                                 <li th:if="${asked.file().delegate()}"><small>its subdomains' files are read too</small></li>
                             </ul>
                         </td>
@@ -67,7 +67,7 @@
             </figure>
             <p th:unless="${check.answering().isEmpty()}"><small>Answering:
                 <th:block th:each="answer, i : ${check.answering()}"><th:block th:if="${i.index > 0}">, </th:block><code
-                        th:text="${answer.key.spelled()}">maven</code> from <code
+                        th:text="${answer.value.entry().spelled()}">maven</code> from <code
                         th:text="${answer.value.domain()}">jenesis.build</code></th:block></small></p>
             <th:block th:if="${check.path() != null}">
                 <h2>Where the path goes</h2>
@@ -82,7 +82,7 @@
                         <small th:if="${located.checked()}">- checked against the checksum beside it</small></th:block>
                     <th:block th:case="'relayed'">Under the root <code th:text="${located.url()}">root</code>
                         at <code th:text="${located.path()}">path</code></th:block>
-                    <th:block th:case="*">Answered here: the metadata the latest link names</th:block>
+                    <th:block th:case="*">Answered here: the Maven metadata of the versions the key serves</th:block>
                 </p>
             </th:block>
         </th:block>
