@@ -6,6 +6,7 @@ import org.apache.commons.compress.archivers.ar.ArArchiveOutputStream;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream;
+import org.apache.commons.compress.compressors.xz.XZCompressorOutputStream;
 import io.airlift.compress.v3.zstd.ZstdOutputStream;
 
 /**
@@ -208,16 +209,30 @@ final class Packages {
 
     /** {@link #deb(String, String, String)} whose payload carries {@code variant}: the same version, other bytes. */
     static byte[] deb(String pkg, String version, String architecture, String variant) throws IOException {
-        String control = "Package: " + pkg + "\n"
+        return deb(pkg, version, architecture, variant, "control.tar.gz");
+    }
+
+    /** {@link #deb(String, String, String, String)} whose {@code control.tar} is the member {@code control} names -
+     *  {@code control.tar.gz}, {@code control.tar.xz} or {@code control.tar.zst}, compressed as its suffix says, which
+     *  are the three {@code dpkg-deb} writes. */
+    static byte[] deb(String pkg, String version, String architecture, String variant, String control)
+            throws IOException {
+        String stanza = "Package: " + pkg + "\n"
                 + "Version: " + version + "\n"
                 + "Architecture: " + architecture + "\n"
                 + "Maintainer: Contract <contract@example.invalid>\n"
                 + "Description: a contract fixture package\n";
-        byte[] controlTar = gzip(tar(Map.of("./control", control.getBytes(StandardCharsets.UTF_8))));
+        byte[] plain = tar(Map.of("./control", stanza.getBytes(StandardCharsets.UTF_8)));
+        byte[] controlTar = switch (control) {
+            case "control.tar.gz" -> gzip(plain);
+            case "control.tar.xz" -> xz(plain);
+            case "control.tar.zst" -> zstd(plain);
+            default -> throw new IllegalArgumentException("no control member " + control);
+        };
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (ArArchiveOutputStream archive = new ArArchiveOutputStream(bytes)) {
             member(archive, "debian-binary", "2.0\n".getBytes(StandardCharsets.US_ASCII));
-            member(archive, "control.tar.gz", controlTar);
+            member(archive, control, controlTar);
             member(archive, "data.tar", tar(Map.of("./usr/share/doc/" + pkg + "/README",
                     ("payload of " + pkg + " " + version + variant).getBytes(StandardCharsets.UTF_8))));
         }
@@ -565,6 +580,22 @@ final class Packages {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (GZIPOutputStream gzip = new GZIPOutputStream(bytes)) {
             gzip.write(content);
+        }
+        return bytes.toByteArray();
+    }
+
+    static byte[] xz(byte[] content) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (XZCompressorOutputStream xz = new XZCompressorOutputStream(bytes)) {
+            xz.write(content);
+        }
+        return bytes.toByteArray();
+    }
+
+    static byte[] zstd(byte[] content) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ZstdOutputStream zstd = new ZstdOutputStream(bytes)) {
+            zstd.write(content);
         }
         return bytes.toByteArray();
     }
