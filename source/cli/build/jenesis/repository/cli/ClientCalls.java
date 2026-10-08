@@ -79,20 +79,8 @@ abstract class ClientCalls {
 
     HttpResponse<String> send(String method, String path, HttpRequest.BodyPublisher body, String contentType,
                               Map<String, String> headers) throws IOException, InterruptedException {
-        String root = base.toString();
-        if (root.endsWith("/")) {
-            root = root.substring(0, root.length() - 1);
-        }
-        URI uri = URI.create(root + path);
-        HttpRequest.Builder request = HttpRequest.newBuilder(uri)
-                .timeout(Duration.ofSeconds(60))
-                .method(method, body == null ? HttpRequest.BodyPublishers.noBody() : body);
-        if (key != null && !key.isBlank()) {
-            request.header("Jenesis-Repository-Key", key);
-        }
-        if (contentType != null) {
-            request.header("Content-Type", contentType);
-        }
+        URI uri = uri(path);
+        HttpRequest.Builder request = request(method, path, body, contentType, Duration.ofSeconds(60));
         headers.forEach(request::header);
         HttpResponse<String> response = client.send(request.build(), BoundedBody.ofString(uri, LARGEST_ANSWER));
         // A 501 is the server saying it carries no module that would answer: what exit code 3 means, so it is that
@@ -106,6 +94,75 @@ abstract class ClientCalls {
             Output.record(response.headers().firstValue("Content-Type").orElse(null), response.body());
         }
         return response;
+    }
+
+    /** How long a transfer of a file sized like an artifact may take: the answer or the upload is the file itself, so
+     *  {@link #send}'s minute bounds a request that is not. */
+    private static final Duration TRANSFER = Duration.ofHours(2);
+
+    /**
+     * Stream the answer to {@code GET path} into {@code file}, written beside it and moved into place once complete, so
+     * an interrupted transfer leaves no partial file under the name; answers the bytes written.
+     */
+    long download(String path, Path file, String action) throws IOException, InterruptedException {
+        Path target = file.toAbsolutePath();
+        Path partial = Files.createTempFile(target.getParent(), target.getFileName().toString(), ".partial");
+        try {
+            HttpResponse<Path> response = client.send(request("GET", path, null, null, TRANSFER).build(),
+                    HttpResponse.BodyHandlers.ofFile(partial));
+            if (response.statusCode() == 501) {
+                throw RepositoryClient.NotInstalled.unimplemented("GET " + path);
+            }
+            if (response.statusCode() == 404
+                    && response.headers().firstValue("Jenesis-Installed").filter("false"::equals).isPresent()) {
+                throw RepositoryClient.NotInstalled.unrouted(action);
+            }
+            if (response.statusCode() != 200) {
+                throw new IOException("Could not " + action + " (HTTP " + response.statusCode() + ")");
+            }
+            Files.move(partial, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            return Files.size(target);
+        } finally {
+            Files.deleteIfExists(partial);
+        }
+    }
+
+    /** {@link #send} with {@code file} as the body, given as long as a file sized like an artifact takes to send. */
+    HttpResponse<String> upload(String method, String path, Path file, String contentType)
+            throws IOException, InterruptedException {
+        URI uri = uri(path);
+        HttpResponse<String> response = client.send(
+                request(method, path, HttpRequest.BodyPublishers.ofFile(file), contentType, TRANSFER).build(),
+                BoundedBody.ofString(uri, LARGEST_ANSWER));
+        if (response.statusCode() == 501) {
+            throw RepositoryClient.NotInstalled.unimplemented(method + " " + path);
+        }
+        if (Output.isJson() && response.statusCode() >= 200 && response.statusCode() < 300) {
+            Output.record(response.headers().firstValue("Content-Type").orElse(null), response.body());
+        }
+        return response;
+    }
+
+    private URI uri(String path) {
+        String root = base.toString();
+        if (root.endsWith("/")) {
+            root = root.substring(0, root.length() - 1);
+        }
+        return URI.create(root + path);
+    }
+
+    private HttpRequest.Builder request(String method, String path, HttpRequest.BodyPublisher body,
+                                        String contentType, Duration timeout) {
+        HttpRequest.Builder request = HttpRequest.newBuilder(uri(path))
+                .timeout(timeout)
+                .method(method, body == null ? HttpRequest.BodyPublishers.noBody() : body);
+        if (key != null && !key.isBlank()) {
+            request.header("Jenesis-Repository-Key", key);
+        }
+        if (contentType != null) {
+            request.header("Content-Type", contentType);
+        }
+        return request;
     }
 
     static void require(HttpResponse<String> response, int expected, String action) throws IOException {
