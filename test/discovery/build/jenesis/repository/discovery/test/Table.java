@@ -3,7 +3,8 @@ package build.jenesis.repository.discovery.test;
 import module java.base;
 import build.jenesis.repository.discovery.RepositoryDiscovery;
 
-/** A transport answering from tables - files by address, {@code HEAD}s by address - and counting what was asked. */
+/** A transport answering from tables - files and documents by address, {@code HEAD}s by address - and counting what
+ *  was asked. */
 final class Table implements RepositoryDiscovery.Transport {
 
     final Map<URI, String> files = new HashMap<>();
@@ -12,6 +13,11 @@ final class Table implements RepositoryDiscovery.Transport {
 
     Table file(String domain, String text) {
         files.put(URI.create("https://" + domain + "/.well-known/java-repository.properties"), text);
+        return this;
+    }
+
+    Table document(String url, String text) {
+        files.put(URI.create(url), text);
         return this;
     }
 

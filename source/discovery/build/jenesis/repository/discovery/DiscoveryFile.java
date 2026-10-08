@@ -5,30 +5,39 @@ import module java.base;
 /**
  * One domain's {@code /.well-known/java-repository.properties}, read and checked as the discovery proposal defines it:
  * a {@code java.util.Properties} document in UTF-8 whose keys are {@code module} and {@code maven} - where a module's or
- * a Maven group's files are, a location - and {@code moduletomaven} - which Maven artifact a module is, a
- * coordinate - each optionally with {@code .since}, {@code .suffixes} and {@code .latest} beside it, and {@code delegate}.
+ * a Maven artifact's files are, a location - {@code moduletomaven} - which Maven artifact a module is, a coordinate -
+ * and {@code sources} - where the source archive of a release is, a template naming {@code {version}}. A key may name
+ * what it is for in brackets, {@code module[build.jenesis]}, or the start of such a name followed by {@code *},
+ * {@code maven[build.jenesis.repository.*]}; one without serves every name below the domain. Each key optionally has
+ * {@code .since}, {@code .suffixes} and {@code .latest} beside it, carrying its selector, and the file may say
+ * {@code delegate}.
  *
  * <p>Every refusal the proposal lists fails the read with a {@link DiscoveryException} naming the file: a key without
- * a value, a suffix that is not one word of letters and digits, a {@code delegate} other than {@code true} or
- * {@code false}, a placeholder the key does not know, a coordinate naming no artifact, a coordinate in {@code module} or
- * {@code maven} and a location in {@code moduletomaven}, a latest link beside a root or a coordinate, and a location or
- * a link that is not {@code https}. A key the proposal does not name is ignored, so the format can grow.
+ * a value, a selector that is not a name or the start of one followed by {@code *}, a suffix that is not one word of
+ * letters and digits, a {@code delegate} other than {@code true} or {@code false}, a placeholder the key does not know,
+ * a coordinate naming no artifact, a coordinate in {@code module}, {@code maven} or {@code sources} and a location in
+ * {@code moduletomaven}, a {@code sources} that names no {@code {version}}, a latest link beside a value naming no
+ * {@code {version}}, and a location or a link that is not {@code https}. A key the proposal does not name, and a
+ * modifier beside no key, is ignored, so the format can grow.
  */
-public record DiscoveryFile(String domain, Map<Key, Entry> entries, boolean delegate) {
+public record DiscoveryFile(String domain, List<Entry> entries, boolean delegate) {
 
     /** Where the file of {@code domain} is published: a convention, never a setting. */
     public static URI address(String domain) {
         return URI.create("https://" + domain + "/.well-known/java-repository.properties");
     }
 
-    /** The three keys. */
+    /** The four keys. */
     public enum Key {
-        /** Where a module's files are: a location. */
+        /** Where a module's files are: a location, selected by module name. */
         MODULE("module", Set.of("module", "-suffix", "version", "-classifier", "type")),
-        /** Which Maven artifact a module is: a coordinate. */
+        /** Which Maven artifact a module is: a coordinate, selected by module name. */
         MODULE_TO_MAVEN("moduletomaven", Set.of("module", "-suffix")),
-        /** Where a Maven group's artifacts are: a location. */
-        MAVEN("maven", Set.of("groupId", "groupPath", "artifactId", "version", "-classifier", "type"));
+        /** Where a Maven group's artifacts are: a location, selected by artifact ID. */
+        MAVEN("maven", Set.of("groupId", "groupPath", "artifactId", "version", "-classifier", "type")),
+        /** Where the source archive of a release is: a template naming {@code {version}}, selected by module name or
+         *  artifact ID. */
+        SOURCES("sources", Set.of("module", "-suffix", "groupId", "groupPath", "artifactId", "version"));
 
         private final String spelled;
         private final Set<String> placeholders;
@@ -50,21 +59,55 @@ public record DiscoveryFile(String domain, Map<Key, Entry> entries, boolean dele
     }
 
     /**
-     * One key's entry: its {@code value} - a location, or for {@link Key#MODULE_TO_MAVEN} a coordinate - and what
-     * restricts it: the first version it serves ({@code since}, or {@code null}), the version qualifiers it serves
-     * ({@code suffixes}, empty for every one) and the link naming its newest version ({@code latest}, or {@code null}).
+     * One key's entry: the {@code key}, the name or name prefix it is for ({@code selector}, ending in {@code *} for a
+     * prefix, or {@code null} for every name), its {@code value} - a location, or for {@link Key#MODULE_TO_MAVEN} a
+     * coordinate - and what restricts it: the first version it serves ({@code since}, or {@code null}), the version
+     * qualifiers it serves ({@code suffixes}, empty for every one) and the link naming its newest version
+     * ({@code latest}, or {@code null}).
      */
-    public record Entry(String value, String since, List<String> suffixes, String latest) {
+    public record Entry(Key key, String selector, String value, String since, List<String> suffixes, String latest) {
 
         public Entry {
+            Objects.requireNonNull(key, "key");
             suffixes = List.copyOf(suffixes);
+        }
+
+        /** The key as the file spells it, with its selector. */
+        public String spelled() {
+            return selector == null ? key.spelled() : key.spelled() + "[" + selector + "]";
         }
 
         /** Whether the value is a template - names a placeholder - rather than a root or a plain coordinate. */
         public boolean template() {
             return value.indexOf('{') >= 0;
         }
+
+        /** Whether the latest link names a {@code maven-metadata.xml}, whose release is the newest version, rather
+         *  than a link whose redirect or header names it. */
+        public boolean listsVersions() {
+            return latest != null && latest.endsWith("/maven-metadata.xml");
+        }
+
+        /** How well this entry selects {@code name}: empty where it does not, else higher the more specific - a
+         *  selector naming {@code name} exactly above every prefix, a longer prefix above a shorter, and any selector
+         *  above none. */
+        public OptionalInt selects(String name) {
+            if (selector == null) {
+                return OptionalInt.of(-1);
+            }
+            if (!selector.endsWith("*")) {
+                return selector.equals(name) ? OptionalInt.of(Integer.MAX_VALUE) : OptionalInt.empty();
+            }
+            String prefix = selector.substring(0, selector.length() - 1);
+            return name.startsWith(prefix) ? OptionalInt.of(prefix.length()) : OptionalInt.empty();
+        }
     }
+
+    /** A known key's name: the key, its selector in brackets, and a modifier. */
+    private static final Pattern NAME = Pattern.compile("([a-z]+)(?:\\[([^\\]]*)])?(\\.since|\\.suffixes|\\.latest)?");
+
+    /** A selector: a module name or an artifact ID, or the start of one followed by {@code *}. */
+    private static final Pattern SELECTOR = Pattern.compile("[A-Za-z0-9_.-]+\\*?");
 
     /** The placeholder pattern: a name between braces. */
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{([^{}]*)}");
@@ -77,12 +120,25 @@ public record DiscoveryFile(String domain, Map<Key, Entry> entries, boolean dele
 
     public DiscoveryFile {
         Objects.requireNonNull(domain, "domain");
-        entries = Map.copyOf(entries);
+        entries = List.copyOf(entries);
     }
 
-    /** The entry of {@code key}, or empty where the file does not hold it. */
-    public Optional<Entry> entry(Key key) {
-        return Optional.ofNullable(entries.get(key));
+    /** The entry of {@code key} that answers for {@code name} - the one selecting it most specifically, or the one
+     *  for every name - or empty where the file holds none. */
+    public Optional<Entry> entry(Key key, String name) {
+        Entry best = null;
+        int score = Integer.MIN_VALUE;
+        for (Entry entry : entries) {
+            if (entry.key() != key) {
+                continue;
+            }
+            OptionalInt selects = entry.selects(name);
+            if (selects.isPresent() && selects.getAsInt() > score) {
+                best = entry;
+                score = selects.getAsInt();
+            }
+        }
+        return Optional.ofNullable(best);
     }
 
     /**
@@ -97,99 +153,97 @@ public record DiscoveryFile(String domain, Map<Key, Entry> entries, boolean dele
         } catch (IOException | IllegalArgumentException unreadable) {
             throw refused(domain, "it is not a properties file: " + unreadable.getMessage());
         }
-        for (String name : properties.stringPropertyNames()) {
-            if (known(name) && properties.getProperty(name).isBlank()) {
-                throw refused(domain, "the key '" + name + "' has no value");
-            }
-        }
         boolean delegate = false;
         String delegating = properties.getProperty("delegate");
         if (delegating != null) {
             switch (delegating.strip()) {
                 case "true" -> delegate = true;
                 case "false" -> delegate = false;
+                case "" -> throw refused(domain, "the key 'delegate' has no value");
                 default -> throw refused(domain, "delegate is '" + delegating.strip() + "', neither true nor false");
             }
         }
-        Map<Key, Entry> entries = new EnumMap<>(Key.class);
-        for (Key key : Key.values()) {
-            String value = properties.getProperty(key.spelled());
-            if (value == null) {
-                for (String modifier : List.of(".since", ".suffixes", ".latest")) {
-                    if (properties.getProperty(key.spelled() + modifier) != null) {
-                        throw refused(domain, "'" + key.spelled() + modifier + "' stands beside no '"
-                                + key.spelled() + "'");
-                    }
-                }
+        List<Entry> entries = new ArrayList<>();
+        for (String name : new TreeSet<>(properties.stringPropertyNames())) {
+            Matcher matcher = NAME.matcher(name);
+            if (!matcher.matches() || matcher.group(3) != null) {
                 continue;
             }
-            entries.put(key, entry(domain, key, value.strip(), properties));
+            Optional<Key> key = Arrays.stream(Key.values()).filter(known -> known.spelled().equals(matcher.group(1)))
+                    .findFirst();
+            if (key.isEmpty()) {
+                continue;
+            }
+            String selector = matcher.group(2);
+            if (selector != null && !SELECTOR.matcher(selector).matches()) {
+                throw refused(domain, "'" + name + "' selects '" + selector + "', where a selector is a module name or"
+                        + " an artifact ID, or the start of one followed by *");
+            }
+            entries.add(entry(domain, key.get(), selector, name, properties));
         }
         return new DiscoveryFile(domain, entries, delegate);
     }
 
-    private static Entry entry(String domain, Key key, String value, Properties properties) {
+    private static Entry entry(String domain, Key key, String selector, String name, Properties properties) {
+        String value = value(domain, properties, name);
         boolean location = value.contains("://");
         if (key == Key.MODULE_TO_MAVEN) {
             if (location) {
-                throw refused(domain, "moduletomaven names a location, '" + value + "', where it takes a coordinate");
+                throw refused(domain, name + " names a location, '" + value + "', where it takes a coordinate");
             }
             String[] parts = value.split(":", -1);
-            if (parts.length < 2 || parts.length > 4 || parts[0].isBlank() || parts[1].isBlank()) {
-                throw refused(domain, "moduletomaven names no artifact: '" + value + "'");
+            if (parts.length < 2 || parts.length > 4 || Arrays.stream(parts).anyMatch(String::isBlank)) {
+                throw refused(domain, name + " names no artifact: '" + value
+                        + "', where it takes <groupId>:<artifactId>[:<extension>[:<classifier>]]");
             }
         } else {
             if (!location) {
-                throw refused(domain, key.spelled() + " names a coordinate, '" + value + "', where it takes a location");
+                throw refused(domain, name + " names a coordinate, '" + value + "', where it takes a location");
             }
-            https(domain, key.spelled(), value);
+            https(domain, name, value);
+            if (key == Key.SOURCES && !value.contains("{version}")) {
+                throw refused(domain, name + " names no {version}, where it takes the source archive of a version");
+            }
         }
-        placeholders(domain, key.spelled(), value, key.placeholders());
-        String since = modifier(properties, key, ".since");
+        placeholders(domain, name, value, key.placeholders());
+        String since = modifier(domain, properties, name + ".since");
         List<String> suffixes = new ArrayList<>();
-        String listed = modifier(properties, key, ".suffixes");
+        String listed = modifier(domain, properties, name + ".suffixes");
         if (listed != null) {
             for (String suffix : listed.split(",", -1)) {
                 String word = suffix.strip();
                 if (!SUFFIX.matcher(word).matches()) {
-                    throw refused(domain, key.spelled() + ".suffixes names '" + word
+                    throw refused(domain, name + ".suffixes names '" + word
                             + "', not one word of letters and digits");
                 }
                 suffixes.add(word.toLowerCase(Locale.ROOT));
             }
         }
-        String latest = modifier(properties, key, ".latest");
+        String latest = modifier(domain, properties, name + ".latest");
         if (latest != null) {
-            if (key == Key.MODULE_TO_MAVEN || !value.contains("{")) {
-                throw refused(domain, key.spelled() + ".latest stands beside a "
-                        + (key == Key.MODULE_TO_MAVEN ? "coordinate" : "root")
+            if (key == Key.MODULE_TO_MAVEN || !value.contains("{version}")) {
+                throw refused(domain, name + ".latest stands beside "
+                        + (key == Key.MODULE_TO_MAVEN ? "a coordinate" : "a value naming no {version}")
                         + ", which lists its versions itself");
             }
-            https(domain, key.spelled() + ".latest", latest);
+            https(domain, name + ".latest", latest);
             Set<String> linked = new HashSet<>(key.placeholders());
             linked.remove("version");
-            placeholders(domain, key.spelled() + ".latest", latest, linked);
+            placeholders(domain, name + ".latest", latest, linked);
         }
-        return new Entry(value, since, suffixes, latest);
+        return new Entry(key, selector, value, since, suffixes, latest);
     }
 
-    private static String modifier(Properties properties, Key key, String modifier) {
-        String value = properties.getProperty(key.spelled() + modifier);
-        return value == null ? null : value.strip();
+    private static String modifier(String domain, Properties properties, String name) {
+        return properties.getProperty(name) == null ? null : value(domain, properties, name);
     }
 
-    private static boolean known(String name) {
-        if (name.equals("delegate")) {
-            return true;
+    private static String value(String domain, Properties properties, String name) {
+        String value = properties.getProperty(name).strip();
+        if (value.isEmpty()) {
+            throw refused(domain, "the key '" + name + "' has no value");
         }
-        for (Key key : Key.values()) {
-            for (String modifier : List.of("", ".since", ".suffixes", ".latest")) {
-                if (name.equals(key.spelled() + modifier)) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        return value;
     }
 
     private static void https(String domain, String name, String value) {

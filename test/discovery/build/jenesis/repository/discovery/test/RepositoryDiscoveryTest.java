@@ -3,6 +3,7 @@ package build.jenesis.repository.discovery.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.discovery.DiscoveryException;
+import build.jenesis.repository.discovery.DiscoveryFile;
 import build.jenesis.repository.discovery.RepositoryDiscovery;
 import build.jenesis.repository.discovery.RepositoryDiscovery.Located;
 
@@ -12,14 +13,32 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Where a request path's file is, as the domain its name reverses into says: through the file Jenesis publishes for
  * itself a Maven file, a module file and the Maven view of a module land on its GitHub releases, each file checked
- * against the checksum beside it, and a request without a version reads the newest from the latest link's redirect. The
- * shortest domain answers for its subdomains unless it says {@code delegate=true}, a key restricted by {@code .since} or
- * {@code .suffixes} leaves other versions to the other legs, each file is asked for once per period - its absence and
- * its refusal too - and a private host is never asked.
+ * against the checksum beside it, and a request without a version reads the newest from the latest link's redirect, or
+ * from the {@code maven-metadata.xml} it names. Each project under one domain is located through the key selecting it.
+ * The shortest domain answers for its subdomains unless it says {@code delegate=true}, a key restricted by
+ * {@code .since} or {@code .suffixes} leaves other versions - and a request without one - to the other legs, each file
+ * is asked for once per period - its absence and its refusal too - and a private host is never asked.
  */
 class RepositoryDiscoveryTest {
 
     private static final String RELEASES = "https://github.com/jenesis/jenesis/releases/";
+
+    private static final String METADATA = """
+            <metadata>
+              <groupId>com.example</groupId>
+              <artifactId>lib</artifactId>
+              <versioning>
+                <latest>1.2-SNAPSHOT</latest>
+                <release>1.1</release>
+                <versions>
+                  <version>1.0</version>
+                  <version>1.1-rc1</version>
+                  <version>1.1</version>
+                  <version>1.2-SNAPSHOT</version>
+                </versions>
+              </versioning>
+            </metadata>
+            """;
 
     private final Table table = new Table().file("jenesis.build", DiscoveryFileTest.JENESIS);
 
@@ -120,7 +139,7 @@ class RepositoryDiscoveryTest {
     }
 
     @Test
-    void a_file_saying_stop_false_lets_the_most_specific_file_holding_a_key_answer() {
+    void a_file_saying_delegate_true_lets_the_most_specific_file_holding_a_key_answer() {
         table.file("bytebuddy.net", """
                 maven=https://maven.bytebuddy.net/releases/
                 module=https://modules.bytebuddy.net/
@@ -132,8 +151,7 @@ class RepositoryDiscoveryTest {
         assertThat(discovery.locate("/module/net.bytebuddy.agent/1.0/net.bytebuddy.agent.jar"))
                 .contains(new Located.Relayed(URI.create("https://agent.bytebuddy.net/modules/"),
                         "module/net.bytebuddy.agent/1.0/net.bytebuddy.agent.jar"));
-        assertThat(discovery.answering("net.bytebuddy.agent").get(
-                build.jenesis.repository.discovery.DiscoveryFile.Key.MAVEN).domain())
+        assertThat(discovery.answering("net.bytebuddy.agent").get(DiscoveryFile.Key.MAVEN).domain())
                 .as("a key the subdomain does not hold is its parent's").isEqualTo("bytebuddy.net");
     }
 
@@ -162,6 +180,8 @@ class RepositoryDiscoveryTest {
         assertThat(discovery.locate("/maven/com/example/lib/1.10.0/lib-1.10.0.jar")).as("Maven's order").isPresent();
         assertThat(discovery.locate("/maven/com/example/lib/1.3.0-RC2/lib-1.3.0-RC2.jar")).isPresent();
         assertThat(discovery.locate("/maven/com/example/lib/1.3.0-rc.1/lib-1.3.0-rc.1.jar")).isPresent();
+        assertThat(discovery.locate("/maven/com/example/lib/1.3.0-rc12/lib-1.3.0-rc12.jar")).isPresent();
+        assertThat(discovery.locate("/maven/com/example/lib/1.3.0-rcx/lib-1.3.0-rcx.jar")).as("a longer word").isEmpty();
         assertThat(discovery.locate("/maven/com/example/lib/1.3.0-SNAPSHOT/lib-1.3.0-SNAPSHOT.jar")).isEmpty();
         assertThat(discovery.locate("/maven/com/example/lib/1.2.0/lib-1.2.0.jar").orElseThrow())
                 .isEqualTo(new Located.Fetched(URI.create("https://example.com/m/com/example/lib/1.2.0/lib-1.2.0.jar"),
@@ -227,6 +247,125 @@ class RepositoryDiscoveryTest {
     }
 
     @Test
+    void each_project_under_one_domain_is_located_through_the_key_selecting_it() {
+        RepositoryDiscovery discovery = discovery();
+
+        assertThat(discovery.locate("/maven/build/jenesis/build.jenesis.launcher/1.4.0/build.jenesis.launcher-1.4.0.jar"))
+                .contains(new Located.Fetched(URI.create("https://github.com/jenesis/jenesis-launcher/releases/"
+                        + "download/v1.4.0/build.jenesis.launcher-1.4.0.jar"), true));
+        assertThat(discovery.locate("/maven/build/jenesis/build.jenesis.repository.store/1.0.0/"
+                + "build.jenesis.repository.store-1.0.0.pom")).as("a prefix selects every artifact it begins")
+                .contains(new Located.Fetched(URI.create("https://github.com/jenesis/jenesis-repository/releases/"
+                        + "download/v1.0.0/build.jenesis.repository.store-1.0.0.pom"), true));
+        assertThat(discovery.locate("/artifact/build.jenesis.repository.store/1.0.0/build.jenesis.repository.store.jar"))
+                .as("a module mapped by the key for every name, located by the key selecting its artifact")
+                .contains(new Located.Fetched(URI.create("https://github.com/jenesis/jenesis-repository/releases/"
+                        + "download/v1.0.0/build.jenesis.repository.store-1.0.0.jar"), true));
+        assertThat(discovery.locate("/maven/build/jenesis/build.jenesis.other/1.0/build.jenesis.other-1.0.jar"))
+                .as("an artifact no key selects").isEmpty();
+        assertThat(discovery.answering("build.jenesis", DiscoveryFile.Key.SOURCES, "build.jenesis.repository.store"))
+                .hasValueSatisfying(answer -> assertThat(answer.entry().value())
+                        .isEqualTo("https://github.com/jenesis/jenesis-repository/archive/refs/tags/v{version}.zip"));
+        assertThat(discovery.answering("build.jenesis").get(DiscoveryFile.Key.SOURCES).entry().spelled())
+                .isEqualTo("sources[build.jenesis]");
+    }
+
+    @Test
+    void a_delegating_file_lets_a_deeper_subdomain_answer_past_one_without_a_file() {
+        table.file("bytebuddy.net", "maven=https://maven.bytebuddy.net/releases/\ndelegate=true\n");
+        table.file("x.agent.bytebuddy.net", "maven=https://x.bytebuddy.net/maven/\n");
+        RepositoryDiscovery discovery = discovery();
+
+        assertThat(discovery.locate("/maven/net/bytebuddy/agent/x/lib/1.0/lib-1.0.jar"))
+                .contains(new Located.Relayed(URI.create("https://x.bytebuddy.net/maven/"),
+                        "net/bytebuddy/agent/x/lib/1.0/lib-1.0.jar"));
+        assertThat(table.asked("agent.bytebuddy.net")).isOne();
+    }
+
+    @Test
+    void a_plain_coordinate_for_every_name_maps_only_the_module_of_its_own_domain() {
+        table.file("example.com", """
+                moduletomaven=com.example:example-core
+                maven=https://maven.example.com/releases/
+                """);
+        RepositoryDiscovery discovery = discovery();
+
+        assertThat(discovery.locate("/artifact/com.example/1.0/com.example.jar"))
+                .contains(new Located.Fetched(URI.create("https://maven.example.com/releases/com/example/"
+                        + "example-core/1.0/example-core-1.0.jar"), false));
+        assertThat(discovery.locate("/artifact/com.example.legacy/1.0/com.example.legacy.jar")).isEmpty();
+
+        table.file("example.com", """
+                moduletomaven=com.example:example-core
+                moduletomaven[com.example.legacy]=com.example:example-classic
+                maven=https://maven.example.com/releases/
+                """);
+        discovery.forget();
+        assertThat(discovery.locate("/artifact/com.example.legacy/1.0/com.example.legacy.jar"))
+                .as("a selected coordinate maps its module wherever it sits below the domain")
+                .contains(new Located.Fetched(URI.create("https://maven.example.com/releases/com/example/"
+                        + "example-classic/1.0/example-classic-1.0.jar"), false));
+    }
+
+    @Test
+    void a_latest_link_naming_maven_metadata_lists_the_versions_the_key_serves() {
+        table.file("example.com", """
+                maven=https://cdn.example.com/{artifactId}/{version}/{artifactId}-{version}{-classifier}.{type}
+                maven.latest=https://maven.example.com/releases/{groupPath}/{artifactId}/maven-metadata.xml
+                maven.suffixes=none,rc
+                module=https://cdn.example.com/{module}/{version}/{module}-{version}.jar
+                module.latest=https://maven.example.com/releases/{module}/maven-metadata.xml
+                module.since=1.1
+                """);
+        table.document("https://maven.example.com/releases/com/example/lib/maven-metadata.xml", METADATA);
+        table.document("https://maven.example.com/releases/com.example.lib/maven-metadata.xml", METADATA);
+        RepositoryDiscovery discovery = discovery();
+
+        Located metadata = discovery.locate("/maven/com/example/lib/maven-metadata.xml").orElseThrow();
+        assertThat(new String(((Located.Answered) metadata).body(), StandardCharsets.UTF_8))
+                .contains("<version>1.0</version>", "<version>1.1-rc1</version>", "<version>1.1</version>",
+                        "<latest>1.1</latest>", "<release>1.1</release>")
+                .doesNotContain("SNAPSHOT");
+        assertThat(discovery.locate("/module/com.example.lib/com.example.lib.jar"))
+                .as("the newest release the key serves")
+                .contains(new Located.Fetched(URI.create("https://cdn.example.com/com.example.lib/1.1/"
+                        + "com.example.lib-1.1.jar"), false));
+        assertThat(table.asked).as("read, never sent a HEAD").noneMatch(url -> !url.getPath().endsWith(".xml")
+                && !url.getPath().endsWith(".properties"));
+    }
+
+    @Test
+    void a_key_restricting_its_versions_serves_no_request_without_one_and_filters_a_roots_metadata() {
+        table.file("example.com", """
+                module=https://modules.example.com/
+                module.since=1.0
+                maven=https://maven.example.com/releases/
+                maven.suffixes=none
+                """);
+        table.document("https://maven.example.com/releases/com/example/lib/maven-metadata.xml", METADATA);
+        RepositoryDiscovery discovery = discovery();
+
+        assertThat(discovery.locate("/module/com.example/com.example.jar")).isEmpty();
+        assertThat(discovery.locate("/module/com.example/1.1/com.example.jar"))
+                .contains(new Located.Relayed(URI.create("https://modules.example.com/"),
+                        "module/com.example/1.1/com.example.jar"));
+        Located metadata = discovery.locate("/maven/com/example/lib/maven-metadata.xml").orElseThrow();
+        assertThat(new String(((Located.Answered) metadata).body(), StandardCharsets.UTF_8))
+                .contains("<version>1.0</version>", "<version>1.1</version>", "<release>1.1</release>")
+                .doesNotContain("rc1", "SNAPSHOT");
+    }
+
+    @Test
+    void a_latest_link_naming_what_is_no_version_is_refused() {
+        table.head(RELEASES + "latest/download/build.jenesis.pom", 200,
+                Map.of("Jenesis-MavenVersion", "../../etc"));
+        RepositoryDiscovery discovery = discovery();
+
+        assertThatThrownBy(() -> discovery.locate("/maven/build/jenesis/build.jenesis/maven-metadata.xml"))
+                .isInstanceOf(DiscoveryException.class).hasMessageContaining("newest version");
+    }
+
+    @Test
     void a_private_host_is_never_asked_and_never_a_location() {
         table.file("corp.internal", "maven=https://maven.corp.internal/\n");
         table.file("example.com", "maven=https://10.0.0.1/maven/\n");
@@ -251,7 +390,7 @@ class RepositoryDiscoveryTest {
         assertThat(table.asked("jenesis.build")).as("asked afresh, not as remembered").isEqualTo(2);
         assertThat(jenesis.domains()).singleElement().satisfies(asked -> {
             assertThat(asked.state()).isEqualTo("found");
-            assertThat(asked.file().entries()).containsKey(build.jenesis.repository.discovery.DiscoveryFile.Key.MAVEN);
+            assertThat(asked.file().entries()).extracting(DiscoveryFile.Entry::key).contains(DiscoveryFile.Key.MAVEN);
         });
         assertThat(jenesis.located()).isEqualTo(new Located.Fetched(
                 URI.create(RELEASES + "download/v0.20.0/build.jenesis-0.20.0.jar"), true));

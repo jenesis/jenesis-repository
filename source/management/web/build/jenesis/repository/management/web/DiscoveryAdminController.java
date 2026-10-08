@@ -13,8 +13,9 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Repository discovery at the API: {@code POST /api/admin/discovery/check?name=<module or groupId>[&path=<path>]}
  * starts asking each domain {@code name} reverses into, afresh, what its {@code /.well-known/java-repository.properties}
- * holds - or that it has none, or why it is refused - which file answers each key, and, given a repository request
- * path such as {@code /maven/build/jenesis/build.jenesis/0.15.4/build.jenesis-0.15.4.jar}, where a {@code discovered}
+ * holds - or that it has none, or why it is refused - which entry answers each key for {@code name}, and, given a
+ * repository request
+ * path such as {@code /maven/build/jenesis/build.jenesis/0.15.5/build.jenesis-0.15.5.jar}, where a {@code discovered}
  * leg would take it. It answers the check's state at once - {@code running}, or {@code done} with what was found -
  * and {@code GET} of the same address reads it back, so nothing waits on the domains. The console's Discovery screen
  * and the CLI's {@code discovery check} reach the same {@link RepositoryDiscovery#ask}. Without the reader on this
@@ -79,27 +80,34 @@ public class DiscoveryAdminController {
         }
     }
 
-    /** What a check found: each domain asked, which domain answers each key, and where {@code path} goes. */
-    public record CheckView(String name, List<DomainView> domains, Map<String, String> answering, String path,
+    /** What a check found: each domain asked, which entry answers each key for the name, and where {@code path}
+     *  goes. */
+    public record CheckView(String name, List<DomainView> domains, Map<String, AnswerView> answering, String path,
                             LocatedView located, String refusal) {
 
         static CheckView of(RepositoryDiscovery.Check check) {
-            Map<String, String> answering = new TreeMap<>();
-            check.answering().forEach((key, answer) -> answering.put(key.spelled(), answer.domain()));
+            Map<String, AnswerView> answering = new TreeMap<>();
+            check.answering().forEach((key, answer) -> answering.put(key.spelled(),
+                    new AnswerView(answer.entry().spelled(), answer.domain())));
             return new CheckView(check.name(), check.domains().stream().map(DomainView::of).toList(), answering,
                     check.path(), check.located() == null ? null : LocatedView.of(check.located()), check.refusal());
         }
     }
 
+    /** The entry answering a key - spelled with its selector, {@code module[build.jenesis]} - and the domain whose
+     *  file holds it. */
+    public record AnswerView(String key, String domain) {
+    }
+
     /** One domain as asked: {@code found}, {@code absent}, {@code refused} or {@code not-reached}, and what its file
-     *  holds key by key, or why it is refused. */
+     *  holds key by key, each spelled with its selector, or why it is refused. */
     public record DomainView(String domain, String address, String state, Boolean delegate,
                              Map<String, EntryView> entries, String refusal) {
 
         static DomainView of(RepositoryDiscovery.Asked asked) {
             Map<String, EntryView> entries = new TreeMap<>();
             if (asked.file() != null) {
-                asked.file().entries().forEach((key, entry) -> entries.put(key.spelled(), EntryView.of(entry)));
+                asked.file().entries().forEach(entry -> entries.put(entry.spelled(), EntryView.of(entry)));
             }
             return new DomainView(asked.domain(), asked.address().toString(), asked.state(),
                     asked.file() == null ? null : asked.file().delegate(), entries, asked.refusal());
@@ -115,7 +123,7 @@ public class DiscoveryAdminController {
     }
 
     /** Where a path's file is: {@code relayed} under a root, {@code fetched} at a filled template ({@code checked}
-     *  against the checksum beside it), or {@code answered} - metadata a latest link names. */
+     *  against the checksum beside it), or {@code answered} - Maven metadata answered here. */
     public record LocatedView(String kind, String url, Boolean checked) {
 
         static LocatedView of(RepositoryDiscovery.Located located) {

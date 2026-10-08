@@ -19,9 +19,12 @@ import org.eclipse.aether.version.VersionScheme;
  *
  * <p><b>Which file answers.</b> A name is asked of the domains {@link Domains#of} lists, shortest first, and the first
  * file found speaks for every name below its domain: a key it does not hold is absent rather than asked of a
- * subdomain. A file saying {@code delegate=true} lets the files of its subdomains be read as well - down to the first
- * subdomain without one - and then the most specific file holding a key answers for it. Each domain's file is read
- * once per {@link #ttl()} on this node, an absent
+ * subdomain. A file saying {@code delegate=true} lets the files of its subdomains be read as well, and then the most
+ * specific file holding a key answers for it. Within a file, a key selecting the name exactly answers before one
+ * selecting a prefix of it, the longest prefix first, and either before the key for every name; {@code module} and
+ * {@code moduletomaven} select by module name, {@code maven} by artifact ID. A {@code moduletomaven} naming a
+ * coordinate without placeholders and selecting nothing answers only for the module whose own domain publishes the
+ * file. Each domain's file is read once per {@link #ttl()} on this node, an absent
  * one remembered as absent for as long, so a busy leg costs a domain one request an hour; at most {@link #MOST_DOMAINS}
  * domains are remembered at once. A file that cannot be fetched - none, a host that does not exist or does not answer -
  * is absent; a file the proposal refuses, and a certificate that does not verify, is a {@link DiscoveryException}
@@ -30,20 +33,24 @@ import org.eclipse.aether.version.VersionScheme;
  * <p><b>What it answers.</b> {@link #locate} reads a request path as a {@link Request} and answers where its file is:
  * {@link Located.Relayed} under a root - a Maven repository, or a module service - at the request's own path in the
  * root's layout; {@link Located.Fetched} at a template's address filled in for this file, {@code checked} against the
- * strongest checksum beside it where the template names {@code {type}}; or {@link Located.Answered}, the Maven metadata
- * a latest link names. A version a key does not serve ({@code .since}, {@code .suffixes}), a file a template cannot
- * name (a classified file without {@code {-classifier}}, anything but the plain jar without {@code {type}}) and a name
- * no file speaks for answer nothing, which leaves the request to the repository's other legs.
+ * strongest checksum beside it where the template names {@code {type}}; or {@link Located.Answered}, Maven metadata
+ * answered here - the versions a latest link's {@code maven-metadata.xml} lists, the one version its redirect names, or
+ * a root's own versions where its key restricts them. A version a key does not serve ({@code .since},
+ * {@code .suffixes}), a request without a version where a key restricts them, a file a template cannot name (a
+ * classified file without {@code {-classifier}}, anything but the plain jar without {@code {type}}) and a name no file
+ * speaks for answer nothing, which leaves the request to the repository's other legs.
  *
  * <p>A module path asks {@code module} first and the Maven view ({@code /artifact/}) asks {@code moduletomaven} first,
  * as a build on the module path and one reading POMs do; a module mapped to a Maven artifact is located through the
  * {@code maven} key of that artifact's own group, and without one answers nothing here. A request without a version
- * is answered through a latest link only, or a root's own metadata for a mapped module.
+ * is answered through a latest link only - the version its header or redirect names, or the newest release among those
+ * the key serves in the {@code maven-metadata.xml} it names - or a root's own metadata for a mapped module.
  *
  * <p><b>Trust.</b> Every address is screened by {@code refused} - a private, loopback or link-local host - before it is
  * asked: a file at such a domain is absent, and a file naming such a location is refused. Files and locations are
- * {@code https} only; a latest link is sent a {@code HEAD} and its redirect is not followed. What a file names says only
- * where bytes come from: the leg serving them screens them as it screens any upstream's.
+ * {@code https} only; a latest link is sent a {@code HEAD} and its redirect is not followed, unless it names a
+ * {@code maven-metadata.xml}, which is read. What a file names says only where bytes come from: the leg serving them
+ * screens them as it screens any upstream's.
  */
 public final class RepositoryDiscovery {
 
@@ -53,7 +60,7 @@ public final class RepositoryDiscovery {
     /** The most domains remembered at once; past it the memory starts over, so no stream of names grows it. */
     public static final int MOST_DOMAINS = 10_000;
 
-    /** The longest Maven metadata document read from a root, for a module's newest mapped version. */
+    /** The longest Maven metadata document read, from a root or a latest link. */
     public static final int MOST_METADATA_BYTES = 1024 * 1024;
 
     /** The header a module service names a module's newest version in. */
@@ -64,6 +71,13 @@ public final class RepositoryDiscovery {
 
     /** Maven's version order, which {@code .since} is read in. */
     private static final VersionScheme VERSIONS = new GenericVersionScheme();
+
+    /** A version a latest link may name. */
+    private static final Pattern VERSION = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._+-]{0,127}");
+
+    /** The qualifiers that mark a version as no release, as Maven's order and common practice read them. */
+    private static final Set<String> PRERELEASE = Set.of("alpha", "beta", "milestone", "rc", "cr", "snapshot", "ea",
+            "pre", "prerelease", "preview", "dev", "nightly", "canary", "next", "test", "adhoc");
 
     /** How this reaches the network; the production one is {@link ScreenedTransport}. */
     public interface Transport {
@@ -109,7 +123,7 @@ public final class RepositoryDiscovery {
         record Fetched(URI url, boolean checked) implements Located {
         }
 
-        /** Maven metadata the latest link named, or its checksum: answered here rather than fetched. */
+        /** Maven metadata answered here rather than fetched, or its checksum. */
         record Answered(byte[] body, String contentType) implements Located {
         }
     }
@@ -163,21 +177,18 @@ public final class RepositoryDiscovery {
     /**
      * What the domains of {@code name} say now, for an operator asking why a request went where it went: each domain
      * the walk reaches, asked afresh rather than as remembered, with what its file holds or why it is refused; which
-     * file answers each key; and, where {@code path} is given, where that request path's file is - or the refusal
-     * that ends its leg. The files read stay remembered as a request would leave them.
+     * entry answers each key for {@code name} - selected by {@code name} itself, so an artifact whose ID differs from
+     * its group is checked through its path; and, where {@code path} is given, where that request path's file is - or
+     * the refusal that ends its leg. The files read stay remembered as a request would leave them.
      */
     public Check check(String name, String path) {
         List<String> domains = Domains.of(name);
         domains.forEach(files::remove);
         List<Asked> asked = new ArrayList<>();
-        boolean found = false;
         for (String domain : domains) {
             URI address = DiscoveryFile.address(domain);
             if (refused.test(address)) {
                 asked.add(new Asked(domain, address, "not-reached", null, null));
-                if (found) {
-                    break;
-                }
                 continue;
             }
             Optional<DiscoveryFile> file;
@@ -188,14 +199,7 @@ public final class RepositoryDiscovery {
                 break;
             }
             asked.add(new Asked(domain, address, file.isPresent() ? "found" : "absent", file.orElse(null), null));
-            if (file.isEmpty()) {
-                if (found) {
-                    break;
-                }
-                continue;
-            }
-            found = true;
-            if (!file.get().delegate()) {
+            if (file.isPresent() && !file.get().delegate()) {
                 break;
             }
         }
@@ -290,31 +294,41 @@ public final class RepositoryDiscovery {
     }
 
     /**
-     * What answers for {@code name}, key by key: the entry of the most specific file read that holds it, and that
-     * file's domain - empty where no domain's file speaks for the name.
+     * What answers for {@code name}, key by key, each key selected by {@code name} itself: empty where no domain's file
+     * speaks for the name.
      */
     public Map<Key, Answering> answering(String name) {
         Map<Key, Answering> answering = new EnumMap<>(Key.class);
-        boolean found = false;
-        for (String domain : Domains.of(name)) {
+        for (Key key : Key.values()) {
+            answering(name, key, name).ifPresent(answer -> answering.put(key, answer));
+        }
+        return answering;
+    }
+
+    /**
+     * The entry of {@code key} that answers for {@code selected} below the domains {@code name} reverses into - a
+     * module name, or for {@code maven} a groupId with {@code selected} its artifact ID - and the domain whose file
+     * holds it; empty where no file holds one.
+     */
+    public Optional<Answering> answering(String name, Key key, String selected) {
+        List<String> domains = Domains.of(name);
+        Answering answering = null;
+        for (int index = 0; index < domains.size(); index++) {
+            String domain = domains.get(index);
             Optional<DiscoveryFile> file = file(domain);
             if (file.isEmpty()) {
-                if (found) {
-                    // A subdomain without a file leaves the keys to the files above it; the walk goes no deeper
-                    // than the files that say so.
-                    break;
-                }
                 continue;
             }
-            found = true;
-            for (Map.Entry<Key, Entry> entry : file.get().entries().entrySet()) {
-                answering.put(entry.getKey(), new Answering(entry.getValue(), domain));
+            Optional<Entry> entry = file.get().entry(key, selected);
+            if (entry.isPresent() && (key != Key.MODULE_TO_MAVEN || entry.get().template()
+                    || entry.get().selector() != null || index == domains.size() - 1)) {
+                answering = new Answering(entry.get(), domain);
             }
             if (!file.get().delegate()) {
                 break;
             }
         }
-        return answering;
+        return Optional.ofNullable(answering);
     }
 
     /** The file {@code domain} publishes, as remembered or read now. */
@@ -348,7 +362,7 @@ public final class RepositoryDiscovery {
     }
 
     private Optional<Located> maven(Request.MavenFile file) {
-        Answering answering = answering(file.groupId()).get(Key.MAVEN);
+        Answering answering = answering(file.groupId(), Key.MAVEN, file.artifactId()).orElse(null);
         if (answering == null || !serves(answering.entry(), file.version())) {
             return Optional.empty();
         }
@@ -361,19 +375,29 @@ public final class RepositoryDiscovery {
     }
 
     private Optional<Located> metadata(Request.MavenMetadata metadata) {
-        Answering answering = answering(metadata.groupId()).get(Key.MAVEN);
+        Answering answering = answering(metadata.groupId(), Key.MAVEN, metadata.artifactId()).orElse(null);
         if (answering == null) {
             return Optional.empty();
         }
-        if (!answering.entry().template()) {
-            return Optional.of(new Located.Relayed(location(answering.entry().value()), ""));
+        Entry entry = answering.entry();
+        Map<String, String> values = Map.of("groupId", metadata.groupId(),
+                "groupPath", metadata.groupId().replace('.', '/'), "artifactId", metadata.artifactId());
+        Optional<Listing> listing;
+        if (!entry.template()) {
+            if (unrestricted(entry)) {
+                return Optional.of(new Located.Relayed(location(entry.value()), ""));
+            }
+            listing = listing(rootMetadata(entry.value(), metadata.groupId(), metadata.artifactId()), false)
+                    .map(listed -> listed.admitted(entry));
+        } else if (entry.listsVersions()) {
+            listing = listing(location(fill(entry.latest(), values)), true).map(listed -> listed.admitted(entry));
+        } else {
+            listing = latest(entry, MAVEN_VERSION, values).map(Listing::of);
         }
-        Optional<String> newest = latest(answering.entry(), MAVEN_VERSION, Map.of("groupId", metadata.groupId(),
-                "groupPath", metadata.groupId().replace('.', '/'), "artifactId", metadata.artifactId()));
-        if (newest.isEmpty()) {
+        if (listing.isEmpty() || listing.get().versions().isEmpty()) {
             return Optional.empty();
         }
-        byte[] document = metadataDocument(metadata.groupId(), metadata.artifactId(), newest.get());
+        byte[] document = metadataDocument(metadata.groupId(), metadata.artifactId(), listing.get());
         if (metadata.digest() == null) {
             return Optional.of(new Located.Answered(document, "application/xml"));
         }
@@ -387,16 +411,14 @@ public final class RepositoryDiscovery {
     }
 
     private Optional<Located> module(Request.ModuleFile file) {
-        Map<Key, Answering> answering = answering(file.module());
-        Optional<Located> located = file.mavenView()
-                ? mapped(file, answering).or(() -> direct(file, answering))
-                : direct(file, answering).or(() -> mapped(file, answering));
-        return located;
+        return file.mavenView()
+                ? mapped(file).or(() -> direct(file))
+                : direct(file).or(() -> mapped(file));
     }
 
     // Through the module key: a module service relays the path, a template is filled for the file.
-    private Optional<Located> direct(Request.ModuleFile file, Map<Key, Answering> answering) {
-        Answering module = answering.get(Key.MODULE);
+    private Optional<Located> direct(Request.ModuleFile file) {
+        Answering module = answering(file.module(), Key.MODULE, file.module()).orElse(null);
         if (module == null) {
             return Optional.empty();
         }
@@ -408,8 +430,11 @@ public final class RepositoryDiscovery {
         String suffix = Domains.suffix(file.module(), module.domain());
         String version = file.version();
         if (version == null) {
-            Optional<String> newest = latest(module.entry(), MODULE_VERSION,
-                    Map.of("module", file.module(), "-suffix", suffix));
+            Map<String, String> values = Map.of("module", file.module(), "-suffix", suffix);
+            Optional<String> newest = module.entry().listsVersions()
+                    ? listing(location(fill(module.entry().latest(), values)), true)
+                            .map(listed -> listed.admitted(module.entry())).map(Listing::release)
+                    : latest(module.entry(), MODULE_VERSION, values);
             if (newest.isEmpty()) {
                 return Optional.empty();
             }
@@ -422,45 +447,54 @@ public final class RepositoryDiscovery {
     }
 
     // Through moduletomaven: the module's Maven artifact, located by the maven key of that artifact's own group.
-    private Optional<Located> mapped(Request.ModuleFile file, Map<Key, Answering> answering) {
-        Answering mapping = answering.get(Key.MODULE_TO_MAVEN);
-        if (mapping == null) {
+    private Optional<Located> mapped(Request.ModuleFile file) {
+        Answering mapping = answering(file.module(), Key.MODULE_TO_MAVEN, file.module()).orElse(null);
+        if (mapping == null || !serves(mapping.entry(), file.version())) {
             return Optional.empty();
         }
         String[] coordinate = fill(mapping.entry().value(), Map.of("module", file.module(),
                 "-suffix", Domains.suffix(file.module(), mapping.domain()))).split(":", -1);
         String groupId = coordinate[0];
         String artifactId = coordinate[1];
-        String extension = coordinate.length > 2 && !coordinate[2].isBlank() ? coordinate[2] : "jar";
+        String extension = coordinate.length > 2 ? coordinate[2] : "jar";
         String classifier = file.classifier() != null ? file.classifier()
-                : coordinate.length > 3 && !coordinate[3].isBlank() ? coordinate[3] : null;
+                : coordinate.length > 3 ? coordinate[3] : null;
         String type = file.type().equals("jar") || file.type().startsWith("jar.")
                 ? extension + file.type().substring(3) : file.type();
-        Answering maven = answering(groupId).get(Key.MAVEN);
+        Answering maven = answering(groupId, Key.MAVEN, artifactId).orElse(null);
         if (maven == null) {
             return Optional.empty();
         }
+        Entry entry = maven.entry();
         String version = file.version();
         if (version == null) {
-            Optional<String> newest = maven.entry().template()
-                    ? latest(maven.entry(), MAVEN_VERSION, Map.of("groupId", groupId,
-                            "groupPath", groupId.replace('.', '/'), "artifactId", artifactId))
-                    : release(location(maven.entry().value()), groupId, artifactId);
+            Map<String, String> values = Map.of("groupId", groupId, "groupPath", groupId.replace('.', '/'),
+                    "artifactId", artifactId);
+            Optional<String> newest;
+            if (!entry.template()) {
+                newest = listing(rootMetadata(entry.value(), groupId, artifactId), false)
+                        .map(listed -> listed.admitted(entry)).map(Listing::release);
+            } else if (entry.listsVersions()) {
+                newest = listing(location(fill(entry.latest(), values)), true)
+                        .map(listed -> listed.admitted(entry)).map(Listing::release);
+            } else {
+                newest = latest(entry, MAVEN_VERSION, values);
+            }
             if (newest.isEmpty()) {
                 return Optional.empty();
             }
             version = newest.get();
         }
-        if (!serves(maven.entry(), version)) {
+        if (!serves(entry, version)) {
             return Optional.empty();
         }
-        if (!maven.entry().template()) {
-            String root = maven.entry().value().endsWith("/") ? maven.entry().value() : maven.entry().value() + "/";
+        if (!entry.template()) {
+            String root = entry.value().endsWith("/") ? entry.value() : entry.value() + "/";
             String name = artifactId + "-" + version + (classifier == null ? "" : "-" + classifier) + "." + type;
             return Optional.of(new Located.Fetched(location(root + groupId.replace('.', '/') + "/" + artifactId
                     + "/" + version + "/" + name), false));
         }
-        return filled(maven.entry().value(), Map.of("groupId", groupId, "groupPath", groupId.replace('.', '/'),
+        return filled(entry.value(), Map.of("groupId", groupId, "groupPath", groupId.replace('.', '/'),
                 "artifactId", artifactId, "version", version), classifier, type);
     }
 
@@ -480,19 +514,20 @@ public final class RepositoryDiscovery {
         return Optional.of(new Located.Fetched(location(fill(template, all)), typed && !checksum));
     }
 
-    // Whether an entry serves a version: from its .since on, and with a qualifier its .suffixes names.
+    // Whether an entry restricts the versions it serves at all.
+    private static boolean unrestricted(Entry entry) {
+        return entry.since() == null && entry.suffixes().isEmpty();
+    }
+
+    // Whether an entry serves a version: from its .since on, and with a qualifier one of its .suffixes begins - the
+    // part after the first dash, ignoring case, the suffix ending where a letter does not follow. A request without a
+    // version is served only by an entry that restricts none.
     private static boolean serves(Entry entry, String version) {
         if (version == null) {
-            return true;
+            return unrestricted(entry);
         }
-        if (entry.since() != null) {
-            try {
-                if (VERSIONS.parseVersion(version).compareTo(VERSIONS.parseVersion(entry.since())) < 0) {
-                    return false;
-                }
-            } catch (InvalidVersionSpecificationException unordered) {
-                return false;
-            }
+        if (entry.since() != null && compare(version, entry.since()) < 0) {
+            return false;
         }
         if (entry.suffixes().isEmpty()) {
             return true;
@@ -501,8 +536,36 @@ public final class RepositoryDiscovery {
         if (dash < 0) {
             return entry.suffixes().contains("none");
         }
-        Matcher word = Pattern.compile("[A-Za-z]+|[0-9]+").matcher(version.substring(dash + 1));
-        return word.lookingAt() && entry.suffixes().contains(word.group().toLowerCase(Locale.ROOT));
+        String qualifier = version.substring(dash + 1).toLowerCase(Locale.ROOT);
+        for (String suffix : entry.suffixes()) {
+            if (qualifier.startsWith(suffix) && (qualifier.length() == suffix.length()
+                    || !Character.isLetter(qualifier.charAt(suffix.length())))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Two versions in Maven's order; a version Maven cannot read orders before every other.
+    private static int compare(String left, String right) {
+        try {
+            return VERSIONS.parseVersion(left).compareTo(VERSIONS.parseVersion(right));
+        } catch (InvalidVersionSpecificationException unordered) {
+            return -1;
+        }
+    }
+
+    // Whether a version is a release: no word of it marks a pre-release, a lone a, b or m before a digit included.
+    private static boolean stable(String version) {
+        Matcher word = Pattern.compile("[a-z]+").matcher(version.toLowerCase(Locale.ROOT));
+        while (word.find()) {
+            boolean numbered = word.end() < version.length() && Character.isDigit(version.charAt(word.end()));
+            if (PRERELEASE.contains(word.group())
+                    || numbered && (word.group().equals("a") || word.group().equals("b") || word.group().equals("m"))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -530,7 +593,12 @@ public final class RepositoryDiscovery {
                     .orElseThrow(() -> new DiscoveryException("The latest link " + link + " redirects to " + target
                             + ", which its template " + entry.value() + " does not describe"));
         }
-        return serves(entry, named.strip()) ? Optional.of(named.strip()) : Optional.empty();
+        String version = named.strip();
+        if (!VERSION.matcher(version).matches()) {
+            throw new DiscoveryException("The latest link " + link + " names '" + version
+                    + "', where it should name the newest version, such as 1.2.3");
+        }
+        return serves(entry, version) ? Optional.of(version) : Optional.empty();
     }
 
     // The version a redirect target names: the template up to the end of the segment holding {version}, every other
@@ -549,7 +617,7 @@ public final class RepositoryDiscovery {
         while (placeholder.find()) {
             pattern.append(Pattern.quote(prefix.substring(last, placeholder.start())));
             if (placeholder.group(1).equals("version") && !grouped) {
-                pattern.append("([^/]+?)");
+                pattern.append("([A-Za-z0-9._+-]+?)");
                 grouped = true;
             } else if (placeholder.group(1).equals("version")) {
                 pattern.append("\\1");
@@ -564,10 +632,41 @@ public final class RepositoryDiscovery {
         return matcher.lookingAt() ? Optional.of(matcher.group(1)) : Optional.empty();
     }
 
-    // The newest release a root's metadata names for an artifact, for a mapped module asked without a version.
-    private Optional<String> release(URI root, String groupId, String artifactId) {
-        String base = root.toString().endsWith("/") ? root.toString() : root + "/";
-        URI document = location(base + groupId.replace('.', '/') + "/" + artifactId + "/maven-metadata.xml");
+    // Where a root's Maven metadata of an artifact is.
+    private URI rootMetadata(String root, String groupId, String artifactId) {
+        String base = root.endsWith("/") ? root : root + "/";
+        return location(base + groupId.replace('.', '/') + "/" + artifactId + "/maven-metadata.xml");
+    }
+
+    /** The versions a {@code maven-metadata.xml} lists, with the newest and the newest release it names. */
+    private record Listing(String latest, String release, List<String> versions) {
+
+        private Listing {
+            versions = List.copyOf(versions);
+        }
+
+        // One version alone, a release only where it is one.
+        static Listing of(String version) {
+            return new Listing(version, stable(version) ? version : null, List.of(version));
+        }
+
+        // The versions an entry serves: its newest and newest release where the entry serves them, else the newest
+        // of those it serves.
+        Listing admitted(Entry entry) {
+            List<String> served = versions.stream().filter(version -> serves(entry, version)).toList();
+            return new Listing(
+                    latest != null && serves(entry, latest) ? latest
+                            : served.stream().max(RepositoryDiscovery::compare).orElse(null),
+                    release != null && serves(entry, release) ? release
+                            : served.stream().filter(RepositoryDiscovery::stable).max(RepositoryDiscovery::compare)
+                                    .orElse(null),
+                    served);
+        }
+    }
+
+    // The Maven metadata at a document, or empty where it is not there; one that is no Maven metadata, or lists what is
+    // no version, is refused for a latest link and absent for a root.
+    private Optional<Listing> listing(URI document, boolean linked) {
         Optional<String> body = transport.read(document, MOST_METADATA_BYTES);
         if (body.isEmpty()) {
             return Optional.empty();
@@ -577,27 +676,38 @@ public final class RepositoryDiscovery {
             factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
             factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
             XMLStreamReader reader = factory.createXMLStreamReader(new StringReader(body.get()));
+            String latest = null;
             String release = null;
-            String last = null;
+            List<String> versions = new ArrayList<>();
             while (reader.hasNext()) {
                 if (reader.next() == XMLStreamConstants.START_ELEMENT) {
                     switch (reader.getLocalName()) {
+                        case "latest" -> latest = reader.getElementText().strip();
                         case "release" -> release = reader.getElementText().strip();
-                        case "version" -> last = reader.getElementText().strip();
+                        case "version" -> versions.add(reader.getElementText().strip());
                         default -> {
                         }
                     }
                 }
             }
-            String newest = release != null && !release.isEmpty() ? release : last;
-            return Optional.ofNullable(newest).filter(version -> !version.isEmpty());
+            for (String version : versions) {
+                if (linked && !VERSION.matcher(version).matches()) {
+                    throw new XMLStreamException("the version '" + version + "' is no version");
+                }
+            }
+            return Optional.of(new Listing(latest == null || latest.isEmpty() ? null : latest,
+                    release == null || release.isEmpty() ? null : release, versions));
         } catch (XMLStreamException unreadable) {
+            if (linked) {
+                throw new DiscoveryException("The latest link " + document + " names no Maven metadata: "
+                        + unreadable.getMessage());
+            }
             return Optional.empty();
         }
     }
 
-    // Maven metadata naming one version, deterministic so its checksum is the same however often it is asked.
-    private static byte[] metadataDocument(String groupId, String artifactId, String version) {
+    // Maven metadata of a listing, deterministic so its checksum is the same however often it is asked.
+    private static byte[] metadataDocument(String groupId, String artifactId, Listing listing) {
         StringWriter text = new StringWriter();
         try {
             XMLStreamWriter writer = XMLOutputFactory.newFactory().createXMLStreamWriter(text);
@@ -606,10 +716,16 @@ public final class RepositoryDiscovery {
             element(writer, "groupId", groupId);
             element(writer, "artifactId", artifactId);
             writer.writeStartElement("versioning");
-            element(writer, "latest", version);
-            element(writer, "release", version);
+            if (listing.latest() != null) {
+                element(writer, "latest", listing.latest());
+            }
+            if (listing.release() != null) {
+                element(writer, "release", listing.release());
+            }
             writer.writeStartElement("versions");
-            element(writer, "version", version);
+            for (String version : listing.versions()) {
+                element(writer, "version", version);
+            }
             writer.writeEndElement();
             writer.writeEndElement();
             writer.writeEndElement();
