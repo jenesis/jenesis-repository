@@ -173,7 +173,7 @@ What goes into a build is pinned, and what comes out of one can be checked:
 | | Pinned or signed | Checked by |
 |---|---|---|
 | Java dependencies | every version and SHA-256 in `build.jenesis/pin-repository.properties`; every signing key's fingerprint beside it in `build.jenesis/signature-repository.properties` | the build, on every resolve; `-Djenesis.dependency.signature=declared` verifies each artifact's and POM's signature against the declared key |
-| Artifacts | a CycloneDX SBOM in every jar the build writes; the Maven Central releases PGP-signed (`jreleaser.yml`) | Maven Central's signature check, or `gpg --verify` |
+| Artifacts | a CycloneDX SBOM in every jar the build writes; the files of a GitHub release PGP-signed (`jreleaser.yml`) | `gpg --verify` against the `.asc` beside each file |
 | Build and CI | the build tool as a submodule commit; every GitHub Action by commit SHA | `git submodule status`; the workflow files |
 | Image and chart | the base image by digest (`source/bundle/META-INF/build.jenesis/packaging.properties`; the images step refuses a base named by tag alone); the pushed image and chart signed by digest, keylessly, with the publish workflow's identity, and the image's CycloneDX SBOM attested to the same digest | `cosign`, below |
 
@@ -201,7 +201,9 @@ for the container-backed tests.
 
 `.github/workflows/release.yml` is dispatched by hand from the Actions tab, so any commit is releasable: the
 optional `sha` input names the commit (default: the head it runs on) and the optional `tag` input names the tag
-(`vX.Y.Z`; default: the next minor of the latest tag). JReleaser then signs, publishes and tags. `project.properties` carries the POM metadata.
+(`vX.Y.Z`; default: the next minor of the latest tag). JReleaser then signs the release's files, cuts the GitHub
+release and tag, and publishes the `jenrepo` client to Homebrew and Scoop, beside the packslip mise reads. No module is
+deployed to Maven Central.
 
 ## License
 
