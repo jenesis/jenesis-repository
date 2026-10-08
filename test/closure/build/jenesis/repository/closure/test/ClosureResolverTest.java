@@ -3,7 +3,9 @@ package build.jenesis.repository.closure.test;
 import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.closure.ClosureResolver;
+import build.jenesis.repository.closure.DeclaredClosure;
 import build.jenesis.repository.closure.spi.ClosureSection;
+import build.jenesis.repository.closure.spi.ClosureSource;
 import build.jenesis.repository.closure.spi.ClosureWalk;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.ManifestSubjectBuilder;
@@ -48,6 +50,17 @@ class ClosureResolverTest {
         store = tenant.scope("releases");
         inventory = new StoreRepositoryInventory(store);
         publication = new Publication(store);
+    }
+
+    @Test
+    void the_walk_is_asked_about_every_ecosystem_an_installed_format_declares() {
+        assertThat(StoreRepositoryInventory.installedEcosystems())
+                .as("Alpine, which no advisory feed keys on by its bare name, is among them").contains("Alpine");
+        for (String ecosystem : StoreRepositoryInventory.installedEcosystems()) {
+            assertThat(ClosureSource.serving(ecosystem)).extracting(ClosureSource::name)
+                    .as("a release of %s still has a closure when no earlier source answers", ecosystem)
+                    .endsWith(DeclaredClosure.NAME);
+        }
     }
 
     @Test
