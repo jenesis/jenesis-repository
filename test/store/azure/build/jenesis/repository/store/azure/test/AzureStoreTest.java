@@ -19,6 +19,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.delete;
 import static com.github.tomakehurst.wiremock.client.WireMock.deleteRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.head;
 import static com.github.tomakehurst.wiremock.client.WireMock.put;
 import static com.github.tomakehurst.wiremock.client.WireMock.putRequestedFor;
@@ -274,6 +275,93 @@ class AzureStoreTest {
         store.writeBlob(new ByteArrayInputStream("blob bytes".getBytes(StandardCharsets.UTF_8)));
         assertThat(server.findAll(putRequestedFor(anyUrl()))).as("content already held is not sent again")
                 .isEmpty();
+    }
+
+    @Test
+    void an_aborted_write_commits_no_block_list() {
+        server.stubFor(put(anyUrl()).willReturn(aResponse().withStatus(201).withHeader("ETag", "\"0x1\"")));
+        // Ten megabytes, so the client stages blocks before the source fails, and then the source fails: a committed
+        // block list would land a truncated blob, which at blobs/<hash> the dedupe probe would keep for good.
+        InputStream torn = new InputStream() {
+            private long served;
+
+            @Override
+            public int read() throws IOException {
+                if (served++ >= 10L << 20) {
+                    throw new IOException("the client went away");
+                }
+                return 'x';
+            }
+
+            @Override
+            public int read(byte[] buffer, int offset, int length) throws IOException {
+                if (served >= 10L << 20) {
+                    throw new IOException("the client went away");
+                }
+                int count = (int) Math.min(length, (10L << 20) - served);
+                Arrays.fill(buffer, offset, offset + count, (byte) 'x');
+                served += count;
+                return count;
+            }
+        };
+
+        assertThatThrownBy(() -> store.write("torn", torn)).isInstanceOf(IOException.class);
+        assertThat(server.findAll(putRequestedFor(blobPath("torn")))).as("no request commits the blob: neither a "
+                        + "block list nor a single-shot upload")
+                .noneMatch(request -> request.getUrl().contains("comp=blocklist"))
+                .noneMatch(request -> !request.getUrl().contains("comp="));
+    }
+
+    @Test
+    void a_ranged_read_asks_the_service_for_the_window_alone() throws IOException {
+        byte[] whole = "0123456789abcdefghijklmnopqrstuvwxyz".getBytes(StandardCharsets.UTF_8);
+        blob("ranged", whole.length, "\"0x1\"");
+        server.stubFor(get(blobPath("ranged")).willReturn(aResponse().withStatus(206)
+                .withHeader("Content-Range", "bytes 10-19/" + whole.length).withHeader("Content-Length", "10")
+                .withHeader("ETag", "\"0x1\"").withHeader("Last-Modified", MODIFIED)
+                .withHeader("x-ms-blob-type", "BlockBlob").withBody(Arrays.copyOfRange(whole, 10, 20))));
+        ByteArrayOutputStream window = new ByteArrayOutputStream();
+
+        store.read("ranged", new Window(10, 10, window));
+
+        assertThat(window.toByteArray()).as("the window and nothing else").isEqualTo(Arrays.copyOfRange(whole, 10, 20));
+        assertThat(server.findAll(getRequestedFor(blobPath("ranged")))).isNotEmpty().allSatisfy(request ->
+                assertThat(Optional.ofNullable(request.getHeader("x-ms-range")).orElse(request.getHeader("Range")))
+                        .as("each download asks for the window").isEqualTo("bytes=10-19"));
+    }
+
+    /** A sink asking the store for {@code length} bytes from {@code offset}, as a ranged download hands one over. */
+    private static final class Window extends OutputStream implements ArtifactStore.RangedSink {
+
+        private final long offset;
+        private final long length;
+        private final OutputStream sink;
+
+        Window(long offset, long length, OutputStream sink) {
+            this.offset = offset;
+            this.length = length;
+            this.sink = sink;
+        }
+
+        @Override
+        public long offset() {
+            return offset;
+        }
+
+        @Override
+        public long length() {
+            return length;
+        }
+
+        @Override
+        public OutputStream sink() {
+            return sink;
+        }
+
+        @Override
+        public void write(int value) throws IOException {
+            sink.write(value);
+        }
     }
 
     @Test
