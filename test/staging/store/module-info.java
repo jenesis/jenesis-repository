@@ -14,6 +14,7 @@ open module build.jenesis.repository.staging.store.test {
     requires build.jenesis.repository.staging.store;
     requires build.jenesis.repository.store;
     requires build.jenesis.repository.store.filesystem;
+    requires build.jenesis.repository.store.testkit;
     requires build.jenesis.repository.format.maven;
     requires build.jenesis.repository.format.jenesis;
     requires build.jenesis.repository.maintenance;
