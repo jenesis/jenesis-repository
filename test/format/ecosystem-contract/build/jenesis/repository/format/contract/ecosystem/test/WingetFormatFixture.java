@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.contract.ecosystem.test;
 
 import module java.base;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.format.testkit.FormatContract;
@@ -98,6 +99,14 @@ final class WingetFormatFixture implements EcosystemFormatFixture {
         return Optional.of(new Enumerated(DOWNLOAD,
                 List.of(new Probe(MANIFESTS, VERSION)),
                 target -> hold(target, ID, VERSION)));
+    }
+
+    @Override
+    public Optional<Marked> marked(ArtifactStore store) throws IOException {
+        put(store, MANIFEST, manifest(VERSION));
+        put(store, DOWNLOAD, "the installer".getBytes(StandardCharsets.UTF_8));
+        return Optional.of(new Marked(ID, VERSION,
+                Map.of(LifecycleMark.YANKED, Signal.unlisted(MANIFESTS, VERSION))));
     }
 
     @Override

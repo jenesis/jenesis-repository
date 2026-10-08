@@ -8,6 +8,7 @@ import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.format.testkit.FormatContract;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.format.ArtifactSignatures;
+import build.jenesis.repository.format.LifecycleMark;
 
 /**
  * The Swift Package Registry's leg of the shared contract.
@@ -110,6 +111,15 @@ final class SwiftFormatFixture implements EcosystemFormatFixture {
         return Optional.of(new Enumerated(download("2.0.0"),
                 List.of(new Probe(RELEASES, "\"2.0.0\"")),
                 target -> hold(target, COORDINATE, "2.0.0")));
+    }
+
+    @Override
+    public Optional<Marked> marked(ArtifactStore store) throws IOException {
+        release(store, "1.0.0", archive("1.0.0"));
+        release(store, "2.0.0", archive("2.0.0"));
+        // A yanked release stays listed, carrying the specification's problem object.
+        return Optional.of(new Marked(COORDINATE, "2.0.0",
+                Map.of(LifecycleMark.YANKED, Signal.flagged(RELEASES, "\"problem\""))));
     }
 
     @Override

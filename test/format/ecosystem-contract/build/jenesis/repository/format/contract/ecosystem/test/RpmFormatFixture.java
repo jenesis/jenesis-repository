@@ -8,6 +8,7 @@ import build.jenesis.repository.format.testkit.FormatContract;
 import build.jenesis.repository.format.testkit.GeneratedBody;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.format.ArtifactSignatures;
+import build.jenesis.repository.format.LifecycleMark;
 
 /**
  * The RPM/yum format's leg of the shared contract. A push parses the binary RPM header off the front of the upload, so
@@ -116,6 +117,14 @@ final class RpmFormatFixture implements EcosystemFormatFixture {
         return Optional.of(new Enumerated(pool("2.0.0"),
                 List.of(new Probe(PRIMARY, file("2.0.0"))),
                 target -> hold(target, REPO + "/" + PACKAGE, version("2.0.0"))));
+    }
+
+    @Override
+    public Optional<Marked> marked(ArtifactStore store) throws IOException {
+        push(store, "1.0.0");
+        push(store, "2.0.0");
+        return Optional.of(new Marked(REPO + "/" + PACKAGE, version("2.0.0"),
+                Map.of(LifecycleMark.YANKED, Signal.unlisted(PRIMARY, file("2.0.0")))));
     }
 
     @Override

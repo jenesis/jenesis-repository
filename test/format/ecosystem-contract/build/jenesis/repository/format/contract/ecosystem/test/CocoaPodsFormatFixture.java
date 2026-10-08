@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.contract.ecosystem.test;
 
 import module java.base;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.testkit.ContractExchange;
@@ -135,6 +136,16 @@ final class CocoaPodsFormatFixture implements EcosystemFormatFixture {
                 List.of(new Probe(SHARD_LISTING, "2.0.0"),
                         new Probe(SPECS + "2.0.0/" + POD + ".podspec.json", "2.0.0")),
                 target -> hold(target, POD, "2.0.0")));
+    }
+
+    @Override
+    public Optional<Marked> marked(ArtifactStore store) throws IOException {
+        push(store, "1.0.0");
+        push(store, "2.0.0");
+        // A deprecation is the podspec's own flag; a yank has no flag, so the version leaves the shard listing.
+        return Optional.of(new Marked(POD, "2.0.0", Map.of(
+                LifecycleMark.DEPRECATED, Signal.flagged(SPECS + "2.0.0/" + POD + ".podspec.json", "\"deprecated\""),
+                LifecycleMark.YANKED, Signal.unlisted(SHARD_LISTING, "2.0.0"))));
     }
 
     @Override

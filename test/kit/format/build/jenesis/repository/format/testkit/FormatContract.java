@@ -3,8 +3,10 @@ package build.jenesis.repository.format.testkit;
 import module java.base;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.ArtifactSignatures;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
+import build.jenesis.repository.format.lifecycle.Lifecycle;
 import build.jenesis.repository.metadata.MetadataKey;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
@@ -149,7 +151,13 @@ public final class FormatContract {
          *  arrived on. A document that tells a client to fetch over {@code http} from a deployment serving TLS
          *  downgrades every credential the client attaches to that URL - and a cache may hand that document to
          *  others (clause 12, and the request-base rule the formats share). */
-        GENERATED_INDEX_CARRIES_THE_REQUEST_SCHEME
+        GENERATED_INDEX_CARRIES_THE_REQUEST_SCHEME,
+        /** Every lifecycle mark the format offers ({@code RepositoryFormat#lifecycleMarks}) shows in the document its
+         *  client resolves from once set, and is gone from it once cleared - a token appearing where the ecosystem
+         *  flags a version, or the version leaving the listing where the ecosystem signals a yank by absence. A mark
+         *  the format offers and its document does not show reads as done to the operator and is seen by no client;
+         *  one it does not offer is refused, so a fixture describing it describes nothing. */
+        LIFECYCLE_MARK_SURFACES_NATIVELY
     }
 
     /** One named, independently runnable contract check. */
@@ -227,7 +235,10 @@ public final class FormatContract {
                         FormatContract::generatedIndexIsRevalidatable),
                 new Check(Property.GENERATED_INDEX_CARRIES_THE_REQUEST_SCHEME,
                         "a generated document's absolute URLs carry the scheme the request arrived on",
-                        FormatContract::generatedIndexCarriesTheRequestScheme));
+                        FormatContract::generatedIndexCarriesTheRequestScheme),
+                new Check(Property.LIFECYCLE_MARK_SURFACES_NATIVELY,
+                        "every lifecycle mark the format offers shows in its client's document and clears again",
+                        FormatContract::lifecycleMarkSurfacesNatively));
     }
 
     /**
@@ -629,6 +640,46 @@ public final class FormatContract {
             isTrue(!body(fixture, store, probe.path()).contains(probe.token()), fixture,
                     "a re-applied hold is idempotent: " + probe.path() + " still omits '" + probe.token() + "'");
         }
+    }
+
+    private static void lifecycleMarkSurfacesNatively(FormatFixture fixture, ArtifactStore store) throws Exception {
+        Set<LifecycleMark> offered = fixture.serving().lifecycleMarks().keySet();
+        Optional<FormatFixture.Marked> declared = fixture.marked(store);
+        if (offered.isEmpty()) {
+            isTrue(declared.isEmpty(), fixture, "the format offers no lifecycle mark, so a repository of it refuses "
+                    + "every one; a fixture saying how a mark shows describes something no operator can set");
+            return;
+        }
+        FormatFixture.Marked marked = declared.orElseThrow(() -> failure(fixture, "the format offers " + offered
+                + " and this fixture seeds no version to mark. Seed one and say how each mark shows in the "
+                + "document its client resolves from."));
+        equal(marked.signals().keySet(), offered, fixture,
+                "the fixture says how every mark the format offers shows, and only those");
+        for (Map.Entry<LifecycleMark, FormatFixture.Signal> entry : marked.signals().entrySet()) {
+            LifecycleMark mark = entry.getKey();
+            FormatFixture.Signal signal = entry.getValue();
+            String shown = signal.present() ? "carries '" + signal.token() + "'" : "omits '" + signal.token() + "'";
+            String unshown = signal.present() ? "omits '" + signal.token() + "'" : "lists '" + signal.token() + "'";
+            isTrue(shows(fixture, store, signal) != signal.present(), fixture, "before any mark, " + signal.path()
+                    + " " + unshown + " - otherwise the check below would pass without the product doing anything");
+
+            Lifecycle.mark(store, marked.coordinate(), marked.version(), new Lifecycle.Flag(mark, "set by the contract"));
+            StoredListing.settle();
+            isTrue(shows(fixture, store, signal) == signal.present(), fixture, "once " + marked.coordinate() + " "
+                    + marked.version() + " is marked " + mark + ", " + signal.path() + " " + shown
+                    + ": the operator set a mark no client of this format would ever see");
+
+            isTrue(Lifecycle.clear(store, marked.coordinate(), marked.version()), fixture, "the mark clears");
+            StoredListing.settle();
+            isTrue(shows(fixture, store, signal) != signal.present(), fixture, "once the " + mark + " mark is "
+                    + "cleared, " + signal.path() + " " + unshown + " again");
+        }
+    }
+
+    /** Whether {@code signal}'s document carries its token, a document that answers no body carrying nothing. */
+    private static boolean shows(FormatFixture fixture, ArtifactStore store, FormatFixture.Signal signal)
+            throws IOException {
+        return body(fixture, store, signal.path()).contains(signal.token());
     }
 
     private static void emptyEnumerationIsAMiss(FormatFixture fixture, ArtifactStore store) throws Exception {

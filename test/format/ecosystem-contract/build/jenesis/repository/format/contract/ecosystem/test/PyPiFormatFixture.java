@@ -8,6 +8,7 @@ import build.jenesis.repository.format.testkit.FormatContract;
 import build.jenesis.repository.format.testkit.GeneratedBody;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.format.ArtifactSignatures;
+import build.jenesis.repository.format.LifecycleMark;
 
 /**
  * The PyPI format's leg of the shared contract. A {@code twine} upload carries the distribution as an opaque multipart
@@ -89,6 +90,14 @@ final class PyPiFormatFixture implements EcosystemFormatFixture {
         return Optional.of(new Enumerated(INDEX + wheel("2.0.0"),
                 List.of(new Probe(INDEX, wheel("2.0.0"))),
                 target -> hold(target, PROJECT, "2.0.0")));
+    }
+
+    @Override
+    public Optional<Marked> marked(ArtifactStore store) throws IOException {
+        upload(store, "1.0.0", "kept".getBytes(StandardCharsets.UTF_8));
+        upload(store, "2.0.0", "marked".getBytes(StandardCharsets.UTF_8));
+        return Optional.of(new Marked(PROJECT, "2.0.0",
+                Map.of(LifecycleMark.YANKED, Signal.flagged(INDEX, "data-yanked"))));
     }
 
     @Override

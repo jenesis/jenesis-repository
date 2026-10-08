@@ -8,6 +8,7 @@ import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.format.testkit.FormatContract;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.format.ArtifactSignatures;
+import build.jenesis.repository.format.LifecycleMark;
 
 /**
  * The classic Helm chart repository's leg of the shared contract.
@@ -107,6 +108,16 @@ final class HelmFormatFixture implements EcosystemFormatFixture {
         return Optional.of(new Enumerated(download(VERSION),
                 List.of(new Probe(INDEX, VERSION)),
                 target -> hold(target, CHART, VERSION)));
+    }
+
+    @Override
+    public Optional<Marked> marked(ArtifactStore store) throws IOException {
+        put(store, download(VERSION), Packages.helmChart(CHART, VERSION));
+        // A deprecated chart stays listed and says so; a yanked one leaves the index, and with it the chart's only
+        // version.
+        return Optional.of(new Marked(CHART, VERSION, Map.of(
+                LifecycleMark.DEPRECATED, Signal.flagged(INDEX, "deprecated: true"),
+                LifecycleMark.YANKED, Signal.unlisted(INDEX, VERSION))));
     }
 
     @Override

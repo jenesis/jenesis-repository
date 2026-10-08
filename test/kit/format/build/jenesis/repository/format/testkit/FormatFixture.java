@@ -2,6 +2,7 @@ package build.jenesis.repository.format.testkit;
 
 import module java.base;
 import build.jenesis.repository.format.ArtifactSignatures;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactStore;
@@ -127,6 +128,50 @@ public interface FormatFixture {
     @FunctionalInterface
     interface Hold {
         void apply(ArtifactStore store) throws IOException;
+    }
+
+    /**
+     * Seed a version to mark and say how each lifecycle mark the format offers ({@code RepositoryFormat#lifecycleMarks})
+     * shows in the document its client resolves from, or empty when the format offers none. The kit sets each mark in
+     * turn and clears it again, and asserts the document moves both ways.
+     */
+    default Optional<Marked> marked(ArtifactStore store) throws IOException {
+        return Optional.empty();
+    }
+
+    /** A seeded version as a mark names it - the coordinate the format keys its marks by and the version - and how each
+     *  mark the format offers shows. */
+    record Marked(String coordinate, String version, Map<LifecycleMark, Signal> signals) {
+
+        public Marked {
+            Objects.requireNonNull(coordinate, "coordinate");
+            Objects.requireNonNull(version, "version");
+            signals = Map.copyOf(signals);
+        }
+    }
+
+    /**
+     * How one mark shows: the request path of the document a client resolves from, and the token that tells the mark.
+     *
+     * @param present whether the token appears once marked - a flag, a warning - or, where the ecosystem signals the
+     *                mark by no longer listing the version, disappears
+     */
+    record Signal(String path, String token, boolean present) {
+
+        public Signal {
+            Objects.requireNonNull(path, "path");
+            Objects.requireNonNull(token, "token");
+        }
+
+        /** The token appears once marked. */
+        public static Signal flagged(String path, String token) {
+            return new Signal(path, token, true);
+        }
+
+        /** The version leaves the listing once marked. */
+        public static Signal unlisted(String path, String token) {
+            return new Signal(path, token, false);
+        }
     }
 
     /**

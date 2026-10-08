@@ -8,6 +8,7 @@ import build.jenesis.repository.format.testkit.FormatContract;
 import build.jenesis.repository.format.testkit.GeneratedBody;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.format.ArtifactSignatures;
+import build.jenesis.repository.format.LifecycleMark;
 
 /**
  * The RubyGems format's leg of the shared contract. A {@code gem push} reads the gzipped YAML gemspec inside the
@@ -96,6 +97,15 @@ final class RubyGemsFormatFixture implements EcosystemFormatFixture {
                 List.of(new Probe("/rubygems/info/" + GEM, "2.0.0"),
                         new Probe("/rubygems/versions", "2.0.0")),
                 target -> hold(target, GEM, "2.0.0")));
+    }
+
+    @Override
+    public Optional<Marked> marked(ArtifactStore store) throws IOException {
+        push(store, "1.0.0");
+        push(store, "2.0.0");
+        // The compact index has no yank flag, so a yanked version leaves the gem's /info document.
+        return Optional.of(new Marked(GEM, "2.0.0",
+                Map.of(LifecycleMark.YANKED, Signal.unlisted("/rubygems/info/" + GEM, "2.0.0"))));
     }
 
     @Override

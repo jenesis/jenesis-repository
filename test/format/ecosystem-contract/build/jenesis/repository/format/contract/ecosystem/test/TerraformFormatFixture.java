@@ -1,6 +1,7 @@
 package build.jenesis.repository.format.contract.ecosystem.test;
 
 import module java.base;
+import build.jenesis.repository.format.LifecycleMark;
 import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.testkit.GeneratedBody;
@@ -101,6 +102,14 @@ final class TerraformFormatFixture implements EcosystemFormatFixture {
                         new Probe(BASE + "/providers/" + NAMESPACE + "/" + TYPE + "/2.0.0/SHA256SUMS",
                                 "terraform-provider-" + TYPE + "_2.0.0_linux_amd64.zip")),
                 target -> hold(target, COORDINATE, "2.0.0")));
+    }
+
+    @Override
+    public Optional<Marked> marked(ArtifactStore store) throws IOException {
+        release(store, "1.0.0");
+        release(store, "2.0.0");
+        return Optional.of(new Marked(COORDINATE, "2.0.0",
+                Map.of(LifecycleMark.YANKED, Signal.unlisted(VERSIONS, "\"version\":\"2.0.0\""))));
     }
 
     @Override
