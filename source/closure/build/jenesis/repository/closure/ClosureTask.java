@@ -1,6 +1,7 @@
 package build.jenesis.repository.closure;
 
 import module java.base;
+import build.jenesis.repository.format.PackageNaming;
 import build.jenesis.repository.closure.spi.ClosureSection;
 import build.jenesis.repository.closure.spi.ClosureSource;
 import build.jenesis.repository.closure.spi.ClosureWalk;
@@ -388,8 +389,8 @@ public final class ClosureTask implements MaintenanceTask {
                         mark);
                 // A copy here of a package some bill names by coordinate is one its build may have installed.
                 if (space.isPresent()) {
-                    ReliedOn.dependents(space.get(), changed.ecosystem(), changed.coordinate(), changed.version(),
-                            mark);
+                    ReliedOn.dependents(space.get(), changed.ecosystem(),
+                            PackageNaming.of(changed.ecosystem(), changed.coordinate()), changed.version(), mark);
                 }
             });
         } catch (IOException | RuntimeException e) {

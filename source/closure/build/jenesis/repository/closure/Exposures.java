@@ -1,6 +1,8 @@
 package build.jenesis.repository.closure;
 
 import module java.base;
+import build.jenesis.repository.format.PackageNaming;
+import build.jenesis.repository.inventory.StoreRepositoryInventory;
 import build.jenesis.repository.closure.spi.ClosureSection;
 import build.jenesis.repository.closure.spi.ClosureWalk;
 import build.jenesis.repository.closure.spi.ExposureSection;
@@ -21,6 +23,10 @@ import build.jenesis.repository.store.ArtifactStore;
  * a feed.
  */
 final class Exposures {
+
+    /** The most copies of one package a repository is asked for by name: one per repository a format's coordinate
+     *  names it under, which a repository keeps a handful of. */
+    private static final int COPIES_BY_NAME = 32;
 
     private Exposures() {
     }
@@ -86,18 +92,27 @@ final class Exposures {
         }
         for (ClosureSection.Foreign foreign : closure.foreign()) {
             examined++;
+            // A bill names a package by the name it goes by; where its format qualifies that further in the
+            // coordinate - an RPM by the repository it was published into - the copies are found by name.
+            boolean renamed = PackageNaming.renames(foreign.ecosystem());
             for (String repository : tenant.repositories(foreign.ecosystem())) {
                 Optional<ArtifactStore> store = tenant.store(repository);
                 if (store.isEmpty()) {
                     continue;
                 }
-                Optional<Holdings.Standing> standing = Holdings.of(store.get()).standing(foreign.ecosystem(),
-                        foreign.coordinate(), foreign.version());
-                if (standing.isPresent()) {
-                    add(reached, findings, store.get(), foreign.ecosystem(), foreign.coordinate(), foreign.version(),
-                            repository.equals(own) ? "" : repository, !standing.get().served(), risk,
-                            paths.foreign(foreign.ecosystem(), foreign.coordinate(), foreign.version()),
-                            foreign.ecosystem());
+                List<String> coordinates = renamed ? new StoreRepositoryInventory(store.get())
+                        .named(foreign.ecosystem(), foreign.coordinate(), foreign.version(), COPIES_BY_NAME).stream()
+                        .map(StoreRepositoryInventory.Coordinate::coordinate).toList()
+                        : List.of(foreign.coordinate());
+                for (String coordinate : coordinates) {
+                    Optional<Holdings.Standing> standing = Holdings.of(store.get()).standing(foreign.ecosystem(),
+                            coordinate, foreign.version());
+                    if (standing.isPresent()) {
+                        add(reached, findings, store.get(), foreign.ecosystem(), coordinate, foreign.version(),
+                                repository.equals(own) ? "" : repository, !standing.get().served(), risk,
+                                paths.foreign(foreign.ecosystem(), foreign.coordinate(), foreign.version()),
+                                foreign.ecosystem());
+                    }
                 }
             }
         }

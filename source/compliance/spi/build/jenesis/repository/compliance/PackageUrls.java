@@ -17,7 +17,9 @@ import module java.base;
  *
  * <p>Read the other way, a distribution package's purl does name a coordinate: an {@code apk}, {@code deb} or
  * {@code rpm} purl names a package of {@link Ecosystems#ALPINE}, {@link Ecosystems#DEBIAN} or {@link Ecosystems#RPM}
- * by its name and version, as those formats key what they publish, its distro namespace aside. What the coordinate
+ * by its name and version, as those formats key what they publish, its distro namespace aside - an RPM's version
+ * being its build, {@code <version>-<release>.<arch>}, as its file names it, and its name the package's, which an RPM
+ * repository qualifies by where it was published. What the coordinate
  * leaves out - the release, the architecture, the source package, the epoch - is in the purl's
  * {@link #qualifiers}, so a reader that keeps both keeps everything the purl said.
  */
@@ -103,8 +105,13 @@ public final class PackageUrls {
         String type = segments[0].toLowerCase(Locale.ROOT);
         String distribution = DISTRIBUTIONS.get(type);
         if (distribution != null) {
-            return Optional.of(new Named(distribution, decoded(segments[segments.length - 1]),
-                    decoded(body.substring(version + 1))));
+            String built = decoded(body.substring(version + 1));
+            String arch = qualifiers(purl).get("arch");
+            // An RPM's version is its build, as its file names it: <version>-<release>.<arch>.
+            if (type.equals("rpm") && arch != null && !arch.isBlank() && !built.endsWith("." + arch)) {
+                built = built + "." + arch;
+            }
+            return Optional.of(new Named(distribution, decoded(segments[segments.length - 1]), built));
         }
         Optional<String> ecosystem = TYPES.covered().stream().filter(named -> type.equals(TYPES.of(named))).findFirst();
         if (ecosystem.isEmpty()) {
