@@ -28,8 +28,9 @@ import org.apache.lucene.store.Directory;
  * The per-repository read side of the search index. The loaded index sits behind a {@code volatile} reference that a
  * query reads lock-free while the refresh window holds; on expiry the manifest's generation token is compared, an
  * unchanged one keeping the loaded index and a changed one streaming the new snapshot in and swapping it whole. A load
- * failure keeps the last-good index and shortens the retry. A superseded reader is left to the garbage collector rather
- * than closed under a concurrent query.
+ * failure keeps the last-good index and shortens the retry. A superseded reader is reference counted and closes, with
+ * its directory, once the last query on it finishes; opening a newer generation then prunes the node's cache of the
+ * generations no reader can still be on.
  *
  * <h2>A due refresh does not hold the request</h2>
  *
@@ -62,9 +63,12 @@ final class LuceneSearcher {
             Thread.ofVirtual().name("search-index-load-", 0).factory());
 
     private final Duration ttl;
-    private final Analyzer coordinates = CoordinateAnalyzer.coordinates();
 
-    private final Analyzer words = CoordinateAnalyzer.words();
+    /** The query analyzers, shared by every scope and held for the JVM: an analyzer keeps only per-thread reuse state,
+     *  and one closed under a running query fails it. */
+    private static final Analyzer COORDINATES = CoordinateAnalyzer.coordinates();
+
+    private static final Analyzer WORDS = CoordinateAnalyzer.words();
 
     private volatile Snapshot snapshot;
     private volatile long refreshAt;
@@ -137,10 +141,10 @@ final class LuceneSearcher {
         // Free text is matched against the coordinate names first, and against the whole text only when no name
         // matches, so a package's name answers that package rather than every coordinate sharing a token. A query
         // without free text runs once.
-        TopDocs top = searcher.search(paged(toQuery(query.trim(), NAME_FIELD, coordinates), cursor), rows + 1,
+        TopDocs top = searcher.search(paged(toQuery(query.trim(), NAME_FIELD, COORDINATES), cursor), rows + 1,
                 new Sort(new SortField(SORT_FIELD, SortField.Type.STRING)));
-        if (top.scoreDocs.length == 0 && !analyze(freeText(query.trim()), words).isEmpty()) {
-            top = searcher.search(paged(toQuery(query.trim(), TEXT_FIELD, words), cursor), rows + 1,
+        if (top.scoreDocs.length == 0 && !analyze(freeText(query.trim()), WORDS).isEmpty()) {
+            top = searcher.search(paged(toQuery(query.trim(), TEXT_FIELD, WORDS), cursor), rows + 1,
                     new Sort(new SortField(SORT_FIELD, SortField.Type.STRING)));
         }
         List<SearchQuery.Hit> results = new ArrayList<>();
@@ -212,6 +216,11 @@ final class LuceneSearcher {
             }
             replace(Snapshot.open(manifest.generation(), index.openSnapshot(manifest.generation())));   // swap whole
             refreshAt = System.currentTimeMillis() + ttl.toMillis();
+            try {
+                index.pruneNode(manifest.generation());
+            } catch (IOException | RuntimeException _) {
+                // best-effort: an unpruned cache costs disk, never an answer
+            }
             return snapshot;
         } catch (IOException | RuntimeException e) {
             refreshAt = System.currentTimeMillis() + FAILURE_BACKOFF.toMillis();   // keep last-good, retry sooner
