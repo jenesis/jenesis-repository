@@ -459,7 +459,12 @@ public class CacheTest {
             }
             assertThat(wrong).as("every read is its own bytes or a miss, every write lands").isEmpty();
             assertThat(hits.get()).as("some reads hit, or the race was never run").isPositive();
-            await("the reapers to bring the project under its cap", () -> size(project) <= 20000);
+            try {
+                await("the reapers to bring the project under its cap", () -> size(project) <= 20000);
+            } catch (AssertionError over) {
+                throw new AssertionError(over.getMessage() + ": the project holds " + size(project) + " bytes in "
+                        + held(project), over);
+            }
         } finally {
             nodes.forEach(Cache::stop);
         }
@@ -470,9 +475,23 @@ public class CacheTest {
         return (inputs + "|").repeat(200).getBytes(UTF_8);
     }
 
+    /** What the project holds on disk, each file with its length, for a failure to say what stayed. */
+    private static String held(Path project) {
+        try (Stream<Path> files = Files.walk(project)) {
+            return files.filter(Files::isRegularFile)
+                    .map(file -> project.relativize(file) + "=" + file.toFile().length()).sorted().toList().toString();
+        } catch (IOException | UncheckedIOException walkedDuringAReap) {
+            return "(walked during a reap: " + walkedDuringAReap + ")";
+        }
+    }
+
+    /** The bytes of the project's entries - what its cap bounds - leaving out the product's own space beside them,
+     *  where the project's settings document is kept. */
     private static long size(Path project) {
         try (Stream<Path> files = Files.walk(project)) {
-            return files.filter(Files::isRegularFile).mapToLong(file -> file.toFile().length()).sum();
+            return files.filter(Files::isRegularFile)
+                    .filter(file -> !project.relativize(file).startsWith(".system"))
+                    .mapToLong(file -> file.toFile().length()).sum();
         } catch (IOException | UncheckedIOException walkedDuringAReap) {
             return Long.MAX_VALUE;
         }
