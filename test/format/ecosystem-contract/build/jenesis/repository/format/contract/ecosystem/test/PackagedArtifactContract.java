@@ -201,6 +201,11 @@ final class PackagedArtifactContract {
         equal(head.responseHeader("Content-Length"), Integer.toString(published.artifact().length), fixture,
                 "a HEAD advertises the package's length, read from the store's metadata - a client sizing an artifact "
                         + "before pulling it must get the same answer a GET would give");
+        ContractExchange served = ContractExchange.of("GET", published.servedPath()).settings(fixture::setting);
+        fixture.serving().handle(served, store);
+        equal(head.responseHeader("Content-Type"), served.responseHeader("Content-Type"), fixture,
+                "a HEAD names the content type a GET serves, so a client deciding how to handle the package before "
+                        + "pulling it decides as it would after");
 
         boolean tripped = false;
         try {
