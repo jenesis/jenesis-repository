@@ -150,9 +150,10 @@ final class JsonGcs implements ResponseDefinitionTransformerV2 {
         }
         String range = request.getHeader("Range");
         if (range != null && range.startsWith("bytes=")) {
-            String[] bounds = range.substring("bytes=".length()).split("-");
+            String[] bounds = range.substring("bytes=".length()).split("-", -1);
             int from = Integer.parseInt(bounds[0]);
-            int to = Math.min(Integer.parseInt(bounds[1]), stored.content().length - 1);
+            int last = stored.content().length - 1;
+            int to = bounds[1].isEmpty() ? last : Math.min(Integer.parseInt(bounds[1]), last);   // "bytes=3-": to the end
             return response.withStatus(206)
                     .withHeader("Content-Range", "bytes " + from + "-" + to + "/" + stored.content().length)
                     .withBody(Arrays.copyOfRange(stored.content(), from, to + 1)).build();
