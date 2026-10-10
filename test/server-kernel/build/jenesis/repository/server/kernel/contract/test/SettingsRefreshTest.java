@@ -13,6 +13,8 @@ import build.jenesis.repository.server.kernel.SettingsRefresh;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.UpstreamMemory;
+import build.jenesis.repository.settings.SettingsDocuments;
+import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import org.springframework.core.env.StandardEnvironment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -22,7 +24,9 @@ import static org.assertj.core.api.Assertions.assertThatCode;
  * settings and, when they changed on another node, re-seeds both runtime surfaces a write elsewhere would otherwise
  * leave stale here - the live {@link LiveConfig} snapshot (for live keys) and the mutable environment's
  * stored-settings source (for keys read through a {@code jenrepo.*} lookup). A malformed stored value is
- * rolled back to the last good live configuration and the pass never throws out of the scheduler.
+ * rolled back to the last good live configuration and the pass never throws out of the scheduler. Every write moves
+ * the settings epoch - an import as much as a set - so a tick over a store nothing has written to reads the epoch and
+ * nothing else, and an import on another node is re-read like any other write.
  */
 class SettingsRefreshTest {
 
@@ -108,6 +112,38 @@ class SettingsRefreshTest {
         refresh.refresh();
         assertThat(environment.getProperty("jenrepo.default-tenant"))
                 .as("a cleared key stops shadowing the file default rather than leaving a stale value").isNull();
+    }
+
+    @Test
+    void a_tick_over_a_store_no_setting_was_written_to_reads_the_epoch_and_nothing_else() throws IOException {
+        FaultInjectingStore counted = FaultInjectingStore.wrap(store);
+        Settings idle = new Settings(counted);
+        SettingsRefresh ticking = new SettingsRefresh(idle, new LiveConfig(idle, new RepositoryProperties(),
+                AdvisorySource.none(), Features.namespaced(environment::getProperty)), environment,
+                new MaintenanceScheduler(null, counted, List.of(), _ -> null, Duration.ofMinutes(10), null));
+        int lists = counted.calls(FaultInjectingStore.Op.LIST);
+        int reads = counted.calls(FaultInjectingStore.Op.READ_VERSIONED);
+
+        for (int tick = 0; tick < 3; tick++) {
+            ticking.refresh();
+        }
+
+        assertThat(counted.calls(FaultInjectingStore.Op.LIST)).as("no listing of the settings documents")
+                .isEqualTo(lists);
+        assertThat(counted.calls(FaultInjectingStore.Op.READ_VERSIONED)).as("one epoch read a tick")
+                .isEqualTo(reads + 3);
+    }
+
+    @Test
+    void an_import_on_another_node_converges_on_refresh() throws IOException {
+        String module = SettingsDocuments.moduleOf("default-tenant");
+        new Settings(store).importBundle(Map.of(module, Map.of("default-tenant", "acme")));
+        refresh.refresh();
+        assertThat(live.defaultTenant()).as("a first import over a store nothing had written to").isEqualTo("acme");
+
+        new Settings(store).importBundle(Map.of(module, Map.of("default-tenant", "globex")));
+        refresh.refresh();
+        assertThat(live.defaultTenant()).as("an import over a store whose epoch already moved").isEqualTo("globex");
     }
 
     @Test

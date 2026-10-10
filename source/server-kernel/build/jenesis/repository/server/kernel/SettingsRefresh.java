@@ -60,11 +60,11 @@ public final class SettingsRefresh {
     @Scheduled(fixedRateString = "${jenrepo.settings-refresh-millis:30000}")
     public void refresh() {
         try {
-            // One point read decides whether anything changed: a store this node or another wrote to bumps the epoch,
-            // and a refresh that sees the token it saw last time lists and re-reads nothing. An empty token is a
-            // store nothing has written to since the epoch existed, which is re-read.
+            // One point read decides whether anything changed: every write of a settings document bumps the epoch,
+            // so a refresh that sees the token it saw last time lists and re-reads nothing. A store nothing has
+            // written to has no token, which is the state this node loaded at boot.
             String epoch = settings.epoch();
-            if (!epoch.isEmpty() && epoch.equals(epochSeen)) {
+            if (epoch.equals(epochSeen)) {
                 return;
             }
             epochSeen = epoch;
@@ -72,11 +72,8 @@ public final class SettingsRefresh {
             // A document relayed from an upstream is remembered for its ttl and served from memory without passing
             // the proxy screen again, so a change to what the screen decides - a deny-list entry, a private name, a
             // tenant's own policy - would reach a remembered enumeration only once the memory forgot it. Forgetting
-            // on a change to the store makes the next read of each fetch, and so screen, afresh. A store nothing has
-            // written to has no epoch and is re-read every tick, and has changed nothing the memory could be stale on.
-            if (!epoch.isEmpty()) {
-                UpstreamMemory.node().clear();
-            }
+            // on a change to the store makes the next read of each fetch, and so screen, afresh.
+            UpstreamMemory.node().clear();
         } catch (IOException e) {
             LOGGER.warn("Could not read the settings epoch; keeping the last known values", e);
             return;
