@@ -6,6 +6,8 @@ import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.StoredCounter;
+import build.jenesis.repository.store.StoredListing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -18,6 +20,12 @@ class PathGrammarTest {
 
     @TempDir
     Path root;
+
+    @AfterEach
+    void settle() {
+        StoredListing.settle();
+        StoredCounter.settle();
+    }
 
     @Test
     void an_encoded_scope_separator_reaches_the_scoped_package_and_nothing_else_is_decoded() throws IOException {

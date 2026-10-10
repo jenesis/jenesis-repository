@@ -7,6 +7,8 @@ import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.StoredCounter;
+import build.jenesis.repository.store.StoredListing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -24,6 +26,12 @@ class HuggingFaceProxyTest {
 
     @TempDir
     Path root;
+
+    @AfterEach
+    void settle() {
+        StoredListing.settle();
+        StoredCounter.settle();
+    }
 
     @Test
     void a_file_a_cdn_serves_under_an_etag_of_its_own_is_held_to_the_listed_digest() throws IOException {
