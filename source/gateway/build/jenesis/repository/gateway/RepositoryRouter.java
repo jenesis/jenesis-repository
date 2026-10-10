@@ -545,7 +545,7 @@ public final class RepositoryRouter {
             return fetchScreenServe(tenant, repository, fallbackIndex, fallback, relayed.root(), format, exchange,
                     UnaryOperator.identity());
         }
-        String route = exchange.path().substring(0, exchange.path().indexOf('/', 1) + 1);
+        String route = RepositoryDiscovery.route(exchange.path());
         return fetchScreenServe(tenant, repository, fallbackIndex, fallback, DISCOVERED, format, exchange,
                 probe -> new DiscoveredFetcher(probe, discovery, DISCOVERED, route));
     }

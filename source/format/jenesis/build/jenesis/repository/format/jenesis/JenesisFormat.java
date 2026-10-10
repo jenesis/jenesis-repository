@@ -13,6 +13,9 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.format.RepositoryExporter;
 import build.jenesis.repository.format.ExportTarget;
 import build.jenesis.repository.format.PublishedExport;
+import build.jenesis.repository.format.ProxyFormat;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The Jenesis module layout ({@code /module/...} and {@code /artifact/...}): a {@code PUT} stores the blob
@@ -24,9 +27,20 @@ import build.jenesis.repository.format.PublishedExport;
  * tracking, eviction, {@code match=} routing) maps a {@code /module/} path to its {@link ArtifactDescriptor} and back.
  * The coordinate is the module name; the versioned pointer {@code /module/<name>/<version>/<file>} carries the version,
  * the latest pointer {@code /module/<name>/<name>.jar} none - the two shapes {@link ModuleViewPublisher} links.
+ *
+ * <p>As a {@link ProxyFormat}, a local miss is asked of the upstream in the module service's own layout - the request
+ * path below the upstream's root, {@code /module/} or {@code /artifact/} included - and a file of a version is kept, so
+ * the next request is a local hit. A latest pointer names whichever version is newest upstream, so it is served from
+ * what the upstream answers now and never kept. A module's own jar must declare the module it is asked for, in its
+ * {@code module-info} or as its {@code Automatic-Module-Name}, or it is neither kept nor served, so an upstream cannot
+ * answer for one module with another; the Maven view under {@code /artifact/} also serves automatic modules whose name
+ * comes from the file, so it is not held to one. The module service publishes no digest beside its files, so a body is
+ * kept as the upstream serves it.
  */
 public final class JenesisFormat implements RepositoryFormat, ArtifactLayout, RepositoryExporter,
-        RepositoryImporter.Delegating {
+        RepositoryImporter.Delegating, ProxyFormat {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(JenesisFormat.class);
 
     /** The ecosystem name the descriptor carries, distinct from {@link #name()} "jenesis", the routing id; every
      *  consumer of a Jenesis module reports it. */
@@ -157,6 +171,70 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout, Re
         try (in; OutputStream out = exchange.respond(200, size)) {
             in.transferTo(out);
         }
+    }
+
+    /** A file is the upstream's or this repository's, never a merge of the two. */
+    @Override
+    public boolean mergesUpstream(FormatExchange exchange) {
+        return false;
+    }
+
+    @Override
+    public boolean proxy(FormatExchange exchange, ArtifactStore store, URI upstream, ProxyFormat.Fetcher fetcher)
+            throws IOException {
+        String path = exchange.path();
+        // A traversal-shaped path is no proxy target.
+        if (!handles(path) || path.endsWith("/") || !ArtifactStore.traversalFree(path)) {
+            return false;
+        }
+        String[] segments = path.substring(1).split("/", -1);
+        if (segments.length < 3 || segments.length > 4) {
+            return false;
+        }
+        boolean latest = segments.length == 3;
+        String root = upstream.toString();
+        URI target = URI.create((root.endsWith("/") ? root : root + "/") + path.substring(1));
+        Optional<ProxyFormat.Download> fetched = fetcher.download(target, Map.of());
+        if (fetched.isEmpty()) {
+            return false;
+        }
+        Publication publication = new Publication(store);
+        Publication.Blob blob;
+        try (ProxyFormat.Download download = fetched.get()) {
+            if (download.status() != 200) {
+                return false;
+            }
+            blob = publication.stored(download.body());
+        }
+        // A module's own jar: /module/<name>/<version>/<name>.jar, or the latest pointer /module/<name>/<name>.jar.
+        String module = segments[0].equals("module") && segments[segments.length - 1].equals(segments[1] + ".jar")
+                ? segments[1] : null;
+        if (module != null) {
+            String declared;
+            try (InputStream jar = new Publication.Stored(store, blob)) {
+                declared = JavaLayout.moduleName(jar);
+            }
+            if (!module.equals(declared)) {
+                LOGGER.warn("Refusing {} from {}: the jar declares {}, where it must declare {}. Nothing was kept or "
+                        + "served.", path, target, declared == null ? "no module name" : declared, module);
+                return false;
+            }
+        }
+        if (!latest) {
+            publication.link(path, blob.hash(), blob.size());
+            serve(exchange, store);
+            return true;
+        }
+        // The latest pointer is the upstream's answer now: served from the blob just stored, never linked.
+        if (exchange.method().equals("HEAD")) {
+            exchange.setResponseHeader("Content-Length", Long.toString(blob.size()));
+            exchange.respond(200);
+            return true;
+        }
+        try (InputStream in = new Publication.Stored(store, blob); OutputStream out = exchange.respond(200, blob.size())) {
+            in.transferTo(out);
+        }
+        return true;
     }
 
     /**

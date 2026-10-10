@@ -27,6 +27,7 @@ open module build.jenesis.repository.gateway.contract.test {
     requires build.jenesis.repository.blobs;
     requires build.jenesis.repository.format;
     requires build.jenesis.repository.format.maven;
+    requires build.jenesis.repository.format.jenesis;
     requires build.jenesis.repository.format.npm;
     requires build.jenesis.repository.format.nuget;
     requires build.jenesis.repository.format.pypi;

@@ -6,6 +6,7 @@ import build.jenesis.repository.definitions.RepositoryDefinition;
 import build.jenesis.repository.discovery.RepositoryDiscovery;
 import build.jenesis.repository.format.DetachedExchange;
 import build.jenesis.repository.format.ProxyFormat;
+import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.maven.MavenFormat;
 import build.jenesis.repository.gateway.RepositoryRouter;
 import build.jenesis.repository.store.ArtifactStore;
@@ -21,12 +22,22 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * template's file at its own address, checked against the checksum beside it, a root's under the request's own path,
  * the metadata a latest link names answered rather than fetched. A body that does not match its checksum is neither
  * served nor kept, a coordinate no domain names falls through to the next leg, a file the proposal refuses answers
- * {@code 502}, and the grammar takes {@code discovered} with every option an upstream takes.
+ * {@code 502}, and the grammar takes {@code discovered} with every option an upstream takes. A module repository's
+ * discovered leg keeps a version as well: its jar is fetched where the domain says and served again from here, a jar
+ * declaring another module is neither served nor kept, and the latest pointer is served as the domain answers it now
+ * without being kept.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class DiscoveredLegTest {
 
     private static final String RELEASES = "https://github.com/jenesis/jenesis/releases/download/v0.20.0/";
+
+    private static final String MODULES = "https://github.com/example/lib/releases/";
+
+    private static final String EXAMPLE = """
+            module=https://github.com/example/lib/releases/download/v{version}/{module}-{version}{-classifier}.{type}
+            module.latest=https://github.com/example/lib/releases/latest/download/{module}.jar
+            """;
 
     private static final String JENESIS = """
             maven=https://github.com/jenesis/jenesis/releases/download/v{version}/{artifactId}-{version}{-classifier}.{type}
@@ -53,6 +64,7 @@ public class DiscoveredLegTest {
                 "maven=https://maven.example.com/releases/\n");
         files.put(URI.create("https://broken.org/.well-known/java-repository.properties"),
                 "maven=http://plain.broken.org/\n");
+        files.put(URI.create("https://example.org/.well-known/java-repository.properties"), EXAMPLE);
         ProxyFormat.Fetcher.Buffered fetcher = (url, _) -> {
             fetched.add(url.toString());
             byte[] body = upstream.get(url.toString());
@@ -72,6 +84,7 @@ public class DiscoveredLegTest {
         };
         Map<String, RepositoryDefinition> definitions = Map.of(
                 "discovered", RepositoryDefinition.parse("fallback discovered"),
+                "modules", RepositoryDefinition.parse("fallback discovered"),
                 "fallthrough", RepositoryDefinition.parse("fallback discovered fallback https://central/"));
         router = new RepositoryRouter(definitions::get,
                 (tenant, repository) -> store.scope(tenant).scope(repository), fetcher)
@@ -144,6 +157,54 @@ public class DiscoveredLegTest {
     }
 
     @Test
+    void a_discovered_module_version_is_fetched_kept_and_served_again_without_asking() throws Exception {
+        byte[] jar = jar("org.example.lib");
+        upstream.put(MODULES + "download/v1.0/org.example.lib-1.0.jar", jar);
+        String path = "/module/org.example.lib/1.0/org.example.lib.jar";
+
+        Exchange first = serve("modules", jenesis(), path);
+        assertThat(first.status).isEqualTo(200);
+        assertThat(first.body.toByteArray()).isEqualTo(jar);
+        assertThat(fetched).contains(MODULES + "download/v1.0/org.example.lib-1.0.jar");
+        assertThat(new Publication(store.scope("acme").scope("modules")).located(path)).as("kept").isPresent();
+
+        int asked = fetched.size();
+        assertThat(serve("modules", jenesis(), path).body.toByteArray()).isEqualTo(jar);
+        assertThat(fetched).as("served again without asking").hasSize(asked);
+    }
+
+    @Test
+    void a_discovered_module_jar_declaring_another_module_is_neither_served_nor_kept() throws Exception {
+        upstream.put(MODULES + "download/v1.0/org.example.lib-1.0.jar", jar("org.other.lib"));
+        String path = "/module/org.example.lib/1.0/org.example.lib.jar";
+
+        Exchange exchange = serve("modules", jenesis(), path);
+
+        assertThat(exchange.status).isEqualTo(404);
+        assertThat(new Publication(store.scope("acme").scope("modules")).located(path)).isEmpty();
+        upstream.put(MODULES + "download/v1.0/org.example.lib-1.0.jar", jar(null));
+        assertThat(serve("modules", jenesis(), path).status).as("nor one declaring no module").isEqualTo(404);
+    }
+
+    @Test
+    void the_latest_pointer_is_served_as_the_domain_answers_it_now_and_never_kept() throws Exception {
+        heads.put(URI.create(MODULES + "latest/download/org.example.lib.jar"), new RepositoryDiscovery.Head(302,
+                Map.of("Location", MODULES + "download/v1.1/org.example.lib.jar")));
+        byte[] jar = jar("org.example.lib");
+        upstream.put(MODULES + "download/v1.1/org.example.lib-1.1.jar", jar);
+        String latest = "/module/org.example.lib/org.example.lib.jar";
+
+        Exchange exchange = serve("modules", jenesis(), latest);
+
+        assertThat(exchange.status).isEqualTo(200);
+        assertThat(exchange.body.toByteArray()).isEqualTo(jar);
+        assertThat(new Publication(store.scope("acme").scope("modules")).located(latest)).as("never kept").isEmpty();
+        int asked = fetched.size();
+        serve("modules", jenesis(), latest);
+        assertThat(fetched.size()).as("asked again").isGreaterThan(asked);
+    }
+
+    @Test
     void the_grammar_takes_discovered_with_every_option_an_upstream_takes() {
         RepositoryDefinition definition = RepositoryDefinition.parse(
                 "writable fallback discovered harden nocache match=maven:build.jenesis:* fallback https://central/");
@@ -165,6 +226,38 @@ public class DiscoveredLegTest {
         Exchange exchange = new Exchange(path);
         router.serve("acme", repository, new MavenFormat(), exchange);
         return exchange;
+    }
+
+    private Exchange serve(String repository, RepositoryFormat format, String path) throws IOException {
+        Exchange exchange = new Exchange(path);
+        router.serve("acme", repository, format, exchange);
+        return exchange;
+    }
+
+    /** The module format, discovered as the server discovers it. */
+    private static RepositoryFormat jenesis() {
+        for (RepositoryFormat format : ServiceLoader.load(RepositoryFormat.class)) {
+            if (format.name().equals("jenesis")) {
+                return format;
+            }
+        }
+        throw new IllegalStateException("no jenesis format installed");
+    }
+
+    /** A jar declaring {@code module} as its Automatic-Module-Name, or no module name for {@code null}. */
+    private static byte[] jar(String module) throws IOException {
+        Manifest manifest = new Manifest();
+        manifest.getMainAttributes().put(java.util.jar.Attributes.Name.MANIFEST_VERSION, "1.0");
+        if (module != null) {
+            manifest.getMainAttributes().putValue("Automatic-Module-Name", module);
+        }
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (JarOutputStream jar = new JarOutputStream(bytes, manifest)) {
+            jar.putNextEntry(new JarEntry("org/example/lib/Lib.class"));
+            jar.write(new byte[]{(byte) 0xCA, (byte) 0xFE});
+            jar.closeEntry();
+        }
+        return bytes.toByteArray();
     }
 
     private static String sha256(byte[] body) throws NoSuchAlgorithmException {

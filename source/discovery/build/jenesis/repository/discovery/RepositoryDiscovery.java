@@ -287,10 +287,15 @@ public final class RepositoryDiscovery {
             case Request.MavenMetadata metadata -> metadata(metadata);
             case Request.ModuleFile file -> module(file);
         };
-        // A Maven root is a Maven repository, laid out without the route; a module service has the module's own.
-        String below = path.startsWith("/maven/") ? path.substring("/maven/".length()) : path.substring(1);
+        String below = path.substring(route(path).length());
         return located.map(found -> found instanceof Located.Relayed relayed
                 ? new Located.Relayed(relayed.root(), below) : found);
+    }
+
+    /** The part of a request path a root's layout leaves out: {@code /maven/} below a Maven repository, which is laid
+     *  out without the route, and {@code /} below a module service, which keeps the module's own. */
+    public static String route(String path) {
+        return path.startsWith("/maven/") ? "/maven/" : "/";
     }
 
     /**
