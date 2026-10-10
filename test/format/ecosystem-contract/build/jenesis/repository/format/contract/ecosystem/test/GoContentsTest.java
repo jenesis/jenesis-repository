@@ -6,6 +6,8 @@ import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.format.go.GoFormat;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.StoredCounter;
+import build.jenesis.repository.store.StoredListing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -17,6 +19,12 @@ class GoContentsTest {
 
     @TempDir
     Path root;
+
+    @AfterEach
+    void settle() {
+        StoredListing.settle();
+        StoredCounter.settle();
+    }
 
     @Test
     void a_module_version_is_its_info_mod_and_zip_with_the_archive_last() throws IOException {

@@ -7,6 +7,8 @@ import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.StoredCounter;
+import build.jenesis.repository.store.StoredListing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -20,6 +22,12 @@ class SwiftImportTest {
 
     @TempDir
     Path root;
+
+    @AfterEach
+    void settle() {
+        StoredListing.settle();
+        StoredCounter.settle();
+    }
 
     @Test
     void an_imported_release_serves_the_manifest_its_archive_carries() throws IOException {
