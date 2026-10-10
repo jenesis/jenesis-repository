@@ -149,7 +149,9 @@ public final class FilesystemArtifactStore implements PrimitiveArtifactStore {
 
     /** Create an upload temp file in {@code dir}, re-creating the directory and retrying if a concurrent
      *  {@link #delete} tidied the empty container away in between - the other half of the race {@link #delete}'s
-     *  {@code DirectoryNotEmptyException} catch handles. */
+     *  {@code DirectoryNotEmptyException} catch handles. The tidy surfaces as {@link NoSuchFileException} when it lands
+     *  before the temp file is created, and as {@link FileAlreadyExistsException} when it lands inside
+     *  {@link Files#createDirectories}, between its finding the directory present and confirming it is one. */
     private static Path createUploadTemp(Path dir) throws IOException {
         for (int attempt = 0; ; attempt++) {
             try {
@@ -157,7 +159,7 @@ public final class FilesystemArtifactStore implements PrimitiveArtifactStore {
                 // the rename into place keeps the temp's mode.
                 OwnerOnly.createDirectories(dir);
                 return OwnerOnly.createTempFile(dir, ".upload", ".tmp");
-            } catch (NoSuchFileException e) {
+            } catch (NoSuchFileException | FileAlreadyExistsException e) {
                 if (attempt >= 4) {
                     throw e;
                 }
@@ -757,7 +759,11 @@ public final class FilesystemArtifactStore implements PrimitiveArtifactStore {
      *  on a match, move the spooled content into place atomically. The pre-lock token is used when the file is provably
      *  the hashed incarnation ({@link Hashed#stands}), and re-hashed otherwise. The token must advance on every
      *  successful update, even of byte-identical content the digest cannot tell apart: otherwise two writes in one tick
-     *  leave it unchanged and a third writer holding the old token would still pass. */
+     *  leave it unchanged and a third writer holding the old token would still pass.
+     *
+     *  <p>A {@link #delete} takes neither lock, so the file can vanish at either end. Before the move that is a lost
+     *  compare-and-set - the incarnation the caller read is gone, and it re-reads as for any lost update. After the
+     *  move the write has landed and a delete took it, so there is no stamp left to advance. */
     private static boolean compareAndMove(Path path, Object expected, Path temp, Hashed before) throws IOException {
         Stamp now = Stamp.of(path);
         boolean present = now != null;
@@ -765,12 +771,26 @@ public final class FilesystemArtifactStore implements PrimitiveArtifactStore {
         if (present != (expected != null)) {
             return false;
         }
-        if (present && !Objects.equals(before.stands(now) ? before.token() : token(modified, path), expected)) {
-            return false;
+        if (present) {
+            Object current;
+            try {
+                current = before.stands(now) ? before.token() : token(modified, path);
+            } catch (NoSuchFileException | FileNotFoundException e) {
+                return false;
+            }
+            if (!Objects.equals(current, expected)) {
+                return false;
+            }
         }
         Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        if (present && Files.getLastModifiedTime(path).toMillis() <= modified) {
-            Files.setLastModifiedTime(path, FileTime.fromMillis(modified + 1));
+        if (present) {
+            try {
+                if (Files.getLastModifiedTime(path).toMillis() <= modified) {
+                    Files.setLastModifiedTime(path, FileTime.fromMillis(modified + 1));
+                }
+            } catch (NoSuchFileException | FileNotFoundException e) {
+                // Deleted as soon as it landed: the write happened, and nothing remains for a token to name.
+            }
         }
         return true;
     }
