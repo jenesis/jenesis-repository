@@ -9,6 +9,8 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
+import build.jenesis.repository.store.StoredCounter;
+import build.jenesis.repository.store.StoredListing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -26,6 +28,12 @@ class ApkProxyTest {
 
     @TempDir
     Path root;
+
+    @AfterEach
+    void settle() {
+        StoredListing.settle();
+        StoredCounter.settle();
+    }
 
     @Test
     void a_package_matching_its_index_is_cached_and_served() throws IOException {

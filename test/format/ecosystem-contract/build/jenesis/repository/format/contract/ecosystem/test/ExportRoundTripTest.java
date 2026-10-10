@@ -9,6 +9,8 @@ import build.jenesis.repository.format.RepositoryType;
 import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.StoredCounter;
+import build.jenesis.repository.store.StoredListing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -24,6 +26,12 @@ class ExportRoundTripTest {
 
     @TempDir
     Path root;
+
+    @AfterEach
+    void settle() {
+        StoredListing.settle();
+        StoredCounter.settle();
+    }
 
     @TestFactory
     Stream<DynamicTest> every_exporter_publishes_what_its_format_serves_into_a_second_repository() {
