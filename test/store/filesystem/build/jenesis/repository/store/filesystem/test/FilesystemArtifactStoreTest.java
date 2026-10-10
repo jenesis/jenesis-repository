@@ -274,6 +274,40 @@ class FilesystemArtifactStoreTest {
     }
 
     @Test
+    void write_versioned_loses_to_a_racing_delete_rather_than_throwing() throws Exception {
+        // An update compares the stored incarnation's token under the stripe lock, re-hashing a file modified within
+        // the last second; a delete takes no stripe lock, so the file can vanish between the stamp and the hash. That
+        // is a lost compare-and-set - the incarnation the caller read is gone - and the caller re-reads, as it does
+        // for any lost update, rather than failing the write with an escaping NoSuchFileException. A sibling keeps the
+        // container from being tidied, so the race asserted is the compare's and not the directory's.
+        store.write("race/anchor", bytes("kept"));
+        AtomicReference<Throwable> deleterFailure = new AtomicReference<>();
+        AtomicBoolean stop = new AtomicBoolean();
+        Thread deleter = new Thread(() -> {
+            try {
+                while (!stop.get()) {
+                    store.delete("race/doc");
+                }
+            } catch (Throwable t) {
+                deleterFailure.compareAndSet(null, t);
+            }
+        });
+        deleter.start();
+        try {
+            byte[] content = "d".repeat(4096).getBytes(StandardCharsets.UTF_8);
+            for (int i = 0; i < 20_000 && deleterFailure.get() == null; i++) {
+                Optional<ArtifactStore.Versioned> read = store.readVersioned("race/doc");
+                // Pre-fix, the update below let a NoSuchFileException escape when the delete landed mid-compare.
+                store.writeVersioned("race/doc", content, read.map(ArtifactStore.Versioned::token).orElse(null));
+            }
+        } finally {
+            stop.set(true);
+            deleter.join(30_000);
+        }
+        assertThat(deleterFailure.get()).as("the deleter never faulted").isNull();
+    }
+
+    @Test
     void a_written_file_and_the_dirs_it_creates_are_owner_only_not_umask_world_readable() throws IOException {
         // The whole point of the hardening: a blob and every container the store creates for it are owner-only
         // (rw-------/rwx------) rather than inheriting the process umask's world-readable 022 default. POSIX
