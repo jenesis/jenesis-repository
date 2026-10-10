@@ -468,6 +468,7 @@ public final class Settings {
                 scope.delete(key);
             }
         }
+        epoch.bump();
         tenantSnapshots.remove(tenant);
     }
 
@@ -516,6 +517,7 @@ public final class Settings {
                 root.delete(key);
             }
         }
+        epoch.bump();
         snapshot = load();
     }
 
@@ -575,8 +577,8 @@ public final class Settings {
         return preserved[0];
     }
 
-    /** The settings epoch: a token every write bumps, empty on a store nothing has written to since it existed. A
-     *  refresh that sees the token it saw last time has nothing to re-read. */
+    /** The settings epoch: a token every write bumps - a set at any scope and an import alike - empty on a store
+     *  nothing has written to. A refresh that sees the token it saw last time has nothing to re-read. */
     public String epoch() throws IOException {
         return epoch.current();
     }
