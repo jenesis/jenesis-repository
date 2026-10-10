@@ -15,7 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>The two halves are tested apart because they are needed apart. Reading the facts is what lets an artifact be
  * described - "signed by this key, over SHA-256, in March" - before anyone has decided whether that key is trusted,
  * which is exactly the order the gate needs them in: the inspector records what it found, and a dimension decides
- * later what that is worth.
+ * later what that is worth. A signature is read as gpg reads it, through a marker packet before it and the compressed
+ * packets around it, to a bound.
  */
 class OpenPgpVerificationTest {
 
@@ -120,6 +121,42 @@ class OpenPgpVerificationTest {
     }
 
     @Test
+    void a_signature_inside_a_compressed_packet_armoured_as_a_message_verifies_as_a_bare_one() throws IOException {
+        byte[] body = "a release signed by a tool that wraps its signatures".getBytes(StandardCharsets.UTF_8);
+        byte[] bare = signer.detachedSignature(body, OpenPgpSigner.Encoding.BINARY);
+
+        // The shape a BouncyCastle-based release signer writes: the signature in a compressed packet that stores it
+        // uncompressed, armoured as a PGP MESSAGE. gpg verifies it, so it is a signature, never an INVALID one.
+        byte[] message = armour("MESSAGE", stored(bare));
+        assertThat(OpenPgpVerification.facts(message)).get().extracting(OpenPgpVerification.Facts::keyId)
+                .isEqualTo(signer.keyId());
+        assertThat(OpenPgpVerification.verify(source(body), message, keyring))
+                .isEqualTo(OpenPgpVerification.Result.VALID);
+        assertThat(OpenPgpVerification.verify(source(body), deflated(bare), keyring)).as("compressed for real")
+                .isEqualTo(OpenPgpVerification.Result.VALID);
+        assertThat(OpenPgpVerification.verify(source(body), concat(MARKER, stored(bare)), keyring))
+                .as("behind a marker packet").isEqualTo(OpenPgpVerification.Result.VALID);
+
+        byte[] tampered = body.clone();
+        tampered[0] ^= 0x01;
+        assertThat(OpenPgpVerification.verify(source(tampered), message, keyring)).as("and checked as strictly")
+                .isEqualTo(OpenPgpVerification.Result.INVALID);
+    }
+
+    @Test
+    void a_signature_nested_deeper_than_any_signer_writes_it_is_not_read() throws IOException {
+        byte[] body = "nested".getBytes(StandardCharsets.UTF_8);
+        byte[] nested = signer.detachedSignature(body, OpenPgpSigner.Encoding.BINARY);
+        for (int layer = 0; layer < 4; layer++) {
+            nested = stored(nested);
+        }
+        assertThat(OpenPgpVerification.verify(source(body), nested, keyring)).as("four layers")
+                .isEqualTo(OpenPgpVerification.Result.VALID);
+
+        assertThat(OpenPgpVerification.facts(stored(nested))).as("five layers").isEmpty();
+    }
+
+    @Test
     void the_key_behind_a_signature_reports_its_size_and_expiry() throws IOException {
         byte[] signature = signer.detachedSignature("x".getBytes(StandardCharsets.UTF_8),
                 OpenPgpSigner.Encoding.ARMOURED);
@@ -155,6 +192,54 @@ class OpenPgpVerificationTest {
 
     private static ArtifactSignatures.Signed source(byte[] body) {
         return () -> new ByteArrayInputStream(body);
+    }
+
+    /** A marker packet, old format: tag 10, one-byte length, "PGP". */
+    private static final byte[] MARKER = {(byte) 0xA8, 3, 'P', 'G', 'P'};
+
+    /** {@code packets} in a compressed packet that stores them uncompressed: old format, tag 8, a length running to
+     *  the end, algorithm 0. */
+    private static byte[] stored(byte[] packets) {
+        return concat(new byte[]{(byte) 0xA3, 0}, packets);
+    }
+
+    /** {@code packets} in a compressed packet deflating them: algorithm 1, raw deflate. */
+    private static byte[] deflated(byte[] packets) {
+        Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION, true);
+        deflater.setInput(packets);
+        deflater.finish();
+        ByteArrayOutputStream compressed = new ByteArrayOutputStream();
+        byte[] buffer = new byte[1024];
+        while (!deflater.finished()) {
+            compressed.write(buffer, 0, deflater.deflate(buffer));
+        }
+        deflater.end();
+        return concat(new byte[]{(byte) 0xA3, 1}, compressed.toByteArray());
+    }
+
+    private static byte[] concat(byte[] first, byte[] second) {
+        byte[] joined = Arrays.copyOf(first, first.length + second.length);
+        System.arraycopy(second, 0, joined, first.length, second.length);
+        return joined;
+    }
+
+    /** {@code packets} in ASCII armour of the given block type, with its CRC-24 checksum line. */
+    private static byte[] armour(String type, byte[] packets) {
+        int crc = 0xB704CE;
+        for (byte b : packets) {
+            crc ^= (b & 0xFF) << 16;
+            for (int bit = 0; bit < 8; bit++) {
+                crc <<= 1;
+                if ((crc & 0x1000000) != 0) {
+                    crc ^= 0x1864CFB;
+                }
+            }
+        }
+        byte[] checksum = {(byte) (crc >> 16), (byte) (crc >> 8), (byte) crc};
+        return ("-----BEGIN PGP " + type + "-----\n\n"
+                + Base64.getMimeEncoder(64, "\n".getBytes(StandardCharsets.US_ASCII)).encodeToString(packets) + "\n"
+                + "=" + Base64.getEncoder().encodeToString(checksum) + "\n"
+                + "-----END PGP " + type + "-----\n").getBytes(StandardCharsets.US_ASCII);
     }
 
     /** A deterministic stream of {@code length} bytes that is never materialised, so the test's own heap does not

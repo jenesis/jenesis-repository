@@ -8,7 +8,9 @@ import org.bouncycastle.bcpg.KeyIdentifier;
 import org.bouncycastle.bcpg.HashAlgorithmTags;
 import org.bouncycastle.bcpg.PublicKeyAlgorithmTags;
 import org.bouncycastle.bcpg.sig.KeyFlags;
+import org.bouncycastle.openpgp.PGPCompressedData;
 import org.bouncycastle.openpgp.PGPException;
+import org.bouncycastle.openpgp.PGPMarker;
 import org.bouncycastle.openpgp.PGPObjectFactory;
 import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPPublicKeyRing;
@@ -27,8 +29,15 @@ import org.bouncycastle.openpgp.operator.jcajce.JcaPGPContentVerifierBuilderProv
  * <p>{@link #facts} needs no key: algorithm, digest, time and issuer live in the packet, so an artifact can be
  * described and graded before anyone decides whether the key is trusted. {@link #verify} needs the key and streams the
  * bytes in bounded chunks, so a multi-gigabyte package is checked on a publish thread.
+ *
+ * <p>A detached signature is read through the marker packets before it and the compressed packets around it, as
+ * {@code gpg} reads it: some signers write the signature inside a compressed packet armoured as a message, and that
+ * signature is as good as a bare one. At most {@code MOST_LAYERS} compressed packets are read through, nested.
  */
 public final class OpenPgpVerification {
+
+    /** The most compressed packets a detached signature is read through, nested; a signer wraps it in one. */
+    private static final int MOST_LAYERS = 4;
 
     private OpenPgpVerification() {
     }
@@ -276,10 +285,24 @@ public final class OpenPgpVerification {
             return parseClearsigned(signature).map(Parsed::signature);
         }
         try (InputStream in = PGPUtil.getDecoderStream(new ByteArrayInputStream(signature))) {
-            Object next = new PGPObjectFactory(in, new JcaKeyFingerprintCalculator()).nextObject();
-            return next instanceof PGPSignatureList list && !list.isEmpty()
-                    ? Optional.of(list.get(0))
-                    : Optional.empty();
+            PGPObjectFactory packets = new PGPObjectFactory(in, new JcaKeyFingerprintCalculator());
+            int layers = 0;
+            while (true) {
+                Object next = packets.nextObject();
+                if (next instanceof PGPMarker) {
+                    continue;
+                }
+                if (next instanceof PGPCompressedData compressed && layers++ < MOST_LAYERS) {
+                    packets = new PGPObjectFactory(compressed.getDataStream(), new JcaKeyFingerprintCalculator());
+                    continue;
+                }
+                return next instanceof PGPSignatureList list && !list.isEmpty()
+                        ? Optional.of(list.get(0))
+                        : Optional.empty();
+            }
+        } catch (PGPException unreadable) {
+            // A compressed packet of an algorithm the library does not know holds no signature it can read.
+            return Optional.empty();
         } catch (RuntimeException unreadable) {
             // Bouncy Castle raises unchecked on some malformed packet streams, which means "not a signature we can
             // read", never a crash. Like an IOException, it is reported as unreadable, never rounded down to "carries
