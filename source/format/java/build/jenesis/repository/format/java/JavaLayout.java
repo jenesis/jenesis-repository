@@ -118,8 +118,8 @@ public final class JavaLayout {
         return requestPath.substring(0, slash + 1) + coordinate[1] + "-" + coordinate[2] + suffix;
     }
 
-    /** The module name a jar declares - its {@code module-info} name or {@code Automatic-Module-Name} - or null for a
-     *  plain jar. The jar is streamed, never buffered, under both archive bounds: the walk runs under
+    /** The module name a jar declares - its {@code module-info} name, else that of the first {@code module-info} under
+     *  {@code META-INF/versions/}, else its {@code Automatic-Module-Name} - or null for a plain jar. The jar is streamed, never buffered, under both archive bounds: the walk runs under
      *  {@link ArchiveWalk}, and the only entries read into heap (the manifest, {@code module-info.class}) go through
      *  {@link ArchiveInflation}. A module name is an optional declaration, so both bounds degrade
      *  ({@link ArchiveWalk.Found#orNull()}, {@link ArchiveInflation.Entry#orNull()}) to "declares no module" - which
@@ -136,11 +136,17 @@ public final class JavaLayout {
     private static String declaredModule(InputStream jar) throws IOException {
         try (ZipInputStream in = ArchiveWalk.zip(jar)) {
             String automatic = null;
+            String versioned = null;
             for (ZipEntry entry; (entry = in.getNextEntry()) != null; ) {
                 if (entry.getName().equals("module-info.class")) {
                     byte[] descriptor = bounded(in);
                     if (descriptor != null) {
                         return ModuleDescriptor.read(ByteBuffer.wrap(descriptor)).name();
+                    }
+                } else if (versioned == null && VERSIONED_DESCRIPTOR.matcher(entry.getName()).matches()) {
+                    byte[] descriptor = bounded(in);
+                    if (descriptor != null) {
+                        versioned = ModuleDescriptor.read(ByteBuffer.wrap(descriptor)).name();
                     }
                 } else if (entry.getName().equals("META-INF/MANIFEST.MF")) {
                     byte[] bytes = bounded(in);
@@ -150,11 +156,17 @@ public final class JavaLayout {
                     }
                 }
             }
+            if (versioned != null) {
+                return versioned;
+            }
             // An Automatic-Module-Name is a raw manifest string that becomes a /module/<name>/ key, so it must be a
             // legal module name first; a crafted value is treated as no module.
             return automatic == null ? null : validModuleName(automatic);
         }
     }
+
+    /** A {@code module-info} of one release of a multi-release jar. */
+    private static final Pattern VERSIONED_DESCRIPTOR = Pattern.compile("META-INF/versions/[0-9]+/module-info\\.class");
 
     /** The current entry's bytes, or null past the shared inflation bound, so a decompression bomb declares nothing
      *  rather than a prefix. */
