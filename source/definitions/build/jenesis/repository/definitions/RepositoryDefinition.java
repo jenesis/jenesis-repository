@@ -128,8 +128,7 @@ public record RepositoryDefinition(boolean writable, List<Fallback> fallbacks) {
         /** Discovered: each request's upstream is where the domain its coordinate's name reverses into says, in its
          *  {@code /.well-known/java-repository.properties}. Written {@code fallback discovered}, the keyword taking
          *  precedence over a repository of that name; fetched, screened and kept as an {@link Upstream} leg is, or
-         *  {@code redirect}ed - the one way it serves a format with no proxy leg, such as the Jenesis module
-         *  format. */
+         *  {@code redirect}ed - the one way it serves a format with no proxy leg. */
         record Discovered() implements Source {
         }
     }

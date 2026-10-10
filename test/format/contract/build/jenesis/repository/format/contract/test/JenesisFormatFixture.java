@@ -1,21 +1,28 @@
 package build.jenesis.repository.format.contract.test;
 
 import module java.base;
+import build.jenesis.repository.format.ProxyFormat;
 import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.format.testkit.FormatContract;
 import build.jenesis.repository.format.testkit.FormatFixture;
+import build.jenesis.repository.format.testkit.GeneratedBody;
 import build.jenesis.repository.store.ArtifactStore;
 
 /**
  * The Jenesis module layout's leg of the shared contract - the smallest of the four, and honestly so: it serves
- * {@code /module/} and {@code /artifact/} pointers and carries the {@code ArtifactLayout} coordinate seam, but it
- * publishes no listing, generates no document and does not proxy. Three properties are therefore excluded with
- * reasons naming the absent protocol surface rather than an absent implementation.
+ * {@code /module/} and {@code /artifact/} pointers, carries the {@code ArtifactLayout} coordinate seam and pulls a
+ * module's files through from a module service, but it publishes no listing and generates no document. The properties
+ * it is excluded from name the absent protocol surface rather than an absent implementation. The pulled file is a
+ * classified jar, since a module's own jar must declare the module and a generated body declares none.
  */
 final class JenesisFormatFixture implements FormatFixture {
 
     private static final String MODULE = "contract.module";
+
+    private static final URI ROOT = URI.create("https://modules.upstream.example/");
+
+    private static final String PROXIED = "/module/" + MODULE + "/1.0.0/" + MODULE + "-sources.jar";
 
     private RepositoryFormat serving;
 
@@ -70,11 +77,31 @@ final class JenesisFormatFixture implements FormatFixture {
     }
 
     @Override
+    public Optional<Upstream> upstream(GeneratedBody body) {
+        String artifact = ROOT + PROXIED.substring(1);
+        return Optional.of(new Upstream(PROXIED, ROOT, new ProxyFormat.Fetcher.Buffered() {
+
+            @Override
+            public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) {
+                return Optional.of(new ProxyFormat.Fetched(404, new byte[0], Map.of()));
+            }
+
+            @Override
+            public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders) {
+                return url.toString().equals(artifact)
+                        ? Optional.of(new ProxyFormat.Download(200, body.open(), Map.of()))
+                        : Optional.of(new ProxyFormat.Download(404, InputStream.nullInputStream(), Map.of()));
+            }
+        }));
+    }
+
+    @Override
     public Map<FormatContract.Property, String> unsupported() {
         return Map.of(
                 FormatContract.Property.PROXY_REFUSAL_IS_NOT_AN_ABSENCE,
-                "the same reason again: with no ProxyFormat there is no upstream refusal to spell, so the format "
-                        + "cannot confuse one with an absence",
+                "a module service advertises no digest, so the leg has no integrity refusal to spell, and it has no "
+                        + "elective path either: a module file's path is its identity, and a client asking for one "
+                        + "that is not there is asking for a file it expects, so the miss is a loud answer",
                 
                 FormatContract.Property.WITHHELD_VERSION_LEAVES_EVERY_ENUMERATION,
                 "the module layout publishes no enumeration surface at all - no listing, no version index, no "
@@ -85,13 +112,11 @@ final class JenesisFormatFixture implements FormatFixture {
                 "the module layout publishes no enumeration surface at all, so there is no listing to answer for an "
                         + "empty repository, and no proxy to send a miss on to",
                 FormatContract.Property.PROXY_VERIFIES_UPSTREAM_INTEGRITY,
-                "JenesisFormat implements no ProxyFormat: the module layout is publish-only, with no upstream to "
-                        + "mirror, so there is no fetched body to verify",
-                FormatContract.Property.PROXY_SCREEN_JUDGES_ONLY_THE_ARTIFACT,
-                "JenesisFormat implements no ProxyFormat, so no fill runs under a screen",
-                FormatContract.Property.PROXY_STREAMS_UPSTREAM_BODY,
-                "JenesisFormat implements no ProxyFormat, so it has no pull-through leg to stream. Its publish path "
-                        + "streams through the same Publication.storeBlob the Maven and raw legs stream through",
+                "a module service is a plain file tree: it publishes no checksum sibling, no digest header and no "
+                        + "content-addressed reference, so an upstream body carries nothing to hold it to, and the kit "
+                        + "refuses to fabricate a check. A discovered location that does publish checksums beside its "
+                        + "files has them checked by the discovered leg, and a module's own jar is held to the module "
+                        + "it is asked for",
                 FormatContract.Property.LISTING_MERGE_STREAMS,
                 "the module layout keeps no generated document a publish merges into - every response is stored "
                         + "bytes streamed back",

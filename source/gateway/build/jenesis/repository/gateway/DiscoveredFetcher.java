@@ -29,7 +29,8 @@ final class DiscoveredFetcher implements ProxyFormat.Fetcher {
     private final String route;
 
     /** Over {@code delegate}, reading each request composed under {@code base} as a repository path beginning
-     *  {@code route} ({@code /maven/}). */
+     *  {@code route}: {@code /maven/} where the format composes below a Maven repository's root, {@code /} where it
+     *  keeps the module service's route ({@link RepositoryDiscovery#route}). */
     DiscoveredFetcher(ProxyFormat.Fetcher delegate, RepositoryDiscovery discovery, URI base, String route) {
         this.delegate = delegate;
         this.discovery = discovery;
