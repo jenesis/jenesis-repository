@@ -79,6 +79,8 @@ open module build.jenesis.repository.publication.contract.test {
     requires build.jenesis.repository.findings;
     requires build.jenesis.repository.findings.store;
     requires build.jenesis.repository.metadata.store;
+    requires build.jenesis.repository.gateway;
+    requires build.jenesis.repository.compliance;
     requires build.jenesis.repository.store.filesystem;
     requires build.jenesis.repository.contract.testkit;
     requires org.junit.jupiter;
