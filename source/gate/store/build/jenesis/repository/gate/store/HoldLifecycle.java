@@ -153,9 +153,10 @@ public final class HoldLifecycle {
             // publish/ pointer - those formats never use one; its served blobs resume purely by lifting the withhold
             // markers below, so synthesizing a pointer here would strand a phantom publish/ entry the format never
             // serves. That is the WHOLE release for those formats however the hold arose: a retroactive KEV/licence
-            // hold overlays a version that is already laid out, and a screen-time QUARANTINE is laid out by the format
-            // itself behind the same withheld/<hash> marker - so the blobs-namespace release is one mechanism (lift the
-            // marker), a pure retraction-lift, which is what makes a retried release converge by construction.
+            // hold overlays a version that is already laid out, and a screen-time QUARANTINE - of a publish or of a
+            // proxied fill - is laid out by the format itself behind the same withheld/<hash> marker - so the
+            // blobs-namespace release is one mechanism (lift the marker), a pure retraction-lift, which is what makes
+            // a retried release converge by construction.
             publication.link(path, held.get());
             if (fetched.isEmpty() && !cachedCopy(inventory, path)) {
                 inventory.record(path, Instant.now());

@@ -680,15 +680,23 @@ public final class HardenedScreen {
             // socket. The pull-through caches it into the durable store (store-on-pass) and serves it.
             return Optional.of(new ProxyFormat.Download(200, release.open(), headers));
         }
-        // Withheld: the pull-through sees an empty result and serves a 404. A held body is copied durably under
-        // /quarantine for review; a rejected one is discarded. Either way the reason is recorded before we return.
+        // Withheld: a held body is placed under its hold. A fetched one, on a leg that keeps its copy, is handed on
+        // re-read from the store, so the pull-through keeps it behind the hold and its serve answers 404 for it; local
+        // bytes being re-screened are already laid out, and a pass-through keeps nothing, so both are a miss. A
+        // rejected one is discarded and the pull-through sees a miss. Either way the reason is recorded first.
+        Optional<ProxyFormat.Download> held = Optional.empty();
         if (screening.verdict() == Verdict.QUARANTINE) {
-            try (InputStream held = body.open()) {
-                screen.quarantine(path, held, LOCAL_SOURCE.equals(source) ? null : source);
+            boolean fetched = source != null && !LOCAL_SOURCE.equals(source);
+            String hash;
+            try (InputStream bytes = body.open()) {
+                hash = screen.quarantine(path, bytes, fetched ? source : null);
+            }
+            if (fetched && reuseVerdict) {
+                held = Optional.of(screen.behindHold(hash, headers));
             }
         }
         screen.log(path, screening);
-        return Optional.empty();
+        return held;
     }
 
     /** The policies a reused verdict may have been reached under: this screen's gate's, or none without a gate. */

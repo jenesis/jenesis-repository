@@ -48,19 +48,21 @@ class AdvisoryFeedSelectionScreenTest {
     void a_feed_the_repository_does_not_select_is_not_asked() throws IOException {
         settings.put(AdvisorySource.SELECTION, "quiet");
 
-        assertThat(fetch()).as("the flagging feed is the deployment's, not this repository's").isPresent();
+        assertThat(HeldFills.admitted(store, fetch()))
+                .as("the flagging feed is the deployment's, not this repository's").isTrue();
     }
 
     @Test
     void a_repository_selecting_none_is_screened_by_every_feed() throws IOException {
-        assertThat(fetch()).as("the flagging feed holds it").isEmpty();
+        assertThat(HeldFills.held(store, fetch())).as("the flagging feed holds it").isTrue();
     }
 
     @Test
     void a_feed_named_that_is_not_on_is_an_outage_of_the_screen() throws IOException {
         settings.put(AdvisorySource.SELECTION, "quiet,snyk");
 
-        assertThat(fetch()).as("held, rather than screened by fewer feeds than it names").isEmpty();
+        assertThat(HeldFills.held(store, fetch()))
+                .as("held, rather than screened by fewer feeds than it names").isTrue();
         assertThat(new QuarantineLog(store).events()).singleElement().satisfies(event ->
                 assertThat(event.rules()).contains(ComplianceGate.FEED_UNAVAILABLE_RULE));
     }

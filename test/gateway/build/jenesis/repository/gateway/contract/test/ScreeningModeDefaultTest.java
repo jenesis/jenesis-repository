@@ -74,7 +74,7 @@ class ScreeningModeDefaultTest {
         Optional<ProxyFormat.Fetched> fetched = new ProxyScreen(gate, store, 0).wrap(upstream, path)
                 .fetch(URI.create("http://up" + path), Map.of());
 
-        assertThat(fetched).as("nothing set anywhere: the copy is held, not served").isEmpty();
+        assertThat(HeldFills.held(store, fetched)).as("nothing set anywhere: the copy is held, not served").isTrue();
         assertThat(new QuarantineLog(store).events()).singleElement().satisfies(event ->
                 assertThat(event.reasons()).anySatisfy(reason ->
                         assertThat(reason).contains(ComplianceGate.FEED_FAILED_CLOSED)));
