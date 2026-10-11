@@ -73,6 +73,13 @@ public final class RevalidatingFetcher implements ProxyFormat.Fetcher, Observabi
         return beside == delegate ? this : new RevalidatingFetcher(beside);
     }
 
+    /** Itself, over what its delegate keeps. */
+    @Override
+    public ProxyFormat.Fetcher keeping() {
+        ProxyFormat.Fetcher keeping = delegate.keeping();
+        return keeping == delegate ? this : new RevalidatingFetcher(keeping);
+    }
+
     @Override
     public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders) throws IOException {
         return delegate.download(url, requestHeaders);

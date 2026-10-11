@@ -570,7 +570,7 @@ public final class ComposerFormat implements RepositoryFormat, ArtifactLayout, P
         // is held to it (ProxyFormat clause 5). That entry is the same document that locates the download, so an
         // unreadable one already declined above; only an entry without a shasum, as Packagist gives a VCS dist, falls
         // back to unverified.
-        try (ProxyFormat.Download download = fetcher.download(dist.url(), Map.of()).orElse(null)) {
+        try (ProxyFormat.Download download = fetcher.keeping().download(dist.url(), Map.of()).orElse(null)) {
             if (download == null || download.status() != 200) {
                 return false;
             }

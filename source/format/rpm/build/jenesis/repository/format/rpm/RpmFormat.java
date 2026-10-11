@@ -495,7 +495,7 @@ public final class RpmFormat implements RepositoryFormat, ArtifactLayout, ProxyL
         if (!declared.verifiable()) {
             LOGGER.debug("The repodata of {} declares no checksum for {}: caching it unverified.", upstream, rest);
         }
-        try (ProxyFormat.Download download = fetcher.download(target, Map.of()).orElse(null)) {
+        try (ProxyFormat.Download download = fetcher.keeping().download(target, Map.of()).orElse(null)) {
             if (download == null || download.status() != 200) {
                 return false;
             }

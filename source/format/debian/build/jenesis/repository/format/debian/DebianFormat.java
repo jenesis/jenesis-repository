@@ -813,7 +813,7 @@ public final class DebianFormat implements RepositoryFormat, ProxyLeg, BlobLayou
             //
             // Streamed from the network into the content-addressed store, since a .deb is unbounded.
             URI target = URI.create(root + rest);
-            try (ProxyFormat.Download download = fetcher.download(target, Map.of()).orElse(null)) {
+            try (ProxyFormat.Download download = fetcher.keeping().download(target, Map.of()).orElse(null)) {
                 if (download == null || download.status() != 200) {
                     return false;
                 }

@@ -481,7 +481,7 @@ public final class CocoaPodsFormat implements RepositoryFormat, ArtifactLayout, 
         // The podspec's http source may declare the archive's :sha256 or :sha1, and the streamed archive is held to it.
         // The podspec is the same document that locates the download, so an unreadable one already declined above; a
         // podspec declaring no checksum, which CocoaPods allows, caches unverified.
-        try (ProxyFormat.Download download = fetcher.download(source.url(), Map.of()).orElse(null)) {
+        try (ProxyFormat.Download download = fetcher.keeping().download(source.url(), Map.of()).orElse(null)) {
             if (download == null || download.status() != 200) {
                 return false;
             }

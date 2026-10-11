@@ -41,6 +41,11 @@ class ImportDownloadsTest {
             public ProxyFormat.Fetcher beside() {
                 return this;
             }
+
+            @Override
+            public ProxyFormat.Fetcher keeping() {
+                return this;
+            }
         };
     }
 

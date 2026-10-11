@@ -468,7 +468,7 @@ public final class MavenFormat implements RepositoryFormat, ProxyFormat, Artifac
             exchange.respond(200, merged.get());
             return true;
         }
-        Optional<ProxyFormat.Download> fetched = fetcher.download(URI.create(prefix + rest), Map.of());
+        Optional<ProxyFormat.Download> fetched = fetcher.keeping().download(URI.create(prefix + rest), Map.of());
         if (fetched.isEmpty()) {
             return resolvedAgainstAbsence(rest)
                     ? undecided(prefix + rest, exchange, ProxyFormat.Fetcher.NO_ANSWER)

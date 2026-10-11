@@ -1033,7 +1033,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         }
         // A sha256 reference holds the fetched bytes to it: on a mismatch they stay under their own hash, unlinked,
         // and nothing is served. A digest in another algorithm cannot be a store key, so the serve path 404s it.
-        Optional<ProxyFormat.Download> fetched = download(url, accept, fetcher);
+        Optional<ProxyFormat.Download> fetched = download(url, accept, fetcher.keeping());
         if (fetched.isEmpty()) {
             return false;
         }
@@ -1081,7 +1081,7 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
             handle(exchange, store);
             return true;
         }
-        Optional<ProxyFormat.Fetched> fetched = fetch(url, accept, fetcher);
+        Optional<ProxyFormat.Fetched> fetched = fetch(url, accept, fetcher.keeping());
         if (fetched.isEmpty() || fetched.get().status() != 200) {
             if (held) {
                 // The upstream could not say what the tag names now; the last answer it gave still stands.

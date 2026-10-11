@@ -96,6 +96,13 @@ public final class ImportScreen implements ProxyFormat.Fetcher {
         return beside == delegate ? this : new ImportScreen(beside, authorised);
     }
 
+    /** Still screened against the authorised URL, as any other fetch. */
+    @Override
+    public ProxyFormat.Fetcher keeping() {
+        ProxyFormat.Fetcher keeping = delegate.keeping();
+        return keeping == delegate ? this : new ImportScreen(keeping, authorised);
+    }
+
     @Override
     public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders) throws IOException {
         return delegate.download(screen(url), requestHeaders);

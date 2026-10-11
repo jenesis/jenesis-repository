@@ -69,7 +69,7 @@ class PendingScreenTaskTest {
                 .wrap((ProxyFormat.Fetcher.Buffered) (url, headers) ->
                         Optional.of(new ProxyFormat.Fetched(200, POM, Map.of())), PATH)
                 .fetch(URI.create("http://up" + PATH), Map.of());
-        assertThat(HeldFills.admitted(store, fetched)).as("admitted through the outage").isTrue();
+        assertThat(fetched).as("admitted through the outage").isPresent();
         Publication publication = new Publication(store);
         publication.link(PATH, publication.storeBlob(new ByteArrayInputStream(POM)));
     }

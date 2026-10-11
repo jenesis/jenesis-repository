@@ -298,7 +298,7 @@ public final class SwiftFormat implements RepositoryFormat, ArtifactLayout, Path
                 return ProxyRelay.unverifiable(target, declared);
             }
             Blobs blobs = new Blobs(store);
-            try (ProxyFormat.Download download = fetcher.download(target, Map.of("Accept", ACCEPT + "zip"))
+            try (ProxyFormat.Download download = fetcher.keeping().download(target, Map.of("Accept", ACCEPT + "zip"))
                     .orElse(null)) {
                 if (download == null || download.status() != 200 || !ProxyRelay.fill(blobs,
                         SwiftListings.archiveKey(repo, scope, name, version), target, download.body(), declared)) {

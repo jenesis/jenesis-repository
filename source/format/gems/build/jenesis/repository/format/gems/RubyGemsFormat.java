@@ -662,7 +662,7 @@ public final class RubyGemsFormat implements RepositoryFormat, ProxyLeg, BlobLay
                 return ProxyRelay.unverifiable(target, expected);
             }
             // Streamed from the network into the content-addressed store, since a .gem is unbounded.
-            try (ProxyFormat.Download download = fetcher.download(target, Map.of()).orElse(null)) {
+            try (ProxyFormat.Download download = fetcher.keeping().download(target, Map.of()).orElse(null)) {
                 if (download == null || download.status() != 200) {
                     return false;
                 }

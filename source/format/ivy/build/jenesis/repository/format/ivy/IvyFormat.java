@@ -332,7 +332,7 @@ public final class IvyFormat implements RepositoryFormat, ArtifactLayout, Artifa
         boolean descriptor = coordinate.get().file().equals("ivy-" + coordinate.get().revision() + ".xml")
                 || coordinate.get().file().equals("ivy.xml");
         if (sidecar(coordinate.get().file())) {
-            try (ProxyFormat.Download download = fetcher.download(target, Map.of()).orElse(null)) {
+            try (ProxyFormat.Download download = fetcher.keeping().download(target, Map.of()).orElse(null)) {
                 if (download == null || download.status() != 200) {
                     return false;
                 }
@@ -341,7 +341,7 @@ public final class IvyFormat implements RepositoryFormat, ArtifactLayout, Artifa
             serve(exchange, store);
             return true;
         }
-        Optional<ProxyFormat.Download> fetched = fetcher.download(target, Map.of());
+        Optional<ProxyFormat.Download> fetched = fetcher.keeping().download(target, Map.of());
         if (fetched.isEmpty()) {
             return descriptor && undecided(target, exchange, ProxyFormat.Fetcher.NO_ANSWER);
         }

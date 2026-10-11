@@ -821,6 +821,13 @@ public final class RepositoryRouter {
             return delegate.beside();
         }
 
+        /** The probe itself: it sits below the screen, over the transport, where a kept artifact is fetched as any
+         *  other and every answer is still the upstream's to record. */
+        @Override
+        public ProxyFormat.Fetcher keeping() {
+            return this;
+        }
+
         @Override
         public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) throws IOException {
             Optional<ProxyFormat.Fetched> fetched = delegate.fetch(url, requestHeaders);

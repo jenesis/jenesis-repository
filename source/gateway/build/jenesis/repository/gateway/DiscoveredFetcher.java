@@ -44,6 +44,12 @@ final class DiscoveredFetcher implements ProxyFormat.Fetcher {
     }
 
     @Override
+    public ProxyFormat.Fetcher keeping() {
+        ProxyFormat.Fetcher keeping = delegate.keeping();
+        return keeping == delegate ? this : new DiscoveredFetcher(keeping, discovery, URI.create(base), route);
+    }
+
+    @Override
     public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> requestHeaders) throws IOException {
         Optional<Located> located = locate(url);
         if (located.isEmpty()) {

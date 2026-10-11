@@ -712,7 +712,7 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         String record = TerraformCoordinates.gitDigest(repo, git.identity());
         ByteArrayOutputStream recorded = new ByteArrayOutputStream();
         boolean known = blobs.read(record, recorded);
-        try (ProxyFormat.Download download = fetcher.download(git.archive(), Map.of()).orElse(null)) {
+        try (ProxyFormat.Download download = fetcher.keeping().download(git.archive(), Map.of()).orElse(null)) {
             if (download == null || download.status() != 200) {
                 return false;
             }
@@ -843,7 +843,7 @@ public final class TerraformFormat implements RepositoryFormat, ArtifactLayout, 
         Blobs blobs = new Blobs(store);
         // Marked before it is linked, so no listing generated in between counts the copy as published here.
         store.writeVersioned(TerraformCoordinates.cached(key), new byte[0], null);
-        try (ProxyFormat.Download download = fetcher.download(url, Map.of()).orElse(null)) {
+        try (ProxyFormat.Download download = fetcher.keeping().download(url, Map.of()).orElse(null)) {
             if (download == null || download.status() != 200
                     || !ProxyRelay.fill(blobs, key, url, download.body(), declared)) {
                 return false;

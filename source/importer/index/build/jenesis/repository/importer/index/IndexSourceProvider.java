@@ -92,6 +92,12 @@ public final class IndexSourceProvider implements ImportSourceProvider {
             }
 
             @Override
+            public ProxyFormat.Fetcher keeping() {
+                ProxyFormat.Fetcher keeping = fetcher.keeping();
+                return keeping == fetcher ? this : authorized(keeping, username, password, root);
+            }
+
+            @Override
             public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders) throws IOException {
                 return fetcher.download(url, merged(url, requestHeaders));
             }
