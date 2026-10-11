@@ -4,6 +4,7 @@ import module java.base;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.format.java.JavaLayout;
 import build.jenesis.repository.store.Publication;
+import build.jenesis.repository.store.Withheld;
 import build.jenesis.repository.store.ServedAliases;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.FormatExchange;
@@ -225,7 +226,11 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout, Re
             serve(exchange, store);
             return true;
         }
-        // The latest pointer is the upstream's answer now: served from the blob just stored, never linked.
+        // The latest pointer is the upstream's answer now: served from the blob just stored, never linked - and held
+        // bytes are not served under it, as a versioned path's serve would not serve them.
+        if (Withheld.is(store, blob.hash())) {
+            return false;
+        }
         if (exchange.method().equals("HEAD")) {
             exchange.setResponseHeader("Content-Length", Long.toString(blob.size()));
             exchange.respond(200);

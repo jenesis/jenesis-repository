@@ -11,6 +11,7 @@ import build.jenesis.repository.gate.InspectionMerge;
 import build.jenesis.repository.gate.QuarantineLog;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublishInterceptor;
+import build.jenesis.repository.store.Withheld;
 import build.jenesis.repository.compliance.ComplianceGate;
 import build.jenesis.repository.compliance.MalformedArtifactException;
 import build.jenesis.repository.compliance.QualityInspector;
@@ -106,6 +107,11 @@ public final class ProxyScreen {
 
     /** Whether to withhold on an incomplete screen rather than serve with the fact recorded. */
     private final boolean withholdIncomplete;
+
+    /** Whether the pull-through keeps what it fetches in the store this screen places its holds in, so a held body
+     *  is handed on to be laid out behind its hold - false on a leg that keeps its fill elsewhere, where the hold
+     *  cannot ride the layout and a held body stays a miss. */
+    private final boolean keeping;
     private final QualityInspector.Lookup siblings = new SiblingLookup(null);
 
     /** What the pull-through fetched beside the artifact being screened, by the path it is kept at; empty on every
@@ -120,11 +126,11 @@ public final class ProxyScreen {
 
     public ProxyScreen(ComplianceGate gate, ArtifactStore store, int holdDays, boolean withholdIncomplete) {
         this(gate, store, holdDays, withholdIncomplete, ScreeningMode.of(null), () -> {
-        });
+        }, true);
     }
 
     private ProxyScreen(ComplianceGate gate, ArtifactStore store, int holdDays, boolean withholdIncomplete,
-                        ScreeningMode mode, Runnable pendingNotice) {
+                        ScreeningMode mode, Runnable pendingNotice, boolean keeping) {
         // The feeds the repository selects among the deployment's, read through the effective settings the request,
         // or the pass, binds for it.
         this.gate = gate == null ? null : gate.screening(store);
@@ -134,11 +140,19 @@ public final class ProxyScreen {
         this.withholdIncomplete = withholdIncomplete;
         this.mode = Objects.requireNonNull(mode, "mode");
         this.pendingNotice = Objects.requireNonNull(pendingNotice, "pendingNotice");
+        this.keeping = keeping;
     }
 
     /** This screen deciding under {@code mode}, the screened repository's {@link ScreeningMode}. */
     public ProxyScreen screening(ScreeningMode mode) {
-        return new ProxyScreen(gate, store, holdDays, withholdIncomplete, mode, pendingNotice);
+        return new ProxyScreen(gate, store, holdDays, withholdIncomplete, mode, pendingNotice, keeping);
+    }
+
+    /** This screen over a leg whose fill is kept elsewhere than this screen's store when {@code keeping} is false - a
+     *  {@code nocache} pass-through, whose fill lands in a throwaway store the hold never reaches - so a held body is
+     *  not handed on and the pull-through sees a miss. */
+    public ProxyScreen keeping(boolean keeping) {
+        return new ProxyScreen(gate, store, holdDays, withholdIncomplete, mode, pendingNotice, keeping);
     }
 
     /** This screen telling {@code exchange}'s response when it serves a copy a feed could not answer for, through
@@ -146,11 +160,14 @@ public final class ProxyScreen {
     public ProxyScreen noticing(FormatExchange exchange) {
         Objects.requireNonNull(exchange, "exchange");
         return new ProxyScreen(gate, store, holdDays, withholdIncomplete, mode,
-                () -> exchange.setResponseHeader(SCREEN_HEADER, SCREEN_PENDING));
+                () -> exchange.setResponseHeader(SCREEN_HEADER, SCREEN_PENDING), keeping);
     }
 
-    /** Wrap an upstream fetcher to screen its fetched artifact: a non-{@link Verdict#ALLOW} verdict becomes an empty
-     *  result, so the pull-through treats it as a miss and neither caches nor serves it. The
+    /** Wrap an upstream fetcher to screen its fetched artifact. A refused artifact becomes an empty result, so the
+     *  pull-through treats it as a miss and neither keeps nor serves it. A held one is handed on behind its hold
+     *  ({@link #quarantine}): the pull-through keeps it as it keeps an admitted one, and the serve that follows reads
+     *  the hold and answers as for any held artifact - so a hold is a marker over the layout, never a second copy
+     *  beside it, and a release lifts the marker with nothing left to fetch. The
      *  {@link ProxyFormat.Fetcher#download streaming download} is overridden too: an artifact no inspector claims has
      *  nothing to screen, so it streams straight from upstream to the store. A claimed artifact IS screened, but only
      *  over a bounded {@link #inspectionLimit()} prefix - the firewall reads the front of the stream, reaches its
@@ -193,9 +210,8 @@ public final class ProxyScreen {
             public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> headers) throws IOException {
                 Optional<ProxyFormat.Fetched> fetched = delegate.fetch(url, headers);
                 if (fetched.isPresent() && fetched.get().status() == 200
-                        && screen(path, fetched.get().body(), lastModified(fetched.get().header("last-modified")),
-                                url.toString())
-                                != Verdict.ALLOW) {
+                        && !handedOn(screen(path, fetched.get().body(),
+                                lastModified(fetched.get().header("last-modified")), url.toString()))) {
                     return Optional.empty();
                 }
                 return fetched;
@@ -248,12 +264,15 @@ public final class ProxyScreen {
                         return pulled;
                     }
                     try (rawResponse) {
+                        Optional<ProxyFormat.Download> held = Optional.empty();
                         if (screening.verdict() == Verdict.QUARANTINE) {
-                            quarantine(path, rawResponse.body(), url.toString());
+                            String hash = quarantine(path, rawResponse.body(), url.toString());
+                            held = handedOn(Verdict.QUARANTINE)
+                                    ? Optional.of(behindHold(hash, rawResponse.headers())) : Optional.empty();
                         }
                         log(path, screening);
+                        return held;
                     }
-                    return Optional.empty();
                 }
                 Optional<ProxyFormat.Download> opened = delegate.download(url, headers);
                 if (opened.isEmpty() || opened.get().status() != 200) {
@@ -282,17 +301,21 @@ public final class ProxyScreen {
                     return Optional.of(new ProxyFormat.Download(response.status(),
                             new SequenceInputStream(new ByteArrayInputStream(prefix), continued), response.headers()));
                 }
-                // Withheld: the pull-through sees an empty result and treats it as a miss. A held artifact is streamed
-                // whole into the /quarantine store for review (still un-buffered), a rejected one is discarded; either
-                // way the durable QuarantineLog row is written before the upstream body is closed.
+                // Withheld: a held artifact is streamed whole into the store under its hold (still un-buffered) and
+                // handed on re-read from there, so the pull-through keeps it behind the hold; a rejected one is
+                // discarded and the pull-through sees a miss. Either way the durable QuarantineLog row is written
+                // before the upstream body is closed.
                 try (response) {
+                    Optional<ProxyFormat.Download> held = Optional.empty();
                     if (screening.verdict() == Verdict.QUARANTINE) {
-                        quarantine(path, new SequenceInputStream(new ByteArrayInputStream(prefix), continued),
-                                url.toString());
+                        String hash = quarantine(path,
+                                new SequenceInputStream(new ByteArrayInputStream(prefix), continued), url.toString());
+                        held = handedOn(Verdict.QUARANTINE)
+                                ? Optional.of(behindHold(hash, response.headers())) : Optional.empty();
                     }
                     log(path, screening);
+                    return held;
                 }
-                return Optional.empty();
             }
         };
     }
@@ -372,18 +395,40 @@ public final class ProxyScreen {
     public static final String UNVERSIONED_REASON = "Refused rather than held for review: the document names no version, so "
             + "there is no release to review and a held copy would go stale";
 
-    /** Store a withheld body fetched from {@code upstream} under {@code /quarantine} for review - the durable hold the
-     *  {@link QuarantineLog} row points at. Shared by the buffered/streaming screen and the hardened proxy leg
-     *  ({@link HardenedScreen}), which passes {@code null} when it re-screens bytes it already held rather than a
-     *  fetch. */
-    void quarantine(String path, InputStream body, String upstream) throws IOException {
-        // The durable path -> coordinate record goes first and the review pointer second, so no hold pointer
-        // exists without the record that says what it is a hold on. A proxied hold is placed while the format that
-        // claims the path is by construction installed - it is what the fetch was routed through - so the coordinate
-        // is resolved now and every later path-keyed question (which kinds hold this, may this name be disclosed,
-        // what does discarding it destroy) answers from the record once that module is gone.
+    /** Place the hold on a withheld body fetched from {@code upstream}, answering the content hash it is stored under:
+     *  the bytes, the record of what they are a copy of, the content-addressed {@link Withheld} marker and the
+     *  {@code /quarantine} review pointer the {@link QuarantineLog} row points at. Everything a release needs is then
+     *  in the store - the pull-through lays the copy out behind these, and a release lifts them without asking the
+     *  upstream again. Shared by the buffered/streaming screen and the hardened proxy leg ({@link HardenedScreen}),
+     *  which passes {@code null} when it re-screens bytes it already held rather than a fetch. */
+    String quarantine(String path, InputStream body, String upstream) throws IOException {
+        String hash = publication.storeBlob(body);
+        // The durable path -> coordinate record goes first, the marker second and the review pointer last, the order
+        // a retroactive hold places them in: no hold pointer exists without the record that says what it is a hold
+        // on, and none without the marker that withholds its bytes wherever a format lays them out. A proxied hold is
+        // placed while the format that claims the path is by construction installed - it is what the fetch was
+        // routed through - so the coordinate is resolved now and every later path-keyed question (which kinds hold
+        // this, may this name be disclosed, what does discarding it destroy) answers from the record once that
+        // module is gone.
         HeldSubjects.recordFetched(store, path, upstream);
-        publication.link("/quarantine" + path, publication.storeBlob(body));
+        Optional<HeldSubjects.Subject> subject = HeldSubjects.read(store, path);
+        Withheld.mark(store, hash, new ArtifactDescriptor(subject.map(HeldSubjects.Subject::ecosystem).orElse(null),
+                subject.map(HeldSubjects.Subject::coordinate).orElse(null),
+                subject.map(HeldSubjects.Subject::version).orElse(null), path, null, false, null, -1L));
+        publication.link("/quarantine" + path, hash);
+        return hash;
+    }
+
+    /** Whether a body screened to {@code verdict} reaches the pull-through: an admitted one always, a held one where
+     *  the pull-through keeps it in this screen's store ({@link #keeping}), a refused one never. */
+    boolean handedOn(Verdict verdict) {
+        return verdict == Verdict.ALLOW || verdict == Verdict.QUARANTINE && keeping;
+    }
+
+    /** A held body handed on to the pull-through, re-read from the store it was held in, so the format keeps it as it
+     *  keeps an admitted one and its serve answers for the hold. */
+    ProxyFormat.Download behindHold(String hash, Map<String, String> headers) throws IOException {
+        return new ProxyFormat.Download(200, store.open("blobs/" + hash), headers);
     }
 
     /** Inspect a bounded body and reach a verdict - the decision half of screening, without any store write, so the

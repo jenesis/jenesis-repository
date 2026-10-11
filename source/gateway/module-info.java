@@ -47,4 +47,6 @@ module build.jenesis.repository.gateway {
                     build.jenesis.repository.gateway.PendingScreenTaskProvider;
     provides build.jenesis.repository.settings.SettingsContributor
             with build.jenesis.repository.gateway.HardeningSettingsContributor;
+    provides build.jenesis.repository.gate.HoldReleaseObserver
+            with build.jenesis.repository.gateway.HardenedReleaseObserver;
 }

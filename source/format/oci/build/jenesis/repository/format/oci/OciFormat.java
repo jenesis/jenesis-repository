@@ -1114,7 +1114,11 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
                 UpstreamMemory.node().put(store, url, body, fetched.get()::header);
             }
         } catch (OciManifests.InvalidManifest invalid) {
-            // An oversized or unparseable upstream manifest is served through without being stored.
+            // An oversized or unparseable upstream manifest is served through without being stored - unless its bytes
+            // are held, which a manifest the screen held is: answered as the local serve answers a held one.
+            if (Withheld.is(store, hex)) {
+                return false;
+            }
             String type = fetched.get().header("Content-Type");
             if (type != null) {
                 exchange.setResponseHeader("Content-Type", type);

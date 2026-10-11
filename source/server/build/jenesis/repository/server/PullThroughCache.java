@@ -375,9 +375,9 @@ public final class PullThroughCache {
      * of that upstream's artifact rather than as a release of its own. It is fired here, at the point the fetched body
      * is committed to the store, so it does not depend on a format's own publish path firing it - and it is the one
      * place a fill is recorded, whichever route (a router fallback, hardened or not, or the dispatcher's format
-     * upstream) reached it. Best-effort and contained: it runs only for a leg that served ({@code served}, so a
-     * quarantined or rejected fill is not observed), and any failure building the event is swallowed, never failing
-     * the serve.
+     * upstream) reached it. Best-effort and contained: it runs only for a leg that kept what it fetched
+     * ({@code served} - a rejected fill is not observed, and a held one is recorded as the copy it is but not
+     * announced as published), and any failure building the event is swallowed, never failing the serve.
      *
      * <p>A fill linked under the generic {@code publish/} pointer is observed both ways, with its blob, once
      * {@link Publication#located located} proves it served. A format that keeps its own key space - npm, PyPI and the
@@ -390,7 +390,12 @@ public final class PullThroughCache {
             Publication publication = new Publication(store);
             Optional<String> key = publication.located(path);
             if (key.isEmpty()) {
-                publication.cached(descriptor(format, path, store), upstream);
+                // A fill the screen held is kept behind its hold: a copy of the upstream's artifact like any other,
+                // recorded as one with the blob its pointer names, and announced as nothing served.
+                Optional<String> held = publication.blob(path);
+                ArtifactDescriptor kept = descriptor(format, path, store);
+                publication.cached(held.isPresent() ? kept.withBlob(held.get(), store.size("blobs/" + held.get()))
+                        : kept, upstream);
                 return;
             }
             String hash = key.get().substring("blobs/".length());

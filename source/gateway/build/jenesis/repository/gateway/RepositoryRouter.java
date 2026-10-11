@@ -742,6 +742,7 @@ public final class RepositoryRouter {
         }
         return new ProxyScreen(active, records, holdDays.getAsInt(), withholdIncomplete.getAsBoolean())
                 .screening(ScreeningMode.of(repositorySettings.apply(tenant, repository)))
+                .keeping(fallback.store())
                 .noticing(exchange)
                 .wrap(raw, path, companions);
     }
