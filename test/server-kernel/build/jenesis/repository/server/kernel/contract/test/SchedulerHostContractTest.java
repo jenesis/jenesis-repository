@@ -287,8 +287,11 @@ class SchedulerHostContractTest {
                 "the loop to keep iterating while a pass is stuck", scheduler);
 
         assertThat(stuck.get()).as("a pass still running is not started again beside itself").isEqualTo(1);
-        assertThat(scheduler.running()).as("and is seen running, with where its thread is").containsKey("stuck")
-                .doesNotContainKey("sane");
+        assertThat(scheduler.running()).as("and is seen running, with where its thread is").containsKey("stuck");
+        // The sane task runs pass after pass, so any one look may catch it mid-pass; what it must not be is stuck,
+        // which is a look that finds it between passes.
+        await(() -> !scheduler.running().containsKey("sane"), "the sane task to be seen between its passes",
+                scheduler);
         assertThat(scheduler.running().get("stuck").stack()).anySatisfy(frame ->
                 assertThat(frame.getMethodName()).isEqualTo("await"));
 
