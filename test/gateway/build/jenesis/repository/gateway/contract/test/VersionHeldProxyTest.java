@@ -46,8 +46,7 @@ class VersionHeldProxyTest {
     void a_file_of_a_held_version_is_held_with_it_on_the_buffered_leg() throws IOException {
         String pom = "/maven/org/acme/lib/1.0/lib-1.0.pom";
 
-        assertThat(HeldFills.held(store, screen(pom).fetch(URI.create("http://up" + pom), Map.of())))
-                .as("withheld").isTrue();
+        assertThat(screen(pom).fetch(URI.create("http://up" + pom), Map.of())).as("withheld").isEmpty();
 
         assertThat(new Publication(store).blob("/quarantine" + pom)).as("kept for review with its version")
                 .isPresent();
@@ -60,8 +59,7 @@ class VersionHeldProxyTest {
         String pom = "/maven/org/acme/lib/1.0/lib-1.0.pom";
 
         assertThat(screen(pom).head(URI.create("http://up" + pom), Map.of())).as("no size disclosed").isEmpty();
-        assertThat(HeldFills.heldDownload(store, screen(pom).download(URI.create("http://up" + pom), Map.of())))
-                .as("streamed on behind the hold").isTrue();
+        assertThat(screen(pom).download(URI.create("http://up" + pom), Map.of())).as("not streamed").isEmpty();
         assertThat(new Publication(store).blob("/quarantine" + pom)).isPresent();
     }
 
@@ -76,8 +74,8 @@ class VersionHeldProxyTest {
                 200, "Metadata-Version: 2.1\nName: widget\nVersion: 1.0.0\n".getBytes(StandardCharsets.UTF_8),
                 Map.of()));
 
-        assertThat(HeldFills.held(store, new ProxyScreen(gate(), store, 0).wrap(upstream, metadata)
-                .fetch(URI.create("http://up" + metadata), Map.of()))).as("held with the wheel it describes").isTrue();
+        assertThat(new ProxyScreen(gate(), store, 0).wrap(upstream, metadata)
+                .fetch(URI.create("http://up" + metadata), Map.of())).as("held with the wheel it describes").isEmpty();
         assertThat(new QuarantineLog(store).events()).singleElement().satisfies(event ->
                 assertThat(event.rules()).contains(ComplianceGate.VERSION_HELD_RULE));
     }
@@ -91,8 +89,8 @@ class VersionHeldProxyTest {
         ProxyFormat.Fetcher upstream = (ProxyFormat.Fetcher.Buffered) (_, _) -> Optional.of(new ProxyFormat.Fetched(
                 200, new byte[] {0x78, 0x01}, Map.of()));
 
-        assertThat(HeldFills.held(store, new ProxyScreen(gate(), store, 0).wrap(upstream, quick)
-                .fetch(URI.create("http://up" + quick), Map.of()))).as("held with the gem it specifies").isTrue();
+        assertThat(new ProxyScreen(gate(), store, 0).wrap(upstream, quick)
+                .fetch(URI.create("http://up" + quick), Map.of())).as("held with the gem it specifies").isEmpty();
         assertThat(new QuarantineLog(store).events()).singleElement().satisfies(event ->
                 assertThat(event.rules()).contains(ComplianceGate.VERSION_HELD_RULE));
     }
@@ -106,8 +104,8 @@ class VersionHeldProxyTest {
         ProxyFormat.Fetcher upstream = (ProxyFormat.Fetcher.Buffered) (_, _) -> Optional.of(new ProxyFormat.Fetched(
                 200, new byte[] {(byte) 0xfd, '7', 'z', 'X', 'Z', 0}, Map.of()));
 
-        assertThat(HeldFills.held(store, new ProxyScreen(gate(), store, 0).wrap(upstream, tarball)
-                .fetch(URI.create("http://up" + tarball), Map.of()))).as("held with its source package").isTrue();
+        assertThat(new ProxyScreen(gate(), store, 0).wrap(upstream, tarball)
+                .fetch(URI.create("http://up" + tarball), Map.of())).as("held with its source package").isEmpty();
         assertThat(new QuarantineLog(store).events()).singleElement().satisfies(event ->
                 assertThat(event.rules()).contains(ComplianceGate.VERSION_HELD_RULE));
     }
@@ -122,8 +120,8 @@ class VersionHeldProxyTest {
                 200, "{\"Version\":\"v1.0.0\",\"Time\":\"2020-01-01T00:00:00Z\"}".getBytes(StandardCharsets.UTF_8),
                 Map.of()));
 
-        assertThat(HeldFills.held(store, new ProxyScreen(gate(), store, 0).wrap(upstream, info)
-                .fetch(URI.create("http://up" + info), Map.of()))).as("withheld").isTrue();
+        assertThat(new ProxyScreen(gate(), store, 0).wrap(upstream, info)
+                .fetch(URI.create("http://up" + info), Map.of())).as("withheld").isEmpty();
         assertThat(new Publication(store).blob("/quarantine" + info))
                 .as("held for review with its version, rather than refused as a document naming none").isPresent();
     }

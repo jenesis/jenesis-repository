@@ -533,7 +533,14 @@ public final class HardenedScreen {
     /** As {@link #wrap(ProxyFormat.Fetcher, String)}, with the companions the pull-through fetched beside the artifact,
      *  which the screen reads before it decides on the artifact they cover. */
     public ProxyFormat.Fetcher wrap(ProxyFormat.Fetcher upstream, String path, Map<String, byte[]> companions) {
-        ProxyFormat.Fetcher screened = screen.wrap(upstream, path, companions);
+        return hardened(upstream, screen.wrap(upstream, path, companions), path, false);
+    }
+
+    /** The hardened fetcher over {@code upstream} for {@code path}, its documents screened by {@code screened}:
+     *  {@code kept} for the view a leg fetches the artifact it keeps through ({@link ProxyFormat.Fetcher#keeping}),
+     *  the only one a held body is handed on by. */
+    private ProxyFormat.Fetcher hardened(ProxyFormat.Fetcher upstream, ProxyFormat.Fetcher screened, String path,
+                                         boolean kept) {
         return new ProxyFormat.Fetcher() {
             @Override
             public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> headers) throws IOException {
@@ -546,6 +553,12 @@ public final class HardenedScreen {
             @Override
             public ProxyFormat.Fetcher beside() {
                 return upstream.beside();
+            }
+
+            /** This screen again, over what the upstream keeps, handing a held artifact on behind its hold. */
+            @Override
+            public ProxyFormat.Fetcher keeping() {
+                return hardened(upstream.keeping(), screened.keeping(), path, true);
             }
 
             @Override
@@ -564,7 +577,7 @@ public final class HardenedScreen {
                 if (opened.isEmpty() || opened.get().status() != 200) {
                     return opened;   // an upstream miss - nothing to spool, screen or withhold
                 }
-                return harden(path, opened.get(), url.toString());
+                return harden(path, opened.get(), url.toString(), kept);
             }
         };
     }
@@ -575,7 +588,8 @@ public final class HardenedScreen {
      * a cannot-screen one (typed, recorded, {@code 404}-shaped). The verified spool file lives until the router
      * reclaims the per-request spool after serving.
      */
-    private Optional<ProxyFormat.Download> harden(String path, ProxyFormat.Download response, String source)
+    private Optional<ProxyFormat.Download> harden(String path, ProxyFormat.Download response, String source,
+                                                  boolean kept)
             throws IOException {
         Instant lastModified = ProxyScreen.lastModified(response.header("last-modified"));
         String key;
@@ -624,7 +638,7 @@ public final class HardenedScreen {
         // other inspector produced a subject. Decompression/scan stays bomb-bounded by the shared full-body tier and
         // each inspector's own caps.
         return screenAndRecord(path, coordinate, digest, spooled(key), lastModified, source,
-                () -> spool.open(key), response.headers());
+                () -> spool.open(key), response.headers(), kept);
     }
 
     /**
@@ -648,7 +662,7 @@ public final class HardenedScreen {
         }
         // Fail-closed: no recorded ALLOW verdict pins these local bytes. Never serve unscreened - re-screen the local
         // bytes, record the fresh verdict, and serve only per it.
-        return screenAndRecord(path, coordinate, digest, body, null, LOCAL_SOURCE, body::open, Map.of());
+        return screenAndRecord(path, coordinate, digest, body, null, LOCAL_SOURCE, body::open, Map.of(), false);
     }
 
     /** Inspect a fully-materialised body, reach the verdict, record it digest-pinned, and return the disposition:
@@ -657,7 +671,7 @@ public final class HardenedScreen {
      *  path so a repaired serve reaches the identical decision the fetch would. */
     private Optional<ProxyFormat.Download> screenAndRecord(String path, Coordinate coordinate, String digest,
             QualityInspector.Content body, Instant lastModified, String source,
-            ByteSource release, Map<String, String> headers) throws IOException {
+            ByteSource release, Map<String, String> headers, boolean kept) throws IOException {
         List<VerdictSection.Validator> validators = screen.validators(path);
         QualityInspector.Inspection inspection;
         try {
@@ -680,10 +694,11 @@ public final class HardenedScreen {
             // socket. The pull-through caches it into the durable store (store-on-pass) and serves it.
             return Optional.of(new ProxyFormat.Download(200, release.open(), headers));
         }
-        // Withheld: a held body is placed under its hold. A fetched one, on a leg that keeps its copy, is handed on
-        // re-read from the store, so the pull-through keeps it behind the hold and its serve answers 404 for it; local
-        // bytes being re-screened are already laid out, and a pass-through keeps nothing, so both are a miss. A
-        // rejected one is discarded and the pull-through sees a miss. Either way the reason is recorded first.
+        // Withheld: a held body is placed under its hold. A fetched one, asked for through the keeping view on a leg
+        // that keeps its copy, is handed on re-read from the store, so the pull-through keeps it behind the hold and
+        // its serve answers 404 for it; local bytes being re-screened are already laid out, a pass-through keeps
+        // nothing and a relay would stream what it is given, so all three are a miss. A rejected one is discarded and
+        // the pull-through sees a miss. Either way the reason is recorded first.
         Optional<ProxyFormat.Download> held = Optional.empty();
         if (screening.verdict() == Verdict.QUARANTINE) {
             boolean fetched = source != null && !LOCAL_SOURCE.equals(source);
@@ -691,7 +706,7 @@ public final class HardenedScreen {
             try (InputStream bytes = body.open()) {
                 hash = screen.quarantine(path, bytes, fetched ? source : null);
             }
-            if (fetched && reuseVerdict) {
+            if (fetched && reuseVerdict && kept) {
                 held = Optional.of(screen.behindHold(hash, headers));
             }
         }

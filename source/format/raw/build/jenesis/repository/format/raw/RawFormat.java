@@ -147,7 +147,7 @@ public final class RawFormat implements RepositoryFormat, ProxyFormat, Repositor
         if (moving(rest, exchange.setting(MOVING))) {
             return relay(exchange, store, target, fetcher);
         }
-        Optional<ProxyFormat.Download> fetched = fetcher.download(target, Map.of());
+        Optional<ProxyFormat.Download> fetched = fetcher.keeping().download(target, Map.of());
         if (fetched.isEmpty()) {
             return false;
         }

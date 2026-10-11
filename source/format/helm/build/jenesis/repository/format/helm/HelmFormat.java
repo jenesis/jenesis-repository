@@ -347,7 +347,7 @@ public final class HelmFormat implements RepositoryFormat, ArtifactLayout, BlobL
             return false;
         }
         Blobs blobs = new Blobs(store);
-        try (ProxyFormat.Download download = fetcher.download(chart.url(), Map.of()).orElse(null)) {
+        try (ProxyFormat.Download download = fetcher.keeping().download(chart.url(), Map.of()).orElse(null)) {
             if (download == null || download.status() != 200
                     || !ProxyRelay.fill(blobs, fileKey(repo, file), chart.url(), download.body(), chart.digest())) {
                 return false;

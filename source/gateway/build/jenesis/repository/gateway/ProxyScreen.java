@@ -164,10 +164,12 @@ public final class ProxyScreen {
     }
 
     /** Wrap an upstream fetcher to screen its fetched artifact. A refused artifact becomes an empty result, so the
-     *  pull-through treats it as a miss and neither keeps nor serves it. A held one is handed on behind its hold
-     *  ({@link #quarantine}): the pull-through keeps it as it keeps an admitted one, and the serve that follows reads
-     *  the hold and answers as for any held artifact - so a hold is a marker over the layout, never a second copy
-     *  beside it, and a release lifts the marker with nothing left to fetch. The
+     *  pull-through treats it as a miss and neither keeps nor serves it. A held one is placed under its hold
+     *  ({@link #quarantine}) and is a miss too, except through the {@link ProxyFormat.Fetcher#keeping keeping} view:
+     *  a leg that keeps the artifact before it answers is handed the held body, keeps it as it keeps an admitted
+     *  one, and its serve reads the hold and answers as for any held artifact - so a hold is a marker over the
+     *  layout, never a second copy beside it, and a release lifts the marker with nothing left to fetch, while a
+     *  leg that relays what it fetched is never given held bytes to stream. The
      *  {@link ProxyFormat.Fetcher#download streaming download} is overridden too: an artifact no inspector claims has
      *  nothing to screen, so it streams straight from upstream to the store. A claimed artifact IS screened, but only
      *  over a bounded {@link #inspectionLimit()} prefix - the firewall reads the front of the stream, reaches its
@@ -205,13 +207,19 @@ public final class ProxyScreen {
      *  links nothing before this screen has decided. */
     public ProxyFormat.Fetcher wrap(ProxyFormat.Fetcher delegate, String path, Map<String, byte[]> companions) {
         this.companions = Map.copyOf(companions);
+        return screened(delegate, path, false);
+    }
+
+    /** The screened fetcher over {@code delegate} for {@code path}: {@code kept} for the view a leg fetches the
+     *  artifact it keeps through ({@link ProxyFormat.Fetcher#keeping}), the only one a held body is handed on by. */
+    private ProxyFormat.Fetcher screened(ProxyFormat.Fetcher delegate, String path, boolean kept) {
         return new ProxyFormat.Fetcher() {
             @Override
             public Optional<ProxyFormat.Fetched> fetch(URI url, Map<String, String> headers) throws IOException {
                 Optional<ProxyFormat.Fetched> fetched = delegate.fetch(url, headers);
                 if (fetched.isPresent() && fetched.get().status() == 200
                         && !handedOn(screen(path, fetched.get().body(),
-                                lastModified(fetched.get().header("last-modified")), url.toString()))) {
+                                lastModified(fetched.get().header("last-modified")), url.toString()), kept)) {
                     return Optional.empty();
                 }
                 return fetched;
@@ -222,6 +230,12 @@ public final class ProxyScreen {
             @Override
             public ProxyFormat.Fetcher beside() {
                 return delegate.beside();
+            }
+
+            /** This screen again, over what its delegate keeps, handing a held artifact on behind its hold. */
+            @Override
+            public ProxyFormat.Fetcher keeping() {
+                return screened(delegate.keeping(), path, true);
             }
 
             @Override
@@ -267,7 +281,7 @@ public final class ProxyScreen {
                         Optional<ProxyFormat.Download> held = Optional.empty();
                         if (screening.verdict() == Verdict.QUARANTINE) {
                             String hash = quarantine(path, rawResponse.body(), url.toString());
-                            held = handedOn(Verdict.QUARANTINE)
+                            held = handedOn(Verdict.QUARANTINE, kept)
                                     ? Optional.of(behindHold(hash, rawResponse.headers())) : Optional.empty();
                         }
                         log(path, screening);
@@ -310,7 +324,7 @@ public final class ProxyScreen {
                     if (screening.verdict() == Verdict.QUARANTINE) {
                         String hash = quarantine(path,
                                 new SequenceInputStream(new ByteArrayInputStream(prefix), continued), url.toString());
-                        held = handedOn(Verdict.QUARANTINE)
+                        held = handedOn(Verdict.QUARANTINE, kept)
                                 ? Optional.of(behindHold(hash, response.headers())) : Optional.empty();
                     }
                     log(path, screening);
@@ -419,10 +433,11 @@ public final class ProxyScreen {
         return hash;
     }
 
-    /** Whether a body screened to {@code verdict} reaches the pull-through: an admitted one always, a held one where
-     *  the pull-through keeps it in this screen's store ({@link #keeping}), a refused one never. */
-    boolean handedOn(Verdict verdict) {
-        return verdict == Verdict.ALLOW || verdict == Verdict.QUARANTINE && keeping;
+    /** Whether a body screened to {@code verdict} reaches the pull-through: an admitted one always; a held one only
+     *  through the view of a leg that keeps what it fetches ({@code kept}), on a leg whose fill lands in this
+     *  screen's store ({@link #keeping}); a refused one never. */
+    boolean handedOn(Verdict verdict, boolean kept) {
+        return verdict == Verdict.ALLOW || verdict == Verdict.QUARANTINE && keeping && kept;
     }
 
     /** A held body handed on to the pull-through, re-read from the store it was held in, so the format keeps it as it

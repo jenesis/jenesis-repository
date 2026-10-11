@@ -67,7 +67,7 @@ class ScreeningModeTest {
 
     @Test
     void hold_keeps_a_copy_the_feed_could_not_clear() throws IOException {
-        assertThat(HeldFills.held(store, fetch(ScreeningMode.HOLD, gate(UNREACHABLE, List.of())))).isTrue();
+        assertThat(fetch(ScreeningMode.HOLD, gate(UNREACHABLE, List.of()))).isEmpty();
         assertThat(new QuarantineLog(store).events()).singleElement().satisfies(event -> {
             assertThat(event.verdict()).isEqualTo(Verdict.QUARANTINE);
             assertThat(event.rules()).contains(ComplianceGate.FEED_UNAVAILABLE_RULE);
@@ -76,8 +76,8 @@ class ScreeningModeTest {
 
     @Test
     void admit_serves_a_copy_every_check_that_could_answer_allows() throws IOException {
-        assertThat(HeldFills.admitted(store, fetch(ScreeningMode.ADMIT, gate(UNREACHABLE, List.of()))))
-                .as("the outage leaves the copy to the checks that answered, and they allow it").isTrue();
+        assertThat(fetch(ScreeningMode.ADMIT, gate(UNREACHABLE, List.of())))
+                .as("the outage leaves the copy to the checks that answered, and they allow it").isPresent();
         assertThat(new QuarantineLog(store).events()).as("nothing is held, and the outage it was served through is "
                 + "recorded").singleElement().satisfies(event -> {
                     assertThat(event.verdict()).isEqualTo(Verdict.ALLOW);
@@ -104,7 +104,7 @@ class ScreeningModeTest {
             }
         };
 
-        assertThat(HeldFills.admitted(store, fetch(ScreeningMode.ADMIT, gate(silent, List.of())))).isTrue();
+        assertThat(fetch(ScreeningMode.ADMIT, gate(silent, List.of()))).isPresent();
         assertThat(new QuarantineLog(store).events()).singleElement().satisfies(event ->
                 assertThat(event.reasons()).as("an outage named by what failed, never by a missing message")
                         .anySatisfy(reason -> assertThat(reason).endsWith(": IllegalStateException"))
@@ -121,8 +121,8 @@ class ScreeningModeTest {
 
     @Test
     void admit_holds_what_a_feed_that_answers_flags() throws IOException {
-        assertThat(HeldFills.held(store, fetch(ScreeningMode.ADMIT, gate(FLAGGED, List.of()))))
-                .as("admitting governs an outage, not a finding").isTrue();
+        assertThat(fetch(ScreeningMode.ADMIT, gate(FLAGGED, List.of())))
+                .as("admitting governs an outage, not a finding").isEmpty();
     }
 
     @Test
@@ -155,7 +155,7 @@ class ScreeningModeTest {
                 .malicious(new MaliciousPackagePolicy().action(Verdict.REJECT))
                 .denyList(new DenyListPolicy(List.of(COORDINATE)).action(Verdict.QUARANTINE));
 
-        assertThat(HeldFills.held(store, fetch(ScreeningMode.RECORD, gate))).as("the deny-list's hold stands").isTrue();
+        assertThat(fetch(ScreeningMode.RECORD, gate)).as("the deny-list's hold stands").isEmpty();
         assertThat(new QuarantineLog(store).events()).singleElement()
                 .satisfies(event -> assertThat(event.verdict()).isEqualTo(Verdict.QUARANTINE));
     }
@@ -165,13 +165,12 @@ class ScreeningModeTest {
         ComplianceGate gate = gate(UNREACHABLE, List.of());
         ProxyScreenHooks hooks = ProxyScreenHooks.perTenant((_, _) -> gate, () -> 0, () -> false);
 
-        assertThat(HeldFills.admitted(store,
-                hooks.forRequest("acme", exchange("ADMIT")).screenFetch(PATH, upstream(), store)
-                .fetch(URI.create("http://up" + PATH), Map.of())))
-                .as("a repository admitting through an outage serves").isTrue();
-        assertThat(HeldFills.held(store, hooks.forRequest("acme", exchange(null)).screenFetch(PATH, upstream(), store)
-                .fetch(URI.create("http://up" + PATH), Map.of())))
-                .as("one that sets no mode holds").isTrue();
+        assertThat(hooks.forRequest("acme", exchange("ADMIT")).screenFetch(PATH, upstream(), store)
+                .fetch(URI.create("http://up" + PATH), Map.of()))
+                .as("a repository admitting through an outage serves").isPresent();
+        assertThat(hooks.forRequest("acme", exchange(null)).screenFetch(PATH, upstream(), store)
+                .fetch(URI.create("http://up" + PATH), Map.of()))
+                .as("one that sets no mode holds").isEmpty();
     }
 
     @Test

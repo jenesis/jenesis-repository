@@ -532,7 +532,7 @@ public final class ConanFormat implements RepositoryFormat, ArtifactLayout, Prox
             // An immutable, revision-pinned file: cached once as the upstream serves it, then served locally. The
             // revision's conanmanifest.txt, which lists each file's MD5, is the publisher's and is relayed like any
             // other file for the conan client to check; it is never held against the bytes here.
-            try (ProxyFormat.Download download = fetcher.download(target, Map.of()).orElse(null)) {
+            try (ProxyFormat.Download download = fetcher.keeping().download(target, Map.of()).orElse(null)) {
                 if (download == null || download.status() != 200) {
                     return false;
                 }

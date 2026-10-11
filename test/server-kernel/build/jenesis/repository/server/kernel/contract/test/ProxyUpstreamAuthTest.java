@@ -113,6 +113,11 @@ public class ProxyUpstreamAuthTest {
             public ProxyFormat.Fetcher beside() {
                 return this;
             }
+
+            @Override
+            public ProxyFormat.Fetcher keeping() {
+                return this;
+            }
         };
         AuthFetcher fetcher = new AuthFetcher(transport, credentials);
 

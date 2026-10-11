@@ -344,7 +344,7 @@ public final class ApkFormat implements RepositoryFormat, ArtifactLayout, PathKe
         }
         Blobs blobs = new Blobs(store);
         String hash;
-        try (ProxyFormat.Download download = fetcher.download(target, Map.of()).orElse(null)) {
+        try (ProxyFormat.Download download = fetcher.keeping().download(target, Map.of()).orElse(null)) {
             if (download == null || download.status() != 200) {
                 return false;
             }

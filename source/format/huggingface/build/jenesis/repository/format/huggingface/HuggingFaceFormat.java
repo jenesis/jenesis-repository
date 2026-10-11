@@ -694,7 +694,7 @@ public final class HuggingFaceFormat implements RepositoryFormat, ArtifactLayout
             if (!listed.readable()) {
                 return ProxyRelay.unverifiable(fileUrl, listed);
             }
-            try (ProxyFormat.Download download = fetcher.download(fileUrl, Map.of()).orElse(null)) {
+            try (ProxyFormat.Download download = fetcher.keeping().download(fileUrl, Map.of()).orElse(null)) {
                 if (download == null || download.status() != 200) {
                     return false;
                 }

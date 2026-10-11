@@ -42,6 +42,11 @@ class HuggingFaceBranchMemoryTest {
             }
 
             @Override
+            public ProxyFormat.Fetcher keeping() {
+                return this;
+            }
+
+            @Override
             public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders) {
                 return Optional.empty();
             }

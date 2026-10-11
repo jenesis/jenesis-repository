@@ -353,6 +353,12 @@ public final class PullThroughCache {
         }
 
         @Override
+        public ProxyFormat.Fetcher keeping() {
+            ProxyFormat.Fetcher keeping = delegate.keeping();
+            return keeping == delegate ? this : new Answered(keeping, last);
+        }
+
+        @Override
         public Optional<ProxyFormat.Download> download(URI url, Map<String, String> requestHeaders)
                 throws IOException {
             Optional<ProxyFormat.Download> download = delegate.download(url, requestHeaders);

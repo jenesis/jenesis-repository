@@ -105,6 +105,11 @@ class FetcherLegsTest {
             public ProxyFormat.Fetcher beside() {
                 return this;
             }
+
+            @Override
+            public ProxyFormat.Fetcher keeping() {
+                return this;
+            }
         };
         ProxyFormat.Fetcher decorator = new ProxyFormat.Fetcher() {
 
@@ -125,6 +130,11 @@ class FetcherLegsTest {
 
             @Override
             public ProxyFormat.Fetcher beside() {
+                return this;
+            }
+
+            @Override
+            public ProxyFormat.Fetcher keeping() {
                 return this;
             }
         };

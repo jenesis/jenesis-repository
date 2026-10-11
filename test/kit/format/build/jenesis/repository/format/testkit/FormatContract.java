@@ -141,7 +141,9 @@ public final class FormatContract {
         /** A screen over a fill judges the artifact the fill serves and nothing else: the index or metadata document
          *  that declares its digest or says where it downloads from is read {@code beside} it. A screen judges every
          *  answer of the fetcher it wraps as that artifact, so a declaring document read through it is held in the
-         *  artifact's place, by its own content and dates, and the fill is refused as unverifiable. */
+         *  artifact's place, by its own content and dates, and the fill is refused as unverifiable. A fill that keeps
+         *  the artifact fetches it through the {@code keeping} view, the only one a screen hands a held artifact on
+         *  by, and a leg that relays it never does, since it would stream the held bytes to the client. */
         PROXY_SCREEN_JUDGES_ONLY_THE_ARTIFACT,
         /** A generated document carries a content-derived validator, is a pure function of the stored state it
          *  renders, revalidates to {@code 304} against that validator, and stops doing so once the state moves
@@ -234,7 +236,8 @@ public final class FormatContract {
                         "a proxied artifact is never materialised and arrives byte-exact",
                         FormatContract::proxyStreamsUpstreamBody),
                 new Check(Property.PROXY_SCREEN_JUDGES_ONLY_THE_ARTIFACT,
-                        "a screen over a fill judges the artifact, never the document that declares it",
+                        "a screen over a fill judges the artifact, never the document that declares it, and a "
+                                + "kept artifact alone is fetched through the keeping view",
                         FormatContract::proxyScreenJudgesOnlyTheArtifact),
                 new Check(Property.GENERATED_INDEX_IS_REVALIDATABLE,
                         "a generated document is deterministic and conditionally revalidatable",
@@ -764,6 +767,13 @@ public final class FormatContract {
                 + screen.judged.keySet());
         equal(screen.judged.keySet(), artifact, fixture, "the screen judges the artifact alone, and every document "
                 + "declaring it is read beside it");
+        // A screen hands a held artifact on only through the keeping view, so a leg that keeps the artifact must
+        // fetch it there - or a release would find nothing laid out - and a leg that relays it must not, or it would
+        // stream held bytes to the client.
+        boolean kept = store.exists("blobs/" + body.sha256());
+        equal(screen.kept, kept ? artifact : Set.of(), fixture, kept
+                ? "a leg that keeps the artifact fetches it through the keeping view, and nothing else"
+                : "a leg that relays the artifact rather than keeping it never fetches through the keeping view");
     }
 
     /** A screen as the gate wraps a fill's fetcher: what it fetches is judged as the artifact, which it records, and
@@ -771,11 +781,23 @@ public final class FormatContract {
     private static final class Judging implements ProxyFormat.Fetcher {
 
         /** Every URL the screen was handed, with the digests of what it answered, in order. */
-        private final Map<URI, List<MessageDigest>> judged = new LinkedHashMap<>();
+        private final Map<URI, List<MessageDigest>> judged;
+
+        /** Every URL fetched through the {@linkplain ProxyFormat.Fetcher#keeping() keeping} view. */
+        private final Set<URI> kept;
         private final ProxyFormat.Fetcher upstream;
+        private final boolean keeping;
 
         private Judging(ProxyFormat.Fetcher upstream) {
+            this(upstream, new LinkedHashMap<>(), new LinkedHashSet<>(), false);
+        }
+
+        private Judging(ProxyFormat.Fetcher upstream, Map<URI, List<MessageDigest>> judged, Set<URI> kept,
+                        boolean keeping) {
             this.upstream = upstream;
+            this.judged = judged;
+            this.kept = kept;
+            this.keeping = keeping;
         }
 
         /** The URLs whose answer carried the bytes digesting to {@code sha256}. */
@@ -792,6 +814,9 @@ public final class FormatContract {
         }
 
         private MessageDigest judge(URI url) {
+            if (keeping) {
+                kept.add(url);
+            }
             try {
                 MessageDigest digest = MessageDigest.getInstance("SHA-256");
                 judged.computeIfAbsent(url, _ -> new ArrayList<>()).add(digest);
@@ -826,6 +851,12 @@ public final class FormatContract {
         @Override
         public ProxyFormat.Fetcher beside() {
             return upstream;
+        }
+
+        /** The same screen, recording what is fetched through it as kept. */
+        @Override
+        public ProxyFormat.Fetcher keeping() {
+            return new Judging(upstream, judged, kept, true);
         }
     }
 

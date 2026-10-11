@@ -330,6 +330,11 @@ public interface ProxyFormat {
             public ProxyFormat.Fetcher beside() {
                 return this;
             }
+
+            @Override
+            public ProxyFormat.Fetcher keeping() {
+                return this;
+            }
         };
 
         /**
@@ -351,6 +356,18 @@ public interface ProxyFormat {
          * answering itself where it should answer the fetcher it wraps would screen a document as the artifact.
          */
         Fetcher beside();
+
+        /**
+         * The fetcher for the artifact a leg <em>keeps</em> before it answers - the fill a {@code ProxyRelay.fill},
+         * a {@code Blobs.write} or a {@code Publication.link} stores and the leg then serves through the same path a
+         * local hit takes. A screen hands an artifact it holds on through this fetcher alone, behind its hold, so the
+         * leg lays the copy out and the serve that follows answers for the hold; through every other fetch a held
+         * artifact is a miss, because a leg that relays what it fetched streams it to the client. Asking for it is
+         * therefore what a keeping leg does and what a relay must never do, and a keeping leg that forgets to ask
+         * loses only the held copy, never the hold. Every other decorator answers itself over the keeping fetcher
+         * of what it wraps, so what it adds still applies; a transport answers itself.
+         */
+        Fetcher keeping();
 
         /**
          * Open a streaming download of an upstream {@code GET}, so a large artifact copies straight from the network
@@ -430,6 +447,12 @@ public interface ProxyFormat {
             /** A scripted upstream reads a document beside an artifact as it reads the artifact: itself. */
             @Override
             default Fetcher beside() {
+                return this;
+            }
+
+            /** A scripted upstream answers a kept artifact as it answers any other: itself. */
+            @Override
+            default Fetcher keeping() {
                 return this;
             }
 

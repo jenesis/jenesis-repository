@@ -359,7 +359,7 @@ public final class GoFormat implements RepositoryFormat, ProxyLeg, ComposedLayou
         }
         String expected = advertised.text();
         // Streamed from the network into the content-addressed store, since a .zip is unbounded.
-        try (ProxyFormat.Download download = fetcher.download(target, Map.of()).orElse(null)) {
+        try (ProxyFormat.Download download = fetcher.keeping().download(target, Map.of()).orElse(null)) {
             if (download == null || download.status() != 200) {
                 return false;
             }

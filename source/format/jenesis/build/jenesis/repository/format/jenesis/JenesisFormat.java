@@ -195,7 +195,7 @@ public final class JenesisFormat implements RepositoryFormat, ArtifactLayout, Re
         boolean latest = segments.length == 3;
         String root = upstream.toString();
         URI target = URI.create((root.endsWith("/") ? root : root + "/") + path.substring(1));
-        Optional<ProxyFormat.Download> fetched = fetcher.download(target, Map.of());
+        Optional<ProxyFormat.Download> fetched = fetcher.keeping().download(target, Map.of());
         if (fetched.isEmpty()) {
             return false;
         }

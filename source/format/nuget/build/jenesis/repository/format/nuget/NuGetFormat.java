@@ -856,15 +856,17 @@ public final class NuGetFormat implements RepositoryFormat, ProxyLeg, BlobLayout
         }
         // NuGet publishes the .nupkg's SHA-512 through its registration and catalog, so the streamed package is
         // verified against it. A hop that could not be read, or that the outbound screen refuses, must not downgrade
-        // the fill.
+        // the fill. That digest is the package's alone: a file beside it - the .nuspec - is declared by nothing, so it
+        // is kept unverified, as the proxy contract allows for a file its ecosystem publishes no digest for.
         URI target = URI.create(root + "v3-flatcontainer/" + after);
-        ProxyRelay.Declared expected =
-                nupkgChecksum(root, id, version, fetcher, ProxyLeg.allowInternalTargets(exchange));
+        ProxyRelay.Declared expected = key.endsWith(".nupkg")
+                ? nupkgChecksum(root, id, version, fetcher, ProxyLeg.allowInternalTargets(exchange))
+                : ProxyRelay.Declared.NONE;
         if (!expected.readable()) {
             return ProxyRelay.unverifiable(target, expected);
         }
         // Streamed from the network into the content-addressed store, since a .nupkg is unbounded.
-        try (ProxyFormat.Download download = fetcher.download(target, Map.of()).orElse(null)) {
+        try (ProxyFormat.Download download = fetcher.keeping().download(target, Map.of()).orElse(null)) {
             if (download == null || download.status() != 200) {
                 return false;
             }
