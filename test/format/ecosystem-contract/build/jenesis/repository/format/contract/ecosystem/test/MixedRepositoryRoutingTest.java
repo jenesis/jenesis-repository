@@ -110,6 +110,11 @@ class MixedRepositoryRoutingTest {
         }
 
         @Override
+        public ProxyFormat.Fetcher keeping() {
+            return new Recording(delegate.keeping(), asked);
+        }
+
+        @Override
         public String toString() {
             return "recording " + delegate;
         }
