@@ -431,6 +431,12 @@ public class PullThroughHooksTest {
                 public ProxyFormat.Fetcher beside() {
                     return upstream.beside();
                 }
+
+                /** The spy itself: what a keeping leg fetches is the decorated fetch it counts. */
+                @Override
+                public ProxyFormat.Fetcher keeping() {
+                    return this;
+                }
             };
         }
     }
