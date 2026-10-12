@@ -3,6 +3,7 @@ project:
   description: A dual-layout artifact repository serving the Maven layout, the Jenesis module layout and OCI from one content-addressed store.
   authors: [Rafael Winterhalter]
   license: Apache-2.0
+  copyright: 2026 Rafael Winterhalter
   links:
     homepage: https://github.com/jenesis/jenesis-repository
   languages:
