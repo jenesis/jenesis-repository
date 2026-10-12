@@ -59,8 +59,21 @@ class DebianPointerDescriptionTest {
     }
 
     @Test
-    void a_key_that_is_not_a_deb_is_not_claimed() {
-        assertThat(describe("debian/stable/pool/main/h/hello/hello_2.10-3_amd64.udeb")).isEmpty();
+    void an_installer_package_and_a_source_packages_files_are_claimed_by_their_package_and_version() {
+        // A mirror's pool holds more than .deb files, and the proxy keeps each of them: the version a pointer serves
+        // is read off its name the same way, so a lost row rebuilds for every file the pool holds.
+        assertThat(describe("debian/pool/main/h/hello/hello-udeb_2.10-3_amd64.udeb"))
+                .hasValueSatisfying(named -> assertThat(named.coordinate() + " " + named.version())
+                        .isEqualTo("hello-udeb 2.10-3"));
+        assertThat(describe("debian/pool/main/h/hello/hello_2.10-3.debian.tar.xz"))
+                .hasValueSatisfying(named -> assertThat(named.coordinate() + " " + named.version())
+                        .isEqualTo("hello 2.10-3"));
+        assertThat(describe("debian/pool/main/h/hello/hello_2.10.orig.tar.gz"))
+                .hasValueSatisfying(named -> assertThat(named.version()).isEqualTo("2.10"));
+    }
+
+    @Test
+    void a_key_that_is_not_a_pool_file_is_not_claimed() {
         assertThat(describe("debian/stable/dists/stable/Release")).isEmpty();
         assertThat(describe("debian/stable/by/hello/2.10-3/x")).isEmpty();
         assertThat(describe("npm/left-pad/versions/1.0.0")).isEmpty();
