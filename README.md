@@ -112,6 +112,11 @@ listed here with the reason. A refresh that moves one of these is reverted by ha
   refuses the layer. 3.9.16's name nothing; versatile requires `maven-artifact` as `org.apache.maven.v3.artifact`,
   which an alias gives it. `maven-repository-metadata`, which splits `org.apache.maven.artifact.repository.metadata`
   with `maven-artifact`, is excluded: the closure resolver reads and writes no `maven-metadata.xml`.
+- **The Jenesis Launcher 0.5.3**, `build.jenesis.launcher`, which the `jenrepo` client's launcher jar runs on. The
+  build tool this repository pins writes the jar's descriptor where 0.5.x reads it, at the root as
+  `application.properties`; 0.6.0 reads `META-INF/jenesis/application.properties`, so a client packaged against it
+  starts with no class or module path. It moves with the build tool. The launcher module asks for the newest
+  release, so the pin is what holds it, imported into the client's `launcher` group.
 - **WireMock 4.0.0-beta.38**, the whole `org.wiremock` family. The 4.x beta is used by decision; the stable line
   is 3.x, so a stable refresh would move back to it.
 
