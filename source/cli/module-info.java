@@ -9,6 +9,7 @@
  * @jenesis.release 25
  * @jenesis.main build.jenesis.repository.cli.Cli
  * @jenesis.bom pin-repository.properties
+ * @jenesis.bom launcher/pin-repository.properties
  * @jenesis.signature signature-repository.properties
  */
 module build.jenesis.repository.cli {
