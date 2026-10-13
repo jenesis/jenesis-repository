@@ -3,8 +3,6 @@ package build.jenesis.repository.publication.contract.test;
 import module org.junit.jupiter.api;
 import module java.base;
 
-import build.jenesis.repository.store.StoredCounter;
-import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import build.jenesis.repository.store.testkit.Falsification;
 import build.jenesis.repository.store.testkit.Mutant;
@@ -52,14 +50,6 @@ class PublicationHookContractTest {
 
     @TempDir
     Path root;
-
-    /** A hook's fixture can queue derivations and counter deltas that write into the store under {@link #root}; they
-     *  land before the directory is deleted, or one landing during the deletion fails it. */
-    @AfterEach
-    void settle() {
-        StoredListing.settle();
-        StoredCounter.settle();
-    }
 
     @TestFactory
     Stream<DynamicTest> the_publication_hook_contract() {

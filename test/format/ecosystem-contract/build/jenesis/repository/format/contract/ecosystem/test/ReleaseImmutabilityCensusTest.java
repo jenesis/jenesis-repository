@@ -7,8 +7,6 @@ import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.format.testkit.FormatFixture;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
-import build.jenesis.repository.store.StoredCounter;
-import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.Publication;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -49,14 +47,6 @@ class ReleaseImmutabilityCensusTest {
 
     @TempDir
     Path root;
-
-    /** Finish any derivation a publish queued - a conda repodata's compressed twin, a Debian index's signed release -
-     *  before the {@code @TempDir} under it is deleted. */
-    @AfterEach
-    void settle() {
-        StoredListing.settle();
-        StoredCounter.settle();
-    }
 
     static List<EcosystemFormatFixture> fixtures() {
         return EcosystemFormatFixture.all();

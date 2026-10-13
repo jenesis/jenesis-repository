@@ -5,8 +5,6 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
-import build.jenesis.repository.store.StoredCounter;
-import build.jenesis.repository.store.StoredListing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -22,12 +20,6 @@ class HuggingFaceRevisionTest {
 
     @TempDir
     Path root;
-
-    @AfterEach
-    void settle() {
-        StoredListing.settle();
-        StoredCounter.settle();
-    }
 
     @Test
     void other_bytes_at_a_commit_are_refused_and_the_first_still_serve() throws IOException {

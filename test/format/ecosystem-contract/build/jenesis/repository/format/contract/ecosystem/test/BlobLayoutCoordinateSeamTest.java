@@ -3,8 +3,6 @@ package build.jenesis.repository.format.contract.ecosystem.test;
 import module java.base;
 import module org.junit.jupiter.api;
 
-import build.jenesis.repository.store.StoredCounter;
-import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.blobs.BlobLayout;
 import build.jenesis.repository.format.ArtifactLayout;
 import build.jenesis.repository.format.RepositoryFormat;
@@ -99,16 +97,6 @@ class BlobLayoutCoordinateSeamTest {
 
     @TempDir
     Path root;
-
-    /** Finish any derivation this test queued before the {@code @TempDir} is deleted. A conda publish hands the
-     *  {@code repodata.json.bz2} twin to {@code StoredListing.later} to keep it off the request path, and that
-     *  background write races JUnit removing the directory - surfacing as {@code Failed to close extension
-     *  context}, nowhere near the cause. Microseconds when nothing is pending. */
-    @AfterEach
-    void settleDeferredDerivations() {
-        StoredListing.settle();
-        StoredCounter.settle();
-    }
 
     /**
      * Every format whose pointers live in the shared {@code blobs} namespace maps its coordinates to them.

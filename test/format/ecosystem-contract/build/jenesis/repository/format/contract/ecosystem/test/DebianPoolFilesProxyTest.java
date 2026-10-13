@@ -10,8 +10,6 @@ import build.jenesis.repository.metadata.MetadataKey;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
-import build.jenesis.repository.store.StoredCounter;
-import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.UpstreamMemory;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,9 +40,7 @@ class DebianPoolFilesProxyTest {
     }
 
     @AfterEach
-    void settle() {
-        StoredListing.settle();
-        StoredCounter.settle();
+    void forgetAgain() {
         UpstreamMemory.reset();
     }
 

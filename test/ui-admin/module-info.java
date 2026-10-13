@@ -62,6 +62,8 @@ open module build.jenesis.repository.ui.admin.test {
     requires build.jenesis.repository.console.api;
     requires org.junit.jupiter;
     requires org.assertj.core;
+    // SettleDeferredWrites finishes the store writes a test queued before its temporary directory is deleted.
+    requires build.jenesis.repository.store.testkit;
     uses build.jenesis.repository.ui.ConsoleLayout.Extension;
     // A console module whose navEntries() throws. Registered for the whole module on purpose: the fan-out runs
     // at construction, so a regression in its containment fails every suite here rather than one leg.

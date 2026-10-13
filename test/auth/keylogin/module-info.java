@@ -33,6 +33,8 @@ open module build.jenesis.repository.auth.keylogin.test {
     requires jakarta.servlet;
     requires org.junit.jupiter;
     requires org.assertj.core;
+    // SettleDeferredWrites finishes the store writes a test queued before its temporary directory is deleted.
+    requires build.jenesis.repository.store.testkit;
     uses build.jenesis.repository.ui.ConsoleModuleProvider;
     uses build.jenesis.repository.settings.SettingsContributor;
     uses build.jenesis.repository.maintenance.StorageNamespace;

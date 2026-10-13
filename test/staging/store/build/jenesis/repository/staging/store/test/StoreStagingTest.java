@@ -9,8 +9,6 @@ import build.jenesis.repository.store.Lease;
 import build.jenesis.repository.staging.StagingState;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
-import build.jenesis.repository.store.StoredCounter;
-import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.staging.store.StagingWithholdInterceptor;
 
@@ -29,15 +27,6 @@ class StoreStagingTest {
 
     @TempDir
     Path root;
-
-    /** Staging and reaping reach the formats' listing observers, which queue derivations and counter deltas that write
-     *  into the store under {@link #root}; they land before the directory is deleted, or one landing during the
-     *  deletion fails it. */
-    @AfterEach
-    void settle() {
-        StoredListing.settle();
-        StoredCounter.settle();
-    }
 
     private ArtifactStore store;
     private StoreStaging staging;

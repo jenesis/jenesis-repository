@@ -10,8 +10,6 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
-import build.jenesis.repository.store.StoredCounter;
-import build.jenesis.repository.store.StoredListing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -26,12 +24,6 @@ class ArtifactoryLayoutImportTest {
 
     @TempDir
     Path root;
-
-    @AfterEach
-    void settle() {
-        StoredListing.settle();
-        StoredCounter.settle();
-    }
 
     @Test
     void an_alpine_package_is_imported_from_its_branch_repository_and_architecture() throws IOException {

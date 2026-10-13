@@ -30,4 +30,6 @@ open module build.jenesis.repository.compliance.web.test {
     requires tools.jackson.databind;
     requires org.junit.jupiter;
     requires org.assertj.core;
+    // SettleDeferredWrites finishes the store writes a test queued before its temporary directory is deleted.
+    requires build.jenesis.repository.store.testkit;
 }

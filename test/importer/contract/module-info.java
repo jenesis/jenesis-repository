@@ -41,6 +41,8 @@ open module build.jenesis.repository.importer.contract.test {
     requires build.jenesis.repository.importer.jenesis;
     requires org.junit.jupiter;
     requires org.assertj.core;
+    // SettleDeferredWrites finishes the store writes a test queued before its temporary directory is deleted.
+    requires build.jenesis.repository.store.testkit;
 
     // Discovery is part of what is under test: the census enumerates what ServiceLoader really sees in this graph and
     // compares it against the source `provides` scan, so this module loads the SPI itself rather than through a static.

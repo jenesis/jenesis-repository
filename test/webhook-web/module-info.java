@@ -31,4 +31,6 @@ open module build.jenesis.repository.webhook.web.test {
     requires org.junit.jupiter;
     requires org.assertj.core;
     requires org.mockito;
+    // SettleDeferredWrites finishes the store writes a test queued before its temporary directory is deleted.
+    requires build.jenesis.repository.store.testkit;
 }

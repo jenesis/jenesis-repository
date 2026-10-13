@@ -8,8 +8,6 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.Publication;
-import build.jenesis.repository.store.StoredCounter;
-import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.Withheld;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,12 +26,6 @@ class HeldPublishTest {
 
     @TempDir
     Path root;
-
-    @AfterEach
-    void settle() {
-        StoredListing.settle();
-        StoredCounter.settle();
-    }
 
     static List<ReleaseImmutabilityTest.Format> screening() {
         return ReleaseImmutabilityTest.screening();

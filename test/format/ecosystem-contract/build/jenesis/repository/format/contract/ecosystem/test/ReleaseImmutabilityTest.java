@@ -6,7 +6,6 @@ import module org.junit.jupiter.params;
 import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
-import build.jenesis.repository.store.StoredCounter;
 import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.Publication;
 
@@ -34,14 +33,6 @@ class ReleaseImmutabilityTest {
 
     @TempDir
     Path root;
-
-    /** Finish any derivation a publish queued - a conda repodata's compressed twin, a Debian index's signed release -
-     *  before the {@code @TempDir} under it is deleted. */
-    @AfterEach
-    void settle() {
-        StoredListing.settle();
-        StoredCounter.settle();
-    }
 
     /** One format's release, uploaded through its own write path with bytes {@code variant} makes distinct, into a
      *  store {@code arrangement} has prepared - a winget installer belongs to a version whose manifest came first. */

@@ -6,7 +6,6 @@ import build.jenesis.repository.format.RepositoryFormat;
 import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
-import build.jenesis.repository.store.StoredCounter;
 import build.jenesis.repository.store.StoredListing;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,12 +19,6 @@ class KeyProvisioningTest {
 
     @TempDir
     Path root;
-
-    @AfterEach
-    void settle() {
-        StoredListing.settle();
-        StoredCounter.settle();
-    }
 
     @Test
     void the_formats_that_sign_their_index_declare_provisioning_administration() {

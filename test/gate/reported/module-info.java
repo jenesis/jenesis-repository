@@ -25,4 +25,6 @@ open module build.jenesis.repository.gate.reported.test {
     requires build.jenesis.repository.format.maven;
     requires org.junit.jupiter;
     requires org.assertj.core;
+    // SettleDeferredWrites finishes the store writes a test queued before its temporary directory is deleted.
+    requires build.jenesis.repository.store.testkit;
 }

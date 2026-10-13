@@ -4,8 +4,6 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.blobs.Blobs;
 import build.jenesis.repository.format.debian.DebianImporter;
-import build.jenesis.repository.store.StoredCounter;
-import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
@@ -31,14 +29,6 @@ class DebianImportCoordinateAgreementTest {
 
     @TempDir
     Path root;
-
-    /** The Debian Release family and the .gz twins are derived off the request; they are finished before the
-     *  store goes. */
-    @AfterEach
-    void settleDerivations() {
-        StoredListing.settle();
-        StoredCounter.settle();
-    }
 
     /**
      * A package screened under the filename name {@code innocent} whose {@code control} declares a DIFFERENT

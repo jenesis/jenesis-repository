@@ -6,8 +6,6 @@ import build.jenesis.repository.staging.Staging;
 import build.jenesis.repository.staging.store.StoreStaging;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
-import build.jenesis.repository.store.StoredCounter;
-import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -25,15 +23,6 @@ class StagingWindowTest {
 
     @TempDir
     Path root;
-
-    /** Staging and reaping reach the formats' listing observers, which queue derivations and counter deltas that write
-     *  into the store under {@link #root}; they land before the directory is deleted, or one landing during the
-     *  deletion fails it. */
-    @AfterEach
-    void settle() {
-        StoredListing.settle();
-        StoredCounter.settle();
-    }
 
     @Test
     void the_list_is_a_window_that_says_more_and_the_reap_pages_through_every_id() throws IOException {

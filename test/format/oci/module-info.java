@@ -30,6 +30,8 @@ open module build.jenesis.repository.format.oci.test {
     requires build.jenesis.repository.cleanup;
     requires org.junit.jupiter;
     requires org.assertj.core;
+    // SettleDeferredWrites finishes the store writes a test queued before its temporary directory is deleted.
+    requires build.jenesis.repository.store.testkit;
     // A PublishInterceptor IS a PublicationObserver, discovered through the single seam and split into
     // the verdict chain by instanceof.
     provides build.jenesis.repository.store.PublicationObserver

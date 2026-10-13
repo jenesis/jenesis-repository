@@ -12,8 +12,6 @@ import build.jenesis.repository.staging.store.StoreStaging;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
-import build.jenesis.repository.store.StoredCounter;
-import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.Publication;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,15 +30,6 @@ class StagingReapTest {
 
     @TempDir
     Path root;
-
-    /** Staging and reaping reach the formats' listing observers, which queue derivations and counter deltas that write
-     *  into the store under {@link #root}; they land before the directory is deleted, or one landing during the
-     *  deletion fails it. */
-    @AfterEach
-    void settle() {
-        StoredListing.settle();
-        StoredCounter.settle();
-    }
 
     private ArtifactStore store;
     private StoreStaging staging;
