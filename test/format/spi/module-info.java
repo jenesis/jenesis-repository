@@ -26,6 +26,8 @@ open module build.jenesis.repository.format.test {
     requires build.jenesis.repository.store.filesystem;
     requires org.junit.jupiter;
     requires org.assertj.core;
+    // SettleDeferredWrites finishes the store writes a test queued before its temporary directory is deleted.
+    requires build.jenesis.repository.store.testkit;
     provides build.jenesis.repository.format.RepositoryFormat
             with build.jenesis.repository.format.test.StubTwinAlphaFormat,
                     build.jenesis.repository.format.test.StubTwinBetaFormat;

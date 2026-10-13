@@ -12,8 +12,6 @@ import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
-import build.jenesis.repository.store.StoredCounter;
-import build.jenesis.repository.store.StoredListing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -32,12 +30,6 @@ class MixedRepositoryRoutingTest {
 
     @TempDir
     Path root;
-
-    @AfterEach
-    void settle() {
-        StoredListing.settle();
-        StoredCounter.settle();
-    }
 
     static Stream<Named<EcosystemFormatFixture>> fixtures() {
         return EcosystemFormatFixture.all().stream().map(fixture -> Named.of(fixture.format(), fixture));

@@ -4,8 +4,6 @@ import module java.base;
 import module org.junit.jupiter.api;
 import build.jenesis.repository.compliance.Verdict;
 import build.jenesis.repository.gate.QuarantineLog;
-import build.jenesis.repository.store.StoredCounter;
-import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
 
@@ -32,14 +30,6 @@ class QuarantineIndexDepthTest {
 
     @TempDir
     Path root;
-
-    /** The Debian Release family and the .gz twins are derived off the request; they are finished before the
-     *  store goes. */
-    @AfterEach
-    void settleDerivations() {
-        StoredListing.settle();
-        StoredCounter.settle();
-    }
 
     private ArtifactStore store() {
         return ArtifactStoreProvider.resolve("filesystem",

@@ -6,8 +6,6 @@ import build.jenesis.repository.format.testkit.ContractExchange;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
-import build.jenesis.repository.store.StoredCounter;
-import build.jenesis.repository.store.StoredListing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -24,12 +22,6 @@ class PyPiFieldOrderTest {
 
     @TempDir
     Path root;
-
-    @AfterEach
-    void settle() {
-        StoredListing.settle();
-        StoredCounter.settle();
-    }
 
     @Test
     void an_upload_naming_its_project_after_the_file_is_screened_under_the_project() throws IOException {

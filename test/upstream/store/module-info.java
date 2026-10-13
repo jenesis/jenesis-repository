@@ -18,6 +18,8 @@ open module build.jenesis.repository.upstream.store.test {
     requires build.jenesis.repository.store.filesystem;
     requires org.junit.jupiter;
     requires org.assertj.core;
+    // SettleDeferredWrites finishes the store writes a test queued before its temporary directory is deleted.
+    requires build.jenesis.repository.store.testkit;
     provides build.jenesis.repository.upstream.UpstreamTokenIssuer
             with build.jenesis.repository.upstream.store.test.CountingIssuer;
 }

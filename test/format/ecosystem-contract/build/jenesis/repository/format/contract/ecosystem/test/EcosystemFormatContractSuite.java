@@ -5,8 +5,6 @@ import module org.junit.jupiter.api;
 import build.jenesis.repository.format.testkit.FormatContract;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
-import build.jenesis.repository.store.StoredCounter;
-import build.jenesis.repository.store.StoredListing;
 
 /**
  * The JUnit driver for one ecosystem format's leg of the shared {@code RepositoryFormat} contract. Everything
@@ -30,24 +28,6 @@ abstract class EcosystemFormatContractSuite {
 
     @TempDir
     Path root;
-
-    /**
-     * Finish every write a check left to a background thread before the {@code @TempDir} above is deleted.
-     *
-     * <p>Two kinds land after the check returns: a derived twin a format hands to {@link StoredListing#later} to keep
-     * it off the request path (conda's {@code repodata.json.bz2}), and a counter delta a publication observer defers
-     * to the node's flusher (the subtree sizes every publish rolls up), which is written at the next flush tick. Either
-     * may then write into a directory JUnit is deleting, and the failure surfaces as {@code Failed to close extension
-     * context}, nowhere near the format that caused it.
-     *
-     * <p>It is here rather than in one subclass because the hazard belongs to owning a temp store, not to a format.
-     * Costs microseconds when nothing is pending.
-     */
-    @AfterEach
-    void settleDeferredWrites() {
-        StoredListing.settle();
-        StoredCounter.settle();
-    }
 
     /** The format under test. */
     abstract EcosystemFormatFixture fixture();

@@ -15,8 +15,6 @@ import build.jenesis.repository.store.PublicationObserver;
 import build.jenesis.repository.store.PublishInterceptor;
 import build.jenesis.repository.store.testkit.ChoreographyMutant;
 import build.jenesis.repository.store.testkit.Falsification;
-import build.jenesis.repository.store.StoredCounter;
-import build.jenesis.repository.store.StoredListing;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import build.jenesis.repository.store.testkit.Mutant;
 import build.jenesis.repository.store.testkit.PublicationHookContract;
@@ -65,14 +63,6 @@ class PublicationHookCensusTest {
 
     @TempDir
     Path root;
-
-    /** A hook's fixture can queue derivations and counter deltas that write into the store under {@link #root}; they
-     *  land before the directory is deleted, or one landing during the deletion fails it. */
-    @AfterEach
-    void settle() {
-        StoredListing.settle();
-        StoredCounter.settle();
-    }
 
     // --- the static and runtime legs, separately ---------------------------------------------------------------
 

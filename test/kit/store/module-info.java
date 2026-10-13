@@ -26,10 +26,16 @@
  * each is re-verified from durable state so a point that stopped biting fails. The JUnit driver, the synthetic
  * fixtures and the census live in {@code test/publication}.
  *
- * <p>The module depends only on the store SPI - no junit, no assertion library, no format, no server - so both this
- * repository's and the downstream distribution's test modules can require it rather than each hand-rolling a bespoke
- * throwing decorator. The classes are test doubles; nothing here provides a service, so the module is inert on a
- * runtime graph.
+ * <p><b>Settling deferred writes:</b> {@code SettleDeferredWrites} is a JUnit extension that finishes the listing
+ * derivations and counter deltas a test left queued before the test's temporary directories are deleted. It is
+ * provided as an {@code Extension} and registered by autodetection, so every test whose module path carries this kit
+ * is covered without naming it; a test module exposed to the race and needing nothing else here requires the kit for
+ * that alone.
+ *
+ * <p>The module depends on the store SPI, the filesystem store and the test libraries - no format, no server - so
+ * both this repository's and the downstream distribution's test modules can require it rather than each
+ * hand-rolling a bespoke throwing decorator. The classes are test doubles, and the one service it provides is a JUnit
+ * extension, so the module is inert on a runtime graph.
  *
  * @jenesis.release 25
  * @jenesis.bom pin-repository.properties
@@ -44,4 +50,5 @@ module build.jenesis.repository.store.testkit {
     requires java.net.http;
     requires org.junit.jupiter;
     exports build.jenesis.repository.store.testkit;
+    provides org.junit.jupiter.api.extension.Extension with build.jenesis.repository.store.testkit.SettleDeferredWrites;
 }

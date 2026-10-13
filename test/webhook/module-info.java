@@ -29,4 +29,6 @@ open module build.jenesis.repository.webhook.test {
     requires wiremock.core;
     requires wiremock.jetty;
     requires wiremock.httpclient;
+    // SettleDeferredWrites finishes the store writes a test queued before its temporary directory is deleted.
+    requires build.jenesis.repository.store.testkit;
 }

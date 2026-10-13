@@ -34,4 +34,6 @@ open module build.jenesis.repository.auth.oidc.test {
     requires jdk.httpserver;
     requires jakarta.servlet;
     requires spring.web;
+    // SettleDeferredWrites finishes the store writes a test queued before its temporary directory is deleted.
+    requires build.jenesis.repository.store.testkit;
 }
