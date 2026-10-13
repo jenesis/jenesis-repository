@@ -15,7 +15,10 @@ name: Release jenesis-repository
 #                                                                token as a warning and the run still succeeds, so a
 #                                                                release is checked for its formula and manifest
 #               DOCKER_HUB_TOKEN                                 a Docker Hub access token, Read & Write
-#   Variables:  DOCKER_HUB_USER, DOCKER_HUB_NAMESPACE            the account and the org or user the image lives under
+#   Variables:  DOCKER_HUB_NAMESPACE, DOCKER_HUB_USER            optional: the org or user the image lives under, by
+#                                                                default jenesisbuild, and the account the token belongs
+#                                                                to, by default the namespace - as for an organisation
+#                                                                access token
 # The image and chart are signed keylessly with this workflow's own identity, so they need no key of their own.
 
 on:
@@ -142,9 +145,9 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           PUSH_VERSION: ${{ steps.version.outputs.version }}
           PUSH_LATEST: ${{ inputs.push_latest && '1' || '0' }}
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER || vars.DOCKER_HUB_NAMESPACE || 'jenesisbuild' }}
           DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
-          DOCKER_HUB_NAMESPACE: ${{ vars.DOCKER_HUB_NAMESPACE }}
+          DOCKER_HUB_NAMESPACE: ${{ vars.DOCKER_HUB_NAMESPACE || 'jenesisbuild' }}
         run: |
           java -Djenesis.project.version=${VERSION} \
                -Djenesis.archive.timestamp="$(git log -1 --format=%cI)" \
