@@ -196,7 +196,11 @@ record Push(long version, Configuration configuration, List<String> targets, Sig
             if (signing.active()) {
                 String name = released.getFileName().toString();
                 name = name.substring(0, name.length() - ("-" + release + ".tgz").length());
-                signing.sign(oci(target, registry) + "/" + name + "@" + chartDigest(answer, released), null);
+                // Signed under the name the images go by rather than the push URL: cosign finds the registry's
+                // credential by host, and Docker Hub's login is recorded for its index, never for registry-1, so a
+                // signature written through the push URL is attempted anonymously and refused. Both names are the
+                // same repository, so the signature lands beside the chart either way.
+                signing.sign(images(target, registry) + "/" + name + "@" + chartDigest(answer, released), null);
             }
         }
     }
