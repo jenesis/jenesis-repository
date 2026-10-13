@@ -61,9 +61,15 @@ distributions:
 checksum:
   individual: true
 
+# Every staged module's jar and POM is a release asset of its own, which is where jenesis.build's discovery file sends a
+# build resolving build.jenesis.repository.*, each beside its signature. A release holds at most 1,000 assets, so the
+# modules carry no checksum file: a resolving build verifies the signature and the SHA-256 its own pins record. The
+# client keeps its checksums, which Scoop's autoupdate reads.
 files:
   artifacts:
     - path: 'sdk/jenrepo-{{projectVersion}}.jar'
   globs:
     - pattern: '**/*-{{projectVersion}}.{jar,pom}'
       directory: 'target/stage/maven/output'
+      extraProperties:
+        skipChecksum: true
