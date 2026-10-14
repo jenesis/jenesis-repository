@@ -506,17 +506,26 @@ public final class OciFormat implements RepositoryFormat, ProxyFormat, Repositor
         if (root.isEmpty()) {
             return List.of();
         }
+        return image(root.get(), key, store);
+    }
+
+    /**
+     * The blobs the manifest {@code root} keeps alive: itself, an index's sub-manifests, and each one's config and
+     * layers - the set a collection marks for an image, and so the set a push relies on once its manifest serves.
+     * {@code rootKey} names what serves the root in an {@link BlobReferences.Unresolvable} raised for it.
+     */
+    static List<String> image(String root, String rootKey, ArtifactStore store) throws IOException {
         LinkedHashSet<String> hashes = new LinkedHashSet<>();
-        hashes.add(root.get());
+        hashes.add(root);
         Deque<String> pending = new ArrayDeque<>();
-        pending.push(root.get());
+        pending.push(root);
         Set<String> expanded = new HashSet<>();
         while (!pending.isEmpty()) {
             String hex = pending.pop();
             if (!expanded.add(hex)) {
                 continue;                                       // each manifest expanded once (a shared/nested digest)
             }
-            JsonNode node = referencedManifest(hex, store, hex.equals(root.get()) ? key : null);
+            JsonNode node = referencedManifest(hex, store, hex.equals(root) ? rootKey : null);
             if (node == null) {
                 continue;                                       // absent, or a sub-manifest that is not one
             }

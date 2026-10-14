@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * The dev profile enables an in-memory {@code root}/{@code root} super-admin, so a dev boot must never be
  * network-reachable. {@link DevConsoleSecurity#verifyLoopback} - the check the {@code devLoopbackGuard} bean runs at
  * context refresh, before the web server binds - fails the boot fast when {@code server.address} names a routable
- * interface, and passes for a loopback address or the (loopback-defaulted) empty value.
+ * interface or is unset - which binds every interface - and passes for a loopback address.
  */
 public class DevLoopbackGuardTest {
 
@@ -24,11 +24,18 @@ public class DevLoopbackGuardTest {
     }
 
     @Test
-    public void a_loopback_or_unset_bind_is_allowed() {
+    public void an_unset_bind_is_rejected_since_it_binds_every_interface() {
+        assertThatThrownBy(() -> DevConsoleSecurity.verifyLoopback(""))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("unset");
+        assertThatThrownBy(() -> DevConsoleSecurity.verifyLoopback(null))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    public void a_loopback_bind_is_allowed() {
         assertThatCode(() -> DevConsoleSecurity.verifyLoopback("127.0.0.1")).doesNotThrowAnyException();
         assertThatCode(() -> DevConsoleSecurity.verifyLoopback("localhost")).doesNotThrowAnyException();
         assertThatCode(() -> DevConsoleSecurity.verifyLoopback("::1")).doesNotThrowAnyException();
-        assertThatCode(() -> DevConsoleSecurity.verifyLoopback("")).doesNotThrowAnyException();
-        assertThatCode(() -> DevConsoleSecurity.verifyLoopback(null)).doesNotThrowAnyException();
     }
 }

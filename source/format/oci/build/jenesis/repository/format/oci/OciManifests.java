@@ -4,6 +4,7 @@ import module java.base;
 import module org.slf4j;
 import build.jenesis.repository.store.ArtifactDescriptor;
 import build.jenesis.repository.store.ArtifactStore;
+import build.jenesis.repository.store.Condemned;
 import build.jenesis.repository.store.Known;
 import build.jenesis.repository.store.Publication;
 import build.jenesis.repository.store.PublishInterceptor;
@@ -109,6 +110,13 @@ final class OciManifests {
                 // Last-writer-wins: an OCI tag is mutable by protocol and a by-digest re-push is the same bytes.
                 Publication.Republish.overwrite(),
                 accepted -> {
+                    // A layer a client found by HEAD is not uploaded again, so the image relies on blobs a collection
+                    // may have condemned while no image named them. Each is spared before the tag can serve it - the
+                    // set a collection marks for this image - and one a sweep has already claimed refuses the push
+                    // as a retryable BlobCollected, so the client uploads it again.
+                    for (String blob : OciFormat.image(accepted.hash(), path, store)) {
+                        Condemned.spare(store, blob, path);
+                    }
                     // The sidecar seam refuses a publish/ key, so nothing serves ahead of it.
                     accepted.sidecar("oci/.types/" + accepted.hash(), servedType.getBytes(StandardCharsets.UTF_8));
                     return Publication.Visibility

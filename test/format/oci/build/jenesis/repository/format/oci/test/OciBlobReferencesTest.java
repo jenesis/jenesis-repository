@@ -296,6 +296,69 @@ class OciBlobReferencesTest {
     }
 
     @Test
+    void a_condemned_layer_a_manifest_reuses_after_the_mark_survives_the_sweep() throws IOException {
+        // A client that finds a layer by HEAD does not upload it again, so a manifest can name a layer that a pass
+        // condemned while no image named it. Pushed after the next pass's mark has walked oci/ and before its sweep
+        // claims the layer, the manifest is the one thing that relies on the layer, and the sweep must not take it.
+        String config = pushBlob("library/app", "reused config".getBytes(StandardCharsets.UTF_8));
+        String layer = pushBlob("library/app", "reused layer".getBytes(StandardCharsets.UTF_8));
+        GcPlan first = collector().collect(store, Known.known(List.of("publish", "oci")), clock.instant());
+        assertThat(first.condemned()).as("both blobs are named by nothing yet").isEqualTo(2);
+
+        byte[] body = manifest(config, layer);
+        PushingBeforeClaim racing = new PushingBeforeClaim(store, "gc/condemned/", () -> {
+            FakeExchange put = new FakeExchange("PUT", "/v2/library/app/manifests/1.0", body, Map.of(),
+                    Map.of("Content-Type", "application/vnd.oci.image.manifest.v1+json"));
+            format.handle(put, store);
+            assertThat(put.status()).as("the push lands between the mark and the claim").isEqualTo(201);
+        });
+        collector().collect(racing, Known.known(List.of("publish", "oci")), clock.instant());
+        assertThat(racing.pushed).as("the sweep reached the claim the push races").isTrue();
+
+        FakeExchange pullLayer = new FakeExchange("GET", "/v2/library/app/blobs/sha256:" + layer);
+        format.handle(pullLayer, store);
+        assertThat(pullLayer.status()).as("the image the push made still pulls its layer").isEqualTo(200);
+        FakeExchange pullConfig = new FakeExchange("GET", "/v2/library/app/blobs/sha256:" + config);
+        format.handle(pullConfig, store);
+        assertThat(pullConfig.status()).isEqualTo(200);
+    }
+
+    /** Runs {@code push} once, through the undecorated store, just before the first versioned write under
+     *  {@code prefix}: the first claim a sweep writes on a condemned blob's marker, once its mark is complete and
+     *  before it has taken anything. */
+    private static final class PushingBeforeClaim extends ForwardingArtifactStore {
+
+        private final String prefix;
+        private final ThrowingRunnable push;
+        private boolean pushed;
+
+        private PushingBeforeClaim(ArtifactStore delegate, String prefix, ThrowingRunnable push) {
+            super(delegate);
+            this.prefix = prefix;
+            this.push = push;
+        }
+
+        @Override
+        public boolean writeVersioned(String key, byte[] content, Object expected) throws IOException {
+            if (!pushed && key.startsWith(prefix)) {
+                pushed = true;
+                push.run();
+            }
+            return super.writeVersioned(key, content, expected);
+        }
+
+        @Override
+        public ArtifactStore scope(String tenant) {
+            return new PushingBeforeClaim(delegate.scope(tenant), prefix, push);
+        }
+    }
+
+    @FunctionalInterface
+    private interface ThrowingRunnable {
+        void run() throws IOException;
+    }
+
+    @Test
     void an_abandoned_upload_is_still_reclaimed() throws IOException {
         // The direction check on the other side: lending references must not turn garbage collection off for OCI. A
         // layer uploaded by a push that never sent its manifest is named by nothing, and is still condemned and
