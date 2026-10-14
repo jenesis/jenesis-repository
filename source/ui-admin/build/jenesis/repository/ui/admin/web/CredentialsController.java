@@ -86,7 +86,12 @@ public class CredentialsController {
                            @RequestParam("rights") String rights,
                            @RequestParam(name = "ttl", required = false) String ttl,
                            RedirectAttributes redirect) throws IOException {
-        credentials.setTrust(name, issuer, audience, subject, scope, rights, CredentialLifetimes.lifetime(ttl));
+        try {
+            credentials.setTrust(name, issuer, audience, subject, scope, rights, CredentialLifetimes.lifetime(ttl));
+        } catch (IllegalArgumentException refused) {
+            redirect.addFlashAttribute("error", refused.getMessage());
+            return "redirect:/ui/credentials/keyless";
+        }
         redirect.addFlashAttribute("message", "Saved OIDC trust '" + name + "'.");
         return "redirect:/ui/credentials/keyless";
     }

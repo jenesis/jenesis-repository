@@ -12,6 +12,8 @@
  */
 module build.jenesis.repository.oidc {
     requires build.jenesis.repository.server.spi;
+    // The posture advisory naming the trusts stored without a subject.
+    requires build.jenesis.repository.posture;
     requires spring.security.oauth2.core;
     requires spring.security.oauth2.jose;
     requires spring.web;
@@ -19,4 +21,6 @@ module build.jenesis.repository.oidc {
     exports build.jenesis.repository.oidc;
     provides build.jenesis.repository.server.spi.TokenExchangeProvider
             with build.jenesis.repository.oidc.OidcExchangeProvider;
+    provides build.jenesis.repository.posture.SafetyAdvisor
+            with build.jenesis.repository.oidc.SubjectlessTrustAdvisor;
 }

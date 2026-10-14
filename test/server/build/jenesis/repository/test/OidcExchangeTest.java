@@ -6,9 +6,13 @@ import module java.base;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.OidcTrusts;
 import build.jenesis.repository.oidc.OidcExchange;
+import build.jenesis.repository.oidc.SubjectlessTrustAdvisor;
+import build.jenesis.repository.posture.SecurityAdvisory;
+import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.server.spi.TokenExchange;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.Documents;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import java.security.Signature;
@@ -48,6 +52,7 @@ class OidcExchangeTest {
     @TempDir
     Path root;
 
+    private ArtifactStore store;
     private Authorization authorization;
     private OidcExchange exchange;
     private WireMockServer server;
@@ -56,7 +61,7 @@ class OidcExchangeTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        ArtifactStore store = ArtifactStoreProvider.resolve(
+        store = ArtifactStoreProvider.resolve(
                 "filesystem", key -> "jenrepo.filesystem.root".equals(key) ? root.toString() : null);
         authorization = Authorization.enforcing(store);
         exchange = new OidcExchange(authorization);
@@ -331,6 +336,56 @@ class OidcExchangeTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .as("a null audience is rejected the same way")
                 .hasMessageContaining("requires an explicit audience");
+    }
+
+    @Test
+    void a_trust_without_a_subject_is_refused_when_saved_and_the_refusal_says_how_to_name_one() {
+        // A CI platform's issuer signs for every one of its users and the requester picks the audience, so the
+        // subject is the only claim saying whose job a token is from: "any" has to be written, as *.
+        for (String blank : Arrays.asList(null, "", "  ")) {
+            assertThatThrownBy(() -> authorization.trusts().set("acme", new OidcTrusts.Trust("open", issuer,
+                    "jenesis", blank, "releases", "repository:write", Duration.ofMinutes(15))))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("'open'")
+                    .hasMessageContaining("requires a subject")
+                    .hasMessageContaining("repo:<owner>/<repository>:*");
+        }
+    }
+
+    @Test
+    void a_trust_stored_without_a_subject_exchanges_no_token_and_is_named_on_the_posture_report() throws Exception {
+        // A trust saved before a subject was required: written as the product wrote it, to a tenant this node has
+        // not read, so the credential cache holds nothing for it.
+        Properties stored = new Properties();
+        stored.setProperty("open.issuer", issuer);
+        stored.setProperty("open.audience", "jenesis");
+        stored.setProperty("open.subject", "");
+        stored.setProperty("open.scope", "releases");
+        stored.setProperty("open.rights", "repository:write");
+        stored.setProperty("open.ttl", "PT15M");
+        store.write(Scopes.space(Scopes.AUTH) + "/legacy/oidc", new ByteArrayInputStream(Documents.bytes(stored)));
+
+        assertThat(exchange.exchange("legacy",
+                jwt("jenesis", "repo:anyone/anything:ref:refs/heads/main", Instant.now().plusSeconds(300))))
+                .as("a token from any job of the issuer mints nothing through a trust that names no subject")
+                .isNull();
+        List<SecurityAdvisory> advised = new SubjectlessTrustAdvisor().advise(_ -> null).stream()
+                .filter(advisory -> advisory.tenant().equals("legacy")).toList();
+        assertThat(advised).as("the posture report names the trust, for that tenant").singleElement()
+                .satisfies(advisory -> {
+                    assertThat(advisory.id()).isEqualTo("jenrepo.oidc.subject.unset");
+                    assertThat(advisory.why()).contains("'open'");
+                    assertThat(advisory.docs()).endsWith("#jenrepo.oidc.subject.unset");
+                });
+
+        authorization.trusts().set("legacy", new OidcTrusts.Trust("open", issuer, "jenesis", "repo:acme/app:*",
+                "releases", "repository:write", Duration.ofMinutes(15)));
+        assertThat(exchange.exchange("legacy",
+                jwt("jenesis", "repo:acme/app:ref:refs/heads/main", Instant.now().plusSeconds(300))))
+                .as("given a subject, the trust exchanges the jobs it names").isNotNull();
+        assertThat(new SubjectlessTrustAdvisor().advise(_ -> null))
+                .as("and the posture report no longer names it")
+                .noneMatch(advisory -> advisory.tenant().equals("legacy"));
     }
 
     @Test

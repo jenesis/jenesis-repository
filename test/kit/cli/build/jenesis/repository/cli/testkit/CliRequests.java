@@ -285,7 +285,7 @@ public final class CliRequests {
             action("roles set <name> <tokens>", "roles set ci read", put("/api/roles/ci").body("tokens")),
             action("roles remove <name>", "roles remove ci", delete("/api/roles/ci")),
             action("keyless-ci", "keyless-ci", get("/api/trusts")),
-            action("keyless-ci set <name> --issuer I --scope S --rights R [--audience A] [--subject S] [--ttl D]",
+            action("keyless-ci set <name> --issuer I --audience A --subject S --scope S --rights R [--ttl D]",
                     "keyless-ci set gh --issuer i --scope s --rights r --audience a --subject b --ttl PT1H",
                     put("/api/trusts/gh").body("issuer", "scope", "rights", "audience", "subject", "ttl")),
             action("keyless-ci remove <name>", "keyless-ci remove gh", delete("/api/trusts/gh")),

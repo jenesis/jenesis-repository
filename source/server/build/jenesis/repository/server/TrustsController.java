@@ -8,6 +8,7 @@ import build.jenesis.repository.server.spi.OidcTrusts;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -52,7 +53,7 @@ public class TrustsController {
         return views;
     }
 
-    /** Add or replace a trust by name; issuer, scope and rights are required. */
+    /** Add or replace a trust by name; issuer, audience, subject, scope and rights are required. */
     @PutMapping("/api/trusts/{name}")
     public void setTrust(@PathVariable("name") String name,
                          @RequestHeader(value = PresentedKey.HEADER, required = false) String key,
@@ -74,6 +75,15 @@ public class TrustsController {
         authorization.trusts().remove(tenant, name);
         context.audit(tenant, key, REMOVE, name);
         response.setStatus(200);
+    }
+
+    /** A trust refused as incomplete, answered {@code 400} with the reason, which names the field and how to fill
+     *  it. */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public void refused(IllegalArgumentException refused, HttpServletResponse response) throws IOException {
+        response.setStatus(400);
+        response.setContentType("text/plain;charset=UTF-8");
+        response.getWriter().write(refused.getMessage() == null ? "bad request" : refused.getMessage());
     }
 
     /** One trust as it is read back; the ttl is its ISO-8601 form, or null for the deployment's default. */

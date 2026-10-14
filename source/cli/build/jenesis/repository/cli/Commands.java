@@ -310,7 +310,7 @@ public final class Commands {
                             act("roles remove <name>", "remove a role")),
                     noun("keyless-ci", "the OIDC trusts a CI job exchanges against", AuthCommands::trusts,
                             act("keyless-ci", "list the trusts"),
-                            act("keyless-ci set <name> --issuer I --scope S --rights R [--audience A] [--subject S] [--ttl D]",
+                            act("keyless-ci set <name> --issuer I --audience A --subject S --scope S --rights R [--ttl D]",
                                     "define a trust"),
                             act("keyless-ci remove <name>", "remove a trust")),
                     noun("policy", "the credential-lifetime policy", ComplianceCommands::policy,

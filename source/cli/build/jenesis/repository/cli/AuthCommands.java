@@ -374,8 +374,8 @@ final class AuthCommands {
         switch (args[1]) {
             case "set" -> {
                 if (args.length < 3) {
-                    throw new IllegalArgumentException("Usage: keyless-ci set <name> --issuer I --scope S --rights R "
-                            + "[--audience A] [--subject S] [--ttl D]");
+                    throw new IllegalArgumentException("Usage: keyless-ci set <name> --issuer I --audience A "
+                            + "--subject S --scope S --rights R [--ttl D]");
                 }
                 String name = args[2];
                 String issuer = null;
@@ -395,8 +395,10 @@ final class AuthCommands {
                         default -> throw new IllegalArgumentException("Unknown keyless-ci flag '" + args[i] + "'");
                     }
                 }
-                if (issuer == null || scope == null || rights == null) {
-                    throw new IllegalArgumentException("keyless-ci set needs --issuer, --scope and --rights.");
+                if (issuer == null || audience == null || subject == null || scope == null || rights == null) {
+                    throw new IllegalArgumentException("keyless-ci set needs --issuer, --audience, --subject, --scope "
+                            + "and --rights. The subject names whose jobs the trust admits, such as "
+                            + "repo:<owner>/<repository>:* for GitHub Actions; * admits every job the issuer signs for.");
                 }
                 client.access().setTrust(name, issuer, audience, subject, scope, rights, ttl);
                 System.out.println("Saved trust " + name + ".");
