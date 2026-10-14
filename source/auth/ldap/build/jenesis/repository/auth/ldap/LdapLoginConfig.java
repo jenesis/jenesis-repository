@@ -9,6 +9,7 @@ import build.jenesis.repository.ui.LoginAuthorities;
 import build.jenesis.repository.ui.LoginContributor;
 import build.jenesis.repository.ui.LoginOptions;
 import build.jenesis.repository.ui.PrincipalNameResolver;
+import build.jenesis.repository.ui.SignInSessions;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
@@ -23,7 +24,6 @@ import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.thymeleaf.spring6.templateresolver.SpringResourceTemplateResolver;
 
@@ -33,8 +33,8 @@ import org.thymeleaf.spring6.templateresolver.SpringResourceTemplateResolver;
  * <p>It authenticates through a filter and an authentication manager of its own on {@code POST /login/ldap} rather
  * than the chain's shared form login, because another mechanism may already own that: a second form login would
  * take over the first's processing URL, and a shared manager would try a directory password as a login key and send
- * a login key to the directory. The context is saved to the session, without which a filter of its own signs a
- * person in and forgets them on the next request.
+ * a login key to the directory. {@link SignInSessions} equips the filter, so a sign-in is saved to the session and
+ * lands under a new session id.
  */
 @Configuration(proxyBeanMethods = false)
 @Conditional(LdapLoginConfig.Configured.class)
@@ -64,12 +64,12 @@ public class LdapLoginConfig {
         ProviderManager manager = new ProviderManager(new LdapSignIn(directory, properties, authorization,
                 authorities, RateLimiterProvider.resolve(environment::getProperty), audit));
         return http -> {
-            UsernamePasswordAuthenticationFilter filter = new UsernamePasswordAuthenticationFilter(manager);
+            UsernamePasswordAuthenticationFilter filter =
+                    SignInSessions.into(new UsernamePasswordAuthenticationFilter(manager));
             filter.setRequiresAuthenticationRequestMatcher(
                     PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/ui/login/ldap"));
             filter.setUsernameParameter("username");
             filter.setPasswordParameter("password");
-            filter.setSecurityContextRepository(new HttpSessionSecurityContextRepository());
             SavedRequestAwareAuthenticationSuccessHandler success = new SavedRequestAwareAuthenticationSuccessHandler();
             success.setDefaultTargetUrl("/ui/");
             success.setAlwaysUseDefaultTargetUrl(true);

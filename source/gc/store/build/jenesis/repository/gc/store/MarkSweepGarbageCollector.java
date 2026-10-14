@@ -453,12 +453,12 @@ public final class MarkSweepGarbageCollector implements GarbageCollector {
                 // same marker, so a claim that does not land spares the blob, and one that lands refuses every publish
                 // of these bytes until they are gone. The completed mark's shard needs no re-read: it has only gained
                 // duplicates since.
-                Instant claiming = Instant.now();
-                if (!Condemned.claim(store, hash, current.get(), claiming)) {
+                long claiming = System.nanoTime();
+                if (!Condemned.claim(store, hash, current.get(), Instant.now())) {
                     spared++;
                     return;
                 }
-                if (Duration.between(claiming, Instant.now()).compareTo(Condemned.CLAIM_EXPIRY.dividedBy(2)) > 0) {
+                if (System.nanoTime() - claiming > Condemned.CLAIM_EXPIRY.dividedBy(2).toNanos()) {
                     // Paused between claim and delete long enough that a publish may take the claim back: re-judge next
                     // pass.
                     standing++;
