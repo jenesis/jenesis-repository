@@ -92,7 +92,9 @@ public final class OidcExchange implements TokenExchange {
 
     private static boolean subjectMatches(String subject, String pattern) {
         if (pattern == null || pattern.isBlank()) {
-            return true;
+            // A trust stored without a subject admits no one: on a shared issuer the subject is the only claim
+            // saying whose job a token is from, and "any" is written as *.
+            return false;
         }
         if (subject == null) {
             return false;
