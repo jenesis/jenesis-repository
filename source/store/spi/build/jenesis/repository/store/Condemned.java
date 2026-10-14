@@ -27,7 +27,10 @@ import module java.base;
  * <p>A claim is followed at once by the delete, so one that has stood for {@link #CLAIM_EXPIRY} belongs to a sweep
  * that died between the two. A publish takes such a claim back, since nothing else would until the next confirming
  * pass, and a sweep abandons a delete its own claim has outlived half of that - so neither side can act on a claim
- * the other has taken back.
+ * the other has taken back. Each side measures the time on its own monotonic clock and never on the other's: the
+ * instant written into a claim is the sweeping node's wall clock, and a publishing node whose clock ran ahead of it by
+ * more than the window would read a claim made a moment ago as long expired. So a publish takes a claim back only once
+ * its own node has {@linkplain ClaimWatch watched} that claim stand for the whole window.
  */
 public final class Condemned {
 
@@ -110,6 +113,11 @@ public final class Condemned {
      * @param what the request path or key the publish is writing, which a refusal names
      */
     public static void spare(ArtifactStore store, String hash, String what) throws IOException {
+        spare(store, hash, what, ClaimWatch.NODE);
+    }
+
+    /** {@link #spare(ArtifactStore, String, String)}, judging how long a claim has stood by {@code watch}. */
+    public static void spare(ArtifactStore store, String hash, String what, ClaimWatch watch) throws IOException {
         String key = key(hash);
         if (!store.exists(key)) {
             return;   // the overwhelmingly common case: nothing condemned these bytes
@@ -119,6 +127,10 @@ public final class Condemned {
                 return Retries.Verdict.keep(false);
             }
             String body = new String(current.get().content(), StandardCharsets.UTF_8);
+            Optional<Instant> claimed = claimed(body);
+            if (claimed.isEmpty()) {
+                watch.forget(key);
+            }
             if (body.startsWith(SPARED)) {
                 // Spared, but not necessarily standing: a publish that took back an expired claim over a blob the
                 // sweep had already deleted wrote this marker and was then refused, and a duplicate upload dropped
@@ -131,10 +143,10 @@ public final class Condemned {
             if (collectedAt(body).isPresent() && store.size("blobs/" + hash) < 0) {
                 throw new Publication.BlobCollected(what, hash);
             }
-            Optional<Instant> claimed = claimed(body);
-            if (claimed.isPresent() && claimed.get().plus(CLAIM_EXPIRY).isAfter(Instant.now())) {
+            if (claimed.isPresent() && !watch.outlasted(key, claimed.get())) {
                 throw new Publication.BlobCollected(what, hash);
             }
+            watch.forget(key);
             return Retries.Verdict.write((SPARED + Instant.now()).getBytes(StandardCharsets.UTF_8), true);
         });
         if (touched && store.size("blobs/" + hash) < 0) {
@@ -147,6 +159,51 @@ public final class Condemned {
         return store.readVersioned(key(hash))
                 .map(marker -> !new String(marker.content(), StandardCharsets.UTF_8).startsWith(SPARED))
                 .orElse(false);
+    }
+
+    /**
+     * The claims a node has met while sparing, each with the moment it first met it on the node's own monotonic clock.
+     * A claim counts as outlasted once the node has watched it stand for {@link #CLAIM_EXPIRY}; a new claim on the
+     * same marker starts the watch again. Forgetting a claim is always safe, since a claim it has not watched makes a
+     * node wait a whole window from its next meeting, which delays a publish and never deletes anything - so a node
+     * that restarted starts empty, and one reaching {@link #CAPACITY} claims forgets them all. The node's watch is
+     * {@link #NODE}; a claim leaves it once it is taken back or the marker is no longer claimed.
+     */
+    public static final class ClaimWatch {
+
+        /** This node's watch, on its monotonic clock. */
+        public static final ClaimWatch NODE = new ClaimWatch(System::nanoTime);
+
+        /** The most claims watched at once: one per blob a sweep died holding, so far above any real count. */
+        static final int CAPACITY = 10_000;
+
+        private final LongSupplier nanos;
+
+        private final ConcurrentHashMap<String, Met> met = new ConcurrentHashMap<>();
+
+        /** A watch on {@code nanos}, a monotonic clock in nanoseconds. */
+        public ClaimWatch(LongSupplier nanos) {
+            this.nanos = nanos;
+        }
+
+        /** Whether this node has watched {@code claim} stand on the marker {@code key} for the whole window. */
+        boolean outlasted(String key, Instant claim) {
+            long now = nanos.getAsLong();
+            if (met.size() >= CAPACITY) {
+                met.clear();
+            }
+            Met seen = met.compute(key, (_, prior) -> prior != null && prior.claim().equals(claim)
+                    ? prior : new Met(claim, now));
+            return now - seen.since() >= CLAIM_EXPIRY.toNanos();
+        }
+
+        /** Stop watching the marker {@code key}. */
+        void forget(String key) {
+            met.remove(key);
+        }
+
+        private record Met(Instant claim, long since) {
+        }
     }
 
     /** When a marker was claimed, or empty for one that is condemned, spared or unreadable. */

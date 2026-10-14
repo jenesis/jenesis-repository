@@ -192,12 +192,15 @@ class GcClaimRaceTest {
         assertThatThrownBy(() -> collector().collect(dying, Known.known(List.of("publish")), clock.instant()))
                 .isInstanceOf(IOException.class);
         assertThat(store.exists("blobs/" + hash)).as("the blob went before the sweep died").isFalse();
-        // The claim is stamped with the wall clock, which a test cannot advance, so its expiry is written into it.
-        String expired = new String(store.readVersioned(marker).orElseThrow().content(), StandardCharsets.UTF_8)
-                .replaceAll("claimed=.*", "claimed=" + Instant.now().minus(Condemned.CLAIM_EXPIRY).minusSeconds(60));
-        store.write(marker, new ByteArrayInputStream(expired.getBytes(StandardCharsets.UTF_8)));
+        // This node meets the dead sweep's claim and watches it stand for the whole window on its own clock.
+        long[] nanos = {0};
+        Condemned.ClaimWatch watch = new Condemned.ClaimWatch(() -> nanos[0]);
+        assertThatThrownBy(() -> Condemned.spare(store, hash, PATH, watch))
+                .as("a claim met for the first time stands").isInstanceOf(Publication.BlobCollected.class);
+        nanos[0] += Condemned.CLAIM_EXPIRY.toNanos();
 
-        assertThat(publishRelyingOnTheBytes(store, hash)).as("the publish taking the expired claim back is refused")
+        assertThatThrownBy(() -> Condemned.spare(store, hash, PATH, watch))
+                .as("the publish taking the outlasted claim back is refused")
                 .isInstanceOf(Publication.BlobCollected.class);
         assertThat(new String(store.readVersioned(marker).orElseThrow().content(), StandardCharsets.UTF_8))
                 .as("and leaves the marker spared").startsWith("spared=");
@@ -209,6 +212,50 @@ class GcClaimRaceTest {
         Publication again = new Publication(store);
         again.link(PATH, again.storeBlob(new ByteArrayInputStream(BYTES)));
         assertThat(again.locate(PATH)).as("the bytes sent again are stored and served").isPresent();
+    }
+
+    /**
+     * A claim carries the sweeping node's wall clock, and a publishing node whose clock runs ahead of it reads a claim
+     * made a moment ago as long expired. Taking it back on that reading spares a blob the sweep deletes that instant,
+     * and the publish is answered {@code 201} for a pointer at nothing. So a claim is taken back only once this node
+     * has watched it stand for the whole window, however old its stamp reads.
+     */
+    @Test
+    void a_claim_whose_stamp_reads_as_expired_is_not_taken_back_until_this_node_has_watched_it_stand()
+            throws IOException {
+        ArtifactStore store = store();
+        String hash = condemned(store);
+        String marker = "gc/condemned/" + hash;
+        // The sweep claims the blob and dies before deleting it, so the claim and the bytes both stand.
+        FaultInjectingStore dying = FaultInjectingStore.wrap(store)
+                .failNextOn(FaultInjectingStore.Op.DELETE, key -> key.equals("blobs/" + hash));
+        assertThatThrownBy(() -> collector().collect(dying, Known.known(List.of("publish")), clock.instant()))
+                .isInstanceOf(IOException.class);
+        assertThat(store.exists("blobs/" + hash)).as("the sweep died before the delete").isTrue();
+        // Its node's clock lagged this one's by more than the window, so the stamp reads as expired here.
+        String lagging = new String(store.readVersioned(marker).orElseThrow().content(), StandardCharsets.UTF_8)
+                .replaceAll("claimed=.*", "claimed=" + Instant.now().minus(Condemned.CLAIM_EXPIRY).minusSeconds(300));
+        store.write(marker, new ByteArrayInputStream(lagging.getBytes(StandardCharsets.UTF_8)));
+
+        assertThat(publishRelyingOnTheBytes(store, hash))
+                .as("a publish meeting the claim for the first time is refused")
+                .isInstanceOf(Publication.BlobCollected.class);
+        assertThat(new String(store.readVersioned(marker).orElseThrow().content(), StandardCharsets.UTF_8))
+                .as("and leaves the claim standing").contains("claimed=");
+        assertThat(new Publication(store).locate(PATH)).as("and wrote no pointer").isEmpty();
+
+        long[] nanos = {0};
+        Condemned.ClaimWatch watch = new Condemned.ClaimWatch(() -> nanos[0]);
+        assertThatThrownBy(() -> Condemned.spare(store, hash, PATH, watch))
+                .isInstanceOf(Publication.BlobCollected.class);
+        nanos[0] += Condemned.CLAIM_EXPIRY.minusSeconds(1).toNanos();
+        assertThatThrownBy(() -> Condemned.spare(store, hash, PATH, watch))
+                .as("a claim watched for less than the window still stands")
+                .isInstanceOf(Publication.BlobCollected.class);
+        nanos[0] += Duration.ofSeconds(1).toNanos();
+        Condemned.spare(store, hash, PATH, watch);
+        assertThat(new String(store.readVersioned(marker).orElseThrow().content(), StandardCharsets.UTF_8))
+                .as("a claim watched for the whole window is taken back over the bytes it held").startsWith("spared=");
     }
 
     /**
