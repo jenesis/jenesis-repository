@@ -37,6 +37,9 @@ final class CredentialSpace {
      *  that window is the whole of its cost. */
     static final Duration EPOCH_TTL = Duration.ofSeconds(5);
 
+    /** The epoch a node holds once it has changed a credential itself: no token equals it, so the next look clears. */
+    private static final String MOVED = "moved here";
+
     /** Where each principal's tenant index lives: {@code .system/auth/.principals/<id>}, beside the tenants. A scope
      *  name cannot carry a dot, so no tenant can be called this and a tenant enumeration of the space passes it by
      *  name rather than by a list. */
@@ -125,7 +128,10 @@ final class CredentialSpace {
     void mutated() throws IOException {
         if (epoch != null) {
             epoch.bump();
-            seenEpoch = null;   // this node has just changed things; do not clear on its own bump
+            // The next look clears this node's cache once. The epoch it reads then carries this bump and any a peer
+            // made since, and nothing tells the two apart, so taking it as the node's own would keep a peer's
+            // revocation out of this cache until the entry expired.
+            seenEpoch = MOVED;
             seenAt = 0;
         }
     }

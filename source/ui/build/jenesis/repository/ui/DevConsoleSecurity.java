@@ -67,8 +67,8 @@ public class DevConsoleSecurity {
     }
 
     /**
-     * Fails the boot when the dev profile is asked to bind a non-loopback {@code server.address}; empty keeps the
-     * loopback default. A non-lazy singleton, so it runs during context refresh, before the web server binds.
+     * Fails the boot when the dev profile is asked to bind anything but a loopback {@code server.address}. A
+     * non-lazy singleton, so it runs during context refresh, before the web server binds.
      */
     @Bean
     public DevLoopbackGuard devLoopbackGuard(Environment environment) throws UnknownHostException {
@@ -76,10 +76,16 @@ public class DevConsoleSecurity {
         return new DevLoopbackGuard();
     }
 
-    /** Throw if {@code address} names a non-loopback interface. Public for a direct unit test of the check. */
+    /** Throw unless {@code address} names a loopback interface: an unset address binds every interface, so it is
+     *  refused as a routable one is. Public for a direct unit test of the check. */
     public static void verifyLoopback(String address) throws UnknownHostException {
         String trimmed = address == null ? "" : address.trim();
-        if (!trimmed.isEmpty() && !InetAddress.getByName(trimmed).isLoopbackAddress()) {
+        if (trimmed.isEmpty()) {
+            throw new IllegalStateException("The 'dev' profile enables in-memory accounts with published passwords "
+                    + "and must bind a loopback address, but server.address is unset, which binds every interface; "
+                    + "set server.address=127.0.0.1 for local dev, or run the production (non-dev) profile.");
+        }
+        if (!InetAddress.getByName(trimmed).isLoopbackAddress()) {
             throw new IllegalStateException("The 'dev' profile enables in-memory accounts with published passwords "
                     + "and must not bind a non-loopback address (server.address=" + trimmed + "); bind a loopback "
                     + "address (127.0.0.1) for local dev, or run the production (non-dev) profile.");

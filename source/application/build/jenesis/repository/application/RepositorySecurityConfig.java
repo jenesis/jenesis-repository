@@ -4,6 +4,7 @@ import build.jenesis.repository.server.kernel.PinnedSettings;
 import build.jenesis.repository.server.RepositoryProperties;
 import build.jenesis.repository.server.kernel.RequestBodyLimitFilter;
 import build.jenesis.repository.server.kernel.Settings;
+import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.KeyUsageTracker;
 import build.jenesis.repository.server.RateLimitFilter;
 import build.jenesis.repository.server.RepositoryAuthorizationManager;
@@ -36,12 +37,13 @@ public class RepositorySecurityConfig {
     @Bean
     public RateLimitFilter rateLimitFilter(RateLimiter rateLimiter, RepositoryProperties properties,
                                            Settings settings, Environment environment,
-                                           PinnedSettings pinnedSettings) {
+                                           PinnedSettings pinnedSettings, Authorization authorization) {
         // Each tenant's ceiling is read live through the settings chain, so a change applies within the filter's
         // ceiling cache; the boot property is the fallback.
         return new RateLimitFilter(rateLimiter, RateLimitFilter.Ceilings.live(
                 tenant -> pinnedSettings.effectiveProperty(settings, environment, tenant), properties.getRateLimit()),
-                RepositoryAuthorizationManager.parseTrustedProxies(properties.getTrustedProxies()));
+                RepositoryAuthorizationManager.parseTrustedProxies(properties.getTrustedProxies()),
+                RateLimitFilter.KeyCheck.of(authorization));
     }
 
     @Bean

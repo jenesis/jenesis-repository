@@ -38,7 +38,8 @@ import static org.mockito.Mockito.when;
  *       the chain, and is counted against that limit.</li>
  *   <li>The address is the one the trusted proxies resolve, or behind an unlisted proxy on a private address the
  *       last forwarded hop; a public peer's forwarded header is never believed.</li>
- *   <li>A forged tenant past the bucket cap meters at the deployment's ceiling, with no credential limit.</li>
+ *   <li>A key the deployment does not accept meters as keyless, so it cannot spend the bucket of the tenant it
+ *       names; a forged tenant past the bucket cap meters at the deployment's ceiling, with no credential limit.</li>
  *   <li>With nothing set, an address may make 60,000 requests a minute and a credential has no ceiling of its own -
  *       the catalogue declares both, and the filter applies them.</li>
  * </ul>
@@ -103,8 +104,9 @@ public class RateLimitFilterTest {
         return new Ceilings(tenant, account, () -> address);
     }
 
+    /** A filter on a deployment that accepts every presented key. */
     private static RateLimitFilter filter(RateLimiter limiter, Ceilings ceilings, String... trustedProxies) {
-        return new RateLimitFilter(limiter, ceilings, List.of(trustedProxies));
+        return new RateLimitFilter(limiter, ceilings, List.of(trustedProxies), _ -> true);
     }
 
     @Test
@@ -161,6 +163,53 @@ public class RateLimitFilterTest {
                 Map.entry("address:203.0.113.9", 6000.0),
                 Map.entry("account:" + Authorization.hash(key), 60.0),
                 Map.entry("acme", 600.0));
+    }
+
+    @Test
+    void a_key_the_deployment_does_not_accept_meters_as_keyless_and_spends_nothing_of_the_tenant_it_names()
+            throws Exception {
+        Capturing limiter = new Capturing();
+        String fabricated = Authorization.mint("acme");
+        RateLimitFilter filter = new RateLimitFilter(limiter, ceilings(_ -> 600, _ -> 60, 6000), List.of(),
+                _ -> false);
+
+        filter.doFilter(request(ARTIFACT, "203.0.113.9", null, fabricated), new Answer().response,
+                mock(FilterChain.class));
+
+        assertThat(limiter.metered()).as("well-formed is not issued: no tenant bucket and no credential bucket")
+                .containsExactly(Map.entry("address:203.0.113.9", 6000.0), Map.entry("anonymous", 600.0));
+    }
+
+    @Test
+    void fabricated_keys_naming_a_tenant_never_shed_that_tenants_own_clients() throws Exception {
+        String genuine = Authorization.mint("acme");
+        RateLimitFilter filter = new RateLimitFilter(new TokenBucketRateLimiter().withClock(() -> 0L),
+                ceilings(tenant -> "acme".equals(tenant) ? 3 : 1_000_000, _ -> 0, 0), List.of(), genuine::equals);
+        FilterChain chain = mock(FilterChain.class);
+        for (int sent = 0; sent < 10; sent++) {
+            filter.doFilter(request(ARTIFACT, "203.0.113.66", null, Authorization.mint("acme")),
+                    new Answer().response, chain);
+        }
+
+        Answer answer = new Answer();
+        filter.doFilter(request(ARTIFACT, "203.0.113.9", null, genuine), answer.response, chain);
+        assertThat(answer.status).as("the tenant's ceiling of three is still whole for the key it issued")
+                .isEqualTo(-1);
+        assertThat(filter.rejected(Limit.TENANT)).isZero();
+    }
+
+    @Test
+    void a_key_the_check_cannot_answer_for_meters_as_keyless() throws Exception {
+        Capturing limiter = new Capturing();
+        RateLimitFilter filter = new RateLimitFilter(limiter, ceilings(_ -> 600, _ -> 60, 6000), List.of(),
+                _ -> {
+                    throw new IOException("the credential store is unreachable");
+                });
+
+        filter.doFilter(request(ARTIFACT, "203.0.113.9", null, Authorization.mint("acme")), new Answer().response,
+                mock(FilterChain.class));
+
+        assertThat(limiter.metered().keySet()).containsExactly("address:203.0.113.9", "anonymous");
     }
 
     @Test
@@ -285,7 +334,7 @@ public class RateLimitFilterTest {
         // What the filter does with nothing set: one address is admitted for a minute's worth and refused after it,
         // on a clock that does not move, while a second address is untouched.
         RateLimitFilter filter = new RateLimitFilter(new TokenBucketRateLimiter().withClock(() -> 0L),
-                Ceilings.live(_ -> Map.<String, String>of()::get, 0), List.of());
+                Ceilings.live(_ -> Map.<String, String>of()::get, 0), List.of(), _ -> true);
         HttpServletRequest request = request(ARTIFACT, "203.0.113.9", null, Authorization.mint("acme"));
         HttpServletResponse response = mock(HttpServletResponse.class);
         FilterChain chain = mock(FilterChain.class);

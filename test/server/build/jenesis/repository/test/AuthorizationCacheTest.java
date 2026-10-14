@@ -6,6 +6,7 @@ import build.jenesis.repository.scope.Scopes;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.store.ArtifactStore;
 import build.jenesis.repository.store.ArtifactStoreProvider;
+import build.jenesis.repository.store.ForwardingArtifactStore;
 import build.jenesis.repository.store.StoreCache;
 import build.jenesis.repository.store.testkit.FaultInjectingStore;
 import org.junit.jupiter.api.io.TempDir;
@@ -97,6 +98,47 @@ class AuthorizationCacheTest {
                 .as("an operator's clear moves the token every node compares against, so the grants half of it is "
                         + "fleet-wide - without pushing anything to any node")
                 .isNotEqualTo(before);
+    }
+
+    @Test
+    void a_peers_revocation_reaches_a_node_that_had_just_changed_a_credential_itself() throws IOException {
+        // Two nodes over one store, each with a cache of its own as two processes have. Node A serves the key from
+        // its cache, then changes another credential itself; node B revokes the key before A looks at the epoch
+        // again. The epoch A reads then carries both changes, and the revocation must still reach A's cache rather
+        // than wait for the entry to expire.
+        Authorization nodeA = authorization;
+        Authorization nodeB = Authorization.enforcing(new OtherNode(store));
+        String key = Authorization.mint("acme");
+        nodeA.setGrant("acme", Authorization.hash(key), "releases", Authorization.REPOSITORY_READ);
+        assertThat(nodeA.authorize(key, "releases", null, Authorization.REPOSITORY_READ))
+                .isEqualTo(Authorization.Decision.ALLOWED);
+
+        nodeA.setGrant("acme", Authorization.hash(Authorization.mint("acme")), "releases",
+                Authorization.REPOSITORY_READ);
+        nodeB.revoke("acme", Authorization.hash(key));
+
+        assertThat(nodeA.authorize(key, "releases", null, Authorization.REPOSITORY_READ))
+                .as("the key node B revoked stops on node A at its next request")
+                .isEqualTo(Authorization.Decision.FORBIDDEN);
+    }
+
+    /** The same store as another node sees it: a node-local cache is shared by store identity, so another identity
+     *  gives this view caches of its own while its reads and writes reach the same documents. */
+    private static final class OtherNode extends ForwardingArtifactStore {
+
+        private OtherNode(ArtifactStore delegate) {
+            super(delegate);
+        }
+
+        @Override
+        public Object identity() {
+            return List.of("another node", delegate.identity());
+        }
+
+        @Override
+        public ArtifactStore scope(String tenant) {
+            return new OtherNode(delegate.scope(tenant));
+        }
     }
 
     @Test

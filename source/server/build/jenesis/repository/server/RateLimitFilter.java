@@ -37,12 +37,14 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *     request shares one {@code anonymous} bucket at the deployment's value.</li>
  * </ol>
  *
- * <p>The tenant and the credential are read from the presented key ({@link PresentedKey}) when it is
- * {@link Authorization#wellFormed well-formed} - a CRC32 typo guard, not a signature, so both are attacker-controlled
- * here: this pre-auth filter cannot afford the store lookup that would tell a genuine key from a fabricated one. A
- * flood of fabricated tenant names is bounded by {@link BoundedTenantBuckets} (at most {@link #MAX_TRACKED_TENANTS}
- * tenants get their own bucket and ceiling; the rest meter as {@code anonymous}, with no credential limit), and the
- * limiter bounds the address and credential buckets it holds. A ceiling is cached briefly per tenant so the limiter,
+ * <p>The tenant and the credential are read from the presented key ({@link PresentedKey}) only once the deployment
+ * accepts it ({@link KeyCheck}): a well-formed key carries a CRC32 typo guard, not a signature, so a key that names a
+ * tenant but was never issued meters as {@code anonymous}, as a keyless request does, and cannot spend the bucket of
+ * the tenant it names. The check is the cached credential read the authorization manager makes for the same request
+ * next, so it adds no store read a request would not already pay; the address limit runs before it, so a flood from
+ * one machine is shed without one. {@link BoundedTenantBuckets} bounds the tenants that get their own bucket (at most
+ * {@link #MAX_TRACKED_TENANTS}; the rest meter as {@code anonymous}, with no credential limit), and the limiter bounds
+ * the address and credential buckets it holds. A ceiling is cached briefly per tenant so the limiter,
  * not a store read, is on the hot path, and is read live through the settings, so a change applies within its ten
  * seconds. A ceiling of zero is no limit.
  *
@@ -78,6 +80,19 @@ public class RateLimitFilter extends OncePerRequestFilter implements Observabili
         /** The setting that sets this limit's ceiling. */
         public String setting() {
             return setting;
+        }
+    }
+
+    /** Whether the deployment accepts a presented, well-formed key - so that its tenant and credential may be
+     *  metered as its own. A check that cannot answer meters the request as keyless. */
+    @FunctionalInterface
+    public interface KeyCheck {
+
+        boolean accepts(String key) throws IOException;
+
+        /** Accepted when {@code authorization} authenticates the key; every key, on an open deployment. */
+        static KeyCheck of(Authorization authorization) {
+            return key -> authorization.authenticated(key) == Authorization.Decision.ALLOWED;
         }
     }
 
@@ -129,6 +144,7 @@ public class RateLimitFilter extends OncePerRequestFilter implements Observabili
     private final RateLimiter limiter;
     private final Ceilings ceilingsOf;
     private final List<String> trustedProxies;
+    private final KeyCheck keys;
     private final BoundedTenantBuckets buckets = new BoundedTenantBuckets(MAX_TRACKED_TENANTS);
     private final ConcurrentHashMap<String, long[]> ceilings = new ConcurrentHashMap<>();
     private final Map<Limit, AtomicLong> rejected = new EnumMap<>(Limit.class);
@@ -138,11 +154,13 @@ public class RateLimitFilter extends OncePerRequestFilter implements Observabili
      * @param ceilings       each limit's ceiling.
      * @param trustedProxies the reverse proxies whose {@code X-Forwarded-For} is believed, as the deployment lists
      *                       them in {@code trusted-proxies}.
+     * @param keys           whether a presented key is one the deployment accepts.
      */
-    public RateLimitFilter(RateLimiter limiter, Ceilings ceilings, List<String> trustedProxies) {
+    public RateLimitFilter(RateLimiter limiter, Ceilings ceilings, List<String> trustedProxies, KeyCheck keys) {
         this.limiter = limiter;
         this.ceilingsOf = ceilings;
         this.trustedProxies = List.copyOf(trustedProxies);
+        this.keys = Objects.requireNonNull(keys, "keys");
         for (Limit limit : Limit.values()) {
             rejected.put(limit, new AtomicLong());
         }
@@ -199,7 +217,8 @@ public class RateLimitFilter extends OncePerRequestFilter implements Observabili
             return;
         }
         String presented = PresentedKey.fromAnyClient(request);
-        String tenant = Authorization.wellFormed(presented) ? Authorization.tenantOf(presented) : null;
+        String tenant = Authorization.wellFormed(presented) && accepted(presented)
+                ? Authorization.tenantOf(presented) : null;
         String bucket = buckets.bucket(tenant);
         // A tenant past the cap meters in the shared bucket at the deployment's ceiling, with no credential limit of
         // its own - a per-tenant ceiling for it would re-introduce an unbounded cache entry per fabricated name.
@@ -217,6 +236,16 @@ public class RateLimitFilter extends OncePerRequestFilter implements Observabili
             return;
         }
         chain.doFilter(request, response);
+    }
+
+    /** Whether {@code presented} is a key the deployment accepts; one the check cannot answer for is metered as
+     *  keyless, and the request is then refused or served by the chain as it would be anyway. */
+    private boolean accepted(String presented) {
+        try {
+            return keys.accepts(presented);
+        } catch (IOException unanswered) {
+            return false;
+        }
     }
 
     /** The address a request is limited by: see the class's first limit. */
