@@ -5,7 +5,7 @@ jenesis-repository
 ![build](https://github.com/jenesis/jenesis-repository/actions/workflows/build.yml/badge.svg)
 
 > ### [Jenesis](https://jenesis.build) - a modern Java build tool
-> _Java-native config, plugin-free, with `module-info.java` treated as a feature, not an afterthought._
+> _Java-native config, everything the JDK provides built in, with `module-info.java` treated as a feature, not an afterthought._
 
 **An artifact repository.** It serves npm, PyPI, Go, Cargo, NuGet, RubyGems, Debian, RPM, apk, Conda, Conan,
 CocoaPods, Composer, Swift, Helm, Homebrew, Hugging Face, Terraform, winget, Ivy - and Maven, OCI, raw and the
