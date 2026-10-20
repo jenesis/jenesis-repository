@@ -4,9 +4,9 @@ name: Release jenesis-repository
 # the sha input picks the commit (the head this runs on by default) and the tag input
 # picks the tag (the next minor of the latest tag by default). One run releases everything under that one version:
 # staging re-runs the build and its tests with strict dependency pinning, which writes the command-line client's
-# launcher; the image and its Helm chart are pushed to Docker Hub; JReleaser then signs the release's files, cuts the
-# GitHub release + tag and publishes the client to Homebrew and Scoop, and the packslip publishes it to mise. No module
-# is deployed to Maven Central.
+# launcher; the image and its Helm chart are pushed to Docker Hub; the released commit is tagged; JReleaser then signs
+# the release's files, cuts the GitHub release on that tag and publishes the client to Homebrew and Scoop, and the
+# packslip publishes it to mise. No module is deployed to Maven Central.
 #
 # ONE-TIME SETUP, under Settings -> Secrets and variables -> Actions:
 #   Secrets:    GPG_PUBLIC_KEY, GPG_SECRET_KEY, GPG_PASSPHRASE   the key the release's files are signed with
@@ -82,10 +82,11 @@ jobs:
               VERSION="${MAJOR}.$((MINOR + 1)).0"
             fi
           fi
-          # Checked before anything is built or pushed, so a run under a tag that exists fails here rather than after
-          # the image went out under it.
-          if git rev-parse -q --verify "refs/tags/v$VERSION" > /dev/null; then
-            echo "Tag v$VERSION exists already: name another with the tag input." >&2
+          # Checked before anything is built or pushed, so a run under a tag that names another commit fails here
+          # rather than after the image went out under it.
+          TAGGED="$(git rev-parse -q --verify "refs/tags/v$VERSION^{commit}" || true)"
+          if [ -n "$TAGGED" ] && [ "$TAGGED" != "$(git rev-parse HEAD)" ]; then
+            echo "Tag v$VERSION names $TAGGED already: name another with the tag input." >&2
             exit 1
           fi
           echo "Releasing $VERSION as tag v$VERSION from $(git rev-parse HEAD)"
@@ -157,6 +158,15 @@ jobs:
                -Djenesis.test.skip=true \
                -Djenesis.make.profiles=hub \
                build/jenesis/Make.java export/custom/images
+
+      - name: Tag the released commit
+        env:
+          TAG: v${{ steps.version.outputs.version }}
+        run: |
+          if [ "$(git rev-parse -q --verify "refs/tags/$TAG^{commit}")" != "$(git rev-parse HEAD)" ]; then
+            git tag "$TAG"
+            git push origin "refs/tags/$TAG"
+          fi
 
       - name: JReleaser deploy
         uses: jreleaser/release-action@90ac653bb9c79d11179e65d81499f3f34527dcd5 # 2.5.0
