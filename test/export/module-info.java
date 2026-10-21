@@ -6,7 +6,6 @@
  * In-process throughout - the JDK's own HTTP server on a loopback port, no container and no registry.
  *
  * @jenesis.release 25
- * @jenesis.test build.jenesis.repository.export
  * @jenesis.test build.jenesis.repository.export.web
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties

@@ -4,7 +4,6 @@
  * container.
  *
  * @jenesis.release 25
- * @jenesis.test build.jenesis.repository.compliance.maven
  * @jenesis.test build.jenesis.repository.compliance.oci
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties

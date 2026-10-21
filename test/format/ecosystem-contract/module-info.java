@@ -33,20 +33,6 @@
  * sibling runs 6.0.3 / 3.27.7.
  *
  * @jenesis.release 25
- * @jenesis.test build.jenesis.repository.blobs
- * @jenesis.test build.jenesis.repository.format.npm
- * @jenesis.test build.jenesis.repository.format.pypi
- * @jenesis.test build.jenesis.repository.format.go
- * @jenesis.test build.jenesis.repository.format.nuget
- * @jenesis.test build.jenesis.repository.format.gems
- * @jenesis.test build.jenesis.repository.format.debian
- * @jenesis.test build.jenesis.repository.format.rpm
- * @jenesis.test build.jenesis.repository.format.cargo
- * @jenesis.test build.jenesis.repository.format.cocoapods
- * @jenesis.test build.jenesis.repository.format.composer
- * @jenesis.test build.jenesis.repository.format.conan
- * @jenesis.test build.jenesis.repository.format.conda
- * @jenesis.test build.jenesis.repository.format.huggingface
  * @jenesis.test build.jenesis.repository.format.oci.inventory
  * @jenesis.alias aircompressor io.airlift/aircompressor-v3
  * @jenesis.bom pin-repository.properties

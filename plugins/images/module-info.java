@@ -19,18 +19,16 @@
  * an image from another. Publishing both from one command, on one credential, off one set of declared inputs, is
  * what makes that hard rather than merely unlikely.
  *
- * <p><strong>How a repository uses it.</strong> As an exporter of the whole project: a line
- * {@code images+export=<path to this module>} in its {@code jenesis.plugins.properties}, and its configuration as the
- * plugin's values in {@code jenesis.plugins.arguments.properties}, the deploy tree bound there as an input. The tool
- * compiles it from source and hands it everything {@code stage} wrote, so {@code java build/jenesis/Make.java
- * export/custom/images} builds the images, and a profile naming {@code images.push} publishes them.
+ * <p><strong>How a repository uses it.</strong> As a releaser of the whole project: a line
+ * {@code images+release=<path to this module>} in its {@code jenesis.plugins.properties}, and its configuration in
+ * {@code build.jenesis/plugin-images.properties}, the deploy tree bound there as an input. The tool compiles it from
+ * source and hands it everything {@code stage} wrote, so {@code java build/jenesis/Make.java
+ * release/custom/plugin.images} builds the images, and a profile naming {@code push}, released with
+ * {@code -Djenesis.release.publish=true}, publishes them.
  *
  * @jenesis.release 25
- * @jenesis.bom pin-repository.properties
- * @jenesis.signature signature-repository.properties
- * @jenesis.pin tool/module/build.jenesis 0.15.5 SHA-256/d173c2873e61c7c5d506bd11fe6a872d6fcc6dd4dde5bf0aba51f7e295cbecce
  */
 module build.jenesis.images {
     requires build.jenesis;
-    provides build.jenesis.BuildExecutorModule with build.jenesis.images.Images;
+    provides build.jenesis.BuildModuleFactory with build.jenesis.images.ImagesFactory;
 }

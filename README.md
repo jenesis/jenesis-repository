@@ -77,10 +77,11 @@ is not a deployment".
 The image is built by the build rather than by a hand-written `Dockerfile`: `source/bundle` requires every
 implementation, its `bundle=true` packaging emits the resolved runtime closure, and its `docker=` packaging
 line makes `stage` write a ready-to-build context. `java -Djenesis.test.skip=true build/jenesis/Make.java
-export/custom/images` stages it, builds `jenesis-repository:latest` from it and packages the Helm chart in
-`deploy/helm/jenesis`; adding `-Djenesis.make.profiles=hub` publishes both to Docker Hub, which is what the `Publish
-the image and chart` workflow runs. The goal is `plugins/images`, a build module named in `jenesis.plugins.properties`
-as an exporter of the whole project and configured in `jenesis.plugins.arguments.properties` - an example of
+release/custom/plugin.images` stages it, builds `jenesis-repository:latest` from it and packages the Helm chart in
+`deploy/helm/jenesis`; adding `-Djenesis.make.profiles=hub -Djenesis.release.publish=true` publishes both to Docker
+Hub, which is what the `Publish the image and chart` workflow runs. The goal is `plugins/images`, a build module named
+in `jenesis.plugins.properties` as a releaser of the whole project and configured in
+`build.jenesis/plugin-images.properties` - an example of
 extending the Jenesis build with a module of one's own, and the same module any build of this product publishes its
 images with.
 There was a `Dockerfile` here that re-ran the whole build inside Docker - a second mechanism for a job the
@@ -98,8 +99,9 @@ it. `deploy/README.md` says what each one takes.
 
 Every dependency's version and checksum is an entry in `build.jenesis/pin-repository.properties`, which every
 module imports with `@jenesis.bom`; no descriptor pins anything of its own. A refresh rewrites the file through the
-build tool - `java -Xmx4g -Djenesis.dependency.pin=versions -Djenesis.test.skip=true
--Djenesis.pin.file=build.jenesis/pin-repository.properties build/jenesis/Make.java pin` - and the writer keeps no
+build tool - `java -Xmx4g -Djenesis.dependency.pin=versions -Djenesis.test.skip=true -Djenesis.plugin.images=false
+-Djenesis.pin.file=build.jenesis/pin-repository.properties build/jenesis/Make.java pin`, which leaves the dry release
+`pin` runs without building the image - and the writer keeps no
 comments, so the versions deliberately held below what a `-Djenesis.resolver.maven=stable` refresh proposes are
 listed here with the reason. A refresh that moves one of these is reverted by hand before it is committed:
 

@@ -4,7 +4,6 @@
  * populates the ledger and stamps its freshness while an unscored coordinate is left unrecorded.
  *
  * @jenesis.release 25
- * @jenesis.test build.jenesis.repository.health
  * @jenesis.test build.jenesis.repository.health.store
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties

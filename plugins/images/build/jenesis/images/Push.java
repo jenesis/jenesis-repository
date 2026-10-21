@@ -19,10 +19,11 @@ import build.jenesis.BuildStepResult;
  * <p>{@link #shouldRun} is what carries that: it ignores whether anything changed, because a push is not derived
  * from its inputs - it is derived from the state of somebody else's registry, which this build cannot see. So
  * naming a target runs the push, every time, however cold or warm the tree is. It runs <em>only</em> when a target
- * is named - {@code images.push=hub|aws|azure|gcp|scaleway|all}, or several comma-separated, which a profile's
- * {@code jenesis.plugins.arguments-<profile>.properties} brings - so building the images does not publish them. The
- * version it publishes as is the one thing set per invocation, and it comes from {@code PUSH_VERSION} with the
- * registry credentials.
+ * is named - {@code push=hub|aws|azure|gcp|scaleway|all}, or several comma-separated, which a profile's
+ * {@code build.jenesis/<profile>/plugin-images.properties} brings - so building the images does not publish
+ * them. A named target is pushed to only by a release run with {@code -Djenesis.release.publish=true}; every other
+ * release is dry, and names what it would push. The version it publishes as is the one thing set per invocation, and
+ * it comes from {@code PUSH_VERSION} with the registry credentials.
  *
  * <p>{@link #shouldCacheRemotely} declines the <em>shared</em> build cache while leaving the local one: a push's
  * effect is in a registry, and a shared cache answering this step would report a push that never happened.
@@ -34,7 +35,8 @@ import build.jenesis.BuildStepResult;
  * image published with it ({@link #released}). Two images never share a repository with the image as the tag, since
  * a registry shows every tag of a repository to anyone who can see it.
  */
-record Push(long version, Configuration configuration, List<String> targets, Signing signing) implements BuildStep {
+record Push(long version, Configuration configuration, List<String> targets, Signing signing, boolean publish)
+        implements BuildStep {
 
     /** A push's whole value is its effect on a registry, and that effect does not travel in a step output - so a
      *  shared cache answering this step would report a push that never happened. The local cache is left alone:
@@ -67,7 +69,7 @@ record Push(long version, Configuration configuration, List<String> targets, Sig
         List<String> built = manifest(arguments, Images.MANIFEST);
         if (built.isEmpty()) {
             throw new IllegalStateException("The image manifest is empty, so there is nothing to publish. Run the "
-                    + "images goal first: it writes " + Images.MANIFEST + " naming what it built.");
+                    + "release/custom/plugin.images first: it writes " + Images.MANIFEST + " naming what it built.");
         }
         List<String> images = new ArrayList<>();
         for (String image : built) {
@@ -77,10 +79,15 @@ record Push(long version, Configuration configuration, List<String> targets, Sig
                 System.out.println("[images] not pushing " + image + ": it is built, and never published");
             }
         }
+        List<Path> charts = packaged(arguments);
+        if (!publish) {
+            System.out.println("[images] a dry release would publish " + images + " and " + charts.size()
+                    + " chart(s) to " + targets + " - -Djenesis.release.publish=true publishes them");
+            return CompletableFuture.completedStage(new BuildStepResult(true));
+        }
         if (!Cli.available("docker")) {
             throw new IllegalStateException("docker is not on the PATH, so no image can be tagged or pushed.");
         }
-        List<Path> charts = packaged(arguments);
         if (!charts.isEmpty() && !Cli.available("helm")) {
             throw new IllegalStateException("helm is not on the PATH, but " + charts.size() + " chart(s) were "
                     + "packaged. Publishing half of a release - the image without the chart that names it - is "
@@ -97,7 +104,7 @@ record Push(long version, Configuration configuration, List<String> targets, Sig
                 if (sbom == null || !Files.isRegularFile(sbom)) {
                     throw new IllegalStateException("No SBOM was kept for " + image + ", so this signing publish "
                             + "could not attest what the image contains. Its module's CycloneDX SBOM is staged by "
-                            + "`stage`; run the images goal after it.");
+                            + "`stage`; release after it.");
                 }
                 sboms.put(image, sbom);
             }
@@ -160,8 +167,8 @@ record Push(long version, Configuration configuration, List<String> targets, Sig
             case "azure" -> azure();
             case "gcp" -> gcp();
             case "scaleway" -> scaleway();
-            default -> throw new IllegalStateException("Unknown publish target '" + target + "'. Set images.push"
-                    + " to one or more of " + TARGETS + ", comma-separated, or to all.");
+            default -> throw new IllegalStateException("Unknown publish target '" + target + "'. Set push in"
+                    + " plugin-images.properties to one or more of " + TARGETS + ", comma-separated, or to all.");
         };
         System.out.println("[images] publishing to " + target + " at " + registry + " (version " + release + ")");
         for (String image : images) {
@@ -293,7 +300,7 @@ record Push(long version, Configuration configuration, List<String> targets, Sig
         try {
             Cli.capture(List.of("docker", "image", "inspect", "--format", "{{.Id}}", image));
         } catch (IllegalStateException | IOException absent) {
-            throw new IllegalStateException("The local image '" + image + "' does not exist. Run the images goal "
+            throw new IllegalStateException("The local image '" + image + "' does not exist. Run release/custom/plugin.images "
                     + "first - it builds what its manifest then names.", absent);
         }
     }
@@ -429,7 +436,7 @@ record Push(long version, Configuration configuration, List<String> targets, Sig
                 : Stream.of(named.split(",")).map(String::strip).filter(target -> !target.isEmpty()).toList();
         for (String target : targets) {
             if (!TARGETS.contains(target)) {
-                throw new IllegalArgumentException("images.push names '" + target + "' - one of " + TARGETS
+                throw new IllegalArgumentException("push names '" + target + "' - one of " + TARGETS
                         + " or all, several comma-separated");
             }
         }

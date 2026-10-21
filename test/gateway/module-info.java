@@ -7,7 +7,6 @@
  * no live registry. The legs that need a real Nexus or Artifactory are asserted where the containers are.
  *
  * @jenesis.release 25
- * @jenesis.test build.jenesis.repository.gateway
  * @jenesis.test build.jenesis.repository.definitions
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties

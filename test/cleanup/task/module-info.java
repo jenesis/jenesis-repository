@@ -6,7 +6,6 @@
  * asserted against the contract alone, where it needs no engine at all.
  *
  * @jenesis.release 25
- * @jenesis.test build.jenesis.repository.cleanup
  * @jenesis.test build.jenesis.repository.cleanup.task
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties

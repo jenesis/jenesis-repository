@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      # The job's OIDC identity is what signs the image and chart keylessly (images.sign=keyless in the hub profile).
+      # The job's OIDC identity is what signs the image and chart keylessly (sign=keyless in build.jenesis/hub/plugin-images.properties).
       id-token: write
       # The mise packslip attests the client archive's build provenance before it is written.
       attestations: write
@@ -138,8 +138,8 @@ jobs:
           cp -r sdk/tests "${UNPACKED}/${BASE}/tests"
           "${UNPACKED}/${BASE}/tests/test.sh"
 
-      # The images goal builds the image from the context staging wrote, packages the chart and, because the hub
-      # profile names a target, pushes both, tagged with the release's version. It runs under the staging step's own
+      # The images releaser builds the image from the context staging wrote, packages the chart and, because the hub
+      # profile names a target and the release publishes, pushes both, tagged with the release's version. It runs under the staging step's own
       # settings, so it reuses what that step built and tested rather than building again. The push comes before the
       # GitHub release because it can be repeated: a run that fails after it is dispatched again under the same tag,
       # which pushes the same version once more. An unset credential makes the push refuse by name.
@@ -157,7 +157,8 @@ jobs:
                -Djenesis.dependency.pin=strict \
                -Djenesis.test.skip=true \
                -Djenesis.make.profiles=hub \
-               build/jenesis/Make.java export/custom/images
+               -Djenesis.release.publish=true \
+               build/jenesis/Make.java release/custom/plugin.images
 
       - name: Tag the released commit
         env:

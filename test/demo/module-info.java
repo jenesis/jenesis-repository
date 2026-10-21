@@ -9,7 +9,6 @@
  * all; and the OSV module so the feed the demo switches on is a setting the catalogue holds.
  *
  * @jenesis.release 25
- * @jenesis.test build.jenesis.repository.demo
  * @jenesis.test build.jenesis.repository.demo.web
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties
