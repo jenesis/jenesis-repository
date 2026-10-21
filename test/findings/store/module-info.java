@@ -5,7 +5,6 @@
  * by coordinate/kind/source/category/severity - plus ServiceLoader discovery of the provider.
  *
  * @jenesis.release 25
- * @jenesis.test build.jenesis.repository.findings
  * @jenesis.test build.jenesis.repository.findings.store
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties

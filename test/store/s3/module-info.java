@@ -7,10 +7,12 @@
  * round-trips, content-addressed writes, enumeration, scoping, ordered paging, compare-and-set and per-entry batch
  * outcomes - lives in the shared {@code StoreContract} kit and runs against this backend from
  * {@code test/store/contract}. The suite skips itself (JUnit assumptions) when no Docker daemon is reachable, so a
- * checkout without Docker still builds green.
+ * checkout without Docker still builds green. The tests require the SDK themselves, so they exclude the two Netty
+ * codecs its module excludes, for the reason that module gives.
  *
  * @jenesis.release 25
  * @jenesis.test build.jenesis.repository.store.s3
+ * @jenesis.exclude software.amazon.awssdk.services.s3 io.netty/netty-codec-marshalling io.netty/netty-codec-protobuf
  * @jenesis.alias wiremock.core org.wiremock/wiremock-core
  * @jenesis.alias wiremock.jetty org.wiremock/wiremock-jetty
  * @jenesis.alias wiremock.httpclient org.wiremock/wiremock-httpclient-apache5

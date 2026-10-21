@@ -3,7 +3,7 @@ package build.jenesis.images;
 import module java.base;
 
 /**
- * How a publish signs what it pushed - {@code images.sign} in the plugin's values, which a profile brings beside the
+ * How a publish signs what it pushed - {@code sign} in the plugin's values, which a profile brings beside the
  * target it publishes to, and absent everywhere else so a push to a test registry signs nothing.
  *
  * <ul>
@@ -37,7 +37,7 @@ record Signing(String mode) implements Serializable {
         }
         String mode = named.strip();
         if (!mode.equals(KEYLESS) && !mode.equals(KEY)) {
-            throw new IllegalArgumentException("images.sign names '" + named + "' - keyless or key, or leave it out "
+            throw new IllegalArgumentException("sign names '" + named + "' - keyless or key, or leave it out "
                     + "to sign nothing");
         }
         return new Signing(mode);
@@ -53,16 +53,16 @@ record Signing(String mode) implements Serializable {
             return;
         }
         if (!Cli.available("cosign")) {
-            throw new IllegalStateException("images.sign=" + mode + " but cosign is not on the PATH, so nothing this "
-                    + "publish pushed could be signed. Install cosign, or leave images.sign out to publish unsigned.");
+            throw new IllegalStateException("sign=" + mode + " but cosign is not on the PATH, so nothing this "
+                    + "publish pushed could be signed. Install cosign, or leave sign out to publish unsigned.");
         }
         if (mode.equals(KEY) && blank(System.getenv("COSIGN_KEY"))) {
-            throw new IllegalStateException("images.sign=key but COSIGN_KEY is not set: set it to the signing key (and "
+            throw new IllegalStateException("sign=key but COSIGN_KEY is not set: set it to the signing key (and "
                     + "COSIGN_PASSWORD to its password).");
         }
         if (mode.equals(KEYLESS) && blank(System.getenv("ACTIONS_ID_TOKEN_REQUEST_URL"))
                 && blank(System.getenv("SIGSTORE_ID_TOKEN"))) {
-            throw new IllegalStateException("images.sign=keyless but this process holds no identity to sign as: run in "
+            throw new IllegalStateException("sign=keyless but this process holds no identity to sign as: run in "
                     + "a GitHub Actions job granted id-token: write, or hand one in as SIGSTORE_ID_TOKEN.");
         }
     }

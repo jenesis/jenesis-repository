@@ -10,11 +10,6 @@
  * ecosystem the maintenance suite records its releases under.
  *
  * @jenesis.release 25
- * @jenesis.test build.jenesis.repository.walk.web
- * @jenesis.test build.jenesis.repository.deploy.web
- * @jenesis.test build.jenesis.repository.config.web
- * @jenesis.test build.jenesis.repository.cleanup.web
- * @jenesis.test build.jenesis.repository.management.web
  * @jenesis.test build.jenesis.repository.search.web
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties

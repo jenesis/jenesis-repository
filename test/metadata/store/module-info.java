@@ -6,7 +6,6 @@
  * downgrade-rewritten, and the provider is ServiceLoader-discovered.
  *
  * @jenesis.release 25
- * @jenesis.test build.jenesis.repository.metadata
  * @jenesis.test build.jenesis.repository.metadata.store
  * @jenesis.bom pin-repository.properties
  * @jenesis.signature signature-repository.properties

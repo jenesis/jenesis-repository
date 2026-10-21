@@ -11,9 +11,9 @@ import build.jenesis.BuildStepResult;
 
 /**
  * Builds the images a build's {@link Configuration} names from the Docker contexts its {@code stage} goal wrote,
- * packages its Helm charts, and publishes both when a registry is named.
+ * packages its Helm charts, and publishes both when a registry is named and the release publishes.
  *
- * <p>This is an exporter of the whole project - {@code images+export=<path to this module>} in
+ * <p>This is a releaser of the whole project - {@code images+release=<path to this module>} in
  * {@code jenesis.plugins.properties} - so it is handed everything {@code stage} wrote, and the contexts it builds from
  * are among that: the images rebuild when and only when what goes into them changed. An image's contents are its module's
  * {@code requires} closure, which the build tool writes into the context's {@code Dockerfile}; nothing here decides
@@ -24,11 +24,12 @@ import build.jenesis.BuildStepResult;
  * the charts, which ride the same goal and the same publish targets: a deployment needs the chart and the image it
  * names, and publishing them from one command with one credential is what keeps them from disagreeing.
  *
- * <p>The configuration is the plugin's values, {@code images.<key>} in {@code jenesis.plugins.arguments.properties},
- * which is why this provider takes a {@code SequencedMap}; its no-argument constructor, which a service provider
- * must have, configures nothing and so builds nothing. The deploy trees a chart is packaged from are bound there
- * too, as {@code images.@<input>/sources=<folder>}, and {@code images.push} names where to publish - a value a
- * profile brings, since the tool hands a plugin values from files alone.
+ * <p>The configuration is the plugin's values, the lines of {@code build.jenesis/plugin-images.properties}, whose
+ * presence is what runs the releaser. The deploy trees a chart is packaged from are bound there too, as
+ * {@code @<input>/sources=<folder>}, and {@code push} names where to publish - a value a profile's
+ * {@code build.jenesis/<profile>/plugin-images.properties} brings, since building the images must not publish them.
+ * A named target is pushed to only when the release publishes ({@code -Djenesis.release.publish=true}); a dry release
+ * builds the images and charts and names what it would push.
  */
 public class Images implements BuildExecutorModule {
 
@@ -43,7 +44,7 @@ public class Images implements BuildExecutorModule {
     private static final long CHARTING = 3L;
 
     /** Bumped when the push step's behaviour changes, for the same reason as {@link #VERSION}. */
-    private static final long PUSHING = 9L;
+    private static final long PUSHING = 10L;
 
     /** The value naming where to publish; kept apart from the {@link Configuration} the other steps are keyed by, so
      *  naming a target publishes what was built instead of building it again. */
@@ -62,15 +63,14 @@ public class Images implements BuildExecutorModule {
 
     private final Signing signing;
 
-    public Images() {
-        this(new LinkedHashMap<>());
-    }
+    private final boolean publish;
 
-    public Images(SequencedMap<String, String> properties) {
+    public Images(SequencedMap<String, String> properties, boolean publish) {
         SequencedMap<String, String> described = new LinkedHashMap<>(properties);
         targets = Push.targets(described.remove(PUSH));
         signing = Signing.of(described.remove(SIGN));
         configuration = Configuration.of(described);
+        this.publish = publish;
     }
 
     @Override
@@ -81,7 +81,7 @@ public class Images implements BuildExecutorModule {
         executor.addStep("chart", new Charts(CHARTING, configuration), inherited.sequencedKeySet());
         // The push reads what the two builds just wrote, and runs only when a target is named - so building does
         // not publish. See Push for why it is a step at all and what makes it really happen.
-        executor.addStep("push", new Push(PUSHING, configuration, targets, signing), "docker", "chart");
+        executor.addStep("push", new Push(PUSHING, configuration, targets, signing, publish), "docker", "chart");
     }
 
     private record Build(long version, Configuration configuration) implements BuildStep {
