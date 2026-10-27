@@ -100,7 +100,8 @@ it. `deploy/README.md` says what each one takes.
 Every dependency's version and checksum is an entry in `build.jenesis/pin-repository.properties`, which every
 module imports with `@jenesis.bom`; no descriptor pins anything of its own. A refresh rewrites the file through the
 build tool - `java -Xmx4g -Djenesis.dependency.pin=versions -Djenesis.test.skip=true -Djenesis.plugin.images=false
--Djenesis.pin.file=build.jenesis/pin-repository.properties build/jenesis/Make.java pin`, which leaves the dry release
+-Djenesis.pin.file=build.jenesis/pin-repository.properties -Djenesis.pin.groups=main,launcher build/jenesis/Make.java pin`,
+which writes the client's `launcher` group into the file beside the main group and leaves the dry release
 `pin` runs without building the image - and the writer keeps no
 comments, so the versions deliberately held below what a `-Djenesis.resolver.maven=stable` refresh proposes are
 listed here with the reason. A refresh that moves one of these is reverted by hand before it is committed:
@@ -116,8 +117,8 @@ listed here with the reason. A refresh that moves one of these is reverted by ha
   with `maven-artifact`, is excluded: the closure resolver reads and writes no `maven-metadata.xml`.
 - **The Jenesis Launcher 0.6.3**, `build.jenesis.launcher`, which the `jenrepo` client's launcher jar runs on. The
   launcher module asks for the newest release, so the pin is what holds it, imported into the client's `launcher`
-  group. A refresh writes the main group alone and so drops its two lines, the jar's and its POM's, which are put
-  back by hand, at a release no older than the one the build tool's executable jars require.
+  group, which the refresh names in `jenesis.pin.groups`. It stays at a release no older than the one the build tool's
+  executable jars require.
 - **WireMock 4.0.0-beta.38**, the whole `org.wiremock` family. The 4.x beta is used by decision; the stable line
   is 3.x, so a stable refresh would move back to it.
 
