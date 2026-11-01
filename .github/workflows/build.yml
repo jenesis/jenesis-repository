@@ -5,11 +5,11 @@ on:
     branches: [main]
   pull_request:
 
-# Route Maven Central through the repository variable MAVEN_REPOSITORY_URI when set
-# (a mirror, to avoid Central rate-limiting the runners), falling back to Central
-# itself so an unset variable never becomes an empty URI.
+# Fetch Maven Central from its Google Cloud mirror, which spares the runners Central's rate limit,
+# and from Central itself for what the mirror has not synced yet: a remote is asked only where
+# the one before it answers 404.
 env:
-  MAVEN_REPOSITORY_URI: ${{ vars.MAVEN_REPOSITORY_URI || 'https://repo1.maven.org/maven2/' }}
+  MAVEN_REPOSITORY_URI: https://maven-central.storage-download.googleapis.com/maven2/,https://repo1.maven.org/maven2/
 
 # One build runs every module and every suite, in one `java build/jenesis/Make.java` invocation. Every suite here runs
 # in process against the code it tests - no container, browser, booted server or live network - so the runner needs
