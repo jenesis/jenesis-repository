@@ -9,6 +9,7 @@ import build.jenesis.repository.server.spi.AccessDenial;
 import build.jenesis.repository.server.spi.Authorization;
 import build.jenesis.repository.server.spi.KeyUsageTracker;
 import build.jenesis.repository.walk.Traversal;
+import build.jenesis.repository.store.Checksums;
 import build.jenesis.repository.store.Durations;
 import build.jenesis.repository.store.StoreCache;
 import io.micrometer.core.instrument.Counter;
@@ -359,6 +360,143 @@ public class Cache {
         if (allowed.project().size() > 0) {
             scheduleEviction(allowed.metric(), allowed.storage(), allowed.project());
         }
+    }
+
+    /** The digest algorithms a build may name its files by, each with the length of its hexadecimal form. */
+    private static final Map<String, Integer> DIGESTS = Map.of("SHA-256", 64, "SHA-384", 96, "SHA-512", 128,
+            "SHA-1", 40, "MD5", 32);
+
+    /** What became of a file a build uploaded under the digest of its bytes. */
+    public enum Admission {
+        /** The file is what its name says and is now stored. */
+        STORED,
+        /** The cache held the file already; the upload was read and dropped. */
+        PRESENT,
+        /** The bytes do not digest to the name they were uploaded under; nothing was stored. */
+        MISMATCHED,
+        /** The file exceeds the entry cap; nothing was stored. */
+        TOO_LARGE
+    }
+
+    /** Whether {@code algorithm} is a digest this cache names content by. */
+    public static boolean isDigest(String algorithm) {
+        return algorithm != null && DIGESTS.containsKey(algorithm.toUpperCase(Locale.ROOT));
+    }
+
+    /** Whether {@code digest} is the lower-case hexadecimal form of a digest of {@code algorithm}: the name a file of
+     *  a build is stored and asked for under. */
+    public static boolean isContent(String algorithm, String digest) {
+        Integer length = algorithm == null ? null : DIGESTS.get(algorithm.toUpperCase(Locale.ROOT));
+        return length != null && digest != null && digest.length() == length && Names.isHex(digest)
+                && digest.equals(digest.toLowerCase(Locale.ROOT));
+    }
+
+    /**
+     * The entry that holds the content named {@code digest} in the project {@code allowed} was resolved for. Content
+     * is an entry of its project like any other - counted toward the project's cap, aged and reclaimed with it - so a
+     * file one project uploaded is neither served to nor confirmed for another: a build that knows a digest learns
+     * nothing about what a project it cannot read has built. The address digests the algorithm with the name, so the
+     * content of two algorithms, and content and a manifest, never share an entry.
+     */
+    public Allowed content(Allowed allowed, String algorithm, String digest) {
+        String address = Checksums.sha256("content/" + algorithm.toUpperCase(Locale.ROOT) + "/" + digest);
+        return new Allowed(allowed.metric(), allowed.storage(), allowed.project(),
+                new CacheStorage.Entry(allowed.entry().project(), address.substring(0, 4), address));
+    }
+
+    /**
+     * The files a manifest names that its project does not hold, in the manifest's order and each once. A file the
+     * project holds is touched, as the manifest being stored or read is what keeps it in use. A manifest is lines of
+     * {@code <digest> <size> <path>}, with {@code -} in place of the digest for an empty folder.
+     *
+     * @throws IllegalArgumentException when a line is no such line, naming it
+     */
+    public List<String> lacking(Allowed allowed, String algorithm, byte[] manifest) {
+        Set<String> lacking = new LinkedHashSet<>();
+        for (String line : new String(manifest, StandardCharsets.UTF_8).split("\n")) {
+            if (line.isEmpty()) {
+                continue;
+            }
+            String[] entry = line.split(" ", 3);
+            if (entry.length < 3 || !entry[0].equals("-") && !isContent(algorithm, entry[0])) {
+                throw new IllegalArgumentException("not a manifest line of <digest> <size> <path>: " + line);
+            }
+            if (entry[0].equals("-")) {
+                continue;
+            }
+            Allowed content = content(allowed, algorithm, entry[0]);
+            if (exists(content)) {
+                touch(content);
+            } else {
+                lacking.add(entry[0]);
+            }
+        }
+        return List.copyOf(lacking);
+    }
+
+    /**
+     * Take a file a build uploaded under {@code digest} and store it only if its bytes digest to that name, so that no
+     * build can plant a file another build of the project would restore under a name it trusts. The bytes are digested
+     * as the store reads them and are never held: a file that is not what its name says, or that exceeds the entry cap,
+     * fails the store's read at its last byte, and a store writes an entry whole or not at all. {@code in} is read to
+     * its end but not closed, as it is one entry of a batch.
+     */
+    public Admission admit(Allowed allowed, String algorithm, String digest, InputStream in) throws IOException {
+        Allowed content = content(allowed, algorithm, digest);
+        if (exists(content)) {
+            in.transferTo(OutputStream.nullOutputStream());
+            touch(content);
+            return Admission.PRESENT;
+        }
+        MessageDigest message;
+        try {
+            message = MessageDigest.getInstance(algorithm.toUpperCase(Locale.ROOT));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalArgumentException("not a digest this cache names content by: " + algorithm, e);
+        }
+        Admission[] refused = new Admission[1];
+        try {
+            store(content, new FilterInputStream(in) {
+                private long size;
+
+                @Override
+                public int read() throws IOException {
+                    byte[] one = new byte[1];
+                    return read(one, 0, 1) < 0 ? -1 : one[0] & 0xFF;
+                }
+
+                @Override
+                public int read(byte[] buffer, int offset, int length) throws IOException {
+                    int read = super.read(buffer, offset, length);
+                    if (read < 0) {
+                        if (refused[0] == null && !HexFormat.of().formatHex(message.digest()).equals(digest)) {
+                            refused[0] = Admission.MISMATCHED;
+                        }
+                    } else {
+                        size += read;
+                        message.update(buffer, offset, read);
+                        if (tooLarge(size)) {
+                            refused[0] = Admission.TOO_LARGE;
+                        }
+                    }
+                    if (refused[0] != null) {
+                        throw new IOException("content " + digest + " is refused: " + refused[0]);
+                    }
+                    return read;
+                }
+
+                @Override
+                public void close() {
+                }
+            });
+        } catch (IOException e) {
+            if (refused[0] == null) {
+                throw e;
+            }
+            in.transferTo(OutputStream.nullOutputStream());
+            return refused[0];
+        }
+        return Admission.STORED;
     }
 
     public boolean tooLarge(long contentLength) {

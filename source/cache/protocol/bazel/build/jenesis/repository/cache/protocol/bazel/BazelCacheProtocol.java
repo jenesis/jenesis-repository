@@ -48,6 +48,11 @@ public final class BazelCacheProtocol implements CacheProtocol {
     }
 
     @Override
+    public Shape shape(String path) {
+        return Shape.ENTRY;
+    }
+
+    @Override
     public Optional<Address> address(Request request) {
         String namespace = namespace(request.path());
         if (namespace == null) {

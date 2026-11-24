@@ -28,12 +28,28 @@ How it works
 ------------
 
 The client computes two hashes per step - `step` (the step's identity) and `inputs`
-(a fold of every input file's content hash) - and addresses an entry at
-`/<step>/<inputs>`. The body is an opaque zip the client packs and unpacks, so the
-server never inspects content; it is a pure key/value blob store.
+(a fold of every input file's content hash) - and keeps a step's result as two
+things: a **manifest** at `/step/<step>/<inputs>`, one line `<digest> <size> <path>`
+per file the step wrote (`- 0 <path>` for an empty folder), and the **files**
+themselves, each stored once under the digest of its own bytes however many steps
+hand it on. A build therefore uploads and downloads only the files the other side
+lacks, in one batch each way.
 
-    GET  /<step>/<inputs>     -> 200 + blob, or 404         (a cache read)
-    PUT  /<step>/<inputs>     -> 201, or 204 if present     (a cache write)
+    GET  /step/<step>/<inputs>   -> 200 + manifest, or 404                    (a cache read)
+    HEAD /step/<step>/<inputs>   -> 200, or 404                               (the step is in use)
+    POST /blobs                  -> 200 + zip of the files asked for          (digests in, one per line)
+    PUT  /step/<step>/<inputs>   -> 201, 204 if present, or 409 + the digests the project lacks
+    PUT  /blobs                  -> 204, or 400 on a file that is not what its name says   (a zip, entries named by digest)
+
+A manifest is stored only while the project holds every file it names, so a build
+that restores it finds them: a build answers `409` by uploading the listed files and
+sending the manifest again. A file a build asks for and the project does not hold is
+left out of the zip, which the build reads as a miss. An uploaded file is stored only
+if its bytes digest to the name it came under, and the files of one project are
+neither served to nor confirmed for another, so a build that knows a digest learns
+nothing about what a project it cannot read has built. `Jenesis-Cache-Digest` names
+the algorithm of the digests, `SHA-256` when it is absent.
+
     GET  /actuator/health     -> 200 {"status":"UP"}        (health probe, via Actuator)
 
 Observability is served by Spring Boot Actuator rather than the traffic port: `GET
@@ -60,7 +76,8 @@ tenant's space), hashes the whole key, and looks it up under
 roles - a comma list of `read` / `write`, or `*` for every project: a `read`
 credential may GET, `write` is required to PUT - so consumers (CI, untrusted clients)
 get credentials that fill their builds from the cache but can never write to it. An
-entry lives at `<root>/<tenant>/<project>/<step>/<inputs>`, shared by all of that
+entry - a manifest under its step and inputs, a file under a digest of its name -
+lives at `<root>/<tenant>/<project>/<4 hex or step>/<inputs or digest>`, shared by all of that
 tenant's credentials; tenants and projects never see each other's entries.
 
 Reads stream the file to the response; writes stream to a temp file and are published
@@ -196,8 +213,8 @@ Security
 Relationship to the local cache
 -------------------------------
 
-This is the networked sibling of `BuildExecutorFileCache`: same content-addressing,
-same zip entry format, and the same knobs (a size cap, an eviction order) per
+This is the networked sibling of `BuildExecutorFileCache`: the same manifests and
+files named by their digests, and the same knobs (a size cap, an eviction order) per
 project. A build typically layers them - the always-on incremental cache under
 `target/`, then a shared cache (local folder or this server) consulted on a miss.
 `BuildExecutorHttpCache` is one implementation of the pluggable `BuildExecutorCache`

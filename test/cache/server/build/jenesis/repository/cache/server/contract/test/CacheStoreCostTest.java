@@ -40,6 +40,9 @@ class CacheStoreCostTest {
     private static final String KEY = Authorization.mint("acme");
     private static final String PROJECT = "demo";
     private static final String STEP = "0123456789abcdef0123456789abcdef";
+    /** A step's result that names no file, so that what is counted is the entry alone: a file a manifest names is an
+     *  entry of its own, probed and stored as one. */
+    private static final String MANIFEST = "- 0 classes\n";
 
     @TempDir
     private Path root;
@@ -59,9 +62,9 @@ class CacheStoreCostTest {
     void a_store_reads_once_and_writes_once() throws IOException {
         CacheController node = node();
         warm(node);
-        put(node, inputs(), "payload");
+        put(node, inputs(), MANIFEST);
         String inputs = inputs();
-        Cost cost = Cost.of(() -> assertThat(put(node, inputs, "payload")).isEqualTo(201));
+        Cost cost = Cost.of(() -> assertThat(put(node, inputs, MANIFEST)).isEqualTo(201));
         assertThat(cost).as("the existence probe and the entry").isEqualTo(new Cost(1, 1));
     }
 
@@ -70,7 +73,7 @@ class CacheStoreCostTest {
         CacheController node = node();
         warm(node);
         String inputs = inputs();
-        Cost first = Cost.of(() -> assertThat(put(node, inputs, "payload")).isEqualTo(201));
+        Cost first = Cost.of(() -> assertThat(put(node, inputs, MANIFEST)).isEqualTo(201));
         assertThat(first).as("the store, and the project's marker read and written once")
                 .isEqualTo(new Cost(3, 2));
     }
@@ -80,8 +83,8 @@ class CacheStoreCostTest {
         CacheController node = node();
         warm(node);
         String inputs = inputs();
-        put(node, inputs, "payload");
-        Cost cost = Cost.of(() -> assertThat(put(node, inputs, "payload")).isEqualTo(204));
+        put(node, inputs, MANIFEST);
+        Cost cost = Cost.of(() -> assertThat(put(node, inputs, MANIFEST)).isEqualTo(204));
         assertThat(cost).as("the existence probe declines it").isEqualTo(new Cost(1, 0));
     }
 
@@ -90,9 +93,9 @@ class CacheStoreCostTest {
         CacheController node = node();
         warm(node);
         String inputs = inputs();
-        put(node, inputs, "payload");
+        put(node, inputs, MANIFEST);
         for (int build = 0; build < 3; build++) {
-            Cost cost = Cost.of(() -> assertThat(get(node, inputs)).isEqualTo("payload"));
+            Cost cost = Cost.of(() -> assertThat(get(node, inputs)).isEqualTo(MANIFEST));
             assertThat(cost).as("warm build %d: the read, and no recency written inside the window", build)
                     .isEqualTo(new Cost(1, 0));
         }
@@ -103,7 +106,7 @@ class CacheStoreCostTest {
         CacheController node = node();
         warm(node);
         String inputs = inputs();
-        put(node, inputs, "payload");
+        put(node, inputs, MANIFEST);
         Cost cost = Cost.of(() -> assertThat(head(node, inputs)).isEqualTo(200));
         assertThat(cost).as("a HEAD has no body, so it pays the existence probe").isEqualTo(new Cost(1, 0));
     }
@@ -122,13 +125,13 @@ class CacheStoreCostTest {
         CacheController storing = node();
         warm(storing);
         String inputs = inputs();
-        put(storing, inputs, "payload");
+        put(storing, inputs, MANIFEST);
         CacheController other = node();
         warm(other);
-        Cost first = Cost.of(() -> assertThat(get(other, inputs)).isEqualTo("payload"));
+        Cost first = Cost.of(() -> assertThat(get(other, inputs)).isEqualTo(MANIFEST));
         assertThat(first).as("the read, the stamps' scan and the entry's own listed time - and no stamp, since the "
                 + "entry is younger than the window").isEqualTo(new Cost(3, 0));
-        Cost second = Cost.of(() -> assertThat(get(other, inputs)).isEqualTo("payload"));
+        Cost second = Cost.of(() -> assertThat(get(other, inputs)).isEqualTo(MANIFEST));
         assertThat(second).as("after which this node remembers it").isEqualTo(new Cost(1, 0));
     }
 
@@ -176,7 +179,7 @@ class CacheStoreCostTest {
     private static HttpServletRequest request(String method, String inputs, byte[] body) throws IOException {
         HttpServletRequest request = mock(HttpServletRequest.class);
         when(request.getMethod()).thenReturn(method);
-        when(request.getRequestURI()).thenReturn("/build/acme/" + STEP + "/" + inputs);
+        when(request.getRequestURI()).thenReturn("/build/acme/step/" + STEP + "/" + inputs);
         when(request.getContextPath()).thenReturn("");
         when(request.getHeader("Jenesis-Cache-Key")).thenReturn(KEY);
         when(request.getHeader("Jenesis-Cache-Project")).thenReturn(PROJECT);
