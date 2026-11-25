@@ -178,7 +178,7 @@ class CacheStoreCostTest {
         when(request.getMethod()).thenReturn(method);
         when(request.getRequestURI()).thenReturn("/build/acme/" + STEP + "/" + inputs);
         when(request.getContextPath()).thenReturn("");
-        when(request.getHeader("Jenesis-Cache-Key")).thenReturn(KEY);
+        when(request.getHeader("Authorization")).thenReturn("Bearer " + KEY);
         when(request.getHeader("Jenesis-Cache-Project")).thenReturn(PROJECT);
         if (body != null) {
             ByteArrayInputStream in = new ByteArrayInputStream(body);

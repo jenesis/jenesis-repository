@@ -60,9 +60,6 @@ public interface CacheProtocol {
      *  rides. */
     String PROJECT_HEADER = "Jenesis-Cache-Project";
 
-    /** The header the product's own cache presentation names a credential in, beside the repository's own. */
-    String KEY_HEADER = "Jenesis-Cache-Key";
-
     /** The first segments of a tenant's cache that root a foreign tool's layout rather than naming a build step, so the
      *  native protocol declines them (clause 3). A constant rather than a question put to the installed set, because
      *  {@link #handles} must answer the same with one protocol shipped as with four - removing a module must not widen

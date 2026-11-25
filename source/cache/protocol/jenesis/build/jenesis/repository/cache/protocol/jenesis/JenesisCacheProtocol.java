@@ -5,8 +5,9 @@ import module java.base;
 import build.jenesis.repository.cache.protocol.CacheProtocol;
 
 /**
- * The cache protocol this build tool speaks: {@code /<step>/<inputs>} within a tenant's cache, with the project and
- * the credential in headers of their own, so neither is written to an intermediary's access log. A build tool's
+ * The cache protocol this build tool speaks: {@code /<step>/<inputs>} within a tenant's cache, with the project in a
+ * header of its own and the credential presented as every request of the product presents one - a bearer token in
+ * {@code Authorization}, or the repository's own key header - so neither is written to an intermediary's access log. A build tool's
  * {@code cache.uri} is the tenant's cache, {@code https://<host>/build/<tenant>}, and the tool appends the address.
  *
  * <p><b>A step may not be a reserved segment</b> ({@link CacheProtocol#RESERVED}): Gradle's {@code /gradle/<key>} has
@@ -54,7 +55,7 @@ public final class JenesisCacheProtocol implements CacheProtocol {
         String inputs = request.path().substring(separator + 1);
         // An unpresented project or credential is an address with nulls, which the caller answers with a challenge
         // rather than as a malformed request.
-        return Optional.of(new Address(step, inputs, request.header(PROJECT_HEADER), request.header(KEY_HEADER),
+        return Optional.of(new Address(step, inputs, request.header(PROJECT_HEADER), request.presentedKey(),
                 Existing.DEDUPE));
     }
 }

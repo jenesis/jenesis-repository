@@ -26,8 +26,6 @@ public class CacheController {
     /** The node's admin surface presents identity as the native protocol does. */
     static final String PROJECT = CacheProtocol.PROJECT_HEADER;
 
-    static final String KEY = CacheProtocol.KEY_HEADER;
-
     /** Where every tenant's cache is addressed: {@code /build/<tenant>/...}. */
     static final String ROOT = "/build/";
 
