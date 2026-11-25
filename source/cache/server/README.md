@@ -29,8 +29,11 @@ How it works
 
 The client computes two hashes per step - `step` (the step's identity) and `inputs`
 (a fold of every input file's content hash) - and addresses an entry at
-`/<step>/<inputs>`. The body is an opaque zip the client packs and unpacks, so the
-server never inspects content; it is a pure key/value blob store.
+`/<step>/<inputs>`. An entry is opaque: the server stores the bytes it is sent, never
+rewrites an entry that exists and answers it as it was sent, so what an entry holds is
+the client's to decide. A client may store files under addresses of its own beside
+its steps - the Jenesis build tool stores a large file once, under a first segment
+that no step hash has the length of.
 
     GET  /<step>/<inputs>     -> 200 + blob, or 404         (a cache read)
     PUT  /<step>/<inputs>     -> 201, or 204 if present     (a cache write)
@@ -47,11 +50,15 @@ these are authorization-gated like every other `/actuator` path - only a deploym
 grant reads them - and `MANAGEMENT_SERVER_PORT` moves them to a dedicated port kept off
 the public service if a deployment would rather they were not on it at all.
 
-Two headers carry the routing and the credential - never the path, so neither is
-exposed to anything that logs URLs:
+A header carries the project and `Authorization` the credential - never the path, so
+neither is exposed to anything that logs URLs:
 
-    Jenesis-Cache-Project: <project>          ->  selects a project within the tenant
-    Jenesis-Cache-Key:     <tenant>.<secret>  ->  the credential; its prefix selects the tenant
+    Jenesis-Cache-Project: <project>            ->  selects a project within the tenant
+    Authorization: Bearer <tenant>.<secret>     ->  the credential; its prefix selects the tenant
+
+The credential is presented as on every surface of the product: as a bearer token, as
+the password of a Basic credential, or in `Jenesis-Repository-Key`, which wins where
+it is sent. A request that presents none is answered `401`.
 
 The key is a `<tenant>.<secret>` string: the server splits off the tenant prefix
 (so a key is bound to exactly one tenant and is only ever checked against that

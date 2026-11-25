@@ -26,8 +26,6 @@ public class CacheController {
     /** The node's admin surface presents identity as the native protocol does. */
     static final String PROJECT = CacheProtocol.PROJECT_HEADER;
 
-    static final String KEY = CacheProtocol.KEY_HEADER;
-
     /** Where every tenant's cache is addressed: {@code /build/<tenant>/...}. */
     static final String ROOT = "/build/";
 
@@ -202,11 +200,14 @@ public class CacheController {
 
     /** Refuse, and on a 401 say how to authenticate: a client that waits to be challenged needs
      *  {@code WWW-Authenticate}. Maven Resolver sends a GET without credentials and never retries unchallenged, so
-     *  without it the Maven cache would store but never hit. */
+     *  without it the Maven cache would store but never hit. The answer names both schemes a key is accepted in,
+     *  {@code Basic} first for the clients that take the first challenge they read, then {@code Bearer}, so a client
+     *  that chooses its scheme from the challenge presents its key as a token. */
     private static void challenge(Cache.Rejected rejected, HttpServletResponse response) {
         response.setStatus(rejected.status());
         if (rejected.status() == 401) {
             response.setHeader("WWW-Authenticate", "Basic realm=\"Jenesis Cache\"");
+            response.addHeader("WWW-Authenticate", "Bearer realm=\"Jenesis Cache\"");
         }
     }
 }

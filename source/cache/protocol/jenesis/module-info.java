@@ -1,6 +1,6 @@
 /**
  * The cache protocol this build tool speaks, as its own module: {@code /<step>/<inputs>} within a tenant's cache,
- * with the project and the credential in headers. It is the protocol a node must carry to serve its own builds, and
+ * with the project in a header and the credential presented as the repository's own requests present one. It is the protocol a node must carry to serve its own builds, and
  * the one a composition carrying no foreign layout still has.
  *
  * <p>Nothing beyond the SPI and {@code java.base}: a protocol translates a path into a record, so it is tested by

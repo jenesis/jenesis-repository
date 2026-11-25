@@ -48,9 +48,8 @@ class JenesisCacheProtocolTest {
     }
 
     @Test
-    void reads_the_address_and_both_headers() {
-        assertThat(protocol.address(request("/compile/abc123",
-                Map.of(CacheProtocol.PROJECT_HEADER, "checkout", CacheProtocol.KEY_HEADER, "jenk_x"))))
+    void reads_the_address_the_project_header_and_the_credential_the_request_presents() {
+        assertThat(protocol.address(request("/compile/abc123", Map.of(CacheProtocol.PROJECT_HEADER, "checkout"), "jenk_x")))
                 .hasValueSatisfying(address -> {
                     assertThat(address.step()).isEqualTo("compile");
                     assertThat(address.inputs()).isEqualTo("abc123");
@@ -58,6 +57,12 @@ class JenesisCacheProtocolTest {
                     assertThat(address.key()).isEqualTo("jenk_x");
                     assertThat(address.existing()).isEqualTo(CacheProtocol.Existing.DEDUPE);
                 });
+    }
+
+    @Test
+    void a_header_of_its_own_names_no_credential() {
+        assertThat(protocol.address(request("/compile/abc123", Map.of("Jenesis-Cache-Key", "jenk_x"))))
+                .hasValueSatisfying(address -> assertThat(address.key()).isNull());
     }
 
     @Test
@@ -90,6 +95,10 @@ class JenesisCacheProtocolTest {
     }
 
     private static CacheProtocol.Request request(String path, Map<String, String> headers) {
+        return request(path, headers, null);
+    }
+
+    private static CacheProtocol.Request request(String path, Map<String, String> headers, String presented) {
         return new CacheProtocol.Request() {
 
             @Override
@@ -114,7 +123,7 @@ class JenesisCacheProtocolTest {
 
             @Override
             public String presentedKey() {
-                return null;
+                return presented;
             }
         };
     }
