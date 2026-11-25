@@ -18,10 +18,9 @@ import build.jenesis.repository.store.Providers;
  *   <li><b>{@link #handles} is a pure function of the path</b>: no store read, no configuration, no observable
  *       allocation. It is asked of every protocol on every cache request until one answers {@code true}.</li>
  *   <li><b>Path ownership does not overlap</b>, so dispatch order is irrelevant. A tenant's cache is one shared space
- *       and a foreign tool's layout is rooted at {@code /<its name>/}, but Gradle's {@code /gradle/<key>} has the shape
- *       of the native {@code /<step>/<inputs>} - so a native address's first segment may not be one of
- *       {@link #RESERVED}, which lists every foreign protocol's name, and a protocol claiming another's path is a
- *       composition error.</li>
+ *       and a foreign tool's layout is rooted at {@code /<its name>/}, while the native protocol's is rooted at
+ *       {@code /step/} and {@code /blobs} - so no root of the native protocol may be one of {@link #RESERVED}, which
+ *       lists every foreign protocol's name, and a protocol claiming another's path is a composition error.</li>
  *   <li><b>{@link #address} answers empty for a request it cannot read</b>, which the caller answers {@code 400}; a
  *       malformed path never throws, though a broken composition may.</li>
  *   <li><b>An address is complete or absent.</b> A readable path with no project or credential answers an address with
@@ -63,8 +62,12 @@ public interface CacheProtocol {
     /** The header the product's own cache presentation names a credential in, beside the repository's own. */
     String KEY_HEADER = "Jenesis-Cache-Key";
 
+    /** The header the native protocol names the digest algorithm in that names a build's files, so that a node keeps
+     *  the content of two algorithms apart and checks an upload against the one its name was computed with. */
+    String DIGEST_HEADER = "Jenesis-Cache-Digest";
+
     /** The first segments of a tenant's cache that root a foreign tool's layout rather than naming a build step, so the
-     *  native protocol declines them (clause 3). A constant rather than a question put to the installed set, because
+     *  native protocol roots nothing of its own at one of them (clause 3). A constant rather than a question put to the installed set, because
      *  {@link #handles} must answer the same with one protocol shipped as with four - removing a module must not widen
      *  what another claims. Each foreign protocol's suite pins its name's presence here. */
     Set<String> RESERVED = Set.of("maven", "gradle", "bazel");
@@ -83,6 +86,27 @@ public interface CacheProtocol {
     /** Read the request as an address in the shared cache, or empty when this protocol owns the path but cannot parse
      *  it - a bad request (clause 4). */
     Optional<Address> address(Request request);
+
+    /** What a request of this protocol asks of the cache. A pure function of the path, as {@link #handles} is, and
+     *  asked only of a path this protocol handles. A protocol whose requests each name one opaque entry answers
+     *  {@link Shape#ENTRY} and needs no more than {@link #address}; the native protocol keeps a step's result as a
+     *  manifest of files and the files apart, so that a file is stored once however many results name it. Abstract,
+     *  as no answer is right for every protocol: an inherited one would have a manifest stored unchecked, or a batch
+     *  stored as one entry. */
+    Shape shape(String path);
+
+    /** What a request asks of the cache. */
+    enum Shape {
+        /** One opaque entry at the request's {@link Address}. */
+        ENTRY,
+        /** A manifest at the request's {@link Address}: lines of {@code <digest> <size> <path>} naming content, stored
+         *  only while the cache holds every file it names. */
+        MANIFEST,
+        /** A batch of content named by its own digest. The request's {@link Address} carries the project and the
+         *  credential alone; its step and inputs are placeholders, as each file of the batch has an address of its
+         *  own. */
+        CONTENT
+    }
 
     /** What a write to an address that already holds bytes does. */
     enum Existing {

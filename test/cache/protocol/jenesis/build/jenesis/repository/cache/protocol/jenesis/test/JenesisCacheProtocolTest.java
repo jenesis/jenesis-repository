@@ -13,43 +13,52 @@ class JenesisCacheProtocolTest {
     private final CacheProtocol protocol = new JenesisCacheProtocol();
 
     @Test
-    void claims_exactly_two_segments_under_the_prefix() {
-        assertThat(protocol.handles("/compile/abc123")).isTrue();
-        assertThat(protocol.handles("/compile/")).isFalse();
-        assertThat(protocol.handles("//abc123")).isFalse();
-        assertThat(protocol.handles("/compile")).isFalse();
+    void claims_a_step_of_exactly_two_segments_and_the_batch_of_files() {
+        assertThat(protocol.handles("/step/compile/abc123")).isTrue();
+        assertThat(protocol.handles("/blobs")).isTrue();
+        assertThat(protocol.handles("/step/compile/")).isFalse();
+        assertThat(protocol.handles("/step//abc123")).isFalse();
+        assertThat(protocol.handles("/step/compile")).isFalse();
+        assertThat(protocol.handles("/step/compile/abc123/more")).isFalse();
+        assertThat(protocol.handles("/blobs/abc123")).isFalse();
+        assertThat(protocol.handles("/compile/abc123")).as("a step's result is not one entry at /<step>/<inputs>").isFalse();
         assertThat(protocol.handles("/repository/maven/x")).isFalse();
     }
 
     @Test
-    void declines_every_reserved_segment_so_ownership_does_not_overlap() {
-        // Clause 3, and the case that makes it a real rule rather than a hope: /cache/gradle/<key> has exactly
-        // this protocol's shape, so without RESERVED both would claim it and dispatch would need a precedence
-        // the contract does not have. Bazel and Maven are longer and would not collide anyway; they are declined
-        // on the same rule rather than on their length, so adding a two-segment foreign layout cannot reopen it.
+    void claims_no_path_under_a_reserved_segment_so_ownership_does_not_overlap() {
+        // Clause 3: neither of this protocol's roots is a foreign tool's, and neither shape has the two segments of
+        // Gradle's /gradle/<key>, so no path has two claimants and dispatch needs no precedence.
+        assertThat(CacheProtocol.RESERVED).doesNotContain("step", "blobs");
         assertThat(protocol.handles("/gradle/abc123")).isFalse();
         assertThat(protocol.handles("/maven/p/1/g/a/s/f")).isFalse();
         assertThat(protocol.handles("/bazel/ac/abc123")).isFalse();
         assertThat(protocol.handles("/bazel/cas/abc123")).isFalse();
-        // A step that merely starts with a reserved word is still a step.
-        assertThat(protocol.handles("/gradle-ish/abc123")).isTrue();
     }
 
     @Test
-    void a_reserved_segment_is_not_an_address_either() {
+    void a_path_it_does_not_own_is_not_an_address_either() {
         assertThat(protocol.address(request("/gradle/abc123", Map.of()))).isEmpty();
+        assertThat(protocol.address(request("/bazel/ac/abc", Map.of()))).isEmpty();
     }
 
     @Test
     void a_client_pointed_at_the_endpoint_lands_on_a_path_this_claims() {
-        // A build tool's cache.uri is the tenant's cache itself, and the tool appends the step and the inputs.
+        // A build tool's cache.uri is the tenant's cache itself, and the tool appends the address.
         assertThat(protocol.endpoint()).isEmpty();
-        assertThat(protocol.handles(protocol.endpoint() + "/compile/abc123")).isTrue();
+        assertThat(protocol.handles(protocol.endpoint() + "/step/compile/abc123")).isTrue();
+        assertThat(protocol.handles(protocol.endpoint() + "/blobs")).isTrue();
     }
 
     @Test
-    void reads_the_address_and_both_headers() {
-        assertThat(protocol.address(request("/compile/abc123",
+    void a_step_is_a_manifest_and_the_batch_is_content() {
+        assertThat(protocol.shape("/step/compile/abc123")).isEqualTo(CacheProtocol.Shape.MANIFEST);
+        assertThat(protocol.shape("/blobs")).isEqualTo(CacheProtocol.Shape.CONTENT);
+    }
+
+    @Test
+    void reads_the_address_of_a_step_and_both_headers() {
+        assertThat(protocol.address(request("/step/compile/abc123",
                 Map.of(CacheProtocol.PROJECT_HEADER, "checkout", CacheProtocol.KEY_HEADER, "jenk_x"))))
                 .hasValueSatisfying(address -> {
                     assertThat(address.step()).isEqualTo("compile");
@@ -61,23 +70,24 @@ class JenesisCacheProtocolTest {
     }
 
     @Test
-    void an_unpresented_credential_is_a_complete_address_rather_than_an_empty_answer() {
-        assertThat(protocol.address(request("/compile/abc123", Map.of())))
+    void the_batch_carries_the_project_and_the_credential_under_a_placeholder_address() {
+        assertThat(protocol.address(request("/blobs",
+                Map.of(CacheProtocol.PROJECT_HEADER, "checkout", CacheProtocol.KEY_HEADER, "jenk_x"))))
                 .hasValueSatisfying(address -> {
-                    assertThat(address.project()).isNull();
-                    assertThat(address.key()).isNull();
+                    assertThat(address.project()).isEqualTo("checkout");
+                    assertThat(address.key()).isEqualTo("jenk_x");
+                    assertThat(address.step()).as("a valid segment, so that the request is authorised as any other").isEqualTo("00");
+                    assertThat(address.inputs()).isEqualTo("00");
                 });
     }
 
     @Test
-    void a_path_it_does_not_own_reads_as_empty() {
-        assertThat(protocol.address(request("/bazel/ac/abc", Map.of()))).isEmpty();
-    }
-
-    @Test
-    void the_address_deduplicates_because_it_is_a_digest_of_the_bytes() {
-        assertThat(protocol.address(request("/compile/abc", Map.of())).orElseThrow().existing())
-                .isEqualTo(CacheProtocol.Existing.DEDUPE);
+    void an_unpresented_credential_is_a_complete_address_rather_than_an_empty_answer() {
+        assertThat(protocol.address(request("/step/compile/abc123", Map.of())))
+                .hasValueSatisfying(address -> {
+                    assertThat(address.project()).isNull();
+                    assertThat(address.key()).isNull();
+                });
     }
 
     @Test

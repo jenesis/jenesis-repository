@@ -46,6 +46,11 @@ public final class MavenCacheProtocol implements CacheProtocol {
     }
 
     @Override
+    public Shape shape(String path) {
+        return Shape.ENTRY;
+    }
+
+    @Override
     public Optional<Address> address(Request request) {
         String[] segments = segments(request.path());
         if (segments == null) {

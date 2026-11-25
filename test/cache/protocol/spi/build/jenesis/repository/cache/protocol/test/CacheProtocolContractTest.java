@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class CacheProtocolContractTest {
 
-    /** A protocol of the native shape: {@code /<step>/<inputs>}, project and credential in headers. */
+    /** A protocol of one entry per request: {@code /<step>/<inputs>}, project and credential in headers. */
     private static final CacheProtocol NATIVE = new CacheProtocol() {
 
         @Override
@@ -30,6 +30,11 @@ class CacheProtocolContractTest {
         @Override
         public boolean handles(String path) {
             return path.startsWith("/") && path.chars().filter(c -> c == '/').count() == 2;
+        }
+
+        @Override
+        public Shape shape(String path) {
+            return Shape.ENTRY;
         }
 
         @Override

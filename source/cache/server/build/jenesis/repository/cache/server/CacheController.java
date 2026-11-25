@@ -30,6 +30,8 @@ public class CacheController {
 
     /** Where every tenant's cache is addressed: {@code /build/<tenant>/...}. */
     static final String ROOT = "/build/";
+    /** The most bytes a manifest, or a list of digests a build asks for, may hold: text of a line per file. */
+    private static final long MANIFEST_LIMIT = 64L << 20;
 
     private final Cache cache;
 
@@ -91,7 +93,7 @@ public class CacheController {
      * encoded separator, which the servlet container refuses by default, and every address the protocols read is hex or
      * an opaque key.
      */
-    @RequestMapping(value = "/build/{tenant}/**", method = {RequestMethod.GET, RequestMethod.HEAD, RequestMethod.PUT})
+    @RequestMapping(value = "/build/{tenant}/**", method = {RequestMethod.GET, RequestMethod.HEAD, RequestMethod.PUT, RequestMethod.POST})
     public void dispatch(HttpServletRequest request, HttpServletResponse response) throws IOException {
         // /build/<tenant>/<path>: the addressed tenant, and the path the protocols read.
         String decoded = decoded(request).substring(ROOT.length());
@@ -116,10 +118,35 @@ public class CacheController {
             response.setStatus(400);
             return;
         }
-        if ("PUT".equalsIgnoreCase(request.getMethod())) {
-            store(tenant, protocol, address.get(), request, response);
-        } else {
-            read(tenant, protocol, address.get(), request, response);
+        boolean put = "PUT".equalsIgnoreCase(request.getMethod()), post = "POST".equalsIgnoreCase(request.getMethod());
+        switch (protocol.shape(path)) {
+            case ENTRY -> {
+                if (post) {
+                    response.setStatus(405);
+                } else if (put) {
+                    store(tenant, protocol, address.get(), request, response);
+                } else {
+                    read(tenant, protocol, address.get(), request, response);
+                }
+            }
+            case MANIFEST -> {
+                if (post) {
+                    response.setStatus(405);
+                } else if (put) {
+                    manifest(tenant, protocol, address.get(), request, response);
+                } else {
+                    read(tenant, protocol, address.get(), request, response);
+                }
+            }
+            case CONTENT -> {
+                if (post) {
+                    download(tenant, protocol, address.get(), request, response);
+                } else if (put) {
+                    upload(tenant, protocol, address.get(), request, response);
+                } else {
+                    response.setStatus(405);
+                }
+            }
         }
     }
 
@@ -203,6 +230,185 @@ public class CacheController {
     /** Refuse, and on a 401 say how to authenticate: a client that waits to be challenged needs
      *  {@code WWW-Authenticate}. Maven Resolver sends a GET without credentials and never retries unchallenged, so
      *  without it the Maven cache would store but never hit. */
+    /**
+     * Store a step's manifest, or name the files it lacks. The manifest is stored only while the project holds every
+     * file it names, so a build that restores it finds them: a build answers {@code 409} by uploading the listed files
+     * and sending the manifest again. The check runs for a manifest the project already holds too, as its files may
+     * have been evicted since.
+     */
+    private void manifest(String tenant, CacheProtocol protocol, CacheProtocol.Address address,
+                          HttpServletRequest request, HttpServletResponse response)
+            throws IOException {
+        Cache.Resolution resolution = cache.resolve(tenant, protocol.name(), address.project(), address.key(),
+                address.step(), address.inputs(), true);
+        if (resolution instanceof Cache.Rejected rejected) {
+            challenge(rejected, response);
+            return;
+        }
+        Cache.Allowed allowed = (Cache.Allowed) resolution;
+        String algorithm = algorithm(request);
+        long contentLength = request.getContentLengthLong();
+        if (contentLength < 0) {
+            cache.count(allowed.metric(), Cache.Outcome.REJECTED);
+            response.setStatus(411);
+            return;
+        }
+        if (contentLength > MANIFEST_LIMIT || cache.tooLarge(contentLength)) {
+            cache.count(allowed.metric(), Cache.Outcome.REJECTED);
+            response.setStatus(413);
+            return;
+        }
+        byte[] body;
+        try (InputStream in = request.getInputStream()) {
+            body = in.readNBytes((int) contentLength);
+        }
+        List<String> lacking;
+        try {
+            if (!Cache.isDigest(algorithm)) {
+                throw new IllegalArgumentException("not a digest this cache names content by: " + algorithm);
+            }
+            lacking = cache.lacking(allowed, algorithm, body);
+        } catch (IllegalArgumentException _) {
+            cache.count(allowed.metric(), Cache.Outcome.INVALID);
+            response.setStatus(400);
+            return;
+        }
+        if (!lacking.isEmpty()) {
+            cache.count(allowed.metric(), Cache.Outcome.MISS);
+            response.setStatus(409);
+            response.setContentType("text/plain;charset=UTF-8");
+            response.getOutputStream().write(String.join("\n", lacking).getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+        if (cache.exists(allowed)) {
+            cache.touch(allowed);
+            cache.count(allowed.metric(), Cache.Outcome.PRESENT);
+            response.setStatus(204);
+            return;
+        }
+        if (cache.cannotFit()) {
+            cache.count(allowed.metric(), Cache.Outcome.FULL);
+            response.setStatus(507);
+            return;
+        }
+        cache.store(allowed, new ByteArrayInputStream(body));
+        cache.count(allowed.metric(), Cache.Outcome.STORED);
+        response.setStatus(201);
+    }
+
+    /** Answer the files a build asks for by their digests as one zip, an entry per file the project holds, named by
+     *  its digest; a file it does not hold is left out, which the build reads as a miss. The files are streamed from
+     *  the store into the answer one after another. */
+    private void download(String tenant, CacheProtocol protocol, CacheProtocol.Address address,
+                          HttpServletRequest request, HttpServletResponse response)
+            throws IOException {
+        Cache.Resolution resolution = cache.resolve(tenant, protocol.name(), address.project(), address.key(),
+                address.step(), address.inputs(), false);
+        if (resolution instanceof Cache.Rejected rejected) {
+            challenge(rejected, response);
+            return;
+        }
+        Cache.Allowed allowed = (Cache.Allowed) resolution;
+        String algorithm = algorithm(request);
+        long contentLength = request.getContentLengthLong();
+        if (contentLength < 0) {
+            cache.count(allowed.metric(), Cache.Outcome.REJECTED);
+            response.setStatus(411);
+            return;
+        }
+        if (contentLength > MANIFEST_LIMIT || !Cache.isDigest(algorithm)) {
+            cache.count(allowed.metric(), Cache.Outcome.REJECTED);
+            response.setStatus(contentLength > MANIFEST_LIMIT ? 413 : 400);
+            return;
+        }
+        Set<String> wanted = new LinkedHashSet<>();
+        try (InputStream in = request.getInputStream()) {
+            for (String line : new String(in.readNBytes((int) contentLength), StandardCharsets.UTF_8).split("\n")) {
+                if (Cache.isContent(algorithm, line.strip())) {
+                    wanted.add(line.strip());
+                }
+            }
+        }
+        response.setStatus(200);
+        response.setContentType("application/zip");
+        try (ZipOutputStream zip = new ZipOutputStream(response.getOutputStream())) {
+            zip.setLevel(Deflater.BEST_SPEED);
+            for (String digest : wanted) {
+                Cache.Allowed content = cache.content(allowed, algorithm, digest);
+                if (!cache.exists(content)) {
+                    cache.count(allowed.metric(), Cache.Outcome.MISS);
+                    continue;
+                }
+                zip.putNextEntry(new ZipEntry(digest));
+                cache.read(content, zip);
+                zip.closeEntry();
+                cache.touch(content);
+                cache.count(allowed.metric(), Cache.Outcome.HIT);
+            }
+        }
+    }
+
+    /** Take the files a build uploads as one zip, an entry per file named by its digest, and store each that is what
+     *  its name says. One that is not ends the upload with {@code 400}: a build that names a file wrongly is broken or
+     *  hostile, and neither should fill the project. */
+    private void upload(String tenant, CacheProtocol protocol, CacheProtocol.Address address,
+                        HttpServletRequest request, HttpServletResponse response)
+            throws IOException {
+        Cache.Resolution resolution = cache.resolve(tenant, protocol.name(), address.project(), address.key(),
+                address.step(), address.inputs(), true);
+        if (resolution instanceof Cache.Rejected rejected) {
+            challenge(rejected, response);
+            return;
+        }
+        Cache.Allowed allowed = (Cache.Allowed) resolution;
+        String algorithm = algorithm(request);
+        if (request.getContentLengthLong() < 0) {
+            cache.count(allowed.metric(), Cache.Outcome.REJECTED);
+            response.setStatus(411);
+            return;
+        }
+        if (!Cache.isDigest(algorithm)) {
+            cache.count(allowed.metric(), Cache.Outcome.INVALID);
+            response.setStatus(400);
+            return;
+        }
+        if (cache.cannotFit()) {
+            cache.count(allowed.metric(), Cache.Outcome.FULL);
+            response.setStatus(507);
+            return;
+        }
+        try (ZipInputStream zip = new ZipInputStream(request.getInputStream())) {
+            for (ZipEntry entry = zip.getNextEntry(); entry != null; entry = zip.getNextEntry()) {
+                if (!Cache.isContent(algorithm, entry.getName())) {
+                    cache.count(allowed.metric(), Cache.Outcome.INVALID);
+                    response.setStatus(400);
+                    return;
+                }
+                switch (cache.admit(allowed, algorithm, entry.getName(), zip)) {
+                    case STORED -> cache.count(allowed.metric(), Cache.Outcome.STORED);
+                    case PRESENT -> cache.count(allowed.metric(), Cache.Outcome.PRESENT);
+                    case MISMATCHED -> {
+                        cache.count(allowed.metric(), Cache.Outcome.INVALID);
+                        response.setStatus(400);
+                        return;
+                    }
+                    case TOO_LARGE -> {
+                        cache.count(allowed.metric(), Cache.Outcome.REJECTED);
+                        response.setStatus(413);
+                        return;
+                    }
+                }
+            }
+        }
+        response.setStatus(204);
+    }
+
+    /** The digest algorithm a request names its files by, SHA-256 where it names none. */
+    private static String algorithm(HttpServletRequest request) {
+        String named = request.getHeader(CacheProtocol.DIGEST_HEADER);
+        return named == null || named.isBlank() ? "SHA-256" : named.strip();
+    }
+
     private static void challenge(Cache.Rejected rejected, HttpServletResponse response) {
         response.setStatus(rejected.status());
         if (rejected.status() == 401) {

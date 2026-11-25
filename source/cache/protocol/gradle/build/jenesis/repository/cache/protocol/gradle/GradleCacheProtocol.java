@@ -43,6 +43,11 @@ public final class GradleCacheProtocol implements CacheProtocol {
     }
 
     @Override
+    public Shape shape(String path) {
+        return Shape.ENTRY;
+    }
+
+    @Override
     public Optional<Address> address(Request request) {
         if (!handles(request.path())) {
             return Optional.empty();
