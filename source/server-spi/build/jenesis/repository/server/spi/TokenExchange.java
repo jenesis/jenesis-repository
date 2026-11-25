@@ -17,7 +17,7 @@ public interface TokenExchange {
     }
 
     /** The shared exchange standing in when no token-exchange module is installed: it admits nothing. A singleton,
-     *  so an endpoint can tell "not installed" by identity and answer 501 rather than 401. */
+     *  so an endpoint can tell "not installed" by identity and answer 501 rather than refuse the token. */
     TokenExchange NONE = (tenant, token) -> null;
 
     /** Validate {@code token} against {@code tenant}'s trust policy and, on a match, mint and return a short-lived

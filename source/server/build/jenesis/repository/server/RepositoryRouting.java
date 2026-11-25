@@ -154,6 +154,12 @@ public interface RepositoryRouting {
                 slash < 0 ? "/" : within.substring(slash));
     }
 
+    /** Whether {@code uri} is under one of the roots {@link #target} reads a tenant and a repository below - a
+     *  repository's own URL, the OCI registry API or a staged upload - rather than any other route of the server. */
+    static boolean addresses(String uri) {
+        return uri.startsWith("/repository/") || uri.startsWith("/v2/") || uri.startsWith(STAGING);
+    }
+
     /** The root staged uploads answer under: {@code /staging/<tenant>/<repository>/<id>/...}. */
     String STAGING = "/staging/";
 

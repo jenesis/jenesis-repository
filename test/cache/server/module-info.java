@@ -28,6 +28,8 @@ open module build.jenesis.repository.cache.server.contract.test {
     requires build.jenesis.repository.store.filesystem;
     requires build.jenesis.repository.store.metering;
     requires build.jenesis.repository.server.spi;
+    // The TenantResource the cache contributes for its own URLs.
+    requires build.jenesis.repository.server;
     requires build.jenesis.repository.walk;
     requires micrometer.core;
     requires jakarta.servlet;
