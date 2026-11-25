@@ -91,6 +91,52 @@ a baked-in `VOLUME` cannot be un-declared by a consumer, so an object-store depl
 volume on every run that it never writes to. So the image declares no store root: name one with
 `JENREPO_FILESYSTEM_ROOT` and mount a volume there, or select an object store.
 
+### Exchanging a CI token for a key
+
+A CI job needs no stored key: it exchanges the OIDC id-token its platform issues for a short-lived one. The
+endpoint is an OAuth 2.0 Token Exchange ([RFC 8693](https://www.rfc-editor.org/rfc/rfc8693)) token endpoint,
+`POST /api/token`, open to a caller without a key because the signed token is what authenticates it. A token is
+admitted by a trust of the tenant (`/api/trusts`, **Keyless CI** in the console), which names the issuer, the
+audience and the subject it accepts and the grant and lifetime of the key it issues.
+
+```bash
+curl -s https://repository.example.com/api/token \
+  -d grant_type=urn:ietf:params:oauth:grant-type:token-exchange \
+  -d subject_token_type=urn:ietf:params:oauth:token-type:id_token \
+  --data-urlencode subject_token="$ID_TOKEN" \
+  --data-urlencode resource=https://repository.example.com/repository/acme/releases/
+```
+
+```json
+{"access_token":"jenk_acme.…","issued_token_type":"urn:ietf:params:oauth:token-type:access_token","token_type":"Bearer","expires_in":3600}
+```
+
+The `access_token` is a key like any other, presented as `Authorization: Bearer <key>` until `expires_in` seconds
+have passed. The request is `application/x-www-form-urlencoded`, and every answer carries
+`Cache-Control: no-store`.
+
+| Parameter | |
+|---|---|
+| `grant_type` | Required: `urn:ietf:params:oauth:grant-type:token-exchange`. |
+| `subject_token` | Required: the id-token, in the request body only. |
+| `subject_token_type` | Required: `urn:ietf:params:oauth:token-type:id_token` or `urn:ietf:params:oauth:token-type:jwt`. |
+| `resource` | The URL the key will be used against: a repository's (`https://host/repository/<tenant>/<repository>/`, likewise `/v2/` and `/staging/`) or the build cache's (`https://host/build/<tenant>/`). The tenant whose trusts judge the token is the one the deployment's routing serves that URL for, so a client that knows the URL needs no parameter of this server's own. It is an absolute URI without a fragment under the address clients reach the deployment at (`public-url`, a trusted proxy's forwarded host, else the request's `Host`). |
+| `audience` | The tenant by name, the RFC's logical name of the target, for a client that holds the name rather than a URL. |
+| `tenant` | The tenant by name under this server's own parameter, in the body or as `?tenant=`. The three may be combined and repeated while they name one tenant; a request naming none gets the deployment's default tenant. |
+| `requested_token_type` | Optional: `urn:ietf:params:oauth:token-type:access_token`, the one kind issued. |
+| `scope` | Refused (`invalid_scope`): a key carries the grant of the trust that admitted the token. |
+| `actor_token`, `actor_token_type` | Refused (`invalid_request`): no delegation is recorded. |
+| anything else | Ignored; a parameter sent without a value counts as omitted. |
+
+A refusal is `400` with `{"error":"…","error_description":"…"}` as RFC 6749 section 5.2 lays it out:
+
+| `error` | When |
+|---|---|
+| `invalid_request` | A required parameter is missing or repeated, a token type is not one of the above, the body is not a form, the query string carries anything but `tenant` - or the token matches no trust of the tenant, which RFC 8693 section 2.2.2 gives this code. |
+| `unsupported_grant_type` | `grant_type` names another grant. A deployment without the `source/oidc` module answers this code with `501`. |
+| `invalid_target` | A `resource` that is not a URL of this server or names no tenant it serves, an `audience` or `tenant` that is not a tenant name, or targets naming different tenants. |
+| `invalid_scope` | A `scope`. |
+
 `deploy/` carries the rest of what a deployment needs besides the image: the Helm chart, and a template for each of
 Google Cloud, AWS, Azure and Scaleway that provisions that cloud's object store and runs the published image over
 it. `deploy/README.md` says what each one takes.

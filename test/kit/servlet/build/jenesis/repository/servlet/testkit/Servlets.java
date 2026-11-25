@@ -40,6 +40,7 @@ public final class Servlets {
                     case "getRequestURI" -> uri;
                     case "getServletPath" -> uri;
                     case "getContextPath" -> "";
+                    case "getQueryString" -> uri.contains("?") ? uri.substring(uri.indexOf('?') + 1) : null;
                     case "getContentType" -> contentType;
                     case "getContentLengthLong" -> (long) body.length;
                     case "getContentLength" -> body.length;

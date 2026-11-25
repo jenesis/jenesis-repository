@@ -2,7 +2,9 @@ package build.jenesis.repository.cache.server;
 
 import module java.base;
 import module org.slf4j;
+import build.jenesis.repository.cache.storage.Names;
 import build.jenesis.repository.cache.storage.delegating.DelegatingCacheStorage;
+import build.jenesis.repository.server.TenantResource;
 import build.jenesis.repository.settings.StoredSettings;
 import build.jenesis.repository.store.StoreCache;
 import build.jenesis.repository.server.spi.Authorization;
@@ -86,6 +88,20 @@ public class CacheConfig {
                         ? "required"
                         : "required (+ trial bootstrap key -> tenant " + defaultTenant + ")");
         return cache;
+    }
+
+    /** The cache's URLs, {@code /build/<tenant>/...}, name the tenant in the segment the controller serves it from:
+     *  what a token request's {@code resource} is read by. */
+    @Bean
+    public TenantResource cacheTenantResource() {
+        return (_, path) -> {
+            if (!path.startsWith(CacheController.ROOT)) {
+                return Optional.empty();
+            }
+            String rest = path.substring(CacheController.ROOT.length());
+            String tenant = rest.contains("/") ? rest.substring(0, rest.indexOf('/')) : rest;
+            return Names.isTenant(tenant) ? Optional.of(tenant) : Optional.empty();
+        };
     }
 
     /** A cache dial's interval, or {@code null} for none: unset, off, or not positive. */

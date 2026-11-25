@@ -286,8 +286,16 @@ public class RepositoryAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(name = "tokenController")
-    public TokenController tokenController(TokenExchange tokenExchange, CredentialContext credentialContext) {
-        return new TokenController(tokenExchange, credentialContext);
+    public TokenController tokenController(TokenExchange tokenExchange, CredentialContext credentialContext,
+                                           ObjectProvider<TenantResource> resources, Environment environment) {
+        return new TokenController(tokenExchange, credentialContext, new ResourceTenants(
+                resources.orderedStream().toList(), key -> environment.getProperty(Features.key(key))));
+    }
+
+    /** The repositories' URLs name their tenant as the routing reads them, for a token request's {@code resource}. */
+    @Bean
+    public TenantResource repositoryTenantResource(RepositoryRouting routing) {
+        return new RoutedTenantResource(routing);
     }
 
     @Bean
